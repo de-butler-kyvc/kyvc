@@ -19,6 +19,6 @@ RUN groupadd --system app \
 COPY --from=build --chown=app:app /workspace/build/libs/*.jar app.jar
 
 USER app
-EXPOSE 8081
+EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
