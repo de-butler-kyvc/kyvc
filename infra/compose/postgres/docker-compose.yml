@@ -1,0 +1,21 @@
+services:
+  kyvc-postgres:
+    image: postgres:16
+    container_name: kyvc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - /opt/kyvc/postgres/data:/var/lib/postgresql/data
+      - /opt/kyvc/backup/db:/backup
+    networks:
+      - kyvc-db
+
+networks:
+  kyvc-db:
+    external: true

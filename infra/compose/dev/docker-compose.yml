@@ -1,0 +1,59 @@
+services:
+  kyvc-frontend-dev:
+    image: nginx:alpine
+    container_name: kyvc-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    volumes:
+      - /opt/kyvc/logs/dev/frontend:/var/log/nginx
+    networks:
+      - kyvc-public
+
+  kyvc-backend-dev:
+    image: nginx:alpine
+    container_name: kyvc-backend-dev
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    volumes:
+      - /mnt/kyvc-dev:/app/storage
+      - /opt/kyvc/logs/dev/backend:/app/logs
+    networks:
+      - kyvc-public
+      - kyvc-internal
+      - kyvc-db
+
+  kyvc-admin-frontend-dev:
+    image: nginx:alpine
+    container_name: kyvc-admin-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "3003:80"
+    volumes:
+      - /opt/kyvc/logs/dev/admin-frontend:/var/log/nginx
+    networks:
+      - kyvc-public
+      - kyvc-admin-internal
+
+  kyvc-core-dev:
+    image: nginx:alpine
+    container_name: kyvc-core-dev
+    restart: unless-stopped
+    expose:
+      - "80"
+    volumes:
+      - /opt/kyvc/logs/dev/core:/app/logs
+    networks:
+      - kyvc-internal
+      - kyvc-db
+
+networks:
+  kyvc-public:
+    external: true
+  kyvc-internal:
+    external: true
+  kyvc-admin-internal:
+    external: true
+  kyvc-db:
+    external: true
