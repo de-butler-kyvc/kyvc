@@ -11,11 +11,21 @@ services:
       - kyvc-public
 
   kyvc-backend-prod:
-    image: nginx:alpine
+    image: ghcr.io/de-butler-kyvc/kyvc-backend:prod
     container_name: kyvc-backend-prod
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: kyvc-postgres
+      DB_PORT: 5432
+      DB_NAME: kyvc_prod
+      DB_USER: kyvc_admin
+      DB_PASSWORD: change_me
+      APP_STORAGE_PATH: /app/storage
+      LOG_PATH: /app/logs
+      CORE_BASE_URL: http://kyvc-core-prod:8090
     volumes:
       - /mnt/kyvc-prod:/app/storage
       - /opt/kyvc/logs/prod/backend:/app/logs
@@ -25,11 +35,14 @@ services:
       - kyvc-db
 
   kyvc-core-prod:
-    image: nginx:alpine
+    image: ghcr.io/de-butler-kyvc/kyvc-core:prod
     container_name: kyvc-core-prod
     restart: unless-stopped
     expose:
-      - "80"
+      - "8090"
+    environment:
+      ENV: prod
+      LOG_PATH: /app/logs
     volumes:
       - /opt/kyvc/logs/prod/core:/app/logs
     networks:
@@ -49,11 +62,21 @@ services:
       - kyvc-admin-internal
 
   kyvc-back-admin-prod:
-    image: nginx:alpine
+    image: ghcr.io/de-butler-kyvc/kyvc-backend-admin:prod
     container_name: kyvc-back-admin-prod
     restart: unless-stopped
     expose:
-      - "80"
+      - "8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: kyvc-postgres
+      DB_PORT: 5432
+      DB_NAME: kyvc_prod
+      DB_USER: kyvc_admin
+      DB_PASSWORD: change_me
+      LOG_PATH: /app/logs
+      SERVICE_LOG_PATH: /app/service-logs
+      CORE_ADMIN_BASE_URL: http://kyvc-core-admin-prod:8091
     volumes:
       - /opt/kyvc/logs/prod/back-admin:/app/logs
       - /opt/kyvc/logs/prod:/app/service-logs:ro
@@ -62,11 +85,15 @@ services:
       - kyvc-db
 
   kyvc-core-admin-prod:
-    image: nginx:alpine
+    image: ghcr.io/de-butler-kyvc/kyvc-core-admin:prod
     container_name: kyvc-core-admin-prod
     restart: unless-stopped
     expose:
-      - "80"
+      - "8091"
+    environment:
+      ENV: prod
+      LOG_PATH: /app/logs
+      SERVICE_LOG_PATH: /app/service-logs
     volumes:
       - /opt/kyvc/logs/prod/core-admin:/app/logs
     networks:
