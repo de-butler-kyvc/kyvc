@@ -12,5 +12,6 @@ app = FastAPI(
     version="0.1.0",
     description="KYvC Core API",
 )
+app.state.settings = settings
 
 app.include_router(health_router)
