@@ -24,6 +24,18 @@ services:
       - kyvc-internal
       - kyvc-db
 
+  kyvc-core-prod:
+    image: nginx:alpine
+    container_name: kyvc-core-prod
+    restart: unless-stopped
+    expose:
+      - "80"
+    volumes:
+      - /opt/kyvc/logs/prod/core:/app/logs
+    networks:
+      - kyvc-internal
+      - kyvc-db
+
   kyvc-admin-frontend-prod:
     image: nginx:alpine
     container_name: kyvc-admin-frontend-prod
@@ -36,16 +48,29 @@ services:
       - kyvc-public
       - kyvc-admin-internal
 
-  kyvc-core-prod:
+  kyvc-back-admin-prod:
     image: nginx:alpine
-    container_name: kyvc-core-prod
+    container_name: kyvc-back-admin-prod
     restart: unless-stopped
     expose:
       - "80"
     volumes:
-      - /opt/kyvc/logs/prod/core:/app/logs
+      - /opt/kyvc/logs/prod/back-admin:/app/logs
+      - /opt/kyvc/logs/prod:/app/service-logs:ro
     networks:
-      - kyvc-internal
+      - kyvc-admin-internal
+      - kyvc-db
+
+  kyvc-core-admin-prod:
+    image: nginx:alpine
+    container_name: kyvc-core-admin-prod
+    restart: unless-stopped
+    expose:
+      - "80"
+    volumes:
+      - /opt/kyvc/logs/prod/core-admin:/app/logs
+    networks:
+      - kyvc-admin-internal
       - kyvc-db
 
 networks:
