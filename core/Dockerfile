@@ -6,7 +6,10 @@ ENV PIP_NO_CACHE_DIR=1
 ENV APP_PORT=8090
 
 WORKDIR /app
-RUN groupadd --system app \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
     && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app \
     && mkdir -p /app/logs /app/storage \
     && chown -R app:app /app
