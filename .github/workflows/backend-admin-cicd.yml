@@ -1,0 +1,212 @@
+name: Backend Admin CI/CD
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - "backend_admin/**"
+      - ".github/workflows/backend-admin-cicd.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: de-butler-kyvc
+  REPO_DIR: /opt/kyvc/repo
+  IMAGE_NAME: kyvc-backend-admin
+  BUILD_CONTEXT: ./backend_admin
+  DEV_SOURCE_COMPOSE_FILE: /opt/kyvc/repo/infra/compose/dev/docker-compose.yml
+  DEV_RUNTIME_COMPOSE_FILE: /opt/kyvc/compose/dev/docker-compose.yml
+  DEV_ENV_FILE: /opt/kyvc/compose/dev/.env
+  PROD_SOURCE_COMPOSE_FILE: /opt/kyvc/repo/infra/compose/prod/docker-compose.yml
+  PROD_RUNTIME_COMPOSE_FILE: /opt/kyvc/compose/prod/docker-compose.yml
+  PROD_ENV_FILE: /opt/kyvc/compose/prod/.env
+
+jobs:
+  build-image:
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: vars
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            develop)
+              echo "deploy_env=dev" >> "$GITHUB_OUTPUT"
+              ;;
+            main)
+              echo "deploy_env=prod" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported branch for image build: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend admin
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BUILD_CONTEXT }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.deploy_env }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.deploy_env }}-${{ steps.vars.outputs.short_sha }}
+
+  deploy-dev:
+    needs: build-image
+    if: github.ref == 'refs/heads/develop'
+    runs-on: [self-hosted, kyvc, dev]
+
+    steps:
+      - name: Update repository
+        run: |
+          set -euo pipefail
+          test -d "$REPO_DIR"
+          cd "$REPO_DIR"
+          git fetch origin
+          git checkout develop
+          git pull origin develop
+
+      - name: Prepare dev runtime compose
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/kyvc/compose/dev
+          cp "$DEV_SOURCE_COMPOSE_FILE" "$DEV_RUNTIME_COMPOSE_FILE"
+
+      - name: Ensure Docker networks
+        run: |
+          set -euo pipefail
+          docker network inspect kyvc-public >/dev/null 2>&1 || docker network create kyvc-public
+          docker network inspect kyvc-internal >/dev/null 2>&1 || docker network create kyvc-internal
+          docker network inspect kyvc-admin-internal >/dev/null 2>&1 || docker network create kyvc-admin-internal
+          docker network inspect kyvc-db >/dev/null 2>&1 || docker network create kyvc-db
+
+      - name: Ensure dev directories
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/kyvc/logs/dev/frontend
+          mkdir -p /opt/kyvc/logs/dev/backend
+          mkdir -p /opt/kyvc/logs/dev/core
+          mkdir -p /opt/kyvc/logs/dev/admin-frontend
+          mkdir -p /opt/kyvc/logs/dev/back-admin
+          mkdir -p /opt/kyvc/logs/dev/core-admin
+          test -d /mnt/kyvc-dev
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy backend admin dev
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file "$DEV_ENV_FILE" \
+            -f "$DEV_RUNTIME_COMPOSE_FILE" \
+            pull kyvc-back-admin-dev
+          docker compose \
+            --env-file "$DEV_ENV_FILE" \
+            -f "$DEV_RUNTIME_COMPOSE_FILE" \
+            up -d kyvc-back-admin-dev
+
+      - name: Health check backend admin dev
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            echo "Health check attempt ${attempt}/30"
+            docker exec kyvc-back-admin-dev sh -c "wget -qO- http://127.0.0.1:8080/health" && exit 0
+            sleep 5
+          done
+          exit 1
+
+  deploy-prod:
+    needs: build-image
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, kyvc, prod]
+
+    steps:
+      - name: Update repository
+        run: |
+          set -euo pipefail
+          test -d "$REPO_DIR"
+          cd "$REPO_DIR"
+          git fetch origin
+          git checkout main
+          git pull origin main
+
+      - name: Prepare prod runtime compose
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/kyvc/compose/prod
+          cp "$PROD_SOURCE_COMPOSE_FILE" "$PROD_RUNTIME_COMPOSE_FILE"
+
+      - name: Ensure Docker networks
+        run: |
+          set -euo pipefail
+          docker network inspect kyvc-public >/dev/null 2>&1 || docker network create kyvc-public
+          docker network inspect kyvc-internal >/dev/null 2>&1 || docker network create kyvc-internal
+          docker network inspect kyvc-admin-internal >/dev/null 2>&1 || docker network create kyvc-admin-internal
+          docker network inspect kyvc-db >/dev/null 2>&1 || docker network create kyvc-db
+
+      - name: Ensure prod directories
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/kyvc/logs/prod/frontend
+          mkdir -p /opt/kyvc/logs/prod/backend
+          mkdir -p /opt/kyvc/logs/prod/core
+          mkdir -p /opt/kyvc/logs/prod/admin-frontend
+          mkdir -p /opt/kyvc/logs/prod/back-admin
+          mkdir -p /opt/kyvc/logs/prod/core-admin
+          test -d /mnt/kyvc-prod
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy backend admin prod
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file "$PROD_ENV_FILE" \
+            -f "$PROD_RUNTIME_COMPOSE_FILE" \
+            pull kyvc-back-admin-prod
+          docker compose \
+            --env-file "$PROD_ENV_FILE" \
+            -f "$PROD_RUNTIME_COMPOSE_FILE" \
+            up -d kyvc-back-admin-prod
+
+      - name: Health check backend admin prod
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            echo "Health check attempt ${attempt}/30"
+            docker exec kyvc-back-admin-prod sh -c "wget -qO- http://127.0.0.1:8080/health" && exit 0
+            sleep 5
+          done
+          exit 1
