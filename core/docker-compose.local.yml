@@ -1,0 +1,26 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: kyvc-mysql-core-local
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-kyvc_core}
+      MYSQL_USER: ${DB_USER:-kyvc_core_dev}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-kyvc_core_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-kyvc_core_root_password}
+      TZ: Asia/Seoul
+    ports:
+      - "${LOCAL_DB_PORT:-3307}:3306"
+    volumes:
+      - kyvc-core-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  kyvc-core-mysql-data:
