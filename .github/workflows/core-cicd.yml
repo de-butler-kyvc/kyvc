@@ -22,10 +22,8 @@ env:
   BUILD_CONTEXT: ./core
   DEV_SOURCE_COMPOSE_FILE: /opt/kyvc/repo/infra/compose/dev/docker-compose.yml
   DEV_RUNTIME_COMPOSE_FILE: /opt/kyvc/compose/dev/docker-compose.yml
-  DEV_ENV_FILE: /opt/kyvc/compose/dev/.env
   PROD_SOURCE_COMPOSE_FILE: /opt/kyvc/repo/infra/compose/prod/docker-compose.yml
   PROD_RUNTIME_COMPOSE_FILE: /opt/kyvc/compose/prod/docker-compose.yml
-  PROD_ENV_FILE: /opt/kyvc/compose/prod/.env
 
 jobs:
   build-image:
@@ -124,11 +122,9 @@ jobs:
         run: |
           set -euo pipefail
           docker compose \
-            --env-file "$DEV_ENV_FILE" \
             -f "$DEV_RUNTIME_COMPOSE_FILE" \
             pull kyvc-core-dev
           docker compose \
-            --env-file "$DEV_ENV_FILE" \
             -f "$DEV_RUNTIME_COMPOSE_FILE" \
             up -d kyvc-core-dev
 
@@ -193,11 +189,9 @@ jobs:
         run: |
           set -euo pipefail
           docker compose \
-            --env-file "$PROD_ENV_FILE" \
             -f "$PROD_RUNTIME_COMPOSE_FILE" \
             pull kyvc-core-prod
           docker compose \
-            --env-file "$PROD_ENV_FILE" \
             -f "$PROD_RUNTIME_COMPOSE_FILE" \
             up -d kyvc-core-prod
 
