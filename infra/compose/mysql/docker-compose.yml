@@ -1,0 +1,44 @@
+services:
+  kyvc-mysql-core-dev:
+    image: mysql:8.4
+    container_name: kyvc-mysql-core-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: kyvc_core
+      MYSQL_USER: ${MYSQL_CORE_DEV_USER}
+      MYSQL_PASSWORD: ${MYSQL_CORE_DEV_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_CORE_DEV_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - /opt/kyvc/mysql/core-dev/data:/var/lib/mysql
+    networks:
+      - kyvc-dev-net
+
+  kyvc-mysql-core-prod:
+    image: mysql:8.4
+    container_name: kyvc-mysql-core-prod
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: kyvc_core
+      MYSQL_USER: ${MYSQL_CORE_PROD_USER}
+      MYSQL_PASSWORD: ${MYSQL_CORE_PROD_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_CORE_PROD_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:3308:3306"
+    volumes:
+      - /opt/kyvc/mysql/core-prod/data:/var/lib/mysql
+    networks:
+      - kyvc-prod-net
+
+networks:
+  kyvc-dev-net:
+    external: true
+  kyvc-prod-net:
+    external: true

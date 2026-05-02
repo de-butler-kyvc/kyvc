@@ -14,43 +14,33 @@ services:
     image: ghcr.io/de-butler-kyvc/kyvc-backend:prod
     container_name: kyvc-backend-prod
     restart: unless-stopped
+    env_file:
+      - .env.common
+      - .env.backend
     ports:
       - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      APP_STORAGE_PATH: ${APP_STORAGE_PATH}
-      LOG_PATH: ${LOG_PATH}
-      FLYWAY_ENABLED: ${FLYWAY_ENABLED}
-      CORE_BASE_URL: ${CORE_BASE_URL}
     volumes:
       - /mnt/kyvc-prod:/app/storage
       - /opt/kyvc/logs/prod/backend:/app/logs
     networks:
       - kyvc-public
       - kyvc-internal
-      - kyvc-db
+      - kyvc-prod-net
 
   kyvc-core-prod:
     image: ghcr.io/de-butler-kyvc/kyvc-core:prod
     container_name: kyvc-core-prod
     restart: unless-stopped
-    expose:
-      - "8090"
-    environment:
-      APP_ENV: ${APP_ENV}
-      ENV: ${ENV}
-      LOG_PATH: ${LOG_PATH}
-      LOG_LEVEL: ${LOG_LEVEL}
+    env_file:
+      - .env.common
+      - .env.core
+    ports:
+      - "8090:8090"
     volumes:
       - /opt/kyvc/logs/prod/core:/app/logs
     networks:
       - kyvc-internal
-      - kyvc-db
+      - kyvc-prod-net
 
   kyvc-admin-frontend-prod:
     image: nginx:alpine
@@ -68,43 +58,32 @@ services:
     image: ghcr.io/de-butler-kyvc/kyvc-backend-admin:prod
     container_name: kyvc-back-admin-prod
     restart: unless-stopped
-    expose:
-      - "8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      APP_STORAGE_PATH: ${APP_STORAGE_PATH}
-      LOG_PATH: ${LOG_PATH}
-      FLYWAY_ENABLED: ${FLYWAY_ENABLED}
-      SERVICE_LOG_PATH: ${SERVICE_LOG_PATH}
-      CORE_ADMIN_BASE_URL: ${CORE_ADMIN_BASE_URL}
+    env_file:
+      - .env.common
+      - .env.backend_admin
+    ports:
+      - "8081:8080"
     volumes:
       - /opt/kyvc/logs/prod/back-admin:/app/logs
       - /opt/kyvc/logs/prod:/app/service-logs:ro
     networks:
       - kyvc-admin-internal
-      - kyvc-db
+      - kyvc-prod-net
 
   kyvc-core-admin-prod:
     image: ghcr.io/de-butler-kyvc/kyvc-core-admin:prod
     container_name: kyvc-core-admin-prod
     restart: unless-stopped
-    expose:
-      - "8091"
-    environment:
-      APP_ENV: ${APP_ENV}
-      ENV: ${ENV}
-      LOG_PATH: ${LOG_PATH}
-      LOG_LEVEL: ${LOG_LEVEL}
+    env_file:
+      - .env.common
+      - .env.core_admin
+    ports:
+      - "8091:8091"
     volumes:
       - /opt/kyvc/logs/prod/core-admin:/app/logs
     networks:
       - kyvc-admin-internal
-      - kyvc-db
+      - kyvc-prod-net
 
 networks:
   kyvc-public:
@@ -113,5 +92,5 @@ networks:
     external: true
   kyvc-admin-internal:
     external: true
-  kyvc-db:
+  kyvc-prod-net:
     external: true
