@@ -40,3 +40,6 @@ venv/
 *.crt
 *.p12
 *.jks
+# Env examples
+!.env.*.example
+!**/.env.*.example
