@@ -20,6 +20,9 @@ logs/
 .gradle/
 build/
 out/
+bin/
+backend/bin/
+
 
 # Node
 node_modules/
