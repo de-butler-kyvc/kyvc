@@ -1,21 +1,36 @@
 services:
-  kyvc-postgres:
+  kyvc-postgres-back-dev:
     image: postgres:16
-    container_name: kyvc-postgres
+    container_name: kyvc-postgres-back-dev
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      TZ: Asia/Seoul
+      POSTGRES_DB: kyvc_back
+      POSTGRES_USER: ${POSTGRES_BACK_DEV_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_BACK_DEV_PASSWORD}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
-      - /opt/kyvc/postgres/data:/var/lib/postgresql/data
-      - /opt/kyvc/backup/db:/backup
+      - /opt/kyvc/postgres/back-dev/data:/var/lib/postgresql/data
     networks:
-      - kyvc-db
+      - kyvc-dev-net
+
+  kyvc-postgres-back-prod:
+    image: postgres:16
+    container_name: kyvc-postgres-back-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kyvc_back
+      POSTGRES_USER: ${POSTGRES_BACK_PROD_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_BACK_PROD_PASSWORD}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - /opt/kyvc/postgres/back-prod/data:/var/lib/postgresql/data
+    networks:
+      - kyvc-prod-net
 
 networks:
-  kyvc-db:
+  kyvc-dev-net:
+    external: true
+  kyvc-prod-net:
     external: true
