@@ -33,7 +33,7 @@ services:
     networks:
       - kyvc-public
       - kyvc-internal
-      - kyvc-db
+      - kyvc-prod-net
 
   kyvc-core-prod:
     image: ghcr.io/de-butler-kyvc/kyvc-core:prod
@@ -46,11 +46,16 @@ services:
       ENV: ${ENV}
       LOG_PATH: ${LOG_PATH}
       LOG_LEVEL: ${LOG_LEVEL}
+      DB_HOST: ${CORE_DB_HOST}
+      DB_PORT: ${CORE_DB_PORT}
+      DB_NAME: ${CORE_DB_NAME}
+      DB_USER: ${CORE_DB_USER}
+      DB_PASSWORD: ${CORE_DB_PASSWORD}
     volumes:
       - /opt/kyvc/logs/prod/core:/app/logs
     networks:
       - kyvc-internal
-      - kyvc-db
+      - kyvc-prod-net
 
   kyvc-admin-frontend-prod:
     image: nginx:alpine
@@ -87,7 +92,7 @@ services:
       - /opt/kyvc/logs/prod:/app/service-logs:ro
     networks:
       - kyvc-admin-internal
-      - kyvc-db
+      - kyvc-prod-net
 
   kyvc-core-admin-prod:
     image: ghcr.io/de-butler-kyvc/kyvc-core-admin:prod
@@ -100,11 +105,16 @@ services:
       ENV: ${ENV}
       LOG_PATH: ${LOG_PATH}
       LOG_LEVEL: ${LOG_LEVEL}
+      DB_HOST: ${CORE_DB_HOST}
+      DB_PORT: ${CORE_DB_PORT}
+      DB_NAME: ${CORE_DB_NAME}
+      DB_USER: ${CORE_DB_USER}
+      DB_PASSWORD: ${CORE_DB_PASSWORD}
     volumes:
       - /opt/kyvc/logs/prod/core-admin:/app/logs
     networks:
       - kyvc-admin-internal
-      - kyvc-db
+      - kyvc-prod-net
 
 networks:
   kyvc-public:
@@ -113,5 +123,5 @@ networks:
     external: true
   kyvc-admin-internal:
     external: true
-  kyvc-db:
+  kyvc-prod-net:
     external: true
