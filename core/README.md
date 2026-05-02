@@ -76,6 +76,9 @@ mobile app. This repository keeps a configured-network holder test runner under
 `holder-test/` so the core issuer/verifier flow can still be exercised end to
 end.
 
+For Android holder wallet implementation guidance, see
+[`docs/android-holder-wallet-guide.md`](docs/android-holder-wallet-guide.md).
+
 ## Issuer API
 
 Generate a funded issuer wallet on the configured XRPL network:
