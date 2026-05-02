@@ -27,4 +27,6 @@ build
 dist
 
 Dockerfile
+docker-compose.local.yml
 README.md
+holder-test
