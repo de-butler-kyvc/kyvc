@@ -3,7 +3,7 @@ spring:
     activate:
       on-profile: dev
   flyway:
-    enabled: ${FLYWAY_ENABLED:false}
+    enabled: ${FLYWAY_ENABLED:true}
   jpa:
     show-sql: false
 
