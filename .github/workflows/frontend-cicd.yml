@@ -5,7 +5,6 @@ on:
     branches:
       - develop
       - main
-      - "feature/**"
     paths:
       - "frontend/**"
       - "frontend_admin/**"
@@ -31,6 +30,7 @@ env:
 
 jobs:
   build-image:
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -53,12 +53,6 @@ jobs:
               echo "kyvc_env=prod" >> "$GITHUB_OUTPUT"
               echo "nginx_conf=prod.conf" >> "$GITHUB_OUTPUT"
               echo "push_image=true" >> "$GITHUB_OUTPUT"
-              ;;
-            feature/*)
-              echo "deploy_env=feature" >> "$GITHUB_OUTPUT"
-              echo "kyvc_env=dev" >> "$GITHUB_OUTPUT"
-              echo "nginx_conf=dev.conf" >> "$GITHUB_OUTPUT"
-              echo "push_image=false" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unsupported branch for frontend image build: ${GITHUB_REF_NAME}" >&2
@@ -140,9 +134,19 @@ jobs:
       - name: Health check frontend dev
         run: |
           set -euo pipefail
-          curl -f -H "Host: dev-kyvc.khuoo.synology.me" http://127.0.0.1:3001
-          curl -f -H "Host: dev-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001
-          curl -f -H "Host: dev-core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001
+          for i in {1..20}; do
+            if curl -fsS -H "Host: dev-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null; then
+              echo "kyvc-frontend-dev is ready"
+              break
+            fi
+
+            echo "Waiting for kyvc-frontend-dev... attempt=$i"
+            sleep 3
+          done
+
+          curl -fsS -H "Host: dev-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null
+          curl -fsS -H "Host: dev-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null
+          curl -fsS -H "Host: dev-core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null
 
   deploy-prod:
     needs: build-image
@@ -193,6 +197,16 @@ jobs:
       - name: Health check frontend prod
         run: |
           set -euo pipefail
-          curl -f -H "Host: kyvc.khuoo.synology.me" http://127.0.0.1:3000
-          curl -f -H "Host: admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000
-          curl -f -H "Host: core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000
+          for i in {1..20}; do
+            if curl -fsS -H "Host: kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null; then
+              echo "kyvc-frontend-prod is ready"
+              break
+            fi
+
+            echo "Waiting for kyvc-frontend-prod... attempt=$i"
+            sleep 3
+          done
+
+          curl -fsS -H "Host: kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null
+          curl -fsS -H "Host: admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null
+          curl -fsS -H "Host: core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null
