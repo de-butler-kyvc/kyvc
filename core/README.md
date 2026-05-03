@@ -62,6 +62,7 @@ MYSQL_ROOT_PASSWORD=kyvc_core_root_password
 XRPL_NETWORK_NAME=devnet
 XRPL_JSON_RPC_URL=https://s.devnet.rippletest.net:51234
 XRPL_ISSUER_SEED=
+ISSUER_PRIVATE_KEY_PEM_PATH=./.local-secrets/issuer-key.pem
 XRPL_FAUCET_HOST=
 DID_DOC_BASE_URL=http://127.0.0.1:8090
 VERIFIER_CHALLENGE_TTL_SECONDS=300
@@ -102,14 +103,19 @@ print(private_key_to_pem(generate_private_key()))
 PY
 ```
 
+Store it in a private file such as `core/.local-secrets/issuer-key.pem`, then
+set the path in `core/.env`:
+
+```env
+ISSUER_PRIVATE_KEY_PEM_PATH=./.local-secrets/issuer-key.pem
+```
+
 Register the issuer DID on XRPL with `DIDSet`:
 
 ```bash
-ISSUER_KEY_PEM="$(cat issuer-key.pem)"
-
 curl -sS -X POST http://127.0.0.1:8090/issuer/did/register \
   -H "Content-Type: application/json" \
-  -d "$(jq -n --arg pem "$ISSUER_KEY_PEM" '{issuer_private_key_pem: $pem}')" | jq
+  -d '{}' | jq
 ```
 
 The `diddoc_url` in the response is the URI written to the XRPL DID entry. With
@@ -130,7 +136,6 @@ curl -sS http://127.0.0.1:8090/dids/{issuerAccount}/diddoc.json | jq
 ```json
 {
   "issuer_seed": "s...",
-  "issuer_private_key_pem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----",
   "holder_account": "rHolder",
   "claims": {
     "kycLevel": "BASIC",
@@ -144,10 +149,11 @@ curl -sS http://127.0.0.1:8090/dids/{issuerAccount}/diddoc.json | jq
 
 The default `status_mode` is `xrpl`. The issuer account is derived from
 `issuer_seed` or `XRPL_ISSUER_SEED`; if `issuer_account` is also supplied it must
-match that wallet. The service signs the VC, computes the XRPL `credentialType`
-from the VC core hash, submits `CredentialCreate`, stores the issued VC locally,
-and records a pending local mirror for development convenience. The response
-includes:
+match that wallet. The DID/VC signing key is read from `issuer_private_key_pem`
+or the file at `ISSUER_PRIVATE_KEY_PEM_PATH`. The service signs the VC, computes
+the XRPL `credentialType` from the VC core hash, submits `CredentialCreate`,
+stores the issued VC locally, and records a pending local mirror for development
+convenience. The response includes:
 
 - `credential`
 - `credential_type`

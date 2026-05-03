@@ -21,6 +21,7 @@ __pycache__
 .ruff_cache
 
 logs
+.local-secrets
 storage
 *.log
 build

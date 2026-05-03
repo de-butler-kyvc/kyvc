@@ -12,6 +12,7 @@ __pycache__/
 .ruff_cache/
 
 logs/
+/.local-secrets/
 /storage/
 /holder-test/*.sqlite3
 *.log
