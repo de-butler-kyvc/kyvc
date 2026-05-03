@@ -30,10 +30,18 @@ public enum ErrorCode {
     AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_EXPIRED", "인증 토큰이 만료되었습니다."),
     // HTTP 401 - 인증 토큰 형식 또는 서명 오류
     AUTH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID", "인증 토큰이 유효하지 않습니다."),
+    // HTTP 401 - Refresh Token 저장 이력 조회 실패
+    AUTH_REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_TOKEN_NOT_FOUND", "리프레시 토큰을 찾을 수 없습니다."),
+    // HTTP 401 - 폐기된 Refresh Token 사용 시도
+    AUTH_REFRESH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_TOKEN_REVOKED", "리프레시 토큰이 폐기되었습니다."),
+    // HTTP 401 - 기대한 토큰 유형과 다른 토큰 사용
+    AUTH_INVALID_TOKEN_TYPE(HttpStatus.UNAUTHORIZED, "AUTH_INVALID_TOKEN_TYPE", "토큰 유형이 올바르지 않습니다."),
     // HTTP 404 - 사용자 정보 조회 실패
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다."),
     // HTTP 409 - 이미 등록된 사용자 정보 재생성 시도
     USER_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER_ALREADY_EXISTS", "이미 존재하는 사용자입니다."),
+    // HTTP 403 - 로그인 또는 인증 불가 사용자 상태
+    USER_INACTIVE(HttpStatus.FORBIDDEN, "USER_INACTIVE", "비활성 사용자입니다."),
     // HTTP 404 - 기업 정보 조회 실패
     CORPORATE_NOT_FOUND(HttpStatus.NOT_FOUND, "CORPORATE_NOT_FOUND", "기업 정보를 찾을 수 없습니다."),
     // HTTP 403 - 기업 리소스 접근 권한 없음
