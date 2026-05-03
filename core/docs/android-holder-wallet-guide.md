@@ -111,7 +111,7 @@ Content-Type: application/json
 }
 ```
 
-실제 issuer 요청에는 `issuer_seed` 또는 서버 환경변수 `XRPL_ISSUER_SEED`, 그리고 `issuer_private_key_pem`이 필요하다. 이 값들은 Android 앱으로 전달하지 않는다.
+issuer 요청에서 `issuer_seed`와 `issuer_private_key_pem`은 생략할 수 있다. 생략하면 서버 환경변수 `XRPL_ISSUER_SEED`와 `ISSUER_PRIVATE_KEY_PEM_PATH`가 가리키는 PEM 파일을 사용한다. 이 값들은 Android 앱으로 전달하지 않는다.
 
 발급 응답에서 앱이 저장해야 하는 핵심 필드는 다음과 같다.
 

@@ -1,7 +1,7 @@
 # OS
 .DS_Store
 Thumbs.db
-.zip
+*.zip
 
 # IDE
 .idea/
@@ -13,6 +13,8 @@ logs/
 
 # Env
 .env
+.env.local
+.env.*.local
 .env.*
 !.env.example
 
@@ -26,6 +28,7 @@ backend/bin/
 
 # Node
 node_modules/
+.next/
 dist/
 
 # Python

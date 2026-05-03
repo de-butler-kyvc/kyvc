@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 class IssueKycCredentialRequest(BaseModel):
     issuer_account: str | None = None
     issuer_seed: str | None = None
-    issuer_private_key_pem: str
+    issuer_private_key_pem: str | None = None
     issuer_did: str | None = None
     key_id: str = Field(default="issuer-key-1")
     holder_account: str
@@ -66,7 +66,7 @@ class GenerateIssuerWalletResponse(BaseModel):
 
 
 class RegisterIssuerDidRequest(BaseModel):
-    issuer_private_key_pem: str
+    issuer_private_key_pem: str | None = None
     issuer_seed: str | None = None
     key_id: str = Field(default="issuer-key-1")
     did_doc_base_url: str | None = None

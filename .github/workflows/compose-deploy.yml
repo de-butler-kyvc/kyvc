@@ -85,7 +85,6 @@ jobs:
           mkdir -p /opt/kyvc/logs/dev/frontend
           mkdir -p /opt/kyvc/logs/dev/backend
           mkdir -p /opt/kyvc/logs/dev/core
-          mkdir -p /opt/kyvc/logs/dev/admin-frontend
           mkdir -p /opt/kyvc/logs/dev/back-admin
           mkdir -p /opt/kyvc/logs/dev/core-admin
           test -d /mnt/kyvc-dev
@@ -110,9 +109,10 @@ jobs:
       - name: Health check dev compose
         run: |
           set -euo pipefail
-          curl -f http://127.0.0.1:3001
+          curl -f -H "Host: dev-kyvc.khuoo.synology.me" http://127.0.0.1:3001
+          curl -f -H "Host: dev-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001
+          curl -f -H "Host: dev-core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001
           curl -f http://127.0.0.1:8082/health
-          curl -f http://127.0.0.1:3003
           docker exec kyvc-core-dev sh -c "wget -qO- http://127.0.0.1:8090/health"
           docker exec kyvc-back-admin-dev sh -c "wget -qO- http://127.0.0.1:8080/health"
           docker exec kyvc-core-admin-dev sh -c "wget -qO- http://127.0.0.1:8091/health"
@@ -155,7 +155,6 @@ jobs:
           mkdir -p /opt/kyvc/logs/prod/frontend
           mkdir -p /opt/kyvc/logs/prod/backend
           mkdir -p /opt/kyvc/logs/prod/core
-          mkdir -p /opt/kyvc/logs/prod/admin-frontend
           mkdir -p /opt/kyvc/logs/prod/back-admin
           mkdir -p /opt/kyvc/logs/prod/core-admin
           test -d /mnt/kyvc-prod
@@ -180,9 +179,10 @@ jobs:
       - name: Health check prod compose
         run: |
           set -euo pipefail
-          curl -f http://127.0.0.1:3000
+          curl -f -H "Host: kyvc.khuoo.synology.me" http://127.0.0.1:3000
+          curl -f -H "Host: admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000
+          curl -f -H "Host: core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000
           curl -f http://127.0.0.1:8080/health
-          curl -f http://127.0.0.1:3002
           docker exec kyvc-core-prod sh -c "wget -qO- http://127.0.0.1:8090/health"
           docker exec kyvc-back-admin-prod sh -c "wget -qO- http://127.0.0.1:8080/health"
           docker exec kyvc-core-admin-prod sh -c "wget -qO- http://127.0.0.1:8091/health"

@@ -1,0 +1,212 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - "frontend/**"
+      - "frontend_admin/**"
+      - "frontend_core_admin/**"
+      - "infra/docker/frontend/**"
+      - "infra/nginx/frontend/**"
+      - ".github/workflows/frontend-cicd.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: de-butler-kyvc
+  REPO_DIR: /opt/kyvc/repo
+  IMAGE_NAME: kyvc-frontend
+  BUILD_CONTEXT: .
+  DOCKERFILE: ./infra/docker/frontend/Dockerfile
+  DEV_RUNTIME_COMPOSE_FILE: /opt/kyvc/compose/dev/docker-compose.yml
+  PROD_RUNTIME_COMPOSE_FILE: /opt/kyvc/compose/prod/docker-compose.yml
+
+jobs:
+  build-image:
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: vars
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            develop)
+              echo "deploy_env=dev" >> "$GITHUB_OUTPUT"
+              echo "kyvc_env=dev" >> "$GITHUB_OUTPUT"
+              echo "nginx_conf=dev.conf" >> "$GITHUB_OUTPUT"
+              echo "push_image=true" >> "$GITHUB_OUTPUT"
+              ;;
+            main)
+              echo "deploy_env=prod" >> "$GITHUB_OUTPUT"
+              echo "kyvc_env=prod" >> "$GITHUB_OUTPUT"
+              echo "nginx_conf=prod.conf" >> "$GITHUB_OUTPUT"
+              echo "push_image=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported branch for frontend image build: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.vars.outputs.push_image == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BUILD_CONTEXT }}
+          file: ${{ env.DOCKERFILE }}
+          push: ${{ steps.vars.outputs.push_image == 'true' }}
+          build-args: |
+            NGINX_CONF=${{ steps.vars.outputs.nginx_conf }}
+            KYVC_ENV=${{ steps.vars.outputs.kyvc_env }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.deploy_env }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.deploy_env }}-${{ steps.vars.outputs.short_sha }}
+
+  deploy-dev:
+    needs: build-image
+    if: github.ref == 'refs/heads/develop'
+    runs-on: [self-hosted, kyvc, dev]
+
+    steps:
+      - name: Update repository
+        run: |
+          set -euo pipefail
+          test -d "$REPO_DIR"
+          cd "$REPO_DIR"
+          git fetch origin
+          git checkout develop
+          git pull origin develop
+
+      - name: Validate dev runtime compose
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/kyvc/logs/dev/frontend
+          test -f "$DEV_RUNTIME_COMPOSE_FILE"
+
+      - name: Ensure Docker networks
+        run: |
+          set -euo pipefail
+          docker network inspect kyvc-public >/dev/null 2>&1 || docker network create kyvc-public
+          docker network inspect kyvc-internal >/dev/null 2>&1 || docker network create kyvc-internal
+          docker network inspect kyvc-admin-internal >/dev/null 2>&1 || docker network create kyvc-admin-internal
+          docker network inspect kyvc-db >/dev/null 2>&1 || docker network create kyvc-db
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy frontend dev
+        run: |
+          set -euo pipefail
+          docker compose \
+            -f "$DEV_RUNTIME_COMPOSE_FILE" \
+            pull kyvc-frontend-dev
+          docker compose \
+            -f "$DEV_RUNTIME_COMPOSE_FILE" \
+            up -d kyvc-frontend-dev
+
+      - name: Health check frontend dev
+        run: |
+          set -euo pipefail
+          for i in {1..20}; do
+            if curl -fsS -H "Host: dev-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null; then
+              echo "kyvc-frontend-dev is ready"
+              break
+            fi
+
+            echo "Waiting for kyvc-frontend-dev... attempt=$i"
+            sleep 3
+          done
+
+          curl -fsS -H "Host: dev-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null
+          curl -fsS -H "Host: dev-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null
+          curl -fsS -H "Host: dev-core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3001/ >/dev/null
+
+  deploy-prod:
+    needs: build-image
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, kyvc, prod]
+
+    steps:
+      - name: Update repository
+        run: |
+          set -euo pipefail
+          test -d "$REPO_DIR"
+          cd "$REPO_DIR"
+          git fetch origin
+          git checkout main
+          git pull origin main
+
+      - name: Validate prod runtime compose
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/kyvc/logs/prod/frontend
+          test -f "$PROD_RUNTIME_COMPOSE_FILE"
+
+      - name: Ensure Docker networks
+        run: |
+          set -euo pipefail
+          docker network inspect kyvc-public >/dev/null 2>&1 || docker network create kyvc-public
+          docker network inspect kyvc-internal >/dev/null 2>&1 || docker network create kyvc-internal
+          docker network inspect kyvc-admin-internal >/dev/null 2>&1 || docker network create kyvc-admin-internal
+          docker network inspect kyvc-db >/dev/null 2>&1 || docker network create kyvc-db
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy frontend prod
+        run: |
+          set -euo pipefail
+          docker compose \
+            -f "$PROD_RUNTIME_COMPOSE_FILE" \
+            pull kyvc-frontend-prod
+          docker compose \
+            -f "$PROD_RUNTIME_COMPOSE_FILE" \
+            up -d kyvc-frontend-prod
+
+      - name: Health check frontend prod
+        run: |
+          set -euo pipefail
+          for i in {1..20}; do
+            if curl -fsS -H "Host: kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null; then
+              echo "kyvc-frontend-prod is ready"
+              break
+            fi
+
+            echo "Waiting for kyvc-frontend-prod... attempt=$i"
+            sleep 3
+          done
+
+          curl -fsS -H "Host: kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null
+          curl -fsS -H "Host: admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null
+          curl -fsS -H "Host: core-admin-kyvc.khuoo.synology.me" http://127.0.0.1:3000/ >/dev/null

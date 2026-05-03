@@ -21,6 +21,7 @@ class Settings(BaseModel):
     xrpl_network_name: str = Field(default="devnet")
     allow_mainnet: bool = Field(default=False)
     xrpl_issuer_seed: str | None = Field(default=None)
+    issuer_private_key_pem_path: str | None = Field(default=None)
     xrpl_faucet_host: str | None = Field(default=None)
     did_doc_base_url: str = Field(default="http://127.0.0.1:8090")
     verifier_challenge_ttl_seconds: int = Field(default=300)
@@ -45,6 +46,7 @@ def get_settings() -> Settings:
         xrpl_network_name=os.getenv("XRPL_NETWORK_NAME", "devnet"),
         allow_mainnet=os.getenv("ALLOW_MAINNET") == "1",
         xrpl_issuer_seed=os.getenv("XRPL_ISSUER_SEED"),
+        issuer_private_key_pem_path=os.getenv("ISSUER_PRIVATE_KEY_PEM_PATH") or os.getenv("ISSUER_KEY_PEM_PATH"),
         xrpl_faucet_host=os.getenv("XRPL_FAUCET_HOST"),
         did_doc_base_url=os.getenv("DID_DOC_BASE_URL", "http://127.0.0.1:8090"),
         verifier_challenge_ttl_seconds=int(os.getenv("VERIFIER_CHALLENGE_TTL_SECONDS", "300")),

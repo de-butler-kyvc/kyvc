@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
 
 from app.credentials.crypto import private_key_from_pem
@@ -30,6 +32,33 @@ def _diddoc_url(base_url: str, issuer_account: str) -> str:
     return f"{base_url.rstrip('/')}/dids/{issuer_account}/diddoc.json"
 
 
+def _issuer_private_key_pem(payload_value: str | None, settings) -> str:
+    if payload_value:
+        return payload_value
+
+    path = settings.issuer_private_key_pem_path
+    if not path:
+        raise HTTPException(
+            status_code=400,
+            detail="issuer private key PEM is required. Set ISSUER_PRIVATE_KEY_PEM_PATH or pass issuer_private_key_pem.",
+        )
+
+    try:
+        return Path(path).expanduser().read_text(encoding="ascii")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"issuer private key PEM file could not be read: {path}",
+        ) from exc
+
+
+def _issuer_seed(payload_value: str | None, settings, *, detail: str) -> str:
+    seed = payload_value or settings.xrpl_issuer_seed
+    if not seed:
+        raise HTTPException(status_code=400, detail=detail)
+    return seed
+
+
 @router.post("/wallets", response_model=GenerateIssuerWalletResponse)
 def generate_issuer_wallet(
     payload: GenerateIssuerWalletRequest,
@@ -54,12 +83,12 @@ def register_issuer_did(
     request: Request,
 ) -> RegisterIssuerDidResponse:
     settings = request.app.state.settings
-    seed = payload.issuer_seed or settings.xrpl_issuer_seed
-    if not seed:
-        raise HTTPException(
-            status_code=400,
-            detail="issuer seed is required. Set XRPL_ISSUER_SEED or pass issuer_seed.",
-        )
+    seed = _issuer_seed(
+        payload.issuer_seed,
+        settings,
+        detail="issuer seed is required. Set XRPL_ISSUER_SEED or pass issuer_seed.",
+    )
+    private_key_pem = _issuer_private_key_pem(payload.issuer_private_key_pem, settings)
 
     rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
     enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
@@ -68,7 +97,7 @@ def register_issuer_did(
 
     service = IssuerService(
         issuer_account=wallet.address,
-        private_key=private_key_from_pem(payload.issuer_private_key_pem),
+        private_key=private_key_from_pem(private_key_pem),
         key_id=payload.key_id,
         did_document_repository=request.app.state.repository,
     )
@@ -91,13 +120,13 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
     issuer_account = payload.issuer_account
     issuer_wallet = None
     client = None
+    private_key_pem = _issuer_private_key_pem(payload.issuer_private_key_pem, settings)
     if payload.status_mode == "xrpl":
-        seed = payload.issuer_seed or settings.xrpl_issuer_seed
-        if not seed:
-            raise HTTPException(
-                status_code=400,
-                detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
-            )
+        seed = _issuer_seed(
+            payload.issuer_seed,
+            settings,
+            detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
+        )
         rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
         try:
             enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
@@ -108,13 +137,15 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
         if issuer_account is not None and issuer_account != issuer_wallet.address:
             raise HTTPException(status_code=400, detail="issuer_account does not match issuer_seed wallet address")
         issuer_account = issuer_wallet.address
+    elif issuer_account is None and (payload.issuer_seed or settings.xrpl_issuer_seed):
+        issuer_account = wallet_from_seed(payload.issuer_seed or settings.xrpl_issuer_seed).address
     elif issuer_account is None:
         raise HTTPException(status_code=400, detail="issuer_account is required for local status mode")
 
     service = IssuerService(
         issuer_account=issuer_account,
         issuer_did=payload.issuer_did,
-        private_key=private_key_from_pem(payload.issuer_private_key_pem),
+        private_key=private_key_from_pem(private_key_pem),
         key_id=payload.key_id,
         credential_repository=repository,
         status_repository=repository,
@@ -180,12 +211,11 @@ def revoke_credential(payload: RevokeCredentialRequest, request: Request) -> Rev
     delete_tx = None
     ledger_entry = None
     if payload.status_mode == "xrpl":
-        seed = payload.issuer_seed or settings.xrpl_issuer_seed
-        if not seed:
-            raise HTTPException(
-                status_code=400,
-                detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
-            )
+        seed = _issuer_seed(
+            payload.issuer_seed,
+            settings,
+            detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
+        )
         rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
         try:
             enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)

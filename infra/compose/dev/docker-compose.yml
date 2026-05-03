@@ -1,6 +1,12 @@
 services:
   kyvc-frontend-dev:
-    image: nginx:alpine
+    image: ghcr.io/de-butler-kyvc/kyvc-frontend:dev
+    build:
+      context: ../../../
+      dockerfile: infra/docker/frontend/Dockerfile
+      args:
+        NGINX_CONF: dev.conf
+        KYVC_ENV: dev
     container_name: kyvc-frontend-dev
     restart: unless-stopped
     ports:
@@ -9,6 +15,7 @@ services:
       - /opt/kyvc/logs/dev/frontend:/var/log/nginx
     networks:
       - kyvc-public
+      - kyvc-admin-internal
 
   kyvc-backend-dev:
     image: ghcr.io/de-butler-kyvc/kyvc-backend:dev
@@ -38,21 +45,10 @@ services:
       - "8092:8090"
     volumes:
       - /opt/kyvc/logs/dev/core:/app/logs
+      - /opt/kyvc/secrets/dev/core/issuer-key.pem:/run/secrets/issuer-key.pem:ro
     networks:
       - kyvc-internal
       - kyvc-dev-net
-
-  kyvc-admin-frontend-dev:
-    image: nginx:alpine
-    container_name: kyvc-admin-frontend-dev
-    restart: unless-stopped
-    ports:
-      - "3003:80"
-    volumes:
-      - /opt/kyvc/logs/dev/admin-frontend:/var/log/nginx
-    networks:
-      - kyvc-public
-      - kyvc-admin-internal
 
   kyvc-back-admin-dev:
     image: ghcr.io/de-butler-kyvc/kyvc-backend-admin:dev
