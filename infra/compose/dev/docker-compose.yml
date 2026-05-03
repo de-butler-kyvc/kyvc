@@ -38,6 +38,7 @@ services:
       - "8092:8090"
     volumes:
       - /opt/kyvc/logs/dev/core:/app/logs
+      - /opt/kyvc/secrets/dev/core/issuer-key.pem:/run/secrets/issuer-key.pem:ro
     networks:
       - kyvc-internal
       - kyvc-dev-net
