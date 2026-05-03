@@ -456,3 +456,30 @@ def test_api_issue_submit_verify_flow(tmp_path):
     assert replay_response.status_code == 200
     assert replay_response.json()["ok"] is False
     assert "VP challenge was already used" in replay_response.json()["errors"]
+
+
+def test_api_issue_uses_env_private_key_path_when_request_omits_it(tmp_path):
+    repository = _repo(tmp_path)
+    issuer_key = generate_private_key()
+    issuer_key_path = tmp_path / "issuer-key.pem"
+    issuer_key_path.write_text(private_key_to_pem(issuer_key), encoding="ascii")
+    app = create_app(
+        settings=Settings(issuer_private_key_pem_path=str(issuer_key_path)),
+        repository=repository,
+    )
+    client = TestClient(app)
+
+    issue_response = client.post(
+        "/issuer/credentials/kyc",
+        json={
+            "issuer_account": "rIssuer",
+            "holder_account": "rHolder",
+            "claims": {"kycLevel": "BASIC", "jurisdiction": "KR"},
+            "valid_from": (datetime.now(tz=UTC) - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "valid_until": (datetime.now(tz=UTC) + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            "status_mode": "local",
+        },
+    )
+
+    assert issue_response.status_code == 200
+    assert verify_vc_signature(issue_response.json()["credential"], private_key_to_jwk(issuer_key))
