@@ -1,8 +1,10 @@
 package com.kyvc.backend.global.exception;
 
+import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
 // KYvC Backend API 공통 에러 코드
+@Getter
 public enum ErrorCode {
 
     // HTTP 400 - 잘못된 요청 파라미터, 요청 본문, 검증 오류
@@ -59,24 +61,13 @@ public enum ErrorCode {
     private final String code;
     private final String message;
 
-    ErrorCode(HttpStatus status, String code, String message) {
+    ErrorCode(
+            HttpStatus status, // HTTP 상태
+            String code, // 코드 문자열
+            String message // 기본 메시지
+    ) {
         this.status = status;
         this.code = code;
         this.message = message;
-    }
-
-    // HTTP 상태 조회
-    public HttpStatus getStatus() {
-        return status;
-    }
-
-    // 코드 문자열 조회
-    public String getCode() {
-        return code;
-    }
-
-    // 기본 메시지 조회
-    public String getMessage() {
-        return message;
     }
 }
