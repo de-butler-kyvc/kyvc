@@ -4,7 +4,14 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.credentials.resolver import CompositeDidResolver, StaticDidResolver
+from app.credentials.resolver import (
+    CachingDidResolver,
+    CompositeDidResolver,
+    StaticDidResolver,
+    VerifiedCachedDidResolver,
+    VerifiedStaticDidResolver,
+    XrplDidResolver,
+)
 from app.verifier.api_models import (
     IssuePresentationChallengeRequest,
     IssuePresentationChallengeResponse,
@@ -48,6 +55,47 @@ def _status_lookup(request: Request, status_mode: str, rpc_url: str | None, allo
     return lookup
 
 
+def _xrpl_client_for_verifier(
+    request: Request,
+    status_mode: str,
+    rpc_url: str | None,
+    allow_mainnet: bool,
+):
+    if status_mode != "xrpl" and rpc_url is None:
+        return None
+    settings = request.app.state.settings
+    selected_rpc_url = rpc_url or settings.xrpl_json_rpc_url
+    try:
+        enforce_mainnet_policy(selected_rpc_url, settings.allow_mainnet, allow_mainnet)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return make_client(selected_rpc_url)
+
+
+def _resolver(
+    request: Request,
+    did_documents: dict[str, dict[str, Any]],
+    *,
+    status_mode: str,
+    xrpl_json_rpc_url: str | None,
+    allow_mainnet: bool,
+):
+    repository = request.app.state.repository
+    client = _xrpl_client_for_verifier(request, status_mode, xrpl_json_rpc_url, allow_mainnet)
+    resolvers = []
+    if did_documents:
+        if client is None:
+            resolvers.append(StaticDidResolver(did_documents))
+        else:
+            resolvers.append(VerifiedStaticDidResolver(did_documents, client, cache=repository))
+    if client is not None:
+        resolvers.append(VerifiedCachedDidResolver(repository, client))
+        resolvers.append(CachingDidResolver(XrplDidResolver(client), repository))
+    else:
+        resolvers.append(repository)
+    return CompositeDidResolver(*resolvers)
+
+
 def _service(
     request: Request,
     did_documents: dict[str, dict[str, Any]],
@@ -58,9 +106,13 @@ def _service(
     allow_mainnet: bool,
 ) -> VerifierService:
     repository = request.app.state.repository
-    resolver = repository
-    if did_documents:
-        resolver = CompositeDidResolver(StaticDidResolver(did_documents), repository)
+    resolver = _resolver(
+        request,
+        did_documents,
+        status_mode=status_mode,
+        xrpl_json_rpc_url=xrpl_json_rpc_url,
+        allow_mainnet=allow_mainnet,
+    )
 
     def logger(subject_id: str | None, result: VerificationResult, verified_at: datetime) -> None:
         repository.save_verification_result(
