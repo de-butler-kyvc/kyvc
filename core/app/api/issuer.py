@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 
 from app.credentials.crypto import private_key_from_pem
+from app.credentials.vc import decode_vc_jwt
 from app.issuer.api_models import (
     GenerateIssuerWalletRequest,
     GenerateIssuerWalletResponse,
@@ -162,8 +163,10 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
         persist_status=payload.persist_status and payload.status_mode == "local",
         mark_status_accepted=payload.mark_status_accepted,
         status_uri=payload.status_uri,
+        credential_format=payload.credential_format,
     )
-    status = credential["credentialStatus"]
+    credential_document = decode_vc_jwt(credential)[1] if isinstance(credential, str) else credential
+    status = credential_document["credentialStatus"]
     credential_type = str(status["credentialType"])
     create_tx = None
     ledger_entry = None

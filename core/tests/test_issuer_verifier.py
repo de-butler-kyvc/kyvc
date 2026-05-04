@@ -3,11 +3,16 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 
 from app.credentials.resolver import did_resolution_result
-from app.credentials.crypto import generate_private_key, private_key_to_jwk
+from app.credentials.crypto import decode_compact_jws, generate_private_key, private_key_to_jwk
 from app.credentials.crypto import private_key_to_pem
 from app.credentials.did import did_from_account, holder_diddoc
-from app.credentials.vc import build_kyc_vc, credential_type_hex_for_vc, verify_vc_signature
-from app.credentials.vp import create_vp
+from app.credentials.vc import (
+    build_kyc_vc,
+    credential_type_hex_for_vc,
+    decode_vc_jwt,
+    verify_vc_signature,
+)
+from app.credentials.vp import create_vp, enveloped_vp, vc_jwts_from_vp, verify_vp_signature
 from app.api.did import get_did_document
 from app.api.verifier import issue_presentation_challenge
 from app.core.config import Settings
@@ -197,10 +202,98 @@ def test_vc_local_signature_and_salt_tamper(tmp_path):
     )
 
     assert verify_vc_signature(vc, private_key_to_jwk(key))
-    original_credential_type = vc["credentialStatus"]["credentialType"]
-    vc["credentialSalt"] = "tampered-salt"
-    assert not verify_vc_signature(vc, private_key_to_jwk(key))
-    assert credential_type_hex_for_vc(vc) != original_credential_type
+    _, vc_document = decode_vc_jwt(vc)
+    original_credential_type = vc_document["credentialStatus"]["credentialType"]
+    parts = vc.split(".")
+    parts[2] = ("A" if parts[2][0] != "A" else "B") + parts[2][1:]
+    tampered_vc = ".".join(parts)
+    assert not verify_vc_signature(tampered_vc, private_key_to_jwk(key))
+    vc_document["credentialSalt"] = "tampered-salt"
+    assert credential_type_hex_for_vc(vc_document) != original_credential_type
+
+
+def test_vc_uses_application_vc_jwt_secured_representation(tmp_path):
+    repository = _repo(tmp_path)
+    key = generate_private_key()
+    service = IssuerService(
+        "rIssuer",
+        key,
+        credential_repository=repository,
+        status_repository=repository,
+        did_document_repository=repository,
+    )
+    service.register_did_document()
+    vc = service.issue_kyc_vc(
+        holder_account="rHolder",
+        claims={"kycLevel": "BASIC", "jurisdiction": "KR"},
+        valid_from=datetime.now(tz=UTC) - timedelta(minutes=1),
+        valid_until=datetime.now(tz=UTC) + timedelta(days=1),
+    )
+
+    assert isinstance(vc, str)
+    assert len(vc.split(".")) == 3
+    protected, payload, _, signature = decode_compact_jws(vc)
+    assert protected["alg"] == "ES256K"
+    assert protected["typ"] == "vc+jwt"
+    assert protected["cty"] == "vc"
+    assert protected["kid"] == "did:xrpl:1:rIssuer#issuer-key-1"
+    assert protected["iss"] == payload["issuer"]
+    assert len(signature) == 64
+    assert payload["type"] == ["VerifiableCredential", "KycCredential"]
+    assert "proof" not in payload
+    assert verify_vc_signature(vc, private_key_to_jwk(key))
+
+
+def test_vp_uses_application_vp_jwt_with_enveloped_vc(tmp_path):
+    repository, holder_did, holder_key, vc = _vp_fixture(tmp_path)
+    vp = create_vp(
+        holder_did,
+        vc,
+        "challenge-1",
+        "example.com",
+        holder_key,
+        f"{holder_did}#holder-key-1",
+    )
+
+    assert isinstance(vp, str)
+    protected, payload, _, signature = decode_compact_jws(vp)
+    assert protected["alg"] == "ES256K"
+    assert protected["typ"] == "vp+jwt"
+    assert protected["cty"] == "vp"
+    assert protected["kid"] == f"{holder_did}#holder-key-1"
+    assert protected["challenge"] == "challenge-1"
+    assert protected["domain"] == "example.com"
+    assert len(signature) == 64
+    enveloped = payload["verifiableCredential"][0]
+    assert enveloped["@context"] == "https://www.w3.org/ns/credentials/v2"
+    assert enveloped["type"] == "EnvelopedVerifiableCredential"
+    assert enveloped["id"].startswith("data:application/vc+jwt,")
+    assert vc_jwts_from_vp(payload) == [vc]
+    assert verify_vp_signature(vp, private_key_to_jwk(holder_key))
+
+    parts = vp.split(".")
+    parts[2] = ("A" if parts[2][0] != "A" else "B") + parts[2][1:]
+    tampered_vp = ".".join(parts)
+    assert not verify_vp_signature(tampered_vp, private_key_to_jwk(holder_key))
+
+
+def test_verifier_accepts_enveloped_vp_data_url(tmp_path):
+    repository, holder_did, holder_key, vc = _vp_fixture(tmp_path)
+    _save_challenge(repository)
+    vp = create_vp(
+        holder_did,
+        vc,
+        "challenge-1",
+        "example.com",
+        holder_key,
+        f"{holder_did}#holder-key-1",
+    )
+
+    verifier = VerifierService(repository, status_lookup=repository.get_credential_entry)
+    result = verifier.verify_vp(enveloped_vp(vp))
+
+    assert result.ok
+    assert result.details["mediaType"] == "vp+jwt"
 
 
 def test_same_claims_receive_distinct_credential_types():
@@ -410,6 +503,7 @@ def test_api_issue_submit_verify_flow(tmp_path):
     assert issue_response.status_code == 200
     issued = issue_response.json()
     credential = issued["credential"]
+    assert isinstance(credential, str)
 
     status_response = client.get(
         f"/credential-status/credentials/rIssuer/{holder_account}/{issued['credential_type']}?status_mode=local",

@@ -12,7 +12,7 @@ class PolicyModel(BaseModel):
 
 
 class VerifyCredentialRequest(BaseModel):
-    credential: dict[str, Any]
+    credential: dict[str, Any] | str
     did_documents: dict[str, dict[str, Any]] = Field(default_factory=dict)
     policy: PolicyModel | None = None
     require_status: bool = True
@@ -22,7 +22,7 @@ class VerifyCredentialRequest(BaseModel):
 
 
 class VerifyPresentationRequest(BaseModel):
-    presentation: dict[str, Any]
+    presentation: dict[str, Any] | str
     did_documents: dict[str, dict[str, Any]] = Field(default_factory=dict)
     policy: PolicyModel | None = None
     require_status: bool = True
