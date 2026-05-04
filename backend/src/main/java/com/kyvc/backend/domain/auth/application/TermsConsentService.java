@@ -25,11 +25,11 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class TermsConsentService {
 
-    private static final Set<String> REQUIRED_TERMS_CODES = Set.of(
-            KyvcEnums.ConsentType.TERMS_OF_SERVICE.name(),
-            KyvcEnums.ConsentType.PRIVACY_POLICY.name(),
-            KyvcEnums.ConsentType.KYC_PROCESSING.name()
-    ); // 필수 약관 코드 목록
+    private static final Set<KyvcEnums.ConsentType> REQUIRED_TERMS_TYPES = Set.of(
+            KyvcEnums.ConsentType.TERMS_OF_SERVICE,
+            KyvcEnums.ConsentType.PRIVACY_POLICY,
+            KyvcEnums.ConsentType.KYC_PROCESSING
+    ); // 필수 약관 유형 목록
 
     private final TermsConsentRepository termsConsentRepository;
 
@@ -54,8 +54,14 @@ public class TermsConsentService {
         LocalDateTime now = LocalDateTime.now(); // 동의 처리 기준 시각
 
         for (TermsConsentItemRequest item : request.consents()) {
-            String termsCode = normalize(item.termsCode()); // 약관 코드
+            KyvcEnums.ConsentType consentType = parseConsentType(item.termsCode()); // 약관 유형
+            String termsCode = consentType.name(); // 서버 기준 약관 코드
             String termsVersion = normalize(item.termsVersion()); // 약관 버전
+            boolean requiredTerms = isRequiredTermsType(consentType); // 서버 기준 필수 약관 여부
+
+            if (requiredTerms && Boolean.FALSE.equals(item.agreed())) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST);
+            }
 
             TermsConsent termsConsent = termsConsentRepository
                     .findByUserIdAndTermsCodeAndTermsVersion(userId, termsCode, termsVersion)
@@ -129,9 +135,7 @@ public class TermsConsentService {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
 
-        if (Boolean.TRUE.equals(consent.required()) && Boolean.FALSE.equals(consent.agreed())) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST);
-        }
+        parseConsentType(consent.termsCode());
     }
 
     // 약관 동의 응답 항목 변환
@@ -147,11 +151,29 @@ public class TermsConsentService {
         );
     }
 
+    // 약관 유형 파싱
+    private KyvcEnums.ConsentType parseConsentType(
+            String termsCode // 약관 코드
+    ) {
+        try {
+            return KyvcEnums.ConsentType.valueOf(normalize(termsCode));
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
     // 필수 약관 코드 여부
     private boolean isRequiredTermsCode(
             String termsCode // 약관 코드
     ) {
-        return REQUIRED_TERMS_CODES.contains(termsCode);
+        return isRequiredTermsType(parseConsentType(termsCode));
+    }
+
+    // 필수 약관 유형 여부
+    private boolean isRequiredTermsType(
+            KyvcEnums.ConsentType consentType // 약관 유형
+    ) {
+        return REQUIRED_TERMS_TYPES.contains(consentType);
     }
 
     // 문자열 정규화
