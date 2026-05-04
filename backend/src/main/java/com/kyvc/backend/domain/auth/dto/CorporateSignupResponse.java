@@ -1,5 +1,7 @@
 package com.kyvc.backend.domain.auth.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 법인 사용자 회원가입 응답
  *
@@ -8,10 +10,15 @@ package com.kyvc.backend.domain.auth.dto;
  * @param userType 사용자 유형
  * @param userStatus 사용자 상태
  */
+@Schema(description = "법인 사용자 회원가입 응답")
 public record CorporateSignupResponse(
+        @Schema(description = "사용자 ID", example = "1")
         Long userId, // 사용자 ID
+        @Schema(description = "로그인 이메일", example = "user@kyvc.local")
         String email, // 로그인 이메일
+        @Schema(description = "사용자 유형", example = "CORPORATE")
         String userType, // 사용자 유형
+        @Schema(description = "사용자 상태", example = "ACTIVE")
         String userStatus // 사용자 상태
 ) {
 
