@@ -43,6 +43,22 @@ ChallengeLookup = Callable[[str], VerificationChallengeEntry | None]
 ChallengeMarker = Callable[[str, datetime], bool]
 
 
+def did_resolution_details(resolution: dict[str, Any]) -> dict[str, Any]:
+    metadata = resolution.get("didResolutionMetadata") or {}
+    document_metadata = resolution.get("didDocumentMetadata") or {}
+    details = {
+        "resolver": metadata.get("resolver"),
+        "cacheResolver": metadata.get("cacheResolver"),
+        "ledger": metadata.get("ledger"),
+        "account": metadata.get("account"),
+        "uri": document_metadata.get("uri"),
+        "dataHash": document_metadata.get("dataHash"),
+        "cached": document_metadata.get("cached"),
+        "cacheVerified": document_metadata.get("cacheVerified"),
+    }
+    return {key: value for key, value in details.items() if value is not None}
+
+
 class VerifierService:
     def __init__(
         self,
@@ -96,6 +112,7 @@ class VerifierService:
             issuer_did = str(vc_document["issuer"])
             issuer_account = account_from_did(issuer_did)
             resolution = self.resolver.resolve(issuer_did)
+            details["issuerDidResolution"] = did_resolution_details(resolution)
             diddoc = resolution["didDocument"]
             proof = vc_document.get("proof") or {}
             vm_id = str(protected.get("kid", "") if protected is not None else proof.get("verificationMethod", ""))
@@ -189,6 +206,7 @@ class VerifierService:
 
             holder_did = str(vp_document["holder"])
             resolution = self.resolver.resolve(holder_did)
+            details["holderDidResolution"] = did_resolution_details(resolution)
             diddoc = resolution["didDocument"]
             proof = vp_document.get("proof") or {}
             proof_challenge_value = protected.get("challenge") if protected is not None else proof.get("challenge")

@@ -123,6 +123,33 @@ status mirrors, verifier challenges, and verification logs. XRPL ledger entries
 are the authoritative source for credential active/inactive status in the default
 API flow.
 
+## DID Resolution
+
+Verifier DID resolution uses a chain:
+
+1. Request `did_documents`, verified against the XRPL DID entry `Data` hash when
+   an XRPL client is configured
+2. Local MySQL DID Document cache, verified against the XRPL DID entry `Data`
+   hash before use when an XRPL client is configured
+3. XRPL DID entry lookup, DID Document fetch from the ledger `URI`, and
+   multihash comparison against ledger `Data`
+
+Issuer DID Documents created by this core service are stored locally, but in
+XRPL-backed verification the cached document is still checked against ledger
+`Data` before it is used. External issuer and holder DIDs fall back to XRPL
+resolution: the verifier reads the DID entry, fetches the document from `URI`,
+computes `multihash_sha2_256(canonical_json(didDocument))`, and requires it to
+match ledger `Data`. Successfully verified external documents are cached locally
+for later verification; later cache hits are rechecked against the current ledger
+hash.
+
+Holder DID Documents may still be supplied in verifier request `did_documents`,
+but in XRPL mode they are not trusted as-is. The verifier verifies the supplied
+document against the XRPL DID entry hash before using it. Offline local mode
+without `xrpl_json_rpc_url` keeps the old static/local behavior for development
+only. If a local cache entry does not match ledger `Data`, the verifier skips
+that cache entry and attempts a fresh XRPL `URI` fetch.
+
 ## Run
 
 Start a local MySQL container:
@@ -382,6 +409,11 @@ through the MySQL repository from application code. Issuer DID Documents created
 the issuer API are stored automatically. VP verification applies the same XRPL
 status lookup to each enveloped VC unless `require_status` is false or
 `status_mode` is explicitly set to `local`.
+
+Verifier responses include DID resolution metadata when available, for example
+`details.issuerDidResolution` and `details.holderDidResolution` with `resolver`,
+`ledger`, `uri`, `dataHash`, and `cached`. DID ledger entry absence, URI fetch
+failure, and hash mismatch are reported as distinct errors.
 
 ## Developer Verification
 
