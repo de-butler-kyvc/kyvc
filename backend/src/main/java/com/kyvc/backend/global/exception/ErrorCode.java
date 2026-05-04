@@ -54,12 +54,22 @@ public enum ErrorCode {
     KYC_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "KYC_ALREADY_SUBMITTED", "이미 제출된 KYC입니다."),
     // HTTP 409 - 허용되지 않은 KYC 상태
     KYC_INVALID_STATUS(HttpStatus.CONFLICT, "KYC_INVALID_STATUS", "유효하지 않은 KYC 상태입니다."),
+    // HTTP 409 - 진행 중인 KYC 신청 존재
+    KYC_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "KYC_ALREADY_IN_PROGRESS", "진행 중인 KYC 신청이 이미 존재합니다."),
+    // HTTP 400 - KYC 신청 법인정보 누락
+    KYC_CORPORATE_REQUIRED(HttpStatus.BAD_REQUEST, "KYC_CORPORATE_REQUIRED", "KYC 신청을 위한 법인정보가 필요합니다."),
     // HTTP 404 - 문서 정보 조회 실패
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     // HTTP 403 - 문서 리소스 접근 권한 없음
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "문서 접근 권한이 없습니다."),
     // HTTP 400 - 필수 문서 누락
     DOCUMENT_REQUIRED_MISSING(HttpStatus.BAD_REQUEST, "DOCUMENT_REQUIRED_MISSING", "필수 문서가 누락되었습니다."),
+    // HTTP 400 - 허용되지 않은 문서 확장자
+    DOCUMENT_INVALID_EXTENSION(HttpStatus.BAD_REQUEST, "DOCUMENT_INVALID_EXTENSION", "허용되지 않은 파일 확장자입니다."),
+    // HTTP 400 - 문서 파일 크기 제한 초과
+    DOCUMENT_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "DOCUMENT_SIZE_EXCEEDED", "파일 크기 제한을 초과했습니다."),
+    // HTTP 500 - 문서 저장 경로 오류
+    DOCUMENT_STORAGE_PATH_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_STORAGE_PATH_INVALID", "문서 저장 경로가 올바르지 않습니다."),
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통 코드 그룹 조회 실패

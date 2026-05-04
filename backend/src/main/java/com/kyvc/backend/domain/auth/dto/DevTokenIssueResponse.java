@@ -1,5 +1,7 @@
 package com.kyvc.backend.domain.auth.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -12,12 +14,19 @@ import java.util.List;
  * @param created 신규 생성 여부
  * @param roles 권한 목록
  */
+@Schema(description = "Dev Token 발급 응답")
 public record DevTokenIssueResponse(
+        @Schema(description = "사용자 ID", example = "1")
         Long userId, // 사용자 ID
+        @Schema(description = "사용자 이메일", example = "dev-user@kyvc.local")
         String email, // 사용자 이메일
+        @Schema(description = "사용자 유형", example = "CORPORATE")
         String userType, // 사용자 유형
+        @Schema(description = "사용자 상태", example = "ACTIVE")
         String userStatus, // 사용자 상태
+        @Schema(description = "신규 생성 여부", example = "false")
         boolean created, // 신규 생성 여부
+        @Schema(description = "권한 목록", example = "[\"ROLE_USER\"]")
         List<String> roles // 권한 목록
 ) {
 
