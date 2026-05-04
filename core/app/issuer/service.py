@@ -1,11 +1,17 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 
 from app.credentials.crypto import private_key_to_jwk
 from app.credentials.did import did_from_account, issuer_diddoc
-from app.credentials.vc import add_vc_proof, build_kyc_vc, make_credential_status, parse_datetime
+from app.credentials.vc import (
+    add_vc_compatibility_proof,
+    build_kyc_vc,
+    make_credential_status,
+    parse_datetime,
+    secure_vc_jwt,
+)
 from app.storage.interfaces import CredentialRepository, DidDocumentRepository, StatusRepository
 from app.xrpl.ledger import LSF_ACCEPTED, datetime_to_ripple_epoch
 
@@ -55,17 +61,21 @@ class IssuerService:
         persist_status: bool = True,
         mark_status_accepted: bool = False,
         status_uri: str | None = None,
-    ) -> dict[str, Any]:
+        credential_format: Literal["jwt", "embedded_jws"] = "jwt",
+    ) -> str | dict[str, Any]:
         selected_holder_did = holder_did or did_from_account(holder_account)
         vc = build_kyc_vc(self.issuer_did, selected_holder_did, claims, valid_from, valid_until)
         vc["credentialStatus"] = make_credential_status(vc, self.issuer_account, holder_account)
-        signed = add_vc_proof(vc, self.private_key, self.verification_method)
+        if credential_format == "jwt":
+            signed: str | dict[str, Any] = secure_vc_jwt(vc, self.private_key, self.verification_method)
+        else:
+            signed = add_vc_compatibility_proof(vc, self.private_key, self.verification_method)
 
-        credential_status = signed["credentialStatus"]
+        credential_status = vc["credentialStatus"]
         credential_type = str(credential_status["credentialType"])
         if persist and self.credential_repository is not None:
             self.credential_repository.save_issued_credential(
-                vc=signed,
+                vc=vc,
                 issuer_did=self.issuer_did,
                 issuer_account=self.issuer_account,
                 holder_did=selected_holder_did,
@@ -80,7 +90,7 @@ class IssuerService:
                 holder_account=holder_account,
                 credential_type=credential_type,
                 flags=flags,
-                expiration=datetime_to_ripple_epoch(parse_datetime(str(signed["validUntil"]))),
+                expiration=datetime_to_ripple_epoch(parse_datetime(str(vc["validUntil"]))),
                 uri=status_uri,
             )
         return signed

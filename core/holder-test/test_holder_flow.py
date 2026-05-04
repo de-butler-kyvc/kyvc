@@ -10,7 +10,7 @@ from typing import Any
 from app.credentials.crypto import generate_private_key, private_key_to_jwk
 from app.credentials.did import did_from_account, holder_diddoc
 from app.credentials.resolver import did_resolution_result
-from app.credentials.vc import issuer_account_from_vc
+from app.credentials.vc import decode_vc_jwt, issuer_account_from_vc
 from app.issuer.service import IssuerService
 from app.storage.interfaces import VerificationChallengeEntry
 from app.verifier.service import VerifierService
@@ -159,7 +159,12 @@ def _init_holder_wallet(db_path: Path) -> None:
             connection.execute("ALTER TABLE holder_test_credentials ADD COLUMN credential_accept_hash TEXT")
 
 
-def holder_store_credential(db_path: Path, credential: dict[str, Any]) -> None:
+def _credential_document(credential: dict[str, Any] | str) -> dict[str, Any]:
+    return decode_vc_jwt(credential)[1] if isinstance(credential, str) else credential
+
+
+def holder_store_credential(db_path: Path, credential: dict[str, Any] | str) -> None:
+    credential_document = _credential_document(credential)
     _init_holder_wallet(db_path)
     with sqlite3.connect(db_path) as connection:
         connection.execute(
@@ -171,7 +176,7 @@ def holder_store_credential(db_path: Path, credential: dict[str, Any]) -> None:
                 stored_at = excluded.stored_at
             """,
             (
-                str(credential["id"]),
+                str(credential_document["id"]),
                 json.dumps(credential, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
                 _now(),
             ),
@@ -183,11 +188,12 @@ def holder_submit_credential_accept(
     client: Any,
     db_path: Path,
     holder_seed: str,
-    credential: dict[str, Any],
+    credential: dict[str, Any] | str,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    status = credential["credentialStatus"]
+    credential_document = _credential_document(credential)
+    status = credential_document["credentialStatus"]
     holder_wallet = wallet_from_seed(holder_seed)
-    issuer_account = issuer_account_from_vc(credential)
+    issuer_account = issuer_account_from_vc(credential_document)
     credential_type = str(status["credentialType"])
     if holder_wallet.address != str(status["subject"]):
         raise RuntimeError("holder seed does not match credential subject account")
@@ -201,7 +207,7 @@ def holder_submit_credential_accept(
             SET submitted_at = ?, credential_accept_hash = ?
             WHERE credential_id = ?
             """,
-            (_now(), tx_hash(tx), str(credential["id"])),
+            (_now(), tx_hash(tx), str(credential_document["id"])),
         )
     return tx, entry
 
@@ -277,7 +283,8 @@ def run_xrpl_holder_flow(
         valid_until=valid_until,
         persist_status=False,
     )
-    credential_type = str(credential["credentialStatus"]["credentialType"])
+    credential_document = _credential_document(credential)
+    credential_type = str(credential_document["credentialStatus"]["credentialType"])
 
     create_tx = submit_credential_create(
         client,
