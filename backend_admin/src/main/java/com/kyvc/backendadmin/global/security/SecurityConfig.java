@@ -64,6 +64,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 "/api/admin/backend/**",
+                                "/api/admin/me",
                                 "/api/admin/me/**",
                                 "/api/admin/auth/logout",
                                 "/api/admin/auth/mfa/**"
