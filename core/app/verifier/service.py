@@ -5,6 +5,7 @@ from typing import Any
 
 from app.credentials.did import account_from_did
 from app.credentials.resolver import DidResolver, find_verification_method
+from app.credentials.crypto import decode_compact_jws
 from app.credentials.vc import (
     ENVELOPED_VC_TYPE,
     credential_type_hex_for_vc,
@@ -22,6 +23,10 @@ from app.credentials.vp import (
     verify_vp_signature,
     vp_jwt_from_enveloped,
 )
+from app.policy.sdjwt_policy import SdJwtVerificationPolicy
+from app.sdjwt.kb import decode_kb_jwt, sd_hash_for_presentation, verify_kb_jwt
+from app.sdjwt.verifier import parse_sd_jwt, verify_issuer_sd_jwt
+from app.status.sdjwt_status import credential_type_hex_from_payload
 from app.storage.interfaces import VerificationChallengeEntry
 from app.verifier.policy import VerificationPolicy
 from app.xrpl.ledger import is_credential_active
@@ -174,6 +179,287 @@ class VerifierService:
         if self.verification_logger is not None:
             self.verification_logger(subject_id, result, checked_at)
         return result
+
+    def verify_sd_jwt_credential(
+        self,
+        credential: str,
+        *,
+        now: datetime | None = None,
+        policy: SdJwtVerificationPolicy | None = None,
+        require_status: bool = True,
+    ) -> VerificationResult:
+        checked_at = (now or datetime.now(tz=UTC)).astimezone(UTC)
+        errors: list[str] = []
+        details: dict[str, Any] = {"mediaType": "dc+sd-jwt"}
+        subject_id: str | None = None
+        try:
+            issuer_header, issuer_payload, _, _ = decode_compact_jws(credential.split("~", 1)[0])
+            issuer_did = str(issuer_payload["iss"])
+            holder_did = str(issuer_payload["sub"])
+            subject_id = holder_did
+            issuer_account = account_from_did(issuer_did)
+            holder_account = account_from_did(holder_did)
+            resolution = self.resolver.resolve(issuer_did)
+            details["issuerDidResolution"] = did_resolution_details(resolution)
+            diddoc = resolution["didDocument"]
+            vm_id = str(issuer_header.get("kid", ""))
+            method = find_verification_method(diddoc, vm_id)
+            if method is None:
+                errors.append("SD-JWT verificationMethod not found in issuer DID Document")
+            elif vm_id not in diddoc.get("assertionMethod", []):
+                errors.append("SD-JWT verificationMethod is not authorized for assertionMethod")
+            else:
+                try:
+                    verified = verify_issuer_sd_jwt(
+                        credential,
+                        public_jwk=method["publicKeyJwk"],
+                        verification_method=vm_id,
+                        accepted_typ=(policy.accepted_format if policy else "dc+sd-jwt"),
+                        now=checked_at,
+                    )
+                    disclosed_payload = verified.disclosed_payload
+                    details["disclosedPayload"] = disclosed_payload
+                    details["disclosedPaths"] = sorted(verified.disclosed_paths)
+                    details["credentialVerified"] = True
+                except Exception as exc:
+                    errors.append(str(exc))
+                    disclosed_payload = {}
+                    details["credentialVerified"] = False
+
+            status = issuer_payload.get("credentialStatus") or {}
+            expected_type = credential_type_hex_from_payload(issuer_payload)
+            details["expectedCredentialType"] = expected_type
+            if status.get("credentialType") != expected_type:
+                errors.append("SD-JWT credentialStatus credentialType mismatch")
+            if status.get("type") != "XRPLCredentialStatus":
+                errors.append("SD-JWT credentialStatus type is not XRPLCredentialStatus")
+            if require_status:
+                if self.status_lookup is None:
+                    errors.append("credential status lookup is not configured")
+                    entry = None
+                else:
+                    entry = self.status_lookup(issuer_account, holder_account, expected_type)
+                details["credentialEntryFound"] = entry is not None
+                details["credentialAccepted"] = is_credential_active(entry, checked_at)
+                details["statusVerified"] = is_credential_active(entry, checked_at)
+                if entry is not None:
+                    if entry.get("Issuer", entry.get("issuer")) != issuer_account:
+                        errors.append("XRPL Credential issuer does not match issuer DID account")
+                    if entry.get("Subject", entry.get("subject")) != holder_account:
+                        errors.append("XRPL Credential subject does not match holder DID account")
+                if not is_credential_active(entry, checked_at):
+                    errors.append("XRPL Credential status is not active")
+            else:
+                details["statusVerified"] = True
+
+            selected_policy = policy or SdJwtVerificationPolicy()
+            if "disclosed_payload" in locals():
+                policy_details = selected_policy.validate(disclosed_payload, set(details.get("disclosedPaths", [])))
+            else:
+                policy_details = selected_policy.validate({}, set())
+            details.update(
+                {
+                    "policyVerified": not policy_details["errors"],
+                    "satisfiedRequirements": policy_details["satisfiedRequirements"],
+                    "missingRequirements": policy_details["missingRequirements"],
+                    "submittedDocumentTypes": policy_details["submittedDocumentTypes"],
+                    "policyErrors": policy_details["errors"],
+                }
+            )
+            errors.extend(policy_details["errors"])
+        except Exception as exc:
+            errors.append(str(exc))
+
+        result = VerificationResult(ok=not errors, errors=errors, details=details)
+        if self.verification_logger is not None:
+            self.verification_logger(subject_id, result, checked_at)
+        return result
+
+    def verify_sd_jwt_presentation(
+        self,
+        presentation: dict[str, Any] | str,
+        *,
+        now: datetime | None = None,
+        policy: SdJwtVerificationPolicy | None = None,
+        require_status: bool = True,
+        attachments: dict[str, tuple[bytes, str | None]] | None = None,
+    ) -> VerificationResult:
+        checked_at = (now or datetime.now(tz=UTC)).astimezone(UTC)
+        errors: list[str] = []
+        details: dict[str, Any] = {
+            "mediaType": "kyvc-sd-jwt-presentation-v1",
+            "credentialVerified": False,
+            "holderBindingVerified": False,
+            "statusVerified": False,
+            "policyVerified": False,
+            "originalDocumentHashMatches": [],
+        }
+        holder_did: str | None = None
+        nonce: str | None = None
+
+        try:
+            if isinstance(presentation, str):
+                presentation_data = {"sdJwtKb": presentation}
+            else:
+                presentation_data = presentation
+            sd_jwt_kb = str(presentation_data["sdJwtKb"])
+            parsed = parse_sd_jwt(sd_jwt_kb, expect_kb=True)
+            presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+            credential_result = self.verify_sd_jwt_credential(
+                presented_without_kb,
+                now=checked_at,
+                policy=policy,
+                require_status=require_status,
+            )
+            details["credential"] = credential_result.to_dict()
+            details["credentialVerified"] = bool(credential_result.details.get("credentialVerified"))
+            details["statusVerified"] = credential_result.details.get("statusVerified", False)
+            issuer_payload = credential_result.details.get("disclosedPayload") or {}
+            issuer_signed = decode_compact_jws(parsed.issuer_jwt)[1]
+            holder_did = str(issuer_signed["sub"])
+            cnf = issuer_signed.get("cnf") if isinstance(issuer_signed.get("cnf"), dict) else {}
+            holder_kid = cnf.get("kid")
+            if not isinstance(holder_kid, str) or not holder_kid.startswith(f"{holder_did}#"):
+                errors.append("SD-JWT cnf.kid does not bind to holder DID")
+            holder_resolution = self.resolver.resolve(holder_did)
+            details["holderDidResolution"] = did_resolution_details(holder_resolution)
+            holder_doc = holder_resolution["didDocument"]
+            holder_method = find_verification_method(holder_doc, str(holder_kid))
+            if holder_method is None:
+                errors.append("KB-JWT verificationMethod not found in holder DID Document")
+            elif holder_kid not in holder_doc.get("authentication", []):
+                errors.append("KB-JWT verificationMethod is not authorized for authentication")
+            elif not verify_kb_jwt(parsed.kb_jwt or "", holder_method["publicKeyJwk"], holder_kid):
+                errors.append("KB-JWT signature verification failed")
+
+            _, kb_payload = decode_kb_jwt(parsed.kb_jwt or "")
+            nonce_value = kb_payload.get("nonce")
+            aud_value = kb_payload.get("aud")
+            nonce = nonce_value if isinstance(nonce_value, str) else None
+            expected_aud = presentation_data.get("aud")
+            expected_nonce = presentation_data.get("nonce")
+            if kb_payload.get("sd_hash") != sd_hash_for_presentation(presented_without_kb):
+                errors.append("KB-JWT sd_hash mismatch")
+            if expected_nonce is not None and nonce_value != expected_nonce:
+                errors.append("KB-JWT nonce does not match presentation nonce")
+            if expected_aud is not None and aud_value != expected_aud:
+                errors.append("KB-JWT aud does not match presentation aud")
+            challenge_entry: VerificationChallengeEntry | None = None
+            if not isinstance(nonce_value, str) or not nonce_value:
+                errors.append("KB-JWT nonce is required")
+            elif not isinstance(aud_value, str) or not aud_value:
+                errors.append("KB-JWT aud is required")
+            elif self.challenge_lookup is None:
+                errors.append("verifier challenge lookup is not configured")
+            else:
+                challenge_entry = self.challenge_lookup(nonce_value)
+                details["challengeFound"] = challenge_entry is not None
+                if challenge_entry is None:
+                    errors.append("KB-JWT nonce was not issued by verifier")
+                else:
+                    details["challengeExpiresAt"] = challenge_entry.expires_at.isoformat().replace("+00:00", "Z")
+                    details["challengeUsed"] = challenge_entry.used_at is not None
+                    if challenge_entry.used_at is not None:
+                        errors.append("KB-JWT nonce was already used")
+                    if checked_at > challenge_entry.expires_at:
+                        errors.append("KB-JWT nonce is expired")
+                    if challenge_entry.domain != aud_value:
+                        errors.append("KB-JWT aud mismatch")
+            if isinstance(kb_payload.get("iat"), int) and kb_payload["iat"] > checked_at.timestamp() + 300:
+                errors.append("KB-JWT iat is in the future")
+
+            attachment_errors, hash_matches = self._verify_attachments(
+                credential_result.details.get("disclosedPayload") or issuer_payload,
+                presentation_data.get("attachmentManifest") or [],
+                attachments or {},
+                policy or SdJwtVerificationPolicy(),
+            )
+            errors.extend(attachment_errors)
+            details["originalDocumentHashMatches"] = hash_matches
+
+            errors.extend(credential_result.errors)
+            details["holderBindingVerified"] = not errors
+        except Exception as exc:
+            errors.append(str(exc))
+
+        if not errors:
+            if not isinstance(nonce, str) or self.challenge_marker is None:
+                errors.append("verifier challenge marker is not configured")
+            elif not self.challenge_marker(nonce, checked_at):
+                errors.append("KB-JWT nonce was already used")
+        details["verified"] = not errors
+        details["holderBindingVerified"] = details["holderBindingVerified"] and not errors
+        result = VerificationResult(ok=not errors, errors=errors, details=details)
+        if self.verification_logger is not None:
+            self.verification_logger(holder_did, result, checked_at)
+        return result
+
+    def _verify_attachments(
+        self,
+        disclosed_payload: dict[str, Any],
+        manifest: list[dict[str, Any]],
+        attachments: dict[str, tuple[bytes, str | None]],
+        policy: SdJwtVerificationPolicy,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        import base64
+        import hashlib
+
+        errors: list[str] = []
+        matches: list[dict[str, Any]] = []
+        evidence_items = disclosed_payload.get("documentEvidence")
+        if evidence_items is None:
+            evidence_items = []
+        if not isinstance(evidence_items, list):
+            return ["documentEvidence must be disclosed to verify attachments"], matches
+        evidence_by_id = {
+            item.get("documentId"): item for item in evidence_items if isinstance(item, dict) and item.get("documentId")
+        }
+        rules_by_id = {rule.id: rule for rule in policy.document_rules}
+        if attachments and not manifest:
+            errors.append("attachments require an attachmentManifest")
+        manifest_by_rule = {
+            str(item.get("requirementId")): item for item in manifest if isinstance(item, dict) and item.get("requirementId")
+        }
+        for rule in policy.document_rules:
+            if rule.original_policy == "REQUIRED":
+                manifest_item = manifest_by_rule.get(rule.id)
+                attachment_ref = manifest_item.get("attachmentRef") if isinstance(manifest_item, dict) else None
+                if not isinstance(attachment_ref, str) or attachment_ref not in attachments:
+                    errors.append(f"document rule {rule.id} requires an original attachment")
+        for item in manifest:
+            if not isinstance(item, dict):
+                errors.append("attachmentManifest entries must be objects")
+                continue
+            submission_mode = item.get("submissionMode")
+            if submission_mode == "EXTERNAL_ORIGINAL":
+                errors.append("EXTERNAL_ORIGINAL document submission is not supported")
+            elif submission_mode not in {None, "EVIDENCE_ONLY", "HASH_ONLY", "ATTACHED_ORIGINAL"}:
+                errors.append("unsupported document submission mode")
+            evidence = evidence_by_id.get(item.get("documentId"))
+            if evidence is None:
+                errors.append("attachmentManifest document is not disclosed in SD-JWT documentEvidence")
+                continue
+            if item.get("digestSRI") != evidence.get("digestSRI"):
+                errors.append("attachmentManifest digestSRI does not match disclosed documentEvidence")
+            if item.get("documentType") != evidence.get("documentType"):
+                errors.append("attachmentManifest documentType does not match disclosed documentEvidence")
+            rule = rules_by_id.get(str(item.get("requirementId")))
+            attachment_ref = item.get("attachmentRef")
+            has_attachment = isinstance(attachment_ref, str) and attachment_ref in attachments
+            if rule is not None and rule.original_policy == "NOT_ALLOWED" and has_attachment:
+                errors.append(f"document rule {rule.id} does not allow original attachments")
+            if has_attachment:
+                file_bytes, media_type = attachments[str(attachment_ref)]
+                digest = "sha384-" + base64.b64encode(hashlib.sha384(file_bytes).digest()).decode("ascii")
+                matched = digest == evidence.get("digestSRI") == item.get("digestSRI")
+                if not matched:
+                    errors.append("attached original digest does not match disclosed documentEvidence")
+                if item.get("byteSize") is not None and int(item["byteSize"]) != len(file_bytes):
+                    errors.append("attached original byteSize does not match manifest")
+                if item.get("mediaType") is not None and media_type is not None and item["mediaType"] != media_type:
+                    errors.append("attached original mediaType does not match manifest")
+                matches.append({"documentId": item.get("documentId"), "matched": matched})
+        return errors, matches
 
     def verify_vp(
         self,

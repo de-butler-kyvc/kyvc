@@ -1,5 +1,7 @@
 # Android Holder Wallet 연동 가이드
 
+> 신규 legal entity KYC wallet은 SD-JWT+KB 흐름을 기준으로 구현한다. SD-JWT 전용 가이드는 [`android-holder-wallet-sdjwt-guide.md`](android-holder-wallet-sdjwt-guide.md)를 먼저 참고한다. 이 문서는 legacy `vc+jwt`/`vp+jwt` 호환 흐름을 설명한다.
+
 이 문서는 Android holder wallet 개발자가 KYvC `core` issuer/verifier와 연동할 때 필요한 계약을 정리한다. 현재 `core`는 holder 전용 API를 제공하지 않는다. Android 앱은 holder XRPL 계정과 holder 인증 키를 보관하고, issuer가 발급한 `vc+jwt`를 저장한 뒤 XRPL `CredentialAccept`를 직접 제출한다.
 
 현재 기본 보안 포맷은 W3C VC Data Model 2.0 및 W3C VC-JOSE-COSE에 맞춘 JWT 기반 secured representation이다.

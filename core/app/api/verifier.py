@@ -1,3 +1,4 @@
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -20,6 +21,8 @@ from app.verifier.api_models import (
     VerifyPresentationRequest,
 )
 from app.verifier.policy import VerificationPolicy
+from app.policy.sdjwt_policy import SdJwtVerificationPolicy
+from app.sdjwt.issuer import DEFAULT_LEGAL_ENTITY_KYC_VCT
 from app.verifier.service import VerificationResult, VerifierService
 from app.xrpl.client import enforce_mainnet_policy, make_client
 from app.xrpl.ledger import get_credential_entry as get_xrpl_credential_entry
@@ -143,7 +146,14 @@ def verify_credential(payload: VerifyCredentialRequest, request: Request) -> Ver
         xrpl_json_rpc_url=payload.xrpl_json_rpc_url,
         allow_mainnet=payload.allow_mainnet,
     )
-    result = service.verify_vc(payload.credential, require_status=payload.require_status)
+    if payload.format == "dc+sd-jwt" or (isinstance(payload.credential, str) and "~" in payload.credential):
+        result = service.verify_sd_jwt_credential(
+            str(payload.credential),
+            require_status=payload.require_status,
+            policy=SdJwtVerificationPolicy.from_dict(_policy_dict(payload.policy)),
+        )
+    else:
+        result = service.verify_vc(payload.credential, require_status=payload.require_status)
     return VerificationResponse(**result.to_dict())
 
 
@@ -156,21 +166,64 @@ def issue_presentation_challenge(
     issued_at = datetime.now(tz=UTC)
     expires_at = issued_at + timedelta(seconds=settings.verifier_challenge_ttl_seconds)
     challenge = secrets.token_urlsafe(32)
+    audience = payload.aud or payload.domain
+    if not audience:
+        raise HTTPException(status_code=400, detail="aud or domain is required")
     request.app.state.repository.save_verification_challenge(
         challenge=challenge,
-        domain=payload.domain,
+        domain=audience,
         expires_at=expires_at,
         created_at=issued_at,
     )
+    expires = expires_at.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    if payload.format == "vp+jwt":
+        return IssuePresentationChallengeResponse(
+            challenge=challenge,
+            domain=audience,
+            expires_at=expires,
+        )
     return IssuePresentationChallengeResponse(
         challenge=challenge,
-        domain=payload.domain,
-        expires_at=expires_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        domain=audience,
+        expires_at=expires,
+        nonce=challenge,
+        aud=audience,
+        expiresAt=expires,
+        presentationDefinition={
+            "id": payload.definitionId,
+            "acceptedFormat": "dc+sd-jwt",
+            "acceptedVct": [DEFAULT_LEGAL_ENTITY_KYC_VCT],
+            "trustedIssuers": [],
+            "requiredDisclosures": [],
+            "documentRules": [],
+        },
     )
 
 
 @router.post("/presentations/verify", response_model=VerificationResponse)
-def verify_presentation(payload: VerifyPresentationRequest, request: Request) -> VerificationResponse:
+async def verify_presentation(request: Request) -> VerificationResponse:
+    content_type = request.headers.get("content-type", "")
+    attachments: dict[str, tuple[bytes, str | None]] = {}
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        raw_presentation = form.get("presentation")
+        if not isinstance(raw_presentation, str):
+            raise HTTPException(status_code=400, detail="multipart presentation field is required")
+        try:
+            payload = VerifyPresentationRequest(presentation=json.loads(raw_presentation))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="multipart presentation field must be JSON") from exc
+        for key, value in form.multi_items():
+            if key == "presentation":
+                continue
+            filename = getattr(value, "filename", None)
+            read = getattr(value, "read", None)
+            if filename is not None and callable(read):
+                file_bytes = await read()
+                attachments[key] = (file_bytes, getattr(value, "content_type", None))
+                attachments[str(filename)] = (file_bytes, getattr(value, "content_type", None))
+    else:
+        payload = VerifyPresentationRequest(**(await request.json()))
     service = _service(
         request,
         payload.did_documents,
@@ -179,8 +232,19 @@ def verify_presentation(payload: VerifyPresentationRequest, request: Request) ->
         xrpl_json_rpc_url=payload.xrpl_json_rpc_url,
         allow_mainnet=payload.allow_mainnet,
     )
-    result = service.verify_vp(
-        payload.presentation,
-        require_status=payload.require_status,
+    is_sd_jwt = payload.format == "kyvc-sd-jwt-presentation-v1" or (
+        isinstance(payload.presentation, dict) and payload.presentation.get("sdJwtKb")
     )
+    if is_sd_jwt:
+        result = service.verify_sd_jwt_presentation(
+            payload.presentation,
+            require_status=payload.require_status,
+            policy=SdJwtVerificationPolicy.from_dict(_policy_dict(payload.policy)),
+            attachments=attachments,
+        )
+    else:
+        result = service.verify_vp(
+            payload.presentation,
+            require_status=payload.require_status,
+        )
     return VerificationResponse(**result.to_dict())
