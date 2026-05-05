@@ -10,8 +10,8 @@ import java.util.Objects;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class CommonResponseFactory {
 
-    private static final String SUCCESS_CODE = "SUCCESS";
-    private static final String SUCCESS_MESSAGE = "Request completed successfully.";
+    private static final String SUCCESS_CODE = "OK";
+    private static final String SUCCESS_MESSAGE = "요청이 성공했습니다.";
 
     // 데이터 포함 성공 응답 생성
     public static <T> CommonResponse<T> success(T data // 응답 데이터

@@ -63,7 +63,27 @@ public enum ErrorCode {
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통 코드 그룹 조회 실패
-    COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통 코드 그룹을 찾을 수 없습니다.");
+    COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통 코드 그룹을 찾을 수 없습니다."),
+
+    ADMIN_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN_NOT_FOUND", "관리자를 찾을 수 없습니다."),
+    ADMIN_ALREADY_EXISTS(HttpStatus.CONFLICT, "ADMIN_ALREADY_EXISTS", "이미 존재하는 관리자입니다."),
+    ADMIN_INACTIVE(HttpStatus.FORBIDDEN, "ADMIN_INACTIVE", "비활성 관리자입니다."),
+    ADMIN_LOCKED(HttpStatus.FORBIDDEN, "ADMIN_LOCKED", "잠금 처리된 관리자입니다."),
+    ADMIN_ROLE_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN_ROLE_NOT_FOUND", "관리자 권한을 찾을 수 없습니다."),
+    ADMIN_ROLE_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "ADMIN_ROLE_ALREADY_ASSIGNED", "이미 할당된 관리자 권한입니다."),
+    ADMIN_ROLE_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "ADMIN_ROLE_NOT_ASSIGNED", "할당된 관리자 권한을 찾을 수 없습니다."),
+    MFA_NOT_FOUND(HttpStatus.NOT_FOUND, "MFA_NOT_FOUND", "MFA 정보를 찾을 수 없습니다."),
+    MFA_EXPIRED(HttpStatus.UNAUTHORIZED, "MFA_EXPIRED", "MFA 인증이 만료되었습니다."),
+    MFA_INVALID_CODE(HttpStatus.UNAUTHORIZED, "MFA_INVALID_CODE", "MFA 인증 코드가 올바르지 않습니다."),
+    MFA_ALREADY_USED(HttpStatus.CONFLICT, "MFA_ALREADY_USED", "이미 사용된 MFA 인증입니다."),
+    PASSWORD_RESET_TOKEN_NOT_FOUND(HttpStatus.NOT_FOUND, "PASSWORD_RESET_TOKEN_NOT_FOUND", "비밀번호 재설정 토큰을 찾을 수 없습니다."),
+    PASSWORD_RESET_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "PASSWORD_RESET_TOKEN_EXPIRED", "비밀번호 재설정 토큰이 만료되었습니다."),
+    AUDIT_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "AUDIT_LOG_NOT_FOUND", "감사 로그를 찾을 수 없습니다."),
+    SUPPLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SUPPLEMENT_NOT_FOUND", "보완 요청을 찾을 수 없습니다."),
+    DOCUMENT_REQUIREMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_REQUIREMENT_NOT_FOUND", "문서 제출 요건을 찾을 수 없습니다."),
+    DOCUMENT_REQUIREMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "DOCUMENT_REQUIREMENT_ALREADY_EXISTS", "이미 존재하는 문서 제출 요건입니다."),
+    COMMON_CODE_DISABLED(HttpStatus.CONFLICT, "COMMON_CODE_DISABLED", "비활성화된 공통 코드입니다."),
+    COMMON_CODE_ALREADY_EXISTS(HttpStatus.CONFLICT, "COMMON_CODE_ALREADY_EXISTS", "이미 존재하는 공통 코드입니다.");
 
     private final HttpStatus status;
     private final String code;

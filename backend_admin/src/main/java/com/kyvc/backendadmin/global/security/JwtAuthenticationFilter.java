@@ -33,10 +33,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request // 요청 정보
     ) {
         String path = request.getRequestURI(); // 요청 경로
-        return "/api/auth/login".equals(path)
-                || "/api/auth/signup/corporate".equals(path)
-                || "/api/auth/token/refresh".equals(path)
-                || "/api/auth/dev/token".equals(path)
+        return "/api/admin/auth/login".equals(path)
+                || "/api/admin/auth/token/refresh".equals(path)
+                || "/api/admin/auth/password-reset/request".equals(path)
+                || "/api/admin/auth/password-reset/confirm".equals(path)
+                || "/api/admin/auth/session".equals(path)
                 || "/health".equals(path)
                 || path.startsWith("/actuator/health")
                 || "/actuator/info".equals(path)

@@ -46,14 +46,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/auth/signup/corporate",
-                                "/api/auth/login",
-                                "/api/auth/token/refresh",
-                                "/api/auth/dev/token"
+                                "/api/admin/auth/login",
+                                "/api/admin/auth/token/refresh",
+                                "/api/admin/auth/password-reset/request",
+                                "/api/admin/auth/password-reset/confirm"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/common/session",
+                                "/api/admin/auth/session",
                                 "/health",
                                 "/actuator/health",
                                 "/actuator/health/**",
@@ -62,12 +62,11 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers("/api/admin/**").denyAll()
                         .requestMatchers(
-                                "/api/auth/logout",
-                                "/api/user/**",
-                                "/api/corporate/**",
-                                "/api/mobile/**"
+                                "/api/admin/backend/**",
+                                "/api/admin/me/**",
+                                "/api/admin/auth/logout",
+                                "/api/admin/auth/mfa/**"
                         ).authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

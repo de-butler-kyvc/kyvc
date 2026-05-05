@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 // JWT 발급 및 검증 컴포넌트
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class JwtTokenProvider {
 
     private static final String CLAIM_EMAIL = "email";
+    private static final String CLAIM_ACTOR_TYPE = "actorType";
     private static final String CLAIM_USER_TYPE = "userType";
     private static final String CLAIM_ROLES = "roles";
     private static final String CLAIM_TOKEN_TYPE = "tokenType";
@@ -44,13 +46,25 @@ public class JwtTokenProvider {
     // Access Token 생성
     public String createAccessToken(User user // 토큰 발급 대상 사용자
     ) {
-        return createToken(user, ACCESS_TOKEN_TYPE, Duration.ofMinutes(jwtProperties.getAccessTokenExpirationMinutes()));
+        return createAccessToken(toTokenPrincipal(user));
+    }
+
+    // Access Token 생성
+    public String createAccessToken(TokenPrincipal principal // 토큰 발급 대상 주체
+    ) {
+        return createToken(principal, ACCESS_TOKEN_TYPE, Duration.ofMinutes(jwtProperties.getAccessTokenExpirationMinutes()));
     }
 
     // Refresh Token 생성
     public String createRefreshToken(User user // 토큰 발급 대상 사용자
     ) {
-        return createToken(user, REFRESH_TOKEN_TYPE, Duration.ofDays(jwtProperties.getRefreshTokenExpirationDays()));
+        return createRefreshToken(toTokenPrincipal(user));
+    }
+
+    // Refresh Token 생성
+    public String createRefreshToken(TokenPrincipal principal // 토큰 발급 대상 주체
+    ) {
+        return createToken(principal, REFRESH_TOKEN_TYPE, Duration.ofDays(jwtProperties.getRefreshTokenExpirationDays()));
     }
 
     // JWT 유효성 검증
@@ -72,7 +86,11 @@ public class JwtTokenProvider {
     ) {
         Claims claims = parseClaims(token);
         validateIssuer(claims);
-        return Long.parseLong(claims.getSubject());
+        try {
+            return Long.parseLong(claims.getSubject());
+        } catch (RuntimeException exception) {
+            throw new ApiException(ErrorCode.AUTH_TOKEN_INVALID);
+        }
     }
 
     // 이메일 조회
@@ -84,7 +102,18 @@ public class JwtTokenProvider {
     // 사용자 유형 조회
     public String getUserType(String token // 조회 대상 JWT
     ) {
-        return getRequiredStringClaim(parseClaims(token), CLAIM_USER_TYPE, ErrorCode.AUTH_TOKEN_INVALID);
+        Claims claims = parseClaims(token);
+        Object userType = claims.get(CLAIM_USER_TYPE);
+        if (userType instanceof String value && !value.isBlank()) {
+            return value;
+        }
+        return getRequiredStringClaim(claims, CLAIM_ACTOR_TYPE, ErrorCode.AUTH_TOKEN_INVALID);
+    }
+
+    // 행위자 유형 조회
+    public String getActorType(String token // 조회 대상 JWT
+    ) {
+        return getRequiredStringClaim(parseClaims(token), CLAIM_ACTOR_TYPE, ErrorCode.AUTH_TOKEN_INVALID);
     }
 
     // 권한 목록 조회
@@ -123,18 +152,19 @@ public class JwtTokenProvider {
 
     // JWT 공통 생성
     private String createToken(
-            User user, // 토큰 발급 대상 사용자
+            TokenPrincipal principal, // 토큰 발급 대상 주체
             String tokenType, // 토큰 유형
             Duration duration // 유효기간
     ) {
         Instant now = Instant.now(); // 발급 시각
         Instant expiration = now.plus(duration); // 만료 시각
-        List<String> roles = resolveRoles(user); // 권한 목록
+        List<String> roles = normalizeRoles(principal.roles()); // 권한 목록
 
         return Jwts.builder()
-                .subject(String.valueOf(user.getUserId()))
-                .claim(CLAIM_EMAIL, user.getEmail())
-                .claim(CLAIM_USER_TYPE, user.getUserTypeCode().name())
+                .subject(String.valueOf(principal.actorId()))
+                .claim(CLAIM_EMAIL, principal.email())
+                .claim(CLAIM_ACTOR_TYPE, principal.actorType())
+                .claim(CLAIM_USER_TYPE, principal.actorType())
                 .claim(CLAIM_ROLES, roles)
                 .claim(CLAIM_TOKEN_TYPE, tokenType)
                 .issuer(jwtProperties.getIssuer())
@@ -145,10 +175,41 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    // 사용자 엔티티를 토큰 주체로 변환
+    private TokenPrincipal toTokenPrincipal(User user // 토큰 발급 대상 사용자
+    ) {
+        return new TokenPrincipal(
+                user.getUserId(),
+                user.getEmail(),
+                user.getUserTypeCode().name(),
+                resolveRoles(user)
+        );
+    }
+
     // 사용자 권한 목록 생성
     private List<String> resolveRoles(User user // 토큰 발급 대상 사용자
     ) {
         return List.of("ROLE_" + user.getUserTypeCode().name());
+    }
+
+    // 권한 접두사 보정
+    private List<String> normalizeRoles(List<String> roles // 토큰 권한 목록
+    ) {
+        if (roles == null || roles.isEmpty()) {
+            throw new ApiException(ErrorCode.AUTH_TOKEN_INVALID);
+        }
+
+        List<String> normalizedRoles = roles.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(role -> !role.isBlank())
+                .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                .distinct()
+                .toList();
+        if (normalizedRoles.isEmpty()) {
+            throw new ApiException(ErrorCode.AUTH_TOKEN_INVALID);
+        }
+        return normalizedRoles;
     }
 
     // JWT Claims 파싱
