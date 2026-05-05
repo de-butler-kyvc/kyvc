@@ -15,6 +15,7 @@ import com.kyvc.backendadmin.global.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 /**
  * 공통코드 등록/수정/활성화/비활성화/삭제 유스케이스를 담당하는 서비스입니다.
@@ -33,12 +34,11 @@ public class CommonCodeAdminService {
 
     @Transactional
     public CommonCodeResponse create(CommonCodeCreateRequest request) {
-        CommonCodeGroup codeGroup = commonCodeRepository.findGroupById(request.codeGroupId())
-                .orElseThrow(() -> new ApiException(ErrorCode.COMMON_CODE_GROUP_NOT_FOUND));
+        CommonCodeGroup codeGroup = findCodeGroup(request);
         // enabledYn 검증: 요청값은 Y 또는 N만 허용한다.
         String enabledYn = normalizeEnabledYn(request.enabledYn());
         // 중복 코드 검증: 동일 공통코드 그룹 안에서 같은 code 값은 한 번만 등록할 수 있다.
-        if (commonCodeRepository.existsCodeByGroupIdAndCode(request.codeGroupId(), request.code())) {
+        if (commonCodeRepository.existsCodeByGroupIdAndCode(codeGroup.getCodeGroupId(), request.code())) {
             throw new ApiException(ErrorCode.COMMON_CODE_ALREADY_EXISTS);
         }
         Long adminId = SecurityUtil.getCurrentAdminId();
@@ -61,6 +61,18 @@ public class CommonCodeAdminService {
                 "공통코드를 등록했습니다. codeGroup=%s, code=%s".formatted(codeGroup.getCodeGroup(), request.code())
         ));
         return commonCodeQueryService.toCodeResponse(commonCode);
+    }
+
+    private CommonCodeGroup findCodeGroup(CommonCodeCreateRequest request) {
+        if (request.codeGroupId() != null) {
+            return commonCodeRepository.findGroupById(request.codeGroupId())
+                    .orElseThrow(() -> new ApiException(ErrorCode.COMMON_CODE_GROUP_NOT_FOUND));
+        }
+        if (StringUtils.hasText(request.codeGroup())) {
+            return commonCodeRepository.findGroupByCodeGroup(request.codeGroup())
+                    .orElseThrow(() -> new ApiException(ErrorCode.COMMON_CODE_GROUP_NOT_FOUND));
+        }
+        throw new ApiException(ErrorCode.INVALID_REQUEST, "codeGroupId 또는 codeGroup 중 하나는 필수입니다.");
     }
 
     @Transactional
