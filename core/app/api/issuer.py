@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.credentials.resolver import did_document_hash
 from app.credentials.crypto import decode_compact_jws, private_key_from_pem
 from app.credentials.vc import decode_vc_jwt
 from app.issuer.api_models import (
@@ -21,6 +22,7 @@ from app.xrpl.client import enforce_mainnet_policy, make_client
 from app.xrpl.ledger import (
     datetime_to_ripple_epoch,
     get_credential_entry as get_xrpl_credential_entry,
+    get_did_entry,
     submit_credential_create,
     submit_credential_delete,
     submit_did_set,
@@ -72,6 +74,43 @@ def _default_credential_format(claims: dict) -> str:
         "documentEvidence",
     }
     return "dc+sd-jwt" if any(key in claims for key in legal_entity_keys) else "vc+jwt"
+
+
+def _issuer_did_document_for_issue(
+    *,
+    service: IssuerService,
+    repository,
+    status_mode: str,
+    client,
+    issuer_account: str,
+    store: bool,
+) -> dict | None:
+    if not store:
+        return None
+    did_document = service.build_did_document()
+    if status_mode == "xrpl":
+        if client is None:
+            raise HTTPException(status_code=400, detail="XRPL client is required to validate issuer DID Document")
+        entry = get_did_entry(client, issuer_account)
+        if not entry:
+            raise HTTPException(
+                status_code=400,
+                detail="issuer DID is not registered on XRPL. Call /issuer/did/register before issuing credentials.",
+            )
+        ledger_hash = str(entry.get("Data") or entry.get("data") or "").upper()
+        generated_hash = did_document_hash(did_document)
+        if ledger_hash != generated_hash:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "issuer DID Document hash mismatch with XRPL DIDSet: "
+                    f"ledger={ledger_hash} generated={generated_hash}. "
+                    "Re-register the issuer DID with the current issuer key, or issue with the key that matches "
+                    "the DID Document currently registered on XRPL."
+                ),
+            )
+    repository.save_did_document(service.issuer_did, did_document)
+    return did_document
 
 
 @router.post("/wallets", response_model=GenerateIssuerWalletResponse)
@@ -166,7 +205,14 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
         status_repository=repository,
         did_document_repository=repository,
     )
-    issuer_did_document = service.register_did_document() if payload.store_issuer_did_document else None
+    issuer_did_document = _issuer_did_document_for_issue(
+        service=service,
+        repository=repository,
+        status_mode=payload.status_mode,
+        client=client,
+        issuer_account=issuer_account,
+        store=payload.store_issuer_did_document,
+    )
     selected_format = payload.format or _default_credential_format(payload.claims)
     if selected_format == "dc+sd-jwt":
         credential, status, disclosable_paths = service.issue_kyc_sd_jwt(
