@@ -84,6 +84,15 @@ public enum ErrorCode {
     // HTTP 400 - 보완 대상이 아닌 문서 유형
     SUPPLEMENT_DOCUMENT_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "SUPPLEMENT_DOCUMENT_TYPE_NOT_ALLOWED", "보완 대상이 아닌 문서 유형입니다."),
 
+    // HTTP 404 - KYC 심사 결과 조회 실패
+    KYC_REVIEW_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "KYC_REVIEW_RESULT_NOT_FOUND", "KYC 심사 결과를 찾을 수 없습니다."),
+    // HTTP 409 - KYC 완료 화면 조회 불가 상태
+    KYC_COMPLETION_NOT_AVAILABLE(HttpStatus.CONFLICT, "KYC_COMPLETION_NOT_AVAILABLE", "KYC 완료 화면을 조회할 수 없는 상태입니다."),
+    // HTTP 409 - VC 발급 안내 조회 불가 상태
+    CREDENTIAL_GUIDE_NOT_AVAILABLE(HttpStatus.CONFLICT, "CREDENTIAL_GUIDE_NOT_AVAILABLE", "VC 발급 안내를 조회할 수 없습니다."),
+    // HTTP 404 - Credential 조회 실패
+    CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_NOT_FOUND", "Credential을 찾을 수 없습니다."),
+
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통 코드 그룹 조회 실패

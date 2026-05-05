@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Set;
 
@@ -55,8 +56,46 @@ public class KycApplication {
     @Column(name = "original_document_store_option_code", length = 50)
     private KyvcEnums.OriginalDocumentStoreOption originalDocumentStoreOption;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ai_review_status_code", length = 50)
+    private KyvcEnums.AiReviewStatus aiReviewStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ai_review_result_code", length = 50)
+    private KyvcEnums.AiReviewResult aiReviewResult;
+
+    @Column(name = "ai_confidence_score")
+    private BigDecimal aiConfidenceScore;
+
+    @Column(name = "ai_review_summary", columnDefinition = "TEXT")
+    private String aiReviewSummary;
+
+    @Column(name = "ai_review_detail_json", columnDefinition = "TEXT")
+    private String aiReviewDetailJson;
+
+    @Column(name = "manual_review_reason", columnDefinition = "TEXT")
+    private String manualReviewReason;
+
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
+
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @Column(name = "applied_ai_policy_id")
+    private Long appliedAiPolicyId;
+
+    @Column(name = "ai_review_reason_code", length = 100)
+    private String aiReviewReasonCode;
+
+    @Column(name = "reject_reason_code", length = 100)
+    private String rejectReasonCode;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
