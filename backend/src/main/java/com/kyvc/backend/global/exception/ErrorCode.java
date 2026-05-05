@@ -92,6 +92,12 @@ public enum ErrorCode {
     CREDENTIAL_GUIDE_NOT_AVAILABLE(HttpStatus.CONFLICT, "CREDENTIAL_GUIDE_NOT_AVAILABLE", "VC 발급 안내를 조회할 수 없습니다."),
     // HTTP 404 - Credential 조회 실패
     CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_NOT_FOUND", "Credential을 찾을 수 없습니다."),
+    // HTTP 404 - 알림 조회 실패
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "알림을 찾을 수 없습니다."),
+    // HTTP 403 - 알림 리소스 접근 권한 없음
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "NOTIFICATION_ACCESS_DENIED", "알림 접근 권한이 없습니다."),
+    // HTTP 500 - 감사로그 저장 실패
+    AUDIT_LOG_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "AUDIT_LOG_SAVE_FAILED", "감사로그 저장에 실패했습니다."),
 
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
