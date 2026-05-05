@@ -68,4 +68,13 @@ public class User {
     public boolean isActive() {
         return KyvcEnums.UserStatus.ACTIVE == userStatusCode;
     }
+
+    /**
+     * 관리자 상태 변경 요청에 따라 사용자 계정 상태를 변경합니다.
+     *
+     * @param status 변경할 사용자 상태
+     */
+    public void changeStatus(KyvcEnums.UserStatus status) {
+        this.userStatusCode = status;
+    }
 }

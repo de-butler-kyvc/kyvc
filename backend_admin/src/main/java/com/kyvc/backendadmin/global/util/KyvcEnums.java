@@ -194,6 +194,7 @@ public final class KyvcEnums {
         KYC_APPLICATION, // KYC 신청
         KYC_DOCUMENT, // KYC 문서
         KYC_SUPPLEMENT, // KYC 보완요청
+        DOCUMENT_REQUIREMENT, // KYC 필수서류 정책
         CREDENTIAL, // Credential
         VP_VERIFICATION, // VP 검증
         ISSUER_POLICY, // Issuer 정책

@@ -91,4 +91,103 @@ public class AuditLog {
         auditLog.description = description;
         return auditLog;
     }
+
+    /**
+     * 일반 사용자 계정 대상 감사 로그 엔티티를 생성합니다.
+     *
+     * @param actorId 변경을 수행한 관리자 ID
+     * @param targetId 변경 대상 사용자 ID
+     * @param action 작업 코드
+     * @param description 변경 내용 요약
+     * @return 사용자 계정 감사 로그 엔티티
+     */
+    public static AuditLog user(
+            Long actorId,
+            Long targetId,
+            String action,
+            String description
+    ) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.actorType = KyvcEnums.ActorType.ADMIN;
+        auditLog.actorId = actorId;
+        auditLog.targetType = KyvcEnums.AuditTargetType.USER;
+        auditLog.targetId = targetId;
+        auditLog.action = action;
+        auditLog.description = description;
+        return auditLog;
+    }
+    /**
+     * KYC 필수서류 정책 대상 감사 로그 엔티티를 생성합니다.
+     *
+     * @param actorId 변경을 수행한 관리자 ID
+     * @param targetId 변경 대상 필수서류 정책 ID
+     * @param action 작업 코드
+     * @param description 변경 내용 요약
+     * @return KYC 필수서류 정책 감사 로그 엔티티
+     */
+    public static AuditLog documentRequirement(
+            Long actorId,
+            Long targetId,
+            String action,
+            String description
+    ) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.actorType = KyvcEnums.ActorType.ADMIN;
+        auditLog.actorId = actorId;
+        auditLog.targetType = KyvcEnums.AuditTargetType.DOCUMENT_REQUIREMENT;
+        auditLog.targetId = targetId;
+        auditLog.action = action;
+        auditLog.description = description;
+        return auditLog;
+    }
+
+    /**
+     * KYC 신청 대상 감사 로그 엔티티를 생성합니다.
+     *
+     * @param actorId 변경을 수행한 관리자 ID
+     * @param targetId 변경 대상 KYC 신청 ID
+     * @param action 작업 코드
+     * @param description 변경 내용 요약
+     * @return KYC 신청 감사 로그 엔티티
+     */
+    public static AuditLog kycApplication(
+            Long actorId,
+            Long targetId,
+            String action,
+            String description
+    ) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.actorType = KyvcEnums.ActorType.ADMIN;
+        auditLog.actorId = actorId;
+        auditLog.targetType = KyvcEnums.AuditTargetType.KYC_APPLICATION;
+        auditLog.targetId = targetId;
+        auditLog.action = action;
+        auditLog.description = description;
+        return auditLog;
+    }
+
+    /**
+     * KYC 보완요청 대상 감사 로그 엔티티를 생성합니다.
+     *
+     * @param actorId 변경을 수행한 관리자 ID
+     * @param targetId 변경 대상 보완요청 ID
+     * @param action 작업 코드
+     * @param description 변경 내용 요약
+     * @return KYC 보완요청 감사 로그 엔티티
+     */
+    public static AuditLog kycSupplement(
+            Long actorId,
+            Long targetId,
+            String action,
+            String description
+    ) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.actorType = KyvcEnums.ActorType.ADMIN;
+        auditLog.actorId = actorId;
+        auditLog.targetType = KyvcEnums.AuditTargetType.KYC_SUPPLEMENT;
+        auditLog.targetId = targetId;
+        auditLog.action = action;
+        auditLog.description = description;
+        return auditLog;
+    }
 }
