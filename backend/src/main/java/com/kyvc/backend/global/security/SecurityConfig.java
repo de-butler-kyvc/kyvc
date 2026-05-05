@@ -49,7 +49,8 @@ public class SecurityConfig {
                                 "/api/auth/signup/corporate",
                                 "/api/auth/login",
                                 "/api/auth/token/refresh",
-                                "/api/auth/dev/token"
+                                "/api/auth/dev/token",
+                                "/api/mobile/auth/login"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
