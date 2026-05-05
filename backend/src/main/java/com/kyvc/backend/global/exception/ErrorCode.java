@@ -54,10 +54,10 @@ public enum ErrorCode {
     KYC_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "KYC_ALREADY_SUBMITTED", "이미 제출된 KYC입니다."),
     // HTTP 409 - 허용되지 않은 KYC 상태
     KYC_INVALID_STATUS(HttpStatus.CONFLICT, "KYC_INVALID_STATUS", "유효하지 않은 KYC 상태입니다."),
-    // HTTP 409 - 진행 중인 KYC 신청 존재
-    KYC_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "KYC_ALREADY_IN_PROGRESS", "진행 중인 KYC 신청이 이미 존재합니다."),
-    // HTTP 400 - KYC 신청 법인정보 누락
-    KYC_CORPORATE_REQUIRED(HttpStatus.BAD_REQUEST, "KYC_CORPORATE_REQUIRED", "KYC 신청을 위한 법인정보가 필요합니다."),
+    // HTTP 409 - 진행 중인 KYC 요청 존재
+    KYC_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "KYC_ALREADY_IN_PROGRESS", "진행 중인 KYC 요청이 이미 존재합니다."),
+    // HTTP 400 - KYC 요청 법인정보 누락
+    KYC_CORPORATE_REQUIRED(HttpStatus.BAD_REQUEST, "KYC_CORPORATE_REQUIRED", "KYC 요청을 위한 법인정보가 필요합니다."),
     // HTTP 404 - 문서 정보 조회 실패
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     // HTTP 403 - 문서 리소스 접근 권한 없음
@@ -70,6 +70,20 @@ public enum ErrorCode {
     DOCUMENT_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "DOCUMENT_SIZE_EXCEEDED", "파일 크기 제한을 초과했습니다."),
     // HTTP 500 - 문서 저장 경로 오류
     DOCUMENT_STORAGE_PATH_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_STORAGE_PATH_INVALID", "문서 저장 경로가 올바르지 않습니다."),
+
+    // HTTP 404 - 보완요청 조회 실패
+    SUPPLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SUPPLEMENT_NOT_FOUND", "보완요청을 찾을 수 없습니다."),
+    // HTTP 403 - 보완요청 접근 권한 없음
+    SUPPLEMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SUPPLEMENT_ACCESS_DENIED", "보완요청 접근 권한이 없습니다."),
+    // HTTP 409 - 이미 제출된 보완요청
+    SUPPLEMENT_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "SUPPLEMENT_ALREADY_SUBMITTED", "이미 제출된 보완요청입니다."),
+    // HTTP 409 - 허용되지 않은 보완요청 상태
+    SUPPLEMENT_INVALID_STATUS(HttpStatus.CONFLICT, "SUPPLEMENT_INVALID_STATUS", "보완요청 상태가 올바르지 않습니다."),
+    // HTTP 400 - 필수 보완서류 누락
+    SUPPLEMENT_REQUIRED_DOCUMENT_MISSING(HttpStatus.BAD_REQUEST, "SUPPLEMENT_REQUIRED_DOCUMENT_MISSING", "필수 보완서류가 누락되었습니다."),
+    // HTTP 400 - 보완 대상이 아닌 문서 유형
+    SUPPLEMENT_DOCUMENT_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "SUPPLEMENT_DOCUMENT_TYPE_NOT_ALLOWED", "보완 대상이 아닌 문서 유형입니다."),
+
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통 코드 그룹 조회 실패

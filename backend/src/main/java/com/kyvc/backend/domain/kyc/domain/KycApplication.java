@@ -102,6 +102,14 @@ public class KycApplication {
         this.submittedAt = submittedAt;
     }
 
+    // 보완 제출 처리
+    public void submitSupplement(
+            LocalDateTime submittedAt // 제출 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.SUBMITTED;
+        this.submittedAt = submittedAt;
+    }
+
     // 소유 여부
     public boolean isOwnedBy(
             Long userId // 사용자 ID
