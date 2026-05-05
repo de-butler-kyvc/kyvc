@@ -108,6 +108,10 @@ public enum ErrorCode {
     MOBILE_INVALID_DEVICE(HttpStatus.BAD_REQUEST, "MOBILE_INVALID_DEVICE", "유효하지 않은 모바일 기기 정보입니다."),
     // HTTP 404 - 모바일 보안 설정 조회 실패
     MOBILE_SECURITY_SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "MOBILE_SECURITY_SETTING_NOT_FOUND", "모바일 보안 설정을 찾을 수 없습니다."),
+    // HTTP 404 - Issuer 정책 조회 실패
+    ISSUER_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "ISSUER_POLICY_NOT_FOUND", "Issuer 정책을 찾을 수 없습니다."),
+    // HTTP 403 - Issuer 정책 리소스 접근 권한 없음
+    ISSUER_POLICY_ACCESS_DENIED(HttpStatus.FORBIDDEN, "ISSUER_POLICY_ACCESS_DENIED", "Issuer 정책 접근 권한이 없습니다."),
 
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
