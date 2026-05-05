@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import httpx
 from fastapi.testclient import TestClient
@@ -1269,3 +1270,39 @@ def test_api_issue_uses_env_private_key_path_when_request_omits_it(tmp_path):
 
     assert issue_response.status_code == 200
     assert verify_vc_signature(issue_response.json()["credential"], private_key_to_jwk(issuer_key))
+
+
+def test_api_issue_xrpl_rejects_issuer_diddoc_ledger_mismatch(tmp_path, monkeypatch):
+    repository = _repo(tmp_path)
+    app = create_app(settings=Settings(), repository=repository)
+    client = TestClient(app)
+    stale_key = generate_private_key()
+    current_key = generate_private_key()
+    stale_doc = IssuerService("rIssuer", stale_key).build_did_document()
+
+    monkeypatch.setattr("app.api.issuer.make_client", lambda rpc_url: object())
+    monkeypatch.setattr("app.api.issuer.wallet_from_seed", lambda seed: SimpleNamespace(address="rIssuer"))
+    monkeypatch.setattr(
+        "app.api.issuer.get_did_entry",
+        lambda xrpl_client, account: {
+            "URI": utf8_to_hex("https://core.example/dids/rIssuer/diddoc.json"),
+            "Data": did_document_hash(stale_doc),
+        },
+    )
+
+    issue_response = client.post(
+        "/issuer/credentials/kyc",
+        json={
+            "issuer_seed": "dummy-seed",
+            "issuer_private_key_pem": private_key_to_pem(current_key),
+            "holder_account": "rHolder",
+            "claims": _legal_entity_claims(),
+            "valid_from": (datetime.now(tz=UTC) - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "valid_until": (datetime.now(tz=UTC) + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            "status_mode": "xrpl",
+        },
+    )
+
+    assert issue_response.status_code == 400
+    assert "issuer DID Document hash mismatch with XRPL DIDSet" in issue_response.json()["detail"]
+    assert repository.get_did_document("did:xrpl:1:rIssuer") is None
