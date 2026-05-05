@@ -1,19 +1,74 @@
 # KYvC Core API
 
 KYvC core now exposes reusable issuer and verifier packages, plus thin FastAPI adapters.
-The implementation follows the XRPL DID / W3C VC flow:
+The implementation now supports both the legacy XRPL DID / W3C VC flow and the
+new KYvC legal entity SD-JWT flow:
 
 - `did:xrpl:1:{account}` DID format
 - secp256k1 JWK keys
 - compact JWS signatures using JOSE `ES256K`
-- top-level `credentialSalt` included in the signed VC core
-- XRPL-style `credentialStatus` with `VC_STATUS_V1:{sha256(vc_core)}` credential type
+- legacy `vc+jwt` credentials with `VC_STATUS_V1:{sha256(vc_core)}` credential type
+- SD-JWT credentials with `SDJWT_STATUS_V1` credential type derived from
+  `iss`, `sub`, `vct`, and `jti`
 - verifier policy separated from cryptographic and status verification
 
-The default secured VC representation is an `application/vc+jwt` compact JWT.
-The default secured VP representation is an `application/vp+jwt` compact JWT.
+Legal-entity-shaped KYC requests default to `dc+sd-jwt`. Flat legacy claim
+requests remain `vc+jwt` when `format` is omitted for compatibility. The legacy
+secured VP representation remains `application/vp+jwt`; SD-JWT presentations use
+SD-JWT+KB and do not rely on holder-signed `vp+jwt`.
 Legacy expanded JSON objects with `proof.jws` are only available through the
 explicit `embedded_jws` compatibility mode.
+
+## SD-JWT Legal Entity KYC
+
+`POST /issuer/credentials/kyc` accepts `"format": "dc+sd-jwt"` or `"vc+jwt"`.
+For SD-JWT, the issuer signs a compact SD-JWT credential:
+
+```text
+<issuer-signed-jwt>~<disclosure-1>~<disclosure-2>~...
+```
+
+The issuer-signed JWT uses `typ: "dc+sd-jwt"` and contains always-disclosed
+claims: `iss`, `sub`, `vct`, `jti`, `iat`, `exp`, `cnf`, and
+`credentialStatus`. KYvC also keeps `kyc.jurisdiction` and
+`kyc.assuranceLevel` available for coarse policy routing. Legal entity,
+representative, beneficial owner, establishment purpose, and document evidence
+claims are selectively disclosed through salted disclosures. Undisclosed claims
+are never reconstructed or used by verifier policy.
+
+SD-JWT status is an active/revoked lookup key only:
+
+```text
+SDJWT_STATUS_V1 = hex(sha256(
+  "SDJWT_STATUS_V1:" + iss + "\x1f" + sub + "\x1f" + vct + "\x1f" + jti
+))
+```
+
+The implementation emits uppercase hex because the existing XRPL adapter and
+legacy status code already use uppercase `CredentialType` values. Verifiers
+recompute the value only from the always-disclosed signed payload fields and
+fail if it differs from `credentialStatus.credentialType`.
+
+Tamper-proofing is not delegated to credential status. It is provided by the
+issuer JWS signature, disclosure digest validation, KB-JWT holder signature,
+`sd_hash`, nonce, and audience.
+
+SD-JWT+KB presentations use:
+
+```text
+<issuer-signed-jwt>~<selected-disclosure-1>~...~<kb-jwt>
+```
+
+The KB-JWT is signed by the holder authentication key referenced by `cnf.kid`
+and carries `iat`, `aud`, `nonce`, and `sd_hash`. `aud` replaces the legacy VP
+`domain`; `nonce` replaces the legacy VP `challenge`. Verifier challenges are
+one-time-use and expire according to `VERIFIER_CHALLENGE_TTL_SECONDS`.
+
+Original PDF/image files are not embedded in SD-JWT. A verifier may accept
+multipart attachments alongside the presentation metadata. Each attachment must
+match a disclosed issuer-signed `documentEvidence[]` item by `documentId`,
+`documentType`, and `digestSRI`; hashes supplied only in presentation metadata
+are not trusted.
 
 ## Signature Format
 
@@ -112,6 +167,9 @@ app/credential_schema/ KYC VC/VP schema constants and subject shaping
 app/credentials/  canonical JSON, DID docs, VC, VP, proof helpers
 app/issuer/       issuer service and API request/response models
 app/credential_status/ credential status query service and API models
+app/sdjwt/        SD-JWT disclosure, issuer, verifier, KB-JWT helpers, models
+app/status/       SD-JWT status derivation helpers
+app/policy/       SD-JWT disclosure and legal-entity document policy
 app/verifier/     verifier service, policy, and API request/response models
 app/storage/      MySQL repository and storage protocols
 app/xrpl/         XRPL DID/Credential transaction helpers
@@ -197,6 +255,8 @@ mobile app. This repository keeps a configured-network holder test runner under
 end.
 
 For Android holder wallet implementation guidance, see
+[`docs/android-holder-wallet-sdjwt-guide.md`](docs/android-holder-wallet-sdjwt-guide.md).
+The legacy `vc+jwt`/`vp+jwt` wallet guide remains at
 [`docs/android-holder-wallet-guide.md`](docs/android-holder-wallet-guide.md).
 
 ## Issuer API
@@ -269,11 +329,51 @@ curl -sS http://127.0.0.1:8090/dids/{issuerAccount}/diddoc.json | jq
 The default `status_mode` is `xrpl`. The issuer account is derived from
 `issuer_seed` or `XRPL_ISSUER_SEED`; if `issuer_account` is also supplied it must
 match that wallet. The DID/VC signing key is read from `issuer_private_key_pem`
-or the file at `ISSUER_PRIVATE_KEY_PEM_PATH`. The service secures the VC as an
-`application/vc+jwt`, computes the XRPL `credentialType` from the VC core hash,
-submits `CredentialCreate`,
-stores the issued VC locally, and records a pending local mirror for development
-convenience. The response includes:
+or the file at `ISSUER_PRIVATE_KEY_PEM_PATH`.
+
+For legal-entity-shaped KYC claims, omit `format` or set `"format":
+"dc+sd-jwt"`:
+
+```json
+{
+  "issuer_account": "rIssuer",
+  "holder_account": "rHolder",
+  "holder_did": "did:xrpl:1:rHolder",
+  "format": "dc+sd-jwt",
+  "claims": {
+    "kyc": {"jurisdiction": "KR", "assuranceLevel": "STANDARD"},
+    "legalEntity": {"type": "STOCK_COMPANY", "name": "KYvC Labs"},
+    "representative": {"name": "Kim Holder", "birthDate": "1980-01-01", "nationality": "KR"},
+    "beneficialOwners": [{"name": "Owner One", "birthDate": "1979-02-03", "nationality": "KR"}],
+    "documentEvidence": [
+      {
+        "documentId": "urn:kyvc:doc:registry:001",
+        "documentType": "KR_CORPORATE_REGISTER_FULL_CERTIFICATE",
+        "digestSRI": "sha384-...",
+        "mediaType": "application/pdf",
+        "byteSize": 482913,
+        "evidenceFor": ["legalEntity.registrationNumber"]
+      }
+    ]
+  },
+  "valid_from": "2026-05-05T00:00:00Z",
+  "valid_until": "2027-05-05T00:00:00Z",
+  "status_mode": "local"
+}
+```
+
+The SD-JWT response includes:
+
+- `format: "dc+sd-jwt"`
+- `credential` as `<issuer-jwt>~<all-disclosures>`
+- `credentialId` from `jti`
+- `status.credentialType` for XRPL `CredentialCreate`
+- `selectiveDisclosure.disclosablePaths`
+
+Legacy flat claim requests or explicit `"format": "vc+jwt"` still secure the VC
+as `application/vc+jwt`, compute XRPL `credentialType` from the VC core hash,
+submit `CredentialCreate`, store the issued VC locally, and record a pending
+local mirror for development convenience. The legacy response includes:
 
 - `credential` as a compact `vc+jwt` string by default
 - `credential_type`
@@ -344,6 +444,19 @@ the before/after verifier results as JSON.
 On success the service removes the local mirror as well. `status_mode: "local"`
 keeps the old local-only deletion behavior for offline tests.
 
+SD-JWT credentials can also be revoked by `jti` or `status_id` when the issuer,
+holder, and `vct` inputs needed for `SDJWT_STATUS_V1` are supplied:
+
+```json
+{
+  "issuer_account": "rIssuer",
+  "holder_account": "rHolder",
+  "jti": "urn:uuid:...",
+  "vct": "https://kyvc.example/vct/legal-entity-kyc-v1",
+  "status_mode": "local"
+}
+```
+
 ## Status Query API
 
 `GET /credential-status/credentials/{issuerAccount}/{holderAccount}/{credentialType}`
@@ -383,15 +496,19 @@ holder is inactive. After `CredentialAccept` it is active. After
 
 `POST /verifier/presentations/challenges`
 
+For SD-JWT+KB:
+
 ```json
 {
-  "domain": "example.com"
+  "aud": "https://verifier.example"
 }
 ```
 
-Returns a verifier-issued `challenge`, its `domain`, and `expires_at`. Build the
-VP JWT with that challenge and domain in the protected JOSE header. The VP
-payload should contain Enveloped Verifiable Credentials, not raw VC JSON.
+Returns `nonce`, `aud`, `expiresAt`, and a `presentationDefinition` with
+`acceptedFormat`, `acceptedVct`, `requiredDisclosures`, and `documentRules`.
+
+For legacy `vp+jwt`, send `"format": "vp+jwt"` with `domain`; the response keeps
+`challenge`, `domain`, and `expires_at`.
 
 `POST /verifier/presentations/verify`
 
@@ -414,6 +531,61 @@ Verifier responses include DID resolution metadata when available, for example
 `details.issuerDidResolution` and `details.holderDidResolution` with `resolver`,
 `ledger`, `uri`, `dataHash`, and `cached`. DID ledger entry absence, URI fetch
 failure, and hash mismatch are reported as distinct errors.
+
+For SD-JWT+KB JSON verification:
+
+```json
+{
+  "format": "kyvc-sd-jwt-presentation-v1",
+  "presentation": {
+    "format": "kyvc-sd-jwt-presentation-v1",
+    "definitionId": "kr-stock-company-kyc-v1",
+    "aud": "https://verifier.example",
+    "nonce": "...",
+    "sdJwtKb": "<issuer-jwt>~<selected-disclosures>~<kb-jwt>",
+    "attachmentManifest": []
+  },
+  "did_documents": {
+    "did:xrpl:1:rHolder": {}
+  },
+  "policy": {
+    "acceptedFormat": "dc+sd-jwt",
+    "acceptedVct": ["https://kyvc.example/vct/legal-entity-kyc-v1"],
+    "acceptedJurisdictions": ["KR"],
+    "minimumAssuranceLevel": "STANDARD",
+    "requiredDisclosures": [
+      "legalEntity.type",
+      "representative.name",
+      "beneficialOwners[].name"
+    ],
+    "documentRules": [
+      {
+        "id": "registry-evidence",
+        "required": true,
+        "oneOf": ["KR_CORPORATE_REGISTER_FULL_CERTIFICATE"],
+        "originalPolicy": "OPTIONAL"
+      }
+    ]
+  },
+  "status_mode": "local"
+}
+```
+
+`multipart/form-data` is also accepted. Put the same JSON object in the
+`presentation` form field and upload originals using field names that match
+`attachmentManifest[].attachmentRef`. Supported original-document modes are
+evidence/hash-only presentation and attached originals. External original
+retrieval is intentionally not implemented yet.
+
+## Migration Note
+
+Move new holders and verifiers from `vc+jwt` plus holder-signed `vp+jwt` to
+`dc+sd-jwt` plus KB-JWT. Keep accepting legacy `vc+jwt`/`vp+jwt` during rollout,
+but do not mix status algorithms: legacy credentials use `VC_STATUS_V1`; SD-JWT
+credentials use `SDJWT_STATUS_V1`. Status remains only the XRPL active/revoked
+lookup. Presentation replay protection moves from `challenge`/`domain` in the
+VP JWS header to `nonce`/`aud` in KB-JWT, with `sd_hash` binding the exact
+issuer JWT and selected disclosure set.
 
 ## Developer Verification
 

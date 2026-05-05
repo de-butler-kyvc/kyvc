@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.credentials.crypto import private_key_from_pem
+from app.credentials.crypto import decode_compact_jws, private_key_from_pem
 from app.credentials.vc import decode_vc_jwt
 from app.issuer.api_models import (
     GenerateIssuerWalletRequest,
@@ -15,6 +15,8 @@ from app.issuer.api_models import (
     RevokeCredentialResponse,
 )
 from app.issuer.service import IssuerService
+from app.sdjwt.issuer import DEFAULT_LEGAL_ENTITY_KYC_VCT
+from app.status.sdjwt_status import credential_type_hex_for_sdjwt
 from app.xrpl.client import enforce_mainnet_policy, make_client
 from app.xrpl.ledger import (
     datetime_to_ripple_epoch,
@@ -58,6 +60,18 @@ def _issuer_seed(payload_value: str | None, settings, *, detail: str) -> str:
     if not seed:
         raise HTTPException(status_code=400, detail=detail)
     return seed
+
+
+def _default_credential_format(claims: dict) -> str:
+    legal_entity_keys = {
+        "kyc",
+        "legalEntity",
+        "representative",
+        "beneficialOwners",
+        "establishmentPurpose",
+        "documentEvidence",
+    }
+    return "dc+sd-jwt" if any(key in claims for key in legal_entity_keys) else "vc+jwt"
 
 
 @router.post("/wallets", response_model=GenerateIssuerWalletResponse)
@@ -153,20 +167,41 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
         did_document_repository=repository,
     )
     issuer_did_document = service.register_did_document() if payload.store_issuer_did_document else None
-    credential = service.issue_kyc_vc(
-        holder_account=payload.holder_account,
-        holder_did=payload.holder_did,
-        claims=payload.claims,
-        valid_from=payload.valid_from,
-        valid_until=payload.valid_until,
-        persist=payload.persist,
-        persist_status=payload.persist_status and payload.status_mode == "local",
-        mark_status_accepted=payload.mark_status_accepted,
-        status_uri=payload.status_uri,
-        credential_format=payload.credential_format,
-    )
-    credential_document = decode_vc_jwt(credential)[1] if isinstance(credential, str) else credential
-    status = credential_document["credentialStatus"]
+    selected_format = payload.format or _default_credential_format(payload.claims)
+    if selected_format == "dc+sd-jwt":
+        credential, status, disclosable_paths = service.issue_kyc_sd_jwt(
+            holder_account=payload.holder_account,
+            holder_did=payload.holder_did,
+            holder_key_id=payload.holder_key_id,
+            claims=payload.claims,
+            valid_from=payload.valid_from,
+            valid_until=payload.valid_until,
+            vct=payload.vct or DEFAULT_LEGAL_ENTITY_KYC_VCT,
+            persist=payload.persist,
+            persist_status=payload.persist_status and payload.status_mode == "local",
+            mark_status_accepted=payload.mark_status_accepted,
+            status_uri=payload.status_uri,
+        )
+        credential_id = str(decode_compact_jws(credential.split("~", 1)[0])[1]["jti"])
+        vc_core_hash = None
+    else:
+        credential = service.issue_kyc_vc(
+            holder_account=payload.holder_account,
+            holder_did=payload.holder_did,
+            claims=payload.claims,
+            valid_from=payload.valid_from,
+            valid_until=payload.valid_until,
+            persist=payload.persist,
+            persist_status=payload.persist_status and payload.status_mode == "local",
+            mark_status_accepted=payload.mark_status_accepted,
+            status_uri=payload.status_uri,
+            credential_format=payload.credential_format,
+        )
+        credential_document = decode_vc_jwt(credential)[1] if isinstance(credential, str) else credential
+        status = credential_document["credentialStatus"]
+        disclosable_paths = []
+        credential_id = str(credential_document.get("id", ""))
+        vc_core_hash = str(status["vcCoreHash"])
     credential_type = str(status["credentialType"])
     create_tx = None
     ledger_entry = None
@@ -196,10 +231,14 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
                 fallback_uri=payload.status_uri,
             )
     return IssueKycCredentialResponse(
+        format=selected_format,
         credential=credential,
+        credentialId=credential_id,
         issuer_did_document=issuer_did_document,
         credential_type=credential_type,
-        vc_core_hash=str(status["vcCoreHash"]),
+        vc_core_hash=vc_core_hash,
+        status=status,
+        selectiveDisclosure={"disclosablePaths": disclosable_paths} if selected_format == "dc+sd-jwt" else None,
         credential_create_transaction=create_tx,
         ledger_entry=ledger_entry,
         status_mode=payload.status_mode,
@@ -211,6 +250,27 @@ def revoke_credential(payload: RevokeCredentialRequest, request: Request) -> Rev
     settings = request.app.state.settings
     repository = request.app.state.repository
     issuer_account = payload.issuer_account
+    credential_type = payload.credential_type
+    if credential_type is None and (payload.jti or payload.status_id):
+        selected_issuer_did = payload.issuer_did
+        if selected_issuer_did is None and issuer_account is not None:
+            selected_issuer_did = f"did:xrpl:1:{issuer_account}"
+        selected_holder_did = payload.holder_did
+        if selected_holder_did is None:
+            selected_holder_did = f"did:xrpl:1:{payload.holder_account}"
+        if selected_issuer_did is None:
+            raise HTTPException(status_code=400, detail="issuer_account or issuer_did is required to revoke by jti/status_id")
+        jti = payload.jti or str(payload.status_id).removeprefix("urn:kyvc:status:")
+        if not str(jti).startswith("urn:uuid:"):
+            jti = f"urn:uuid:{jti}"
+        credential_type = credential_type_hex_for_sdjwt(
+            issuer_did=selected_issuer_did,
+            holder_did=selected_holder_did,
+            vct=payload.vct or DEFAULT_LEGAL_ENTITY_KYC_VCT,
+            jti=str(jti),
+        )
+    if credential_type is None:
+        raise HTTPException(status_code=400, detail="credential_type or jti/status_id is required")
     delete_tx = None
     ledger_entry = None
     if payload.status_mode == "xrpl":
@@ -234,11 +294,11 @@ def revoke_credential(payload: RevokeCredentialRequest, request: Request) -> Rev
                 client,
                 issuer_wallet,
                 payload.holder_account,
-                payload.credential_type,
+                credential_type,
             )
         except RuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        ledger_entry = get_xrpl_credential_entry(client, issuer_account, payload.holder_account, payload.credential_type)
+        ledger_entry = get_xrpl_credential_entry(client, issuer_account, payload.holder_account, credential_type)
     elif issuer_account is None:
         raise HTTPException(status_code=400, detail="issuer_account is required for local status mode")
 
@@ -246,7 +306,7 @@ def revoke_credential(payload: RevokeCredentialRequest, request: Request) -> Rev
         repository,
         issuer_account=issuer_account,
         holder_account=payload.holder_account,
-        credential_type=payload.credential_type,
+        credential_type=credential_type,
     )
     return RevokeCredentialResponse(
         revoked=ledger_entry is None,
