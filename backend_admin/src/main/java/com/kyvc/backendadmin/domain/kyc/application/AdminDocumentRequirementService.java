@@ -8,6 +8,7 @@ import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementSearchRequest;
 import com.kyvc.backendadmin.domain.kyc.repository.DocumentRequirementQueryRepository;
 import com.kyvc.backendadmin.domain.kyc.repository.DocumentRequirementRepository;
+import com.kyvc.backendadmin.global.commoncode.application.CommonCodeValidator;
 import com.kyvc.backendadmin.global.exception.ApiException;
 import com.kyvc.backendadmin.global.exception.ErrorCode;
 import com.kyvc.backendadmin.global.security.SecurityUtil;

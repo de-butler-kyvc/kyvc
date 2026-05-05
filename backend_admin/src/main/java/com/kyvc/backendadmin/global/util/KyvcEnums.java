@@ -201,7 +201,18 @@ public final class KyvcEnums {
         ADMIN_USER, // 관리자 계정
         ADMIN_ROLE, // 관리자 권한
         USER, // 사용자
-        CORPORATE // 법인
+        CORPORATE, // 법인
+        COMMON_CODE // 공통코드
+    }
+
+    // 공통코드 그룹
+    public enum CommonCodeGroup {
+        DOCUMENT_TYPE,
+        CORPORATE_TYPE,
+        SUPPLEMENT_REASON,
+        REJECT_REASON,
+        AI_REVIEW_REASON,
+        AI_REVIEW_ACTION
     }
 
     // Core 요청 대상 유형
