@@ -15,7 +15,6 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 // 이메일 MFA challenge와 인증번호 검증 상태를 저장하는 엔티티
 /**
@@ -33,16 +32,12 @@ public class MfaEmailVerification {
     // mfa_email_verifications 기본 키
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "mfa_email_verification_id")
+    @Column(name = "mfa_verification_id")
     private Long mfaEmailVerificationId;
-
-    // 클라이언트에 전달되는 challenge 식별자
-    @Column(name = "challenge_id", nullable = false, unique = true, length = 36)
-    private String challengeId;
 
     // MFA 대상 행위자 유형, Backend Admin에서는 ADMIN 사용
     @Enumerated(EnumType.STRING)
-    @Column(name = "actor_type", nullable = false, length = 50)
+    @Column(name = "actor_type_code", nullable = false, length = 50)
     private KyvcEnums.ActorType actorType;
 
     // MFA 대상 관리자 ID
@@ -51,11 +46,11 @@ public class MfaEmailVerification {
 
     // LOGIN, IMPORTANT_ACTION 등 MFA 목적
     @Enumerated(EnumType.STRING)
-    @Column(name = "purpose", nullable = false, length = 50)
+    @Column(name = "mfa_purpose_code", nullable = false, length = 100)
     private KyvcEnums.MfaPurpose purpose;
 
     // 인증번호 발송 대상 이메일
-    @Column(name = "target_email", nullable = false)
+    @Column(name = "email", nullable = false)
     private String targetEmail;
 
     // 원문 인증번호가 아닌 SHA-256 해시 값
@@ -64,12 +59,16 @@ public class MfaEmailVerification {
 
     // MFA challenge 상태
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 50)
+    @Column(name = "mfa_status_code", nullable = false, length = 50)
     private KyvcEnums.MfaStatus status;
 
     // 인증번호 입력 실패 횟수
-    @Column(name = "failed_count", nullable = false)
+    @Column(name = "failed_attempt_count", nullable = false)
     private int failedCount;
+
+    // 인증 요청 시각
+    @Column(name = "requested_at", nullable = false)
+    private LocalDateTime requestedAt;
 
     // 인증번호 만료 시각
     @Column(name = "expires_at", nullable = false)
@@ -83,6 +82,11 @@ public class MfaEmailVerification {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    // challenge 수정 시각
+    @org.hibernate.annotations.UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     // 이메일 MFA challenge 신규 생성
     /**
@@ -103,15 +107,19 @@ public class MfaEmailVerification {
             LocalDateTime expiresAt
     ) {
         MfaEmailVerification verification = new MfaEmailVerification();
-        verification.challengeId = UUID.randomUUID().toString();
         verification.actorType = KyvcEnums.ActorType.ADMIN;
         verification.actorId = actorId;
         verification.purpose = purpose;
         verification.targetEmail = targetEmail;
         verification.verificationCodeHash = verificationCodeHash;
         verification.status = KyvcEnums.MfaStatus.REQUESTED;
+        verification.requestedAt = LocalDateTime.now();
         verification.expiresAt = expiresAt;
         return verification;
+    }
+
+    public String getChallengeId() {
+        return mfaEmailVerificationId == null ? null : String.valueOf(mfaEmailVerificationId);
     }
 
     // 전달받은 기준 시각으로 만료 여부 확인

@@ -37,7 +37,7 @@ public class AuthToken {
 
     // 토큰 소유자 유형, Backend Admin에서는 ADMIN 사용
     @Enumerated(EnumType.STRING)
-    @Column(name = "actor_type", nullable = false, length = 50)
+    @Column(name = "actor_type_code", nullable = false, length = 50)
     private KyvcEnums.ActorType actorType;
 
     // 토큰 소유자 ID, ADMIN이면 admin_id
@@ -46,7 +46,7 @@ public class AuthToken {
 
     // 토큰 용도, REFRESH/PASSWORD_RESET/MFA_SESSION 등
     @Enumerated(EnumType.STRING)
-    @Column(name = "token_type", nullable = false, length = 50)
+    @Column(name = "token_type_code", nullable = false, length = 50)
     private KyvcEnums.TokenType tokenType;
 
     // 원문 토큰이 아닌 SHA-256 해시 값
@@ -55,8 +55,16 @@ public class AuthToken {
 
     // 토큰 상태, ACTIVE/REVOKED/USED/EXPIRED
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 50)
+    @Column(name = "token_status_code", nullable = false, length = 50)
     private KyvcEnums.TokenStatus status;
+
+    // JWT ID, JWT가 아닌 임의 토큰은 null 허용
+    @Column(name = "token_jti")
+    private String tokenJti;
+
+    // 토큰 발급 시각
+    @Column(name = "issued_at", nullable = false)
+    private LocalDateTime issuedAt;
 
     // 서버 기준 토큰 만료 시각
     @Column(name = "expires_at", nullable = false)
@@ -67,13 +75,15 @@ public class AuthToken {
     private LocalDateTime revokedAt;
 
     // 1회성 토큰 사용 완료 시각
-    @Column(name = "used_at")
-    private LocalDateTime usedAt;
-
     // 토큰 레코드 생성 시각
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    // 토큰 수정 시각
+    @org.hibernate.annotations.UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     // ACTIVE 상태의 신규 토큰 레코드 생성
     /**
@@ -99,6 +109,7 @@ public class AuthToken {
         authToken.tokenType = tokenType;
         authToken.tokenHash = tokenHash;
         authToken.status = KyvcEnums.TokenStatus.ACTIVE;
+        authToken.issuedAt = LocalDateTime.now();
         authToken.expiresAt = expiresAt;
         return authToken;
     }
@@ -122,6 +133,5 @@ public class AuthToken {
     // password reset token 등 1회성 토큰 사용 완료 처리
     public void markUsed(LocalDateTime usedAt) {
         this.status = KyvcEnums.TokenStatus.USED;
-        this.usedAt = usedAt;
     }
 }

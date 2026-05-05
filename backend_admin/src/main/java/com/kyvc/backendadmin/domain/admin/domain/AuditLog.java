@@ -37,7 +37,7 @@ public class AuditLog {
 
     // 변경을 수행한 행위자 유형
     @Enumerated(EnumType.STRING)
-    @Column(name = "actor_type", nullable = false, length = 50)
+    @Column(name = "actor_type_code", nullable = false, length = 50)
     private KyvcEnums.ActorType actorType;
 
     // 변경을 수행한 관리자 ID
@@ -46,7 +46,7 @@ public class AuditLog {
 
     // 변경 대상 유형
     @Enumerated(EnumType.STRING)
-    @Column(name = "target_type", nullable = false, length = 50)
+    @Column(name = "audit_target_type_code", nullable = false, length = 50)
     private KyvcEnums.AuditTargetType targetType;
 
     // 변경 대상 ID
@@ -54,11 +54,11 @@ public class AuditLog {
     private Long targetId;
 
     // 수행한 작업 코드
-    @Column(name = "action", nullable = false, length = 100)
+    @Column(name = "action_type", nullable = false, length = 100)
     private String action;
 
     // 변경 내용 요약
-    @Column(name = "description", length = 1000)
+    @Column(name = "request_summary", length = 1000)
     private String description;
 
     // 감사 로그 생성 시각

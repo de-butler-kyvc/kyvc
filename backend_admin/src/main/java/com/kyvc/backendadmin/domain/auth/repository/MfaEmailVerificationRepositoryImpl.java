@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
 import java.util.Optional;
 
 // EntityManager 기반 이메일 MFA challenge Repository 구현체
@@ -32,16 +31,11 @@ public class MfaEmailVerificationRepositoryImpl implements MfaEmailVerificationR
     // 클라이언트가 전달한 challengeId로 challenge 단건 조회
     @Override
     public Optional<MfaEmailVerification> findByChallengeId(String challengeId) {
-        List<MfaEmailVerification> result = entityManager()
-                .createQuery("""
-                        select verification
-                        from MfaEmailVerification verification
-                        where verification.challengeId = :challengeId
-                        """, MfaEmailVerification.class)
-                .setParameter("challengeId", challengeId)
-                .setMaxResults(1)
-                .getResultList();
-        return result.stream().findFirst();
+        try {
+            return Optional.ofNullable(entityManager().find(MfaEmailVerification.class, Long.parseLong(challengeId)));
+        } catch (NumberFormatException exception) {
+            return Optional.empty();
+        }
     }
 
     // 실제 DB 접근 시점에 EntityManager를 가져옴

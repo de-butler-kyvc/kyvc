@@ -46,11 +46,11 @@ public class AdminUser {
 
     // 관리자 계정 상태
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 50)
+    @Column(name = "admin_user_status_code", nullable = false, length = 50)
     private KyvcEnums.AdminUserStatus status;
 
     // 화면 표시용 관리자 이름
-    @Column(name = "display_name", length = 100)
+    @Column(name = "name", nullable = false, length = 100)
     private String displayName;
 
     // 마지막 로그인 시각
