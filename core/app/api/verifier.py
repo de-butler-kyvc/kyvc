@@ -39,6 +39,22 @@ def _policy_dict(policy: Any) -> dict[str, Any] | None:
     return policy.dict(exclude_none=True)
 
 
+def _sdjwt_policy(policy: Any) -> SdJwtVerificationPolicy | None:
+    policy_data = _policy_dict(policy)
+    return SdJwtVerificationPolicy.from_dict(policy_data) if policy_data is not None else None
+
+
+def _default_presentation_definition(payload: IssuePresentationChallengeRequest) -> dict[str, Any]:
+    return {
+        "id": payload.definitionId,
+        "acceptedFormat": "dc+sd-jwt",
+        "acceptedVct": [DEFAULT_LEGAL_ENTITY_KYC_VCT],
+        "trustedIssuers": [],
+        "requiredDisclosures": [],
+        "documentRules": [],
+    }
+
+
 def _status_lookup(request: Request, status_mode: str, rpc_url: str | None, allow_mainnet: bool):
     repository = request.app.state.repository
     if status_mode == "local":
@@ -150,7 +166,7 @@ def verify_credential(payload: VerifyCredentialRequest, request: Request) -> Ver
         result = service.verify_sd_jwt_credential(
             str(payload.credential),
             require_status=payload.require_status,
-            policy=SdJwtVerificationPolicy.from_dict(_policy_dict(payload.policy)),
+            policy=_sdjwt_policy(payload.policy),
         )
     else:
         result = service.verify_vc(payload.credential, require_status=payload.require_status)
@@ -169,11 +185,17 @@ def issue_presentation_challenge(
     audience = payload.aud or payload.domain
     if not audience:
         raise HTTPException(status_code=400, detail="aud or domain is required")
+    presentation_definition = (
+        payload.presentationDefinition
+        if payload.presentationDefinition is not None
+        else _default_presentation_definition(payload)
+    )
     request.app.state.repository.save_verification_challenge(
         challenge=challenge,
         domain=audience,
         expires_at=expires_at,
         created_at=issued_at,
+        presentation_definition=payload.presentationDefinition if payload.format == "dc+sd-jwt" else None,
     )
     expires = expires_at.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     if payload.format == "vp+jwt":
@@ -189,14 +211,7 @@ def issue_presentation_challenge(
         nonce=challenge,
         aud=audience,
         expiresAt=expires,
-        presentationDefinition={
-            "id": payload.definitionId,
-            "acceptedFormat": "dc+sd-jwt",
-            "acceptedVct": [DEFAULT_LEGAL_ENTITY_KYC_VCT],
-            "trustedIssuers": [],
-            "requiredDisclosures": [],
-            "documentRules": [],
-        },
+        presentationDefinition=presentation_definition,
     )
 
 
@@ -239,7 +254,7 @@ async def verify_presentation(request: Request) -> VerificationResponse:
         result = service.verify_sd_jwt_presentation(
             payload.presentation,
             require_status=payload.require_status,
-            policy=SdJwtVerificationPolicy.from_dict(_policy_dict(payload.policy)),
+            policy=_sdjwt_policy(payload.policy),
             attachments=attachments,
         )
     else:

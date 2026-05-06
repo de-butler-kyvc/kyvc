@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.policy.document_rules import DocumentRule, condition_matches, document_rules_for_legal_entity_type
+from app.policy.document_rules import DocumentRule, condition_matches
 from app.verifier.policy import ASSURANCE_ORDER
 
 
@@ -62,11 +62,7 @@ class SdJwtVerificationPolicy:
                 missing.append(path)
                 errors.append(f"required disclosure missing: {path}")
 
-        rules = list(self.document_rules)
-        if not rules:
-            legal_entity = disclosed_payload.get("legalEntity") if isinstance(disclosed_payload.get("legalEntity"), dict) else {}
-            rules = document_rules_for_legal_entity_type(legal_entity.get("type"))
-        doc_details = validate_document_rules(disclosed_payload, rules)
+        doc_details = validate_document_rules(disclosed_payload, list(self.document_rules))
         errors.extend(doc_details["errors"])
         satisfied.extend(doc_details["satisfiedRequirements"])
         missing.extend(doc_details["missingRequirements"])

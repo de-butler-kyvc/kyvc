@@ -152,12 +152,13 @@ class InMemoryRepository:
             }
         )
 
-    def save_verification_challenge(self, *, challenge, domain, expires_at, created_at):
+    def save_verification_challenge(self, *, challenge, domain, expires_at, created_at, presentation_definition=None):
         self.verification_challenges[challenge] = VerificationChallengeEntry(
             challenge=challenge,
             domain=domain,
             expires_at=self._datetime(expires_at),
             created_at=self._datetime(created_at),
+            presentation_definition=presentation_definition,
         )
 
     def get_verification_challenge(self, challenge):
@@ -173,6 +174,7 @@ class InMemoryRepository:
             expires_at=entry.expires_at,
             used_at=self._datetime(used_at),
             created_at=entry.created_at,
+            presentation_definition=entry.presentation_definition,
         )
         return True
 
@@ -413,6 +415,86 @@ def test_sdjwt_kb_presentation_rejects_tampered_disclosure_set(tmp_path):
 
     assert not result.ok
     assert "KB-JWT sd_hash mismatch" in result.errors
+
+
+def test_sdjwt_presentation_rejects_policy_mismatch_with_challenge(tmp_path):
+    repository, holder_did, holder_key, credential, status, paths = _sdjwt_fixture(tmp_path)
+    challenge_policy = {
+        "acceptedFormat": "dc+sd-jwt",
+        "acceptedVct": ["https://kyvc.example/vct/legal-entity-kyc-v1"],
+        "requiredDisclosures": ["legalEntity.type"],
+        "documentRules": [],
+    }
+    issued_at = datetime.now(tz=UTC)
+    repository.save_verification_challenge(
+        challenge="nonce-1",
+        domain="https://verifier.example",
+        expires_at=issued_at + timedelta(minutes=5),
+        created_at=issued_at,
+        presentation_definition=challenge_policy,
+    )
+    parsed = parse_sd_jwt(credential)
+    presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+    kb = create_kb_jwt(
+        private_key=holder_key,
+        verification_method=f"{holder_did}#holder-key-1",
+        aud="https://verifier.example",
+        nonce="nonce-1",
+        presented_sd_jwt_without_kb=presented_without_kb,
+    )
+    verifier = VerifierService(repository, status_lookup=repository.get_credential_entry)
+
+    result = verifier.verify_sd_jwt_presentation(
+        {
+            "aud": "https://verifier.example",
+            "nonce": "nonce-1",
+            "sdJwtKb": f"{presented_without_kb}~{kb}",
+        },
+        policy=SdJwtVerificationPolicy.from_dict(
+            {
+                **challenge_policy,
+                "requiredDisclosures": ["legalEntity.type", "representative.name"],
+            }
+        ),
+    )
+
+    assert not result.ok
+    assert "presentation policy does not match verifier challenge" in result.errors
+
+
+def test_sdjwt_policy_without_document_rules_does_not_require_documents(tmp_path):
+    repository, holder_did, holder_key, credential, status, paths = _sdjwt_fixture(tmp_path)
+    verifier = VerifierService(repository, status_lookup=repository.get_credential_entry)
+    policy = SdJwtVerificationPolicy(
+        accepted_vct={"https://kyvc.example/vct/legal-entity-kyc-v1"},
+        accepted_jurisdictions={"KR"},
+        minimum_assurance_level="STANDARD",
+        required_disclosures={
+            "legalEntity.type",
+            "representative.name",
+            "representative.birthDate",
+            "representative.nationality",
+            "beneficialOwners[].name",
+            "beneficialOwners[].birthDate",
+            "beneficialOwners[].nationality",
+        },
+    )
+    parsed = parse_sd_jwt(credential)
+    selected_disclosures = []
+    for disclosure in parsed.disclosures:
+        decoded = json.loads(b64url_decode(disclosure))
+        if len(decoded) == 2 and isinstance(decoded[1], dict) and decoded[1].get("documentId"):
+            continue
+        selected_disclosures.append(disclosure)
+
+    result = verifier.verify_sd_jwt_credential(
+        f"{parsed.issuer_jwt}~{'~'.join(selected_disclosures)}",
+        policy=policy,
+    )
+
+    assert result.ok
+    assert "documentEvidence[]" not in result.details["disclosedPaths"]
+    assert result.details["policyVerified"] is True
 
 
 def test_sdjwt_attachment_must_match_disclosed_document_hash(tmp_path):
@@ -962,12 +1044,27 @@ def test_verifier_challenge_issuance_persists_expiring_challenge(tmp_path):
     class Request:
         app = App()
 
-    response = issue_presentation_challenge(IssuePresentationChallengeRequest(domain="example.com"), Request())
+    presentation_definition = {
+        "id": "backend-defined-policy",
+        "acceptedFormat": "dc+sd-jwt",
+        "acceptedVct": ["https://kyvc.example/vct/legal-entity-kyc-v1"],
+        "requiredDisclosures": ["legalEntity.type"],
+        "documentRules": [],
+    }
+    response = issue_presentation_challenge(
+        IssuePresentationChallengeRequest(
+            aud="https://verifier.example",
+            presentationDefinition=presentation_definition,
+        ),
+        Request(),
+    )
     stored = repository.get_verification_challenge(response.challenge)
 
     assert stored is not None
-    assert response.domain == "example.com"
-    assert stored.domain == "example.com"
+    assert response.aud == "https://verifier.example"
+    assert stored.domain == "https://verifier.example"
+    assert response.presentationDefinition == presentation_definition
+    assert stored.presentation_definition == presentation_definition
     assert stored.used_at is None
     assert stored.expires_at > datetime.now(tz=UTC)
 
@@ -1198,15 +1295,27 @@ def test_api_issues_sdjwt_by_default_for_legal_entity_claims_and_verifies_json_p
     assert issued["credentialId"].startswith("urn:uuid:")
     assert issued["selectiveDisclosure"]["disclosablePaths"]
 
+    presentation_definition = {
+        "id": "backend-defined-kyc-policy",
+        "acceptedFormat": "dc+sd-jwt",
+        "acceptedVct": ["https://kyvc.example/vct/legal-entity-kyc-v1"],
+        "acceptedJurisdictions": ["KR"],
+        "minimumAssuranceLevel": "STANDARD",
+        "requiredDisclosures": ["legalEntity.type", "representative.name", "beneficialOwners[].name"],
+        "documentRules": [],
+    }
     challenge_response = client.post(
         "/verifier/presentations/challenges",
-        json={"aud": "https://verifier.example"},
+        json={
+            "aud": "https://verifier.example",
+            "presentationDefinition": presentation_definition,
+        },
     )
     assert challenge_response.status_code == 200
     challenge = challenge_response.json()
     assert challenge["nonce"]
     assert challenge["aud"] == "https://verifier.example"
-    assert challenge["presentationDefinition"]["acceptedFormat"] == "dc+sd-jwt"
+    assert challenge["presentationDefinition"] == presentation_definition
 
     parsed = parse_sd_jwt(issued["credential"])
     presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
@@ -1230,19 +1339,13 @@ def test_api_issues_sdjwt_by_default_for_legal_entity_claims_and_verifies_json_p
             },
             "did_documents": {holder_did: holder_document},
             "status_mode": "local",
-            "policy": {
-                "acceptedFormat": "dc+sd-jwt",
-                "acceptedVct": ["https://kyvc.example/vct/legal-entity-kyc-v1"],
-                "acceptedJurisdictions": ["KR"],
-                "minimumAssuranceLevel": "STANDARD",
-                "requiredDisclosures": ["legalEntity.type", "representative.name", "beneficialOwners[].name"],
-            },
         },
     )
     assert verify_response.status_code == 200
     body = verify_response.json()
     assert body["ok"] is True
     assert body["details"]["verified"] is True
+    assert body["details"]["presentationDefinition"] == presentation_definition
 
 
 def test_api_issue_uses_env_private_key_path_when_request_omits_it(tmp_path):
