@@ -21,6 +21,10 @@ public enum ErrorCode {
     INVALID_STATUS(HttpStatus.CONFLICT, "INVALID_STATUS", "허용되지 않은 상태입니다."),
     // HTTP 500 - 파일 업로드 처리 실패
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_UPLOAD_FAILED", "파일 업로드에 실패했습니다."),
+    // HTTP 500 - 이메일 발송 실패
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_SEND_FAILED", "이메일 발송에 실패했습니다."),
+    // HTTP 500 - 이메일 발송 설정 오류
+    EMAIL_CONFIGURATION_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_CONFIGURATION_INVALID", "이메일 발송 설정이 올바르지 않습니다."),
     // HTTP 500 - 분류되지 않은 서버 내부 오류
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."),
 
@@ -54,10 +58,10 @@ public enum ErrorCode {
     KYC_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "KYC_ALREADY_SUBMITTED", "이미 제출된 KYC입니다."),
     // HTTP 409 - 허용되지 않은 KYC 상태
     KYC_INVALID_STATUS(HttpStatus.CONFLICT, "KYC_INVALID_STATUS", "유효하지 않은 KYC 상태입니다."),
-    // HTTP 409 - 진행 중인 KYC 신청 존재
-    KYC_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "KYC_ALREADY_IN_PROGRESS", "진행 중인 KYC 신청이 이미 존재합니다."),
-    // HTTP 400 - KYC 신청 법인정보 누락
-    KYC_CORPORATE_REQUIRED(HttpStatus.BAD_REQUEST, "KYC_CORPORATE_REQUIRED", "KYC 신청을 위한 법인정보가 필요합니다."),
+    // HTTP 409 - 진행 중인 KYC 요청 존재
+    KYC_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "KYC_ALREADY_IN_PROGRESS", "진행 중인 KYC 요청이 이미 존재합니다."),
+    // HTTP 400 - KYC 요청 법인정보 누락
+    KYC_CORPORATE_REQUIRED(HttpStatus.BAD_REQUEST, "KYC_CORPORATE_REQUIRED", "KYC 요청을 위한 법인정보가 필요합니다."),
     // HTTP 404 - 문서 정보 조회 실패
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     // HTTP 403 - 문서 리소스 접근 권한 없음
@@ -70,10 +74,74 @@ public enum ErrorCode {
     DOCUMENT_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "DOCUMENT_SIZE_EXCEEDED", "파일 크기 제한을 초과했습니다."),
     // HTTP 500 - 문서 저장 경로 오류
     DOCUMENT_STORAGE_PATH_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_STORAGE_PATH_INVALID", "문서 저장 경로가 올바르지 않습니다."),
+
+    // HTTP 404 - 보완요청 조회 실패
+    SUPPLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SUPPLEMENT_NOT_FOUND", "보완요청을 찾을 수 없습니다."),
+    // HTTP 403 - 보완요청 접근 권한 없음
+    SUPPLEMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SUPPLEMENT_ACCESS_DENIED", "보완요청 접근 권한이 없습니다."),
+    // HTTP 409 - 이미 제출된 보완요청
+    SUPPLEMENT_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "SUPPLEMENT_ALREADY_SUBMITTED", "이미 제출된 보완요청입니다."),
+    // HTTP 409 - 허용되지 않은 보완요청 상태
+    SUPPLEMENT_INVALID_STATUS(HttpStatus.CONFLICT, "SUPPLEMENT_INVALID_STATUS", "보완요청 상태가 올바르지 않습니다."),
+    // HTTP 400 - 필수 보완서류 누락
+    SUPPLEMENT_REQUIRED_DOCUMENT_MISSING(HttpStatus.BAD_REQUEST, "SUPPLEMENT_REQUIRED_DOCUMENT_MISSING", "필수 보완서류가 누락되었습니다."),
+    // HTTP 400 - 보완 대상이 아닌 문서 유형
+    SUPPLEMENT_DOCUMENT_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "SUPPLEMENT_DOCUMENT_TYPE_NOT_ALLOWED", "보완 대상이 아닌 문서 유형입니다."),
+
+    // HTTP 404 - KYC 심사 결과 조회 실패
+    KYC_REVIEW_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "KYC_REVIEW_RESULT_NOT_FOUND", "KYC 심사 결과를 찾을 수 없습니다."),
+    // HTTP 409 - KYC 완료 화면 조회 불가 상태
+    KYC_COMPLETION_NOT_AVAILABLE(HttpStatus.CONFLICT, "KYC_COMPLETION_NOT_AVAILABLE", "KYC 완료 화면을 조회할 수 없는 상태입니다."),
+    // HTTP 409 - VC 발급 안내 조회 불가 상태
+    CREDENTIAL_GUIDE_NOT_AVAILABLE(HttpStatus.CONFLICT, "CREDENTIAL_GUIDE_NOT_AVAILABLE", "VC 발급 안내를 조회할 수 없습니다."),
+    // HTTP 404 - Credential 조회 실패
+    CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_NOT_FOUND", "Credential을 찾을 수 없습니다."),
+    // HTTP 404 - 알림 조회 실패
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "알림을 찾을 수 없습니다."),
+    // HTTP 403 - 알림 리소스 접근 권한 없음
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "NOTIFICATION_ACCESS_DENIED", "알림 접근 권한이 없습니다."),
+    // HTTP 500 - 감사로그 저장 실패
+    AUDIT_LOG_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "AUDIT_LOG_SAVE_FAILED", "감사로그 저장에 실패했습니다."),
+    // HTTP 404 - 모바일 기기 조회 실패
+    MOBILE_DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "MOBILE_DEVICE_NOT_FOUND", "모바일 기기를 찾을 수 없습니다."),
+    // HTTP 403 - 모바일 기기 리소스 접근 권한 없음
+    MOBILE_DEVICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MOBILE_DEVICE_ACCESS_DENIED", "모바일 기기 접근 권한이 없습니다."),
+    // HTTP 409 - 이미 등록된 모바일 기기
+    MOBILE_DEVICE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "MOBILE_DEVICE_ALREADY_REGISTERED", "이미 등록된 모바일 기기입니다."),
+    // HTTP 400 - 유효하지 않은 모바일 기기 정보
+    MOBILE_INVALID_DEVICE(HttpStatus.BAD_REQUEST, "MOBILE_INVALID_DEVICE", "유효하지 않은 모바일 기기 정보입니다."),
+    // HTTP 404 - 모바일 보안 설정 조회 실패
+    MOBILE_SECURITY_SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "MOBILE_SECURITY_SETTING_NOT_FOUND", "모바일 보안 설정을 찾을 수 없습니다."),
+    // HTTP 404 - Issuer 정책 조회 실패
+    ISSUER_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "ISSUER_POLICY_NOT_FOUND", "Issuer 정책을 찾을 수 없습니다."),
+    // HTTP 403 - Issuer 정책 리소스 접근 권한 없음
+    ISSUER_POLICY_ACCESS_DENIED(HttpStatus.FORBIDDEN, "ISSUER_POLICY_ACCESS_DENIED", "Issuer 정책 접근 권한이 없습니다."),
+
+    // HTTP 404 - MFA 인증 요청 조회 실패
+    MFA_CHALLENGE_NOT_FOUND(HttpStatus.NOT_FOUND, "MFA_CHALLENGE_NOT_FOUND", "MFA 인증 요청을 찾을 수 없습니다."),
+    // HTTP 400 - MFA 인증 코드 불일치
+    MFA_CODE_INVALID(HttpStatus.BAD_REQUEST, "MFA_CODE_INVALID", "MFA 인증 코드가 올바르지 않습니다."),
+    // HTTP 410 - MFA 인증 코드 만료
+    MFA_CODE_EXPIRED(HttpStatus.GONE, "MFA_CODE_EXPIRED", "MFA 인증 코드가 만료되었습니다."),
+    // HTTP 429 - MFA 인증 시도 횟수 초과
+    MFA_CODE_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "MFA_CODE_ATTEMPT_EXCEEDED", "MFA 인증 시도 횟수를 초과했습니다."),
+
+    // HTTP 400 - 비밀번호 재설정 토큰 오류
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "PASSWORD_RESET_TOKEN_INVALID", "비밀번호 재설정 토큰이 올바르지 않습니다."),
+    // HTTP 410 - 비밀번호 재설정 토큰 만료
+    PASSWORD_RESET_TOKEN_EXPIRED(HttpStatus.GONE, "PASSWORD_RESET_TOKEN_EXPIRED", "비밀번호 재설정 토큰이 만료되었습니다."),
+
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통 코드 그룹 조회 실패
-    COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통 코드 그룹을 찾을 수 없습니다.");
+    COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통 코드 그룹을 찾을 수 없습니다."),
+
+    // HTTP 409 - 문서 미리보기 사용 불가
+    DOCUMENT_PREVIEW_NOT_AVAILABLE(HttpStatus.CONFLICT, "DOCUMENT_PREVIEW_NOT_AVAILABLE", "문서 미리보기를 사용할 수 없습니다."),
+    // HTTP 500 - 내부 알림 저장 실패
+    INTERNAL_NOTIFICATION_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_NOTIFICATION_SAVE_FAILED", "내부 알림 저장에 실패했습니다."),
+    // HTTP 500 - 내부 감사로그 저장 실패
+    INTERNAL_AUDIT_LOG_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_AUDIT_LOG_SAVE_FAILED", "내부 감사로그 저장에 실패했습니다.");
 
     private final HttpStatus status;
     private final String code;

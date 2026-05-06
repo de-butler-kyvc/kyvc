@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.auth.repository;
 
 import com.kyvc.backend.domain.auth.domain.AuthToken;
+import com.kyvc.backend.global.util.KyvcEnums;
 
 import java.util.Optional;
 
@@ -37,6 +38,30 @@ public interface AuthTokenRepository {
      */
     Optional<AuthToken> findRefreshTokenByHash(
             String tokenHash // SHA-256 토큰 해시
+    );
+
+    /**
+     * 토큰 해시와 유형 기준 토큰 조회
+     *
+     * @param tokenHash SHA-256 토큰 해시
+     * @param tokenType 토큰 유형
+     * @return 토큰 조회 결과
+     */
+    Optional<AuthToken> findByHashAndType(
+            String tokenHash, // SHA-256 토큰 해시
+            KyvcEnums.TokenType tokenType // 토큰 유형
+    );
+
+    /**
+     * 활성 토큰 해시와 유형 기준 토큰 조회
+     *
+     * @param tokenHash SHA-256 토큰 해시
+     * @param tokenType 토큰 유형
+     * @return 활성 토큰 조회 결과
+     */
+    Optional<AuthToken> findActiveByHashAndType(
+            String tokenHash, // SHA-256 토큰 해시
+            KyvcEnums.TokenType tokenType // 토큰 유형
     );
 
     /**

@@ -2,8 +2,11 @@ package com.kyvc.backend.domain.document.application;
 
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
 import com.kyvc.backend.domain.document.domain.KycDocument;
+import com.kyvc.backend.domain.document.dto.DocumentDeleteResponse;
+import com.kyvc.backend.domain.document.dto.DocumentPreviewResponse;
 import com.kyvc.backend.domain.document.dto.KycDocumentResponse;
 import com.kyvc.backend.domain.document.dto.KycDocumentUploadRequest;
+import com.kyvc.backend.domain.document.infrastructure.DocumentPreviewProperties;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
@@ -16,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
@@ -32,20 +37,21 @@ public class KycDocumentService {
     private final KycDocumentRepository kycDocumentRepository;
     private final DocumentStorage documentStorage;
     private final DocumentStorageProperties documentStorageProperties;
+    private final DocumentPreviewProperties documentPreviewProperties;
     private final CommonCodeProvider commonCodeProvider;
 
     // KYC 문서 업로드
     public KycDocumentResponse uploadDocument(
             Long userId, // 사용자 ID
-            Long kycId, // KYC 신청 ID
+            Long kycId, // KYC 요청 ID
             KycDocumentUploadRequest request // KYC 문서 업로드 요청
     ) {
         validateUserId(userId);
         validateKycId(kycId);
         validateUploadRequest(request);
 
-        String documentTypeCode = normalizeRequired(request.documentTypeCode()); // 문서 유형 코드
-        MultipartFile file = request.file(); // 업로드 파일
+        String documentTypeCode = normalizeRequired(request.documentTypeCode());
+        MultipartFile file = request.file();
         commonCodeProvider.validateEnabledCode(DOCUMENT_TYPE_GROUP, documentTypeCode);
 
         KycApplication kycApplication = findOwnedKyc(userId, kycId);
@@ -71,7 +77,7 @@ public class KycDocumentService {
     @Transactional(readOnly = true)
     public List<KycDocumentResponse> getDocuments(
             Long userId, // 사용자 ID
-            Long kycId // KYC 신청 ID
+            Long kycId // KYC 요청 ID
     ) {
         validateUserId(userId);
         validateKycId(kycId);
@@ -86,7 +92,7 @@ public class KycDocumentService {
     @Transactional(readOnly = true)
     public KycDocumentResponse getDocument(
             Long userId, // 사용자 ID
-            Long kycId, // KYC 신청 ID
+            Long kycId, // KYC 요청 ID
             Long documentId // 문서 ID
     ) {
         validateUserId(userId);
@@ -94,18 +100,65 @@ public class KycDocumentService {
         validateDocumentId(documentId);
         findOwnedKyc(userId, kycId);
 
-        KycDocument kycDocument = kycDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
-        if (!kycDocument.belongsToKyc(kycId)) {
-            throw new ApiException(ErrorCode.DOCUMENT_ACCESS_DENIED);
+        return toResponse(findOwnedDocument(kycId, documentId));
+    }
+
+    // 문서 미리보기 URL 조회
+    @Transactional(readOnly = true)
+    public DocumentPreviewResponse getDocumentPreview(
+            Long userId, // 사용자 ID
+            Long kycId, // KYC 요청 ID
+            Long documentId // 문서 ID
+    ) {
+        validateUserId(userId);
+        validateKycId(kycId);
+        validateDocumentId(documentId);
+        findOwnedKyc(userId, kycId);
+
+        KycDocument kycDocument = findOwnedDocument(kycId, documentId);
+        if (!kycDocument.isPreviewAvailable()) {
+            throw new ApiException(ErrorCode.DOCUMENT_PREVIEW_NOT_AVAILABLE);
         }
-        return toResponse(kycDocument);
+
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(documentPreviewProperties.resolvedExpirationMinutes());
+        String previewUrl = UriComponentsBuilder.newInstance()
+                .path("/api/user/kyc/applications/{kycId}/documents/{documentId}/preview-content")
+                .queryParam("expiresAt", expiresAt)
+                .buildAndExpand(kycId, documentId)
+                .toUriString();
+
+        return new DocumentPreviewResponse(previewUrl, expiresAt);
+    }
+
+    // 제출 전 문서 삭제 처리
+    public DocumentDeleteResponse deleteDocument(
+            Long userId, // 사용자 ID
+            Long kycId, // KYC 요청 ID
+            Long documentId // 문서 ID
+    ) {
+        validateUserId(userId);
+        validateKycId(kycId);
+        validateDocumentId(documentId);
+
+        KycApplication kycApplication = findOwnedKyc(userId, kycId);
+        if (!kycApplication.isDraft()) {
+            throw new ApiException(ErrorCode.KYC_INVALID_STATUS);
+        }
+
+        KycDocument kycDocument = findOwnedDocument(kycId, documentId);
+        if (kycDocument.isDeleted()) {
+            return new DocumentDeleteResponse(true);
+        }
+
+        kycDocument.markDeleted();
+        kycDocumentRepository.save(kycDocument);
+        return new DocumentDeleteResponse(true);
     }
 
     // 사용자 소유 KYC 조회
     private KycApplication findOwnedKyc(
             Long userId, // 사용자 ID
-            Long kycId // KYC 신청 ID
+            Long kycId // KYC 요청 ID
     ) {
         KycApplication kycApplication = kycApplicationRepository.findById(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
@@ -113,6 +166,19 @@ public class KycDocumentService {
             throw new ApiException(ErrorCode.KYC_ACCESS_DENIED);
         }
         return kycApplication;
+    }
+
+    // 사용자 소유 문서 조회
+    private KycDocument findOwnedDocument(
+            Long kycId, // KYC 요청 ID
+            Long documentId // 문서 ID
+    ) {
+        KycDocument kycDocument = kycDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
+        if (!kycDocument.belongsToKyc(kycId)) {
+            throw new ApiException(ErrorCode.DOCUMENT_ACCESS_DENIED);
+        }
+        return kycDocument;
     }
 
     // 업로드 요청 검증
@@ -143,7 +209,7 @@ public class KycDocumentService {
     private void validateExtension(
             MultipartFile file // 업로드 파일
     ) {
-        String originalFileName = file.getOriginalFilename(); // 원본 파일명
+        String originalFileName = file.getOriginalFilename();
         if (!StringUtils.hasText(originalFileName)) {
             throw new ApiException(ErrorCode.DOCUMENT_INVALID_EXTENSION);
         }
@@ -153,17 +219,17 @@ public class KycDocumentService {
             throw new ApiException(ErrorCode.DOCUMENT_INVALID_EXTENSION);
         }
 
-        String extension = originalFileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT); // 파일 확장자
+        String extension = originalFileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
         if (!documentStorageProperties.isAllowedExtension(extension)) {
             throw new ApiException(ErrorCode.DOCUMENT_INVALID_EXTENSION);
         }
     }
 
-    // MIME 타입 검증
+    // MIME 유형 검증
     private void validateMimeType(
             MultipartFile file // 업로드 파일
     ) {
-        String contentType = file.getContentType(); // MIME 타입
+        String contentType = file.getContentType();
         if (StringUtils.hasText(contentType) && !documentStorageProperties.isAllowedMimeType(contentType)) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
@@ -202,9 +268,9 @@ public class KycDocumentService {
         }
     }
 
-    // KYC 신청 ID 검증
+    // KYC 요청 ID 검증
     private void validateKycId(
-            Long kycId // KYC 신청 ID
+            Long kycId // KYC 요청 ID
     ) {
         if (kycId == null || kycId <= 0) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
