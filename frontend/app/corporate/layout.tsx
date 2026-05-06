@@ -1,23 +1,4 @@
-import { Header } from "@/components/nav/header";
-import { Sidebar, type NavSection } from "@/components/nav/sidebar";
-
-const sections: NavSection[] = [
-  {
-    title: "KYC",
-    items: [
-      { href: "/corporate", label: "대시보드" },
-      { href: "/corporate/kyc/apply", label: "KYC 신청" },
-      { href: "/corporate/kyc", label: "신청 내역" }
-    ]
-  },
-  {
-    title: "계정",
-    items: [
-      { href: "/corporate/profile", label: "법인 정보" },
-      { href: "/corporate/agents", label: "대표자 · 대리인" }
-    ]
-  }
-];
+import { CorporateSidebar } from "@/components/corporate/sidebar";
 
 export default function CorporateLayout({
   children
@@ -25,16 +6,29 @@ export default function CorporateLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar
-        brand="KYvC"
-        subtitle="법인 사용자 웹"
-        sections={sections}
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Header channel="법인 사용자 웹" channelTag="CW · CORPORATE" />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+    <div className="flex min-h-screen flex-col bg-[#fafaf9]">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#e5e5e2] bg-white px-10">
+        <div className="flex items-center gap-[9px]">
+          <div className="flex size-[30px] items-center justify-center rounded-lg bg-[#2563eb] text-[14px] font-bold text-white">
+            K
+          </div>
+          <span className="text-[16px] font-bold tracking-[-0.4px] text-[#111110]">
+            KYvC
+          </span>
+        </div>
+        <div className="flex size-8 items-center justify-center rounded-2xl border border-[#bfdbfe] bg-[#eff6ff] text-[12px] font-bold text-[#2563eb]">
+          김
+        </div>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <CorporateSidebar />
+        <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
+      <footer className="flex h-12 shrink-0 items-center border-t border-[#e5e5e2] bg-white px-10">
+        <span className="text-[12px] text-[#a1a19d]">
+          © 2025 KYvC. All rights reserved.
+        </span>
+      </footer>
     </div>
   );
 }
