@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.commoncode.repository;
 import com.kyvc.backend.domain.commoncode.domain.CommonCode;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -44,5 +45,13 @@ public interface CommonCodeJpaRepository extends JpaRepository<CommonCode, Long>
     boolean existsByCodeGroup_CodeGroupAndCodeAndEnabledTrue(
             String codeGroup, // 공통코드 그룹 코드
             String code // 공통코드 값
+    );
+
+    List<CommonCode> findByCodeGroup_CodeGroupOrderBySortOrderAscCodeAsc(
+            String codeGroup // 공통코드 그룹 코드
+    );
+
+    List<CommonCode> findByCodeGroup_CodeGroupAndEnabledTrueOrderBySortOrderAscCodeAsc(
+            String codeGroup // 공통코드 그룹 코드
     );
 }

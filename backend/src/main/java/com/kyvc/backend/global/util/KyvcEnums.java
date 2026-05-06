@@ -200,7 +200,8 @@ public final class KyvcEnums {
         ADMIN_USER, // 관리자 계정
         ADMIN_ROLE, // 관리자 권한
         USER, // 사용자
-        CORPORATE // 법인
+        CORPORATE, // 법인
+        NOTIFICATION // 알림
     }
 
     // Core 요청 대상 유형
@@ -299,5 +300,11 @@ public final class KyvcEnums {
         FAILED, // 실패
         CALLBACK_RECEIVED, // Callback 수신
         RETRYING // 재시도중
+    }
+
+    // 감사로그 작업 유형
+    public enum AuditActionType {
+        NOTIFICATION_READ, // 알림 읽음 처리
+        NOTIFICATION_READ_ALL // 알림 전체 읽음 처리
     }
 }

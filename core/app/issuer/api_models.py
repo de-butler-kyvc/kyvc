@@ -23,10 +23,11 @@ class IssueKycCredentialRequest(BaseModel):
     xrpl_json_rpc_url: str | None = None
     allow_mainnet: bool = False
     status_mode: Literal["xrpl", "local"] = "xrpl"
+    credential_format: Literal["jwt", "embedded_jws"] = "jwt"
 
 
 class IssueKycCredentialResponse(BaseModel):
-    credential: dict[str, Any]
+    credential: dict[str, Any] | str
     issuer_did_document: dict[str, Any] | None = None
     credential_type: str
     vc_core_hash: str

@@ -1,17 +1,109 @@
 # KYvC Core API
 
 KYvC core now exposes reusable issuer and verifier packages, plus thin FastAPI adapters.
-The implementation follows the XRPL DID / W3C VC PoC rules:
+The implementation follows the XRPL DID / W3C VC flow:
 
 - `did:xrpl:1:{account}` DID format
-- deterministic JSON canonicalization for the PoC proof input
 - secp256k1 JWK keys
-- Data Integrity-like `ecdsa-secp256k1-jcs-poc-2026` proofs
+- compact JWS signatures using JOSE `ES256K`
 - top-level `credentialSalt` included in the signed VC core
 - XRPL-style `credentialStatus` with `VC_STATUS_V1:{sha256(vc_core)}` credential type
 - verifier policy separated from cryptographic and status verification
 
-This is still a PoC proof format, not production JSON-LD/JWS/COSE canonicalization.
+The default secured VC representation is an `application/vc+jwt` compact JWT.
+The default secured VP representation is an `application/vp+jwt` compact JWT.
+Legacy expanded JSON objects with `proof.jws` are only available through the
+explicit `embedded_jws` compatibility mode.
+
+## Signature Format
+
+KYvC uses the JOSE profile from W3C VC-JOSE-COSE:
+
+- JWS Compact Serialization from RFC 7515
+- `alg: "ES256K"` from RFC 8812, using secp256k1 with SHA-256
+- `typ: "vc+jwt"` for credentials and `typ: "vp+jwt"` for presentations
+- `cty: "vc"` or `cty: "vp"` to identify the unsecured payload type
+- `kid` set to the DID verification method URL
+- `iss` set on VC JWTs and required to match the VC `issuer`
+
+The JWS payload is the unsecured VC or VP document. In the default mode the API
+returns that compact JWT directly:
+
+```json
+{
+  "credential": "eyJhbGciOiJFUzI1Nksi..."
+}
+```
+
+VP payloads no longer embed raw VC JSON. Each entry in `verifiableCredential` is
+an Enveloped Verifiable Credential as defined by VC Data Model 2.0:
+
+```json
+{
+  "@context": "https://www.w3.org/ns/credentials/v2",
+  "id": "data:application/vc+jwt,eyJhbGciOiJFUzI1Nksi...",
+  "type": "EnvelopedVerifiableCredential"
+}
+```
+
+The verifier now treats the secured JWT as the verification input, verifies the
+JOSE signature, decodes the VC/VP document from the JWS payload, and then reuses
+the existing validation path for XRPL status, policy, validity dates, DID
+authorization, and holder/subject matching.
+
+`challenge` and `domain` are still required for VP replay protection. They are
+carried as protected JOSE header parameters on the `vp+jwt`, so tampering with
+either field breaks the holder signature. This is a KYvC application profile on
+top of VC-JOSE-COSE; the core secured presentation remains `application/vp+jwt`.
+
+### Compatibility Mode
+
+For older local callers, `POST /issuer/credentials/kyc` accepts
+`"credential_format": "embedded_jws"`. That returns the previous expanded JSON
+shape with a `proof.jws` compatibility wrapper. Standard JWT mode is the default,
+and the verifier treats the embedded wrapper path as `legacy-embedded-jws`.
+
+### Why JWS Instead of Data Integrity
+
+VC Data Integrity is the natural W3C-native proof family, but production-grade
+Data Integrity requires the matching cryptosuite canonicalization rules, usually
+JSON-LD processing and RDF Dataset Canonicalization. The previous implementation
+used deterministic JSON only, so switching to Data Integrity correctly would be a
+larger architecture and dependency change.
+
+JOSE/JWS is a clearer minimal step toward interoperability because it has stable
+compact serialization, standard protected headers, and direct support for JWK
+key discovery. W3C VC-JOSE-COSE defines JOSE/COSE-based securing for VC/VP data,
+and RFC 8812 registers secp256k1 for JOSE as `ES256K`.
+
+### Remaining Limits
+
+The default VC and VP security representations now match the VC-JOSE-COSE media
+types much more closely, but there are still implementation limits:
+
+- JWS payload bytes are produced from deterministic JSON serialization; the
+  verifier validates the JWS and uses the decoded payload as the VC/VP document.
+- `challenge` and `domain` are protected JOSE header parameters rather than a
+  separate W3C-defined presentation exchange profile.
+- The local credential repository still stores the unsecured VC document for
+  indexing and XRPL status bookkeeping; API responses default to the secured JWT.
+- Compatibility mode can still emit `proof.jws`, but it is no longer the default
+  verifier or issuer path.
+
+`ES256K` is standardized, but secp256k1 is less universally supported by
+enterprise JWT libraries, FIPS-oriented stacks, and managed KMS products than
+`ES256` on P-256. If broad off-the-shelf verifier compatibility becomes more
+important than XRPL/ecosystem key alignment, the recommended migration path is
+`ES256` with P-256 JWKs or Ed25519/`EdDSA`, with DID Documents publishing the
+new verification methods during a key-rotation period.
+
+References:
+
+- W3C VC-JOSE-COSE: https://www.w3.org/TR/vc-jose-cose/
+- W3C VC Data Model 2.0: https://www.w3.org/TR/vc-data-model-2.0/
+- RFC 7515 JSON Web Signature: https://www.rfc-editor.org/rfc/rfc7515
+- RFC 7519 JSON Web Token: https://www.rfc-editor.org/rfc/rfc7519
+- RFC 8812 JOSE `ES256K`: https://www.rfc-editor.org/rfc/rfc8812
 
 ## Package Layout
 
@@ -30,6 +122,33 @@ MySQL is used for local DID documents, issued credentials, optional credential
 status mirrors, verifier challenges, and verification logs. XRPL ledger entries
 are the authoritative source for credential active/inactive status in the default
 API flow.
+
+## DID Resolution
+
+Verifier DID resolution uses a chain:
+
+1. Request `did_documents`, verified against the XRPL DID entry `Data` hash when
+   an XRPL client is configured
+2. Local MySQL DID Document cache, verified against the XRPL DID entry `Data`
+   hash before use when an XRPL client is configured
+3. XRPL DID entry lookup, DID Document fetch from the ledger `URI`, and
+   multihash comparison against ledger `Data`
+
+Issuer DID Documents created by this core service are stored locally, but in
+XRPL-backed verification the cached document is still checked against ledger
+`Data` before it is used. External issuer and holder DIDs fall back to XRPL
+resolution: the verifier reads the DID entry, fetches the document from `URI`,
+computes `multihash_sha2_256(canonical_json(didDocument))`, and requires it to
+match ledger `Data`. Successfully verified external documents are cached locally
+for later verification; later cache hits are rechecked against the current ledger
+hash.
+
+Holder DID Documents may still be supplied in verifier request `did_documents`,
+but in XRPL mode they are not trusted as-is. The verifier verifies the supplied
+document against the XRPL DID entry hash before using it. Offline local mode
+without `xrpl_json_rpc_url` keeps the old static/local behavior for development
+only. If a local cache entry does not match ledger `Data`, the verifier skips
+that cache entry and attempts a fresh XRPL `URI` fetch.
 
 ## Run
 
@@ -94,7 +213,7 @@ The API uses `XRPL_JSON_RPC_URL`, `XRPL_FAUCET_HOST`, and `ALLOW_MAINNET` from
 env unless the request overrides them. The response includes a seed. Put it in
 `core/.env` as `XRPL_ISSUER_SEED`; never commit that file.
 
-Generate an issuer DID signing key PEM for local PoC work:
+Generate an issuer DID signing key PEM for local development:
 
 ```bash
 PYTHONPATH=. .venv/bin/python - <<'PY'
@@ -150,18 +269,19 @@ curl -sS http://127.0.0.1:8090/dids/{issuerAccount}/diddoc.json | jq
 The default `status_mode` is `xrpl`. The issuer account is derived from
 `issuer_seed` or `XRPL_ISSUER_SEED`; if `issuer_account` is also supplied it must
 match that wallet. The DID/VC signing key is read from `issuer_private_key_pem`
-or the file at `ISSUER_PRIVATE_KEY_PEM_PATH`. The service signs the VC, computes
-the XRPL `credentialType` from the VC core hash, submits `CredentialCreate`,
+or the file at `ISSUER_PRIVATE_KEY_PEM_PATH`. The service secures the VC as an
+`application/vc+jwt`, computes the XRPL `credentialType` from the VC core hash,
+submits `CredentialCreate`,
 stores the issued VC locally, and records a pending local mirror for development
 convenience. The response includes:
 
-- `credential`
+- `credential` as a compact `vc+jwt` string by default
 - `credential_type`
 - `vc_core_hash`
 - `credential_create_transaction`
 - `ledger_entry`
 
-Local/offline PoC mode is still available but must be explicit:
+Local/offline mode is still available but must be explicit:
 
 ```json
 {
@@ -222,7 +342,7 @@ the before/after verifier results as JSON.
 ```
 
 On success the service removes the local mirror as well. `status_mode: "local"`
-keeps the old local-only deletion behavior for offline PoC work.
+keeps the old local-only deletion behavior for offline tests.
 
 ## Status Query API
 
@@ -236,7 +356,7 @@ curl -sS \
   "http://127.0.0.1:8090/credential-status/credentials/rIssuer/rHolder/56435...?xrpl_json_rpc_url=https://s.devnet.rippletest.net:51234" | jq
 ```
 
-Use `?status_mode=local` only for offline tests or local PoC flows.
+Use `?status_mode=local` only for offline tests or local development flows.
 
 ## Verifier API
 
@@ -244,7 +364,7 @@ Use `?status_mode=local` only for offline tests or local PoC flows.
 
 ```json
 {
-  "credential": {},
+  "credential": "eyJhbGciOiJFUzI1Nksi...",
   "policy": {
     "trustedIssuers": ["did:xrpl:1:rIssuer"],
     "acceptedKycLevels": ["BASIC", "ADVANCED"],
@@ -270,13 +390,14 @@ holder is inactive. After `CredentialAccept` it is active. After
 ```
 
 Returns a verifier-issued `challenge`, its `domain`, and `expires_at`. Build the
-VP proof with that challenge and domain.
+VP JWT with that challenge and domain in the protected JOSE header. The VP
+payload should contain Enveloped Verifiable Credentials, not raw VC JSON.
 
 `POST /verifier/presentations/verify`
 
 ```json
 {
-  "presentation": {},
+  "presentation": "eyJhbGciOiJFUzI1Nksi...",
   "did_documents": {
     "did:xrpl:1:rHolder": {}
   }
@@ -286,8 +407,13 @@ VP proof with that challenge and domain.
 For VP verification, pass holder DID Documents in `did_documents` or pre-store them
 through the MySQL repository from application code. Issuer DID Documents created by
 the issuer API are stored automatically. VP verification applies the same XRPL
-status lookup to each embedded VC unless `require_status` is false or
+status lookup to each enveloped VC unless `require_status` is false or
 `status_mode` is explicitly set to `local`.
+
+Verifier responses include DID resolution metadata when available, for example
+`details.issuerDidResolution` and `details.holderDidResolution` with `resolver`,
+`ledger`, `uri`, `dataHash`, and `cached`. DID ledger entry absence, URI fetch
+failure, and hash mismatch are reported as distinct errors.
 
 ## Developer Verification
 

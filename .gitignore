@@ -11,6 +11,11 @@ Thumbs.db
 *.log
 logs/
 
+# Local Storage
+storage/
+backend/storage/
+**/storage/
+
 # Env
 .env
 .env.local
@@ -24,7 +29,6 @@ build/
 out/
 bin/
 backend/bin/
-
 
 # Node
 node_modules/
@@ -46,6 +50,7 @@ venv/
 *.crt
 *.p12
 *.jks
+
 # Env examples
 !.env.*.example
 !**/.env.*.example
