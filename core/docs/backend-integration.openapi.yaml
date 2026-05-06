@@ -1,0 +1,1268 @@
+openapi: 3.0.3
+info:
+  title: KYvC Core Backend Integration API
+  version: 0.1.0
+  description: |
+    Swagger contract for backend-to-Core integration during the SD-JWT migration.
+
+    Core verifies issuer signatures, SD-JWT disclosure digests, SD-JWT+KB holder
+    binding, nonce/aud, XRPL Credential status, and verifier policy. XRPL
+    Credential status is only the active/revoked lookup key; it is not used as
+    the tamper-proofing mechanism.
+
+    Backend owns verifier policy decisions. Send presentationDefinition in the
+    challenge request when the backend wants to require specific disclosures,
+    document evidence metadata, or original document attachments. Core stores
+    that presentationDefinition with the nonce and uses it during verification.
+servers:
+  - url: https://dev-core-kyvc.khuoo.synology.me
+    description: KYvC dev Core
+  - url: http://localhost:8000
+    description: Local Core
+tags:
+  - name: issuer
+    description: Credential issuance, issuer DID registration, and revocation.
+  - name: verifier
+    description: Credential and presentation verification.
+  - name: credential-status
+    description: XRPL/local Credential status lookup.
+  - name: did
+    description: DID Document retrieval from Core cache.
+paths:
+  /issuer/credentials/kyc:
+    post:
+      tags:
+        - issuer
+      summary: Issue a KYC credential
+      description: |
+        Issues a legal-entity KYC credential. The default format is dc+sd-jwt
+        when legal-entity KYC claim groups are present.
+
+        In xrpl status mode Core checks that the issuer DID Document generated
+        from the current issuer key matches the XRPL DIDSet Data hash before
+        issuing.
+      operationId: issueKycCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueKycCredentialRequest"
+            examples:
+              sdJwtNoDocuments:
+                summary: SD-JWT issuance without document evidence
+                value:
+                  format: dc+sd-jwt
+                  holder_account: rHolderAccount
+                  holder_did: did:xrpl:1:rHolderAccount
+                  holder_key_id: holder-key-1
+                  valid_from: "2026-05-06T00:00:00Z"
+                  valid_until: "2027-05-06T00:00:00Z"
+                  status_mode: xrpl
+                  claims:
+                    kyc:
+                      jurisdiction: KR
+                      assuranceLevel: STANDARD
+                      verifiedAt: "2026-05-06T00:00:00Z"
+                    legalEntity:
+                      type: STOCK_COMPANY
+                      name: Example Co Ltd
+                      registrationNumber: "1101111234567"
+                    representative:
+                      name: Hong Gil Dong
+                      birthDate: "1990-01-01"
+                      nationality: KR
+                    beneficialOwners:
+                      - name: Kim Owner
+                        birthDate: "1985-02-02"
+                        nationality: KR
+                        ownershipPercentage: 35
+              sdJwtWithDocumentEvidence:
+                summary: SD-JWT issuance with selectively disclosable document evidence metadata
+                value:
+                  format: dc+sd-jwt
+                  holder_account: rHolderAccount
+                  holder_did: did:xrpl:1:rHolderAccount
+                  holder_key_id: holder-key-1
+                  valid_from: "2026-05-06T00:00:00Z"
+                  valid_until: "2027-05-06T00:00:00Z"
+                  status_mode: xrpl
+                  claims:
+                    kyc:
+                      jurisdiction: KR
+                      assuranceLevel: STANDARD
+                      verifiedAt: "2026-05-06T00:00:00Z"
+                    legalEntity:
+                      type: STOCK_COMPANY
+                      name: Example Co Ltd
+                      registrationNumber: "1101111234567"
+                    representative:
+                      name: Hong Gil Dong
+                      birthDate: "1990-01-01"
+                      nationality: KR
+                    beneficialOwners:
+                      - name: Kim Owner
+                        birthDate: "1985-02-02"
+                        nationality: KR
+                        ownershipPercentage: 35
+                    documentEvidence:
+                      - documentId: urn:kyvc:doc:registry:001
+                        documentType: KR_CORPORATE_REGISTER_FULL_CERTIFICATE
+                        documentClass: ENTITY_REALNAME_EVIDENCE
+                        digestSRI: sha384-BASE64URL_DIGEST
+                        mediaType: application/pdf
+                        byteSize: 482913
+                        hashInput: original-file-bytes
+                        verifiedAt: "2026-05-06T00:00:00Z"
+                        evidenceFor:
+                          - legalEntity.name
+                          - legalEntity.registrationNumber
+      responses:
+        "200":
+          description: Credential issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueKycCredentialResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /issuer/credentials/revoke:
+    post:
+      tags:
+        - issuer
+      summary: Revoke a credential
+      description: |
+        Revokes by credential_type or by jti/status_id. For SD-JWT revocation
+        by jti/status_id, Core resolves credential_type using SDJWT_STATUS_V1.
+      operationId: revokeCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevokeCredentialRequest"
+            examples:
+              byCredentialType:
+                value:
+                  holder_account: rHolderAccount
+                  credential_type: 0123ABCD
+                  status_mode: xrpl
+              byJti:
+                value:
+                  holder_account: rHolderAccount
+                  holder_did: did:xrpl:1:rHolderAccount
+                  jti: urn:uuid:2d2bc4a7-46e8-4d6f-8bde-b70ed4d4fe32
+                  vct: https://kyvc.example/vct/legal-entity-kyc-v1
+                  status_mode: xrpl
+      responses:
+        "200":
+          description: Revocation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokeCredentialResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /issuer/did/register:
+    post:
+      tags:
+        - issuer
+      summary: Register issuer DID Document hash on XRPL DIDSet
+      description: |
+        Registers the current issuer DID Document URI and Data hash on XRPL.
+        The DID Document itself is served by Core at /dids/{issuerAccount}/diddoc.json.
+      operationId: registerIssuerDid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterIssuerDidRequest"
+            examples:
+              devCore:
+                value:
+                  did_doc_base_url: https://dev-core-kyvc.khuoo.synology.me
+      responses:
+        "200":
+          description: Issuer DID registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterIssuerDidResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /verifier/presentations/challenges:
+    post:
+      tags:
+        - verifier
+      summary: Issue a one-time presentation challenge
+      description: |
+        Issues a high-entropy nonce and binds it to aud. For SD-JWT+KB, aud
+        replaces the legacy vp+jwt domain and nonce replaces the legacy challenge.
+
+        Backend should send presentationDefinition when it wants Core to enforce
+        a verifier policy. Core stores that object with the nonce and returns it
+        unchanged. During /verifier/presentations/verify, Core uses the stored
+        presentationDefinition. If verify also sends policy, it must match the
+        challenge presentationDefinition.
+      operationId: issuePresentationChallenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssuePresentationChallengeRequest"
+            examples:
+              noDocumentEvidence:
+                summary: Selective disclosure without document evidence
+                value:
+                  aud: https://dev-core-kyvc.khuoo.synology.me
+                  presentationDefinition:
+                    id: wallet-direct-kyc-test-v1
+                    acceptedFormat: dc+sd-jwt
+                    acceptedVct:
+                      - https://kyvc.example/vct/legal-entity-kyc-v1
+                    acceptedJurisdictions:
+                      - KR
+                    minimumAssuranceLevel: STANDARD
+                    requiredDisclosures:
+                      - legalEntity.type
+                      - representative.name
+                      - representative.birthDate
+                      - representative.nationality
+                      - beneficialOwners[].name
+                      - beneficialOwners[].birthDate
+                      - beneficialOwners[].nationality
+                    documentRules: []
+              stockCompanyEvidence:
+                summary: Require stock company document evidence metadata
+                value:
+                  aud: https://dev-core-kyvc.khuoo.synology.me
+                  presentationDefinition:
+                    id: kr-stock-company-kyc-v1
+                    acceptedFormat: dc+sd-jwt
+                    acceptedVct:
+                      - https://kyvc.example/vct/legal-entity-kyc-v1
+                    acceptedJurisdictions:
+                      - KR
+                    minimumAssuranceLevel: STANDARD
+                    requiredDisclosures:
+                      - legalEntity.type
+                      - representative.name
+                      - representative.birthDate
+                      - representative.nationality
+                    documentRules:
+                      - id: entity-realname-evidence
+                        required: true
+                        oneOf:
+                          - KR_BUSINESS_REGISTRATION_CERTIFICATE
+                        originalPolicy: OPTIONAL
+                      - id: registry-evidence
+                        required: true
+                        oneOf:
+                          - KR_CORPORATE_REGISTER_FULL_CERTIFICATE
+                        originalPolicy: OPTIONAL
+                      - id: ownership-evidence
+                        required: true
+                        oneOf:
+                          - KR_SHAREHOLDER_REGISTER
+                          - KR_STOCK_CHANGE_STATEMENT
+                        originalPolicy: OPTIONAL
+      responses:
+        "200":
+          description: Presentation challenge
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuePresentationChallengeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /verifier/presentations/verify:
+    post:
+      tags:
+        - verifier
+      summary: Verify an SD-JWT+KB presentation
+      description: |
+        Verifies issuer signature, disclosed SD-JWT digests, holder KB-JWT,
+        sd_hash, nonce/aud, XRPL/local status, and policy.
+
+        Use application/json when no original files are attached. Use
+        multipart/form-data when original documents are attached. Original
+        document bytes are never embedded in the SD-JWT.
+      operationId: verifyPresentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPresentationRequest"
+            examples:
+              sdJwtKbJson:
+                summary: Verify SD-JWT+KB with request-supplied holder DID Document
+                value:
+                  format: kyvc-sd-jwt-presentation-v1
+                  status_mode: xrpl
+                  presentation:
+                    format: kyvc-sd-jwt-presentation-v1
+                    aud: https://dev-core-kyvc.khuoo.synology.me
+                    nonce: CHALLENGE_NONCE
+                    sdJwtKb: ISSUER_JWT~SELECTED_DISCLOSURE~KB_JWT
+                  did_documents:
+                    did:xrpl:1:rHolderAccount:
+                      "@context":
+                        - https://www.w3.org/ns/did/v1
+                        - https://w3id.org/security/jwk/v1
+                      id: did:xrpl:1:rHolderAccount
+                      verificationMethod:
+                        - id: did:xrpl:1:rHolderAccount#holder-key-1
+                          type: JsonWebKey
+                          controller: did:xrpl:1:rHolderAccount
+                          publicKeyJwk:
+                            kty: EC
+                            crv: secp256k1
+                            x: BASE64URL_X
+                            y: BASE64URL_Y
+                      authentication:
+                        - did:xrpl:1:rHolderAccount#holder-key-1
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - presentation
+              properties:
+                presentation:
+                  type: string
+                  description: JSON string matching VerifyPresentationRequest.
+                doc-1:
+                  type: string
+                  format: binary
+                  description: Original document attachment referenced by attachmentManifest[].attachmentRef.
+            encoding:
+              presentation:
+                contentType: application/json
+            examples:
+              attachedOriginal:
+                summary: Verify SD-JWT+KB with one original PDF attachment
+                value:
+                  presentation: |
+                    {
+                      "format": "kyvc-sd-jwt-presentation-v1",
+                      "status_mode": "xrpl",
+                      "presentation": {
+                        "format": "kyvc-sd-jwt-presentation-v1",
+                        "aud": "https://dev-core-kyvc.khuoo.synology.me",
+                        "nonce": "CHALLENGE_NONCE",
+                        "sdJwtKb": "ISSUER_JWT~SELECTED_DISCLOSURE~KB_JWT",
+                        "attachmentManifest": [
+                          {
+                            "requirementId": "registry-evidence",
+                            "documentId": "urn:kyvc:doc:registry:001",
+                            "attachmentRef": "doc-1",
+                            "documentType": "KR_CORPORATE_REGISTER_FULL_CERTIFICATE",
+                            "digestSRI": "sha384-BASE64URL_DIGEST",
+                            "mediaType": "application/pdf",
+                            "byteSize": 482913
+                          }
+                        ]
+                      },
+                      "did_documents": {
+                        "did:xrpl:1:rHolderAccount": {
+                          "id": "did:xrpl:1:rHolderAccount",
+                          "verificationMethod": [],
+                          "authentication": []
+                        }
+                      }
+                    }
+                  doc-1: ./registry.pdf
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /verifier/credentials/verify:
+    post:
+      tags:
+        - verifier
+      summary: Verify a credential without holder presentation
+      description: |
+        Verifies a dc+sd-jwt credential or legacy vc+jwt. For dc+sd-jwt this
+        validates issuer signature, disclosure digests, status, and policy, but
+        does not verify holder KB-JWT binding.
+      operationId: verifyCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyCredentialRequest"
+            examples:
+              sdJwtCredential:
+                value:
+                  format: dc+sd-jwt
+                  credential: ISSUER_JWT~DISCLOSURE_1~DISCLOSURE_2
+                  status_mode: xrpl
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /credential-status/credentials/{issuer_account}/{holder_account}/{credential_type}:
+    get:
+      tags:
+        - credential-status
+      summary: Lookup XRPL/local Credential status
+      operationId: getCredentialStatus
+      parameters:
+        - name: issuer_account
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: holder_account
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: credential_type
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - xrpl
+              - local
+            default: xrpl
+        - name: xrpl_json_rpc_url
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: allow_mainnet
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Credential status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialStatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /dids/{account}/diddoc.json:
+    get:
+      tags:
+        - did
+      summary: Get cached DID Document by XRPL account
+      operationId: getDidDocument
+      parameters:
+        - name: account
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: DID Document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DidDocument"
+        "404":
+          description: DID Document was not found in Core cache
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    IssueKycCredentialRequest:
+      type: object
+      required:
+        - holder_account
+        - claims
+        - valid_from
+        - valid_until
+      properties:
+        format:
+          type: string
+          enum:
+            - dc+sd-jwt
+            - vc+jwt
+          nullable: true
+          description: Defaults to dc+sd-jwt for legal-entity KYC claims.
+        issuer_account:
+          type: string
+          nullable: true
+        issuer_seed:
+          type: string
+          nullable: true
+          writeOnly: true
+        issuer_private_key_pem:
+          type: string
+          nullable: true
+          writeOnly: true
+        issuer_did:
+          type: string
+          nullable: true
+        key_id:
+          type: string
+          default: issuer-key-1
+        holder_account:
+          type: string
+        holder_did:
+          type: string
+          nullable: true
+        holder_key_id:
+          type: string
+          default: holder-key-1
+        claims:
+          $ref: "#/components/schemas/LegalEntityKycClaims"
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        persist:
+          type: boolean
+          default: true
+        persist_status:
+          type: boolean
+          default: true
+        mark_status_accepted:
+          type: boolean
+          default: false
+        store_issuer_did_document:
+          type: boolean
+          default: true
+        status_uri:
+          type: string
+          nullable: true
+        xrpl_json_rpc_url:
+          type: string
+          nullable: true
+        allow_mainnet:
+          type: boolean
+          default: false
+        status_mode:
+          type: string
+          enum:
+            - xrpl
+            - local
+          default: xrpl
+        credential_format:
+          type: string
+          enum:
+            - jwt
+            - embedded_jws
+          default: jwt
+          description: Legacy vc+jwt option.
+        vct:
+          type: string
+          nullable: true
+          default: https://kyvc.example/vct/legal-entity-kyc-v1
+    LegalEntityKycClaims:
+      type: object
+      additionalProperties: true
+      properties:
+        kyc:
+          type: object
+          properties:
+            jurisdiction:
+              type: string
+              example: KR
+            assuranceLevel:
+              type: string
+              example: STANDARD
+            verifiedAt:
+              type: string
+              format: date-time
+        legalEntity:
+          type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - STOCK_COMPANY
+                - LIMITED_OR_PARTNERSHIP_COMPANY
+                - INCORPORATED_ASSOCIATION_OR_FOUNDATION
+                - COOPERATIVE_OR_ASSOCIATION
+                - UNIQUE_NUMBER_ENTITY
+                - FOREIGN_COMPANY
+            name:
+              type: string
+            registrationNumber:
+              type: string
+            nonProfit:
+              type: boolean
+            purposeCheckRequired:
+              type: boolean
+        representative:
+          type: object
+          properties:
+            name:
+              type: string
+            birthDate:
+              type: string
+              format: date
+            nationality:
+              type: string
+        beneficialOwners:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              name:
+                type: string
+              birthDate:
+                type: string
+                format: date
+              nationality:
+                type: string
+              englishName:
+                type: string
+                nullable: true
+              ownershipPercentage:
+                type: number
+        establishmentPurpose:
+          type: object
+          additionalProperties: true
+          properties:
+            checked:
+              type: boolean
+            purposeText:
+              type: string
+        documentEvidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentEvidence"
+    DocumentEvidence:
+      type: object
+      required:
+        - documentId
+        - documentType
+        - digestSRI
+      properties:
+        documentId:
+          type: string
+          example: urn:kyvc:doc:registry:001
+        documentType:
+          $ref: "#/components/schemas/DocumentType"
+        documentClass:
+          type: string
+          nullable: true
+        digestSRI:
+          type: string
+          description: SRI digest over original file bytes, for example sha384-...
+        mediaType:
+          type: string
+          nullable: true
+          example: application/pdf
+        byteSize:
+          type: integer
+          nullable: true
+        hashInput:
+          type: string
+          nullable: true
+          example: original-file-bytes
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        evidenceFor:
+          type: array
+          items:
+            type: string
+    DocumentType:
+      type: string
+      enum:
+        - KR_BUSINESS_REGISTRATION_CERTIFICATE
+        - KR_CORPORATE_REGISTER_FULL_CERTIFICATE
+        - KR_SHAREHOLDER_REGISTER
+        - KR_STOCK_CHANGE_STATEMENT
+        - KR_CONTRIBUTOR_REGISTER
+        - KR_MEMBER_REGISTER
+        - KR_ARTICLES_OF_ASSOCIATION
+        - KR_BOARD_MEMBER_LIST
+        - KR_OPERATING_RULES
+        - KR_BYLAWS
+        - KR_MEETING_MINUTES
+        - KR_OFFICIAL_LETTER
+        - KR_ESTABLISHMENT_APPLICATION
+        - KR_PERMIT_APPLICATION
+        - KR_ESTABLISHMENT_PERMIT
+        - KR_INSTALLATION_REPORT_CERTIFICATE
+        - KR_AUTHORIZATION_CERTIFICATE
+        - KR_ENTITY_REALNAME_CERTIFICATE
+        - KR_UNIQUE_NUMBER_CERTIFICATE
+        - FOREIGN_INVESTMENT_REGISTRATION_CERTIFICATE
+        - FOREIGN_ENTITY_REALNAME_DOCUMENT
+        - FOREIGN_CORPORATE_REGISTRY_CERTIFICATE
+        - FOREIGN_SHAREHOLDER_REGISTER
+        - FOREIGN_BENEFICIAL_OWNER_DOCUMENT
+        - FOREIGN_ARTICLES_OF_ASSOCIATION
+        - FOREIGN_OPERATING_RULES
+        - FOREIGN_BYLAWS
+        - FOREIGN_MEETING_MINUTES
+        - FOREIGN_OFFICIAL_LETTER
+        - FOREIGN_ESTABLISHMENT_APPLICATION
+        - FOREIGN_PERMIT_APPLICATION
+        - FOREIGN_ESTABLISHMENT_PERMIT
+        - FOREIGN_AUTHORIZATION_CERTIFICATE
+    IssueKycCredentialResponse:
+      type: object
+      required:
+        - format
+        - credential
+        - credential_type
+        - status_mode
+      properties:
+        format:
+          type: string
+          enum:
+            - dc+sd-jwt
+            - vc+jwt
+        credential:
+          oneOf:
+            - type: string
+              description: Compact SD-JWT or vc+jwt.
+            - type: object
+        credentialId:
+          type: string
+          nullable: true
+        issuer_did_document:
+          $ref: "#/components/schemas/DidDocument"
+          nullable: true
+        credential_type:
+          type: string
+        vc_core_hash:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/CredentialStatus"
+          nullable: true
+        selectiveDisclosure:
+          type: object
+          nullable: true
+          properties:
+            disclosablePaths:
+              type: array
+              items:
+                type: string
+        credential_create_transaction:
+          type: object
+          nullable: true
+          additionalProperties: true
+        ledger_entry:
+          type: object
+          nullable: true
+          additionalProperties: true
+        status_mode:
+          type: string
+          enum:
+            - xrpl
+            - local
+    CredentialStatus:
+      type: object
+      properties:
+        type:
+          type: string
+          example: XRPLCredentialStatus
+        statusId:
+          type: string
+          example: urn:kyvc:status:2d2bc4a7-46e8-4d6f-8bde-b70ed4d4fe32
+        credentialType:
+          type: string
+          description: SDJWT_STATUS_V1 credential type hex.
+    RevokeCredentialRequest:
+      type: object
+      required:
+        - holder_account
+      properties:
+        issuer_account:
+          type: string
+          nullable: true
+        issuer_seed:
+          type: string
+          nullable: true
+          writeOnly: true
+        holder_account:
+          type: string
+        credential_type:
+          type: string
+          nullable: true
+        jti:
+          type: string
+          nullable: true
+        status_id:
+          type: string
+          nullable: true
+        holder_did:
+          type: string
+          nullable: true
+        issuer_did:
+          type: string
+          nullable: true
+        vct:
+          type: string
+          nullable: true
+        xrpl_json_rpc_url:
+          type: string
+          nullable: true
+        allow_mainnet:
+          type: boolean
+          default: false
+        status_mode:
+          type: string
+          enum:
+            - xrpl
+            - local
+          default: xrpl
+    RevokeCredentialResponse:
+      type: object
+      required:
+        - revoked
+        - status_mode
+      properties:
+        revoked:
+          type: boolean
+        credential_delete_transaction:
+          type: object
+          nullable: true
+          additionalProperties: true
+        ledger_entry:
+          type: object
+          nullable: true
+          additionalProperties: true
+        status_mode:
+          type: string
+          enum:
+            - xrpl
+            - local
+    RegisterIssuerDidRequest:
+      type: object
+      properties:
+        issuer_private_key_pem:
+          type: string
+          nullable: true
+          writeOnly: true
+        issuer_seed:
+          type: string
+          nullable: true
+          writeOnly: true
+        key_id:
+          type: string
+          default: issuer-key-1
+        did_doc_base_url:
+          type: string
+          nullable: true
+        xrpl_json_rpc_url:
+          type: string
+          nullable: true
+        allow_mainnet:
+          type: boolean
+          default: false
+    RegisterIssuerDidResponse:
+      type: object
+      required:
+        - issuer_account
+        - issuer_did
+        - diddoc_url
+        - did_document
+        - did_set_transaction
+      properties:
+        issuer_account:
+          type: string
+        issuer_did:
+          type: string
+        diddoc_url:
+          type: string
+        did_document:
+          $ref: "#/components/schemas/DidDocument"
+        did_set_transaction:
+          type: object
+          additionalProperties: true
+    IssuePresentationChallengeRequest:
+      type: object
+      properties:
+        domain:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Legacy vp+jwt domain. For SD-JWT+KB use aud.
+        aud:
+          type: string
+          nullable: true
+        definitionId:
+          type: string
+          default: kr-stock-company-kyc-v1
+        format:
+          type: string
+          enum:
+            - dc+sd-jwt
+            - vp+jwt
+          default: dc+sd-jwt
+        presentationDefinition:
+          $ref: "#/components/schemas/PresentationDefinition"
+          nullable: true
+    IssuePresentationChallengeResponse:
+      type: object
+      properties:
+        challenge:
+          type: string
+          nullable: true
+          description: Same value as nonce for SD-JWT+KB; legacy vp+jwt field.
+        domain:
+          type: string
+          nullable: true
+          description: Same value as aud for SD-JWT+KB; legacy vp+jwt field.
+        expires_at:
+          type: string
+          nullable: true
+          description: Legacy snake_case expiration.
+        nonce:
+          type: string
+          nullable: true
+        aud:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          nullable: true
+        presentationDefinition:
+          $ref: "#/components/schemas/PresentationDefinition"
+          nullable: true
+    PresentationDefinition:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        acceptedFormat:
+          type: string
+          enum:
+            - dc+sd-jwt
+            - vc+sd-jwt
+        acceptedVct:
+          type: array
+          items:
+            type: string
+        trustedIssuers:
+          type: array
+          items:
+            type: string
+        acceptedJurisdictions:
+          type: array
+          items:
+            type: string
+        minimumAssuranceLevel:
+          type: string
+          example: STANDARD
+        requiredDisclosures:
+          type: array
+          items:
+            type: string
+          example:
+            - legalEntity.type
+            - representative.name
+            - beneficialOwners[].name
+        documentRules:
+          type: array
+          description: Empty or omitted means Core does not require document evidence.
+          items:
+            $ref: "#/components/schemas/DocumentRule"
+    DocumentRule:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        required:
+          type: boolean
+          default: true
+        oneOf:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentType"
+        notAllowed:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentType"
+        originalPolicy:
+          type: string
+          enum:
+            - OPTIONAL
+            - REQUIRED
+            - NOT_ALLOWED
+          default: OPTIONAL
+        requiredWhen:
+          type: object
+          nullable: true
+          additionalProperties: true
+          example:
+            any:
+              - nonProfit: true
+              - purposeCheckRequired: true
+    VerifyPresentationRequest:
+      type: object
+      required:
+        - presentation
+      properties:
+        format:
+          type: string
+          nullable: true
+          enum:
+            - kyvc-sd-jwt-presentation-v1
+            - vp+jwt
+        presentation:
+          oneOf:
+            - $ref: "#/components/schemas/SdJwtKbPresentation"
+            - type: string
+            - type: object
+        did_documents:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/DidDocument"
+          description: |
+            Request-supplied DID Documents keyed by DID. In xrpl mode Core
+            verifies each supplied DID Document against the XRPL DIDSet Data hash.
+        policy:
+          $ref: "#/components/schemas/PresentationDefinition"
+          nullable: true
+          description: Optional. If challenge stored presentationDefinition, this must match it.
+        require_status:
+          type: boolean
+          default: true
+        xrpl_json_rpc_url:
+          type: string
+          nullable: true
+        allow_mainnet:
+          type: boolean
+          default: false
+        status_mode:
+          type: string
+          enum:
+            - xrpl
+            - local
+          default: xrpl
+    SdJwtKbPresentation:
+      type: object
+      required:
+        - aud
+        - nonce
+        - sdJwtKb
+      properties:
+        format:
+          type: string
+          enum:
+            - kyvc-sd-jwt-presentation-v1
+        definitionId:
+          type: string
+          nullable: true
+        aud:
+          type: string
+        nonce:
+          type: string
+        sdJwtKb:
+          type: string
+          description: Compact SD-JWT+KB, <issuer-jwt>~<selected-disclosures>~<kb-jwt>.
+        attachmentManifest:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttachmentManifestEntry"
+    AttachmentManifestEntry:
+      type: object
+      required:
+        - documentId
+        - attachmentRef
+        - documentType
+        - digestSRI
+      properties:
+        requirementId:
+          type: string
+        documentId:
+          type: string
+        attachmentRef:
+          type: string
+          description: multipart field name for the original file.
+        documentType:
+          $ref: "#/components/schemas/DocumentType"
+        digestSRI:
+          type: string
+        mediaType:
+          type: string
+          nullable: true
+        byteSize:
+          type: integer
+          nullable: true
+    VerifyCredentialRequest:
+      type: object
+      required:
+        - credential
+      properties:
+        format:
+          type: string
+          nullable: true
+          enum:
+            - dc+sd-jwt
+            - vc+jwt
+        credential:
+          oneOf:
+            - type: string
+            - type: object
+        did_documents:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/DidDocument"
+        policy:
+          $ref: "#/components/schemas/PresentationDefinition"
+          nullable: true
+        require_status:
+          type: boolean
+          default: true
+        xrpl_json_rpc_url:
+          type: string
+          nullable: true
+        allow_mainnet:
+          type: boolean
+          default: false
+        status_mode:
+          type: string
+          enum:
+            - xrpl
+            - local
+          default: xrpl
+    VerificationResponse:
+      type: object
+      required:
+        - ok
+        - errors
+        - details
+      properties:
+        ok:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        details:
+          type: object
+          additionalProperties: true
+          properties:
+            verified:
+              type: boolean
+            credentialVerified:
+              type: boolean
+            holderBindingVerified:
+              type: boolean
+            statusVerified:
+              type: boolean
+            policyVerified:
+              type: boolean
+            satisfiedRequirements:
+              type: array
+              items:
+                type: string
+            missingRequirements:
+              type: array
+              items:
+                type: string
+            submittedDocumentTypes:
+              type: array
+              items:
+                type: string
+            originalDocumentHashMatches:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    CredentialStatusResponse:
+      type: object
+      required:
+        - issuer_account
+        - holder_account
+        - credential_type
+        - found
+        - active
+        - checked_at
+      properties:
+        issuer_account:
+          type: string
+        holder_account:
+          type: string
+        credential_type:
+          type: string
+        found:
+          type: boolean
+        active:
+          type: boolean
+        entry:
+          type: object
+          nullable: true
+          additionalProperties: true
+        checked_at:
+          type: string
+    DidDocument:
+      type: object
+      required:
+        - id
+        - verificationMethod
+      additionalProperties: true
+      properties:
+        "@context":
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        id:
+          type: string
+        verificationMethod:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        assertionMethod:
+          type: array
+          items:
+            type: string
+        authentication:
+          type: array
+          items:
+            type: string
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                additionalProperties: true

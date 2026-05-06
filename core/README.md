@@ -258,6 +258,8 @@ For Android holder wallet implementation guidance, see
 [`docs/android-holder-wallet-sdjwt-guide.md`](docs/android-holder-wallet-sdjwt-guide.md).
 The legacy `vc+jwt`/`vp+jwt` wallet guide remains at
 [`docs/android-holder-wallet-guide.md`](docs/android-holder-wallet-guide.md).
+For backend integration, see the OpenAPI contract at
+[`docs/backend-integration.openapi.yaml`](docs/backend-integration.openapi.yaml).
 
 ## Issuer API
 
