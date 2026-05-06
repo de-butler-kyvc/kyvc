@@ -14,6 +14,12 @@ info:
     challenge request when the backend wants to require specific disclosures,
     document evidence metadata, or original document attachments. Core stores
     that presentationDefinition with the nonce and uses it during verification.
+
+    DID Document public URI ownership belongs to the backend/API gateway layer.
+    When registering the issuer DID, pass the backend public origin as
+    did_doc_base_url. Backend must expose GET /dids/{account}/diddoc.json and
+    proxy it to Core's same endpoint so XRPL DIDSet URI resolves through the
+    backend domain, not the Core internal/dev domain.
 servers:
   - url: https://dev-core-kyvc.khuoo.synology.me
     description: KYvC dev Core
@@ -27,7 +33,7 @@ tags:
   - name: credential-status
     description: XRPL/local Credential status lookup.
   - name: did
-    description: DID Document retrieval from Core cache.
+    description: DID Document retrieval from Core cache. Backend should expose this path as a pass-through.
 paths:
   /issuer/credentials/kyc:
     post:
@@ -170,7 +176,17 @@ paths:
       summary: Register issuer DID Document hash on XRPL DIDSet
       description: |
         Registers the current issuer DID Document URI and Data hash on XRPL.
-        The DID Document itself is served by Core at /dids/{issuerAccount}/diddoc.json.
+        The DID Document is stored in Core, but the URI written to XRPL DIDSet
+        should be the backend public URL:
+        {did_doc_base_url}/dids/{issuerAccount}/diddoc.json.
+
+        Backend integration requirement:
+        - Backend calls this endpoint with did_doc_base_url set to the backend
+          public origin.
+        - Backend exposes GET /dids/{account}/diddoc.json.
+        - That backend route proxies/bypasses to Core GET /dids/{account}/diddoc.json.
+        - Verifiers resolving the XRPL DIDSet URI will therefore fetch DID
+          Documents through the backend domain while Core remains behind backend.
       operationId: registerIssuerDid
       requestBody:
         required: false
@@ -179,9 +195,9 @@ paths:
             schema:
               $ref: "#/components/schemas/RegisterIssuerDidRequest"
             examples:
-              devCore:
+              backendPublicOrigin:
                 value:
-                  did_doc_base_url: https://dev-core-kyvc.khuoo.synology.me
+                  did_doc_base_url: "https://<backend-public-origin>"
       responses:
         "200":
           description: Issuer DID registered
@@ -216,7 +232,7 @@ paths:
               noDocumentEvidence:
                 summary: Selective disclosure without document evidence
                 value:
-                  aud: https://dev-core-kyvc.khuoo.synology.me
+                  aud: "https://<backend-public-origin>"
                   presentationDefinition:
                     id: wallet-direct-kyc-test-v1
                     acceptedFormat: dc+sd-jwt
@@ -237,7 +253,7 @@ paths:
               stockCompanyEvidence:
                 summary: Require stock company document evidence metadata
                 value:
-                  aud: https://dev-core-kyvc.khuoo.synology.me
+                  aud: "https://<backend-public-origin>"
                   presentationDefinition:
                     id: kr-stock-company-kyc-v1
                     acceptedFormat: dc+sd-jwt
@@ -304,7 +320,7 @@ paths:
                   status_mode: xrpl
                   presentation:
                     format: kyvc-sd-jwt-presentation-v1
-                    aud: https://dev-core-kyvc.khuoo.synology.me
+                    aud: "https://<backend-public-origin>"
                     nonce: CHALLENGE_NONCE
                     sdJwtKb: ISSUER_JWT~SELECTED_DISCLOSURE~KB_JWT
                   did_documents:
@@ -350,7 +366,7 @@ paths:
                       "status_mode": "xrpl",
                       "presentation": {
                         "format": "kyvc-sd-jwt-presentation-v1",
-                        "aud": "https://dev-core-kyvc.khuoo.synology.me",
+                        "aud": "https://<backend-public-origin>",
                         "nonce": "CHALLENGE_NONCE",
                         "sdJwtKb": "ISSUER_JWT~SELECTED_DISCLOSURE~KB_JWT",
                         "attachmentManifest": [
@@ -470,6 +486,11 @@ paths:
       tags:
         - did
       summary: Get cached DID Document by XRPL account
+      description: |
+        Core cache endpoint for DID Documents. Backend should expose the same
+        route publicly and proxy to this Core endpoint. The backend public URL
+        for this route is what should be registered in XRPL DIDSet URI via
+        /issuer/did/register did_doc_base_url.
       operationId: getDidDocument
       parameters:
         - name: account
@@ -881,6 +902,7 @@ components:
         did_doc_base_url:
           type: string
           nullable: true
+          description: Backend public origin used to build XRPL DIDSet URI. Do not use the internal Core origin in backend-mediated deployments.
         xrpl_json_rpc_url:
           type: string
           nullable: true

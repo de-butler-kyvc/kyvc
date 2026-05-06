@@ -260,6 +260,10 @@ The legacy `vc+jwt`/`vp+jwt` wallet guide remains at
 [`docs/android-holder-wallet-guide.md`](docs/android-holder-wallet-guide.md).
 For backend integration, see the OpenAPI contract at
 [`docs/backend-integration.openapi.yaml`](docs/backend-integration.openapi.yaml).
+In backend-mediated deployments, register issuer DIDSet with the backend public
+origin as `did_doc_base_url`. Backend should expose
+`GET /dids/{account}/diddoc.json` and proxy it to Core's same endpoint so XRPL
+DIDSet URI resolves through backend, while Core remains behind backend.
 
 ## Issuer API
 
