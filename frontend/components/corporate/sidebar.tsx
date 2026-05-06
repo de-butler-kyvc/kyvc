@@ -55,13 +55,13 @@ export function CorporateSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden h-full w-[220px] shrink-0 flex-col border-r border-[#e5e5e2] bg-white px-3 py-5 md:flex">
+    <aside className="hidden h-full w-[220px] shrink-0 flex-col border-r border-border bg-card px-3 py-5 md:flex">
       {sections.map((section, sectionIdx) => (
         <div key={section.title} className={cn(sectionIdx === 0 ? "" : "mt-3.5")}>
-          <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.6px] text-[#a1a19d]">
+          <div className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-[0.6px] text-muted-strong">
             {section.title}
           </div>
-          <ul className="mt-1 space-y-px">
+          <ul className="space-y-px">
             {section.items.map((item) => {
               const active =
                 pathname === item.href ||
@@ -74,8 +74,8 @@ export function CorporateSidebar() {
                     className={cn(
                       "flex items-center gap-2 rounded-[10px] px-2.5 py-[7px] text-[13px] transition-colors",
                       active
-                        ? "bg-[#eff6ff] font-semibold text-[#2563eb]"
-                        : "text-[#6b6b68] hover:bg-[#f4f4f1] hover:text-[#111110]"
+                        ? "bg-accent font-semibold text-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <Icon className="size-[15px] shrink-0" strokeWidth={1.75} />
