@@ -27,6 +27,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalApiKeyFilter internalApiKeyFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final KyvcCorsProperties kyvcCorsProperties;
@@ -65,6 +66,7 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        .requestMatchers("/api/internal/core/**").permitAll()
                         .requestMatchers("/api/admin/**").denyAll()
                         .requestMatchers(
                                 "/api/auth/logout",
@@ -73,6 +75,7 @@ public class SecurityConfig {
                                 "/api/mobile/**"
                         ).authenticated()
                         .anyRequest().authenticated())
+                .addFilterBefore(internalApiKeyFilter, JwtAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

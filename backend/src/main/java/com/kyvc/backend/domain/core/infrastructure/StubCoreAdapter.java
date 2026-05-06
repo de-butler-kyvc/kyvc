@@ -118,7 +118,7 @@ public class StubCoreAdapter implements CoreAdapter {
     ) {
         return new CoreXrplTransactionResponse(
                 txHash,
-                "PENDING",
+                KyvcEnums.XrplTransactionStatus.PENDING.name(),
                 "XRPL transaction is pending in stub core.",
                 LocalDateTime.now()
         );

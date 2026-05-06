@@ -303,6 +303,14 @@ public final class KyvcEnums {
     }
 
     // 감사로그 작업 유형
+
+    // XRPL 트랜잭션 상태
+    public enum XrplTransactionStatus {
+        PENDING, // 대기
+        CONFIRMED, // 확정
+        FAILED // 실패
+    }
+
     public enum AuditActionType {
         NOTIFICATION_READ, // 알림 읽음 처리
         NOTIFICATION_READ_ALL // 알림 전체 읽음 처리
