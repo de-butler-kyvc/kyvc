@@ -1,0 +1,38 @@
+package com.kyvc.backend.domain.core.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.time.LocalDateTime;
+
+/**
+ * Core VP 검증 요청
+ *
+ * @param coreRequestId Core 요청 ID
+ * @param vpVerificationId VP 검증 ID
+ * @param credentialId Credential ID
+ * @param corporateId 법인 ID
+ * @param requestNonce 요청 nonce
+ * @param purpose 검증 목적
+ * @param callbackUrl Callback URL
+ * @param requestedAt 요청 시각
+ */
+@Schema(description = "Core VP 검증 요청")
+public record CoreVpVerificationRequest(
+        @Schema(description = "Core 요청 ID", example = "36ad38f0-d3bd-41a1-8c4e-079dcaec3075")
+        String coreRequestId, // Core 요청 ID
+        @Schema(description = "VP 검증 ID", example = "21")
+        Long vpVerificationId, // VP 검증 ID
+        @Schema(description = "Credential ID", example = "11")
+        Long credentialId, // Credential ID
+        @Schema(description = "법인 ID", example = "10")
+        Long corporateId, // 법인 ID
+        @Schema(description = "요청 nonce", example = "nonce-20260506-001")
+        String requestNonce, // 요청 nonce
+        @Schema(description = "검증 목적", example = "KYC 제출 증빙")
+        String purpose, // 검증 목적
+        @Schema(description = "Callback URL", example = "http://localhost:8080/api/internal/core/callbacks/vp-verification")
+        String callbackUrl, // Callback URL
+        @Schema(description = "요청 시각", example = "2026-05-06T10:20:00")
+        LocalDateTime requestedAt // 요청 시각
+) {
+}
