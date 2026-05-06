@@ -500,12 +500,30 @@ For SD-JWT+KB:
 
 ```json
 {
-  "aud": "https://verifier.example"
+  "aud": "https://verifier.example",
+  "presentationDefinition": {
+    "id": "backend-defined-kyc-policy",
+    "acceptedFormat": "dc+sd-jwt",
+    "acceptedVct": ["https://kyvc.example/vct/legal-entity-kyc-v1"],
+    "acceptedJurisdictions": ["KR"],
+    "minimumAssuranceLevel": "STANDARD",
+    "requiredDisclosures": [
+      "legalEntity.type",
+      "representative.name"
+    ],
+    "documentRules": []
+  }
 }
 ```
 
 Returns `nonce`, `aud`, `expiresAt`, and a `presentationDefinition` with
 `acceptedFormat`, `acceptedVct`, `requiredDisclosures`, and `documentRules`.
+Document rules are verifier policy, not automatic Core defaults. If
+`documentRules` is empty or omitted, Core does not require document evidence for
+that verification request. When the backend supplies `presentationDefinition` in
+the challenge request, Core stores it with the nonce and echoes the same object
+in the response. Later SD-JWT+KB verification uses the stored challenge policy;
+if the verify request also supplies `policy`, it must match the challenge policy.
 
 For legacy `vp+jwt`, send `"format": "vp+jwt"` with `domain`; the response keeps
 `challenge`, `domain`, and `expires_at`.
@@ -570,6 +588,10 @@ For SD-JWT+KB JSON verification:
   "status_mode": "local"
 }
 ```
+
+When the challenge was issued with `presentationDefinition`, this `policy` may be
+omitted; Core will use the policy stored with the nonce. If it is supplied, it
+must match the challenge `presentationDefinition`.
 
 `multipart/form-data` is also accepted. Put the same JSON object in the
 `presentation` form field and upload originals using field names that match

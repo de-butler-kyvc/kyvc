@@ -305,10 +305,53 @@ class VerifierService:
             sd_jwt_kb = str(presentation_data["sdJwtKb"])
             parsed = parse_sd_jwt(sd_jwt_kb, expect_kb=True)
             presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+            _, kb_payload = decode_kb_jwt(parsed.kb_jwt or "")
+            nonce_value = kb_payload.get("nonce")
+            aud_value = kb_payload.get("aud")
+            nonce = nonce_value if isinstance(nonce_value, str) else None
+            expected_aud = presentation_data.get("aud")
+            expected_nonce = presentation_data.get("nonce")
+            challenge_entry: VerificationChallengeEntry | None = None
+            challenge_policy: SdJwtVerificationPolicy | None = None
+            if kb_payload.get("sd_hash") != sd_hash_for_presentation(presented_without_kb):
+                errors.append("KB-JWT sd_hash mismatch")
+            if expected_nonce is not None and nonce_value != expected_nonce:
+                errors.append("KB-JWT nonce does not match presentation nonce")
+            if expected_aud is not None and aud_value != expected_aud:
+                errors.append("KB-JWT aud does not match presentation aud")
+            if not isinstance(nonce_value, str) or not nonce_value:
+                errors.append("KB-JWT nonce is required")
+            elif not isinstance(aud_value, str) or not aud_value:
+                errors.append("KB-JWT aud is required")
+            elif self.challenge_lookup is None:
+                errors.append("verifier challenge lookup is not configured")
+            else:
+                challenge_entry = self.challenge_lookup(nonce_value)
+                details["challengeFound"] = challenge_entry is not None
+                if challenge_entry is None:
+                    errors.append("KB-JWT nonce was not issued by verifier")
+                else:
+                    details["challengeExpiresAt"] = challenge_entry.expires_at.isoformat().replace("+00:00", "Z")
+                    details["challengeUsed"] = challenge_entry.used_at is not None
+                    if challenge_entry.presentation_definition is not None:
+                        details["presentationDefinition"] = challenge_entry.presentation_definition
+                        challenge_policy = SdJwtVerificationPolicy.from_dict(challenge_entry.presentation_definition)
+                    if challenge_entry.used_at is not None:
+                        errors.append("KB-JWT nonce was already used")
+                    if checked_at > challenge_entry.expires_at:
+                        errors.append("KB-JWT nonce is expired")
+                    if challenge_entry.domain != aud_value:
+                        errors.append("KB-JWT aud mismatch")
+            if isinstance(kb_payload.get("iat"), int) and kb_payload["iat"] > checked_at.timestamp() + 300:
+                errors.append("KB-JWT iat is in the future")
+            if policy is not None and challenge_policy is not None and policy != challenge_policy:
+                errors.append("presentation policy does not match verifier challenge")
+            effective_policy = challenge_policy or policy or SdJwtVerificationPolicy()
+
             credential_result = self.verify_sd_jwt_credential(
                 presented_without_kb,
                 now=checked_at,
-                policy=policy,
+                policy=effective_policy,
                 require_status=require_status,
             )
             details["credential"] = credential_result.to_dict()
@@ -332,47 +375,11 @@ class VerifierService:
             elif not verify_kb_jwt(parsed.kb_jwt or "", holder_method["publicKeyJwk"], holder_kid):
                 errors.append("KB-JWT signature verification failed")
 
-            _, kb_payload = decode_kb_jwt(parsed.kb_jwt or "")
-            nonce_value = kb_payload.get("nonce")
-            aud_value = kb_payload.get("aud")
-            nonce = nonce_value if isinstance(nonce_value, str) else None
-            expected_aud = presentation_data.get("aud")
-            expected_nonce = presentation_data.get("nonce")
-            if kb_payload.get("sd_hash") != sd_hash_for_presentation(presented_without_kb):
-                errors.append("KB-JWT sd_hash mismatch")
-            if expected_nonce is not None and nonce_value != expected_nonce:
-                errors.append("KB-JWT nonce does not match presentation nonce")
-            if expected_aud is not None and aud_value != expected_aud:
-                errors.append("KB-JWT aud does not match presentation aud")
-            challenge_entry: VerificationChallengeEntry | None = None
-            if not isinstance(nonce_value, str) or not nonce_value:
-                errors.append("KB-JWT nonce is required")
-            elif not isinstance(aud_value, str) or not aud_value:
-                errors.append("KB-JWT aud is required")
-            elif self.challenge_lookup is None:
-                errors.append("verifier challenge lookup is not configured")
-            else:
-                challenge_entry = self.challenge_lookup(nonce_value)
-                details["challengeFound"] = challenge_entry is not None
-                if challenge_entry is None:
-                    errors.append("KB-JWT nonce was not issued by verifier")
-                else:
-                    details["challengeExpiresAt"] = challenge_entry.expires_at.isoformat().replace("+00:00", "Z")
-                    details["challengeUsed"] = challenge_entry.used_at is not None
-                    if challenge_entry.used_at is not None:
-                        errors.append("KB-JWT nonce was already used")
-                    if checked_at > challenge_entry.expires_at:
-                        errors.append("KB-JWT nonce is expired")
-                    if challenge_entry.domain != aud_value:
-                        errors.append("KB-JWT aud mismatch")
-            if isinstance(kb_payload.get("iat"), int) and kb_payload["iat"] > checked_at.timestamp() + 300:
-                errors.append("KB-JWT iat is in the future")
-
             attachment_errors, hash_matches = self._verify_attachments(
                 credential_result.details.get("disclosedPayload") or issuer_payload,
                 presentation_data.get("attachmentManifest") or [],
                 attachments or {},
-                policy or SdJwtVerificationPolicy(),
+                effective_policy,
             )
             errors.extend(attachment_errors)
             details["originalDocumentHashMatches"] = hash_matches

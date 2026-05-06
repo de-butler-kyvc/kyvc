@@ -43,6 +43,7 @@ class IssuePresentationChallengeRequest(BaseModel):
     aud: str | None = Field(default=None)
     definitionId: str = Field(default="kr-stock-company-kyc-v1")
     format: Literal["dc+sd-jwt", "vp+jwt"] = "dc+sd-jwt"
+    presentationDefinition: dict[str, Any] | None = None
 
 
 class IssuePresentationChallengeResponse(BaseModel):

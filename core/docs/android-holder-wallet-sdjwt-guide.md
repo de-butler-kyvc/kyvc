@@ -370,7 +370,21 @@ Content-Type: application/json
 
 ```json
 {
-  "aud": "https://verifier.example"
+  "aud": "https://verifier.example",
+  "presentationDefinition": {
+    "id": "backend-defined-kyc-policy",
+    "acceptedFormat": "dc+sd-jwt",
+    "acceptedVct": [
+      "https://kyvc.example/vct/legal-entity-kyc-v1"
+    ],
+    "acceptedJurisdictions": ["KR"],
+    "minimumAssuranceLevel": "STANDARD",
+    "requiredDisclosures": [
+      "legalEntity.type",
+      "representative.name"
+    ],
+    "documentRules": []
+  }
 }
 ```
 
@@ -399,10 +413,12 @@ Content-Type: application/json
 - `nonce`는 1회용이다.
 - 성공한 verification 이후 같은 `nonce`는 재사용할 수 없다.
 - `aud`는 KB-JWT payload에 그대로 넣어야 한다.
+- `presentationDefinition`은 backend가 정한다. Core는 이 값을 nonce와 함께 저장하고 응답에 그대로 돌려준다.
+- verify 단계에서 backend가 `policy`를 다시 보내면 challenge에 저장된 `presentationDefinition`과 같아야 한다. 생략하면 Core는 nonce에 저장된 policy를 사용한다.
 
 ## 10. 선택 Disclosure 결정
 
-앱은 verifier의 `presentationDefinition` 또는 verifier가 별도로 전달한 policy에 맞춰 disclosure를 선택한다.
+앱은 verifier의 `presentationDefinition` 또는 verifier가 별도로 전달한 policy에 맞춰 disclosure를 선택한다. `documentRules`는 verifier 요청자가 정하는 policy다. 비어 있거나 생략되면 Core는 문서 증빙을 요구하지 않는다.
 
 예:
 

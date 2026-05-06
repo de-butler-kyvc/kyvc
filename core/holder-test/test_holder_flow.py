@@ -147,12 +147,14 @@ class HolderTestRepository:
         domain: str,
         expires_at: datetime,
         created_at: datetime,
+        presentation_definition: dict[str, Any] | None = None,
     ) -> None:
         self.verification_challenges[challenge] = VerificationChallengeEntry(
             challenge=challenge,
             domain=domain,
             expires_at=expires_at.astimezone(UTC).replace(microsecond=0),
             created_at=created_at.astimezone(UTC).replace(microsecond=0),
+            presentation_definition=presentation_definition,
         )
 
     def get_verification_challenge(self, challenge: str) -> VerificationChallengeEntry | None:
@@ -168,6 +170,7 @@ class HolderTestRepository:
             expires_at=entry.expires_at,
             used_at=used_at.astimezone(UTC).replace(microsecond=0),
             created_at=entry.created_at,
+            presentation_definition=entry.presentation_definition,
         )
         return True
 
