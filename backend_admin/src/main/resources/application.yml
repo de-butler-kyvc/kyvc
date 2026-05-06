@@ -20,6 +20,17 @@ spring:
     enabled: ${FLYWAY_ENABLED:false}
     baseline-on-migrate: true
     locations: classpath:db/migration
+  mail:
+    host: ${KYVC_MAIL_HOST:smtp.gmail.com}
+    port: ${KYVC_MAIL_PORT:587}
+    username: ${KYVC_MAIL_USERNAME:}
+    password: ${KYVC_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${KYVC_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${KYVC_MAIL_SMTP_STARTTLS_ENABLE:true}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -45,3 +56,13 @@ logging:
   level:
     root: INFO
     com.kyvc.backendadmin: INFO
+
+kyvc:
+  auth:
+    mfa:
+      expiration-minutes: ${KYVC_MFA_EXPIRATION_MINUTES:5}
+      session-expiration-minutes: ${KYVC_MFA_SESSION_EXPIRATION_MINUTES:10}
+      code-length: ${KYVC_MFA_CODE_LENGTH:6}
+      max-failed-attempts: ${KYVC_MFA_MAX_FAILED_ATTEMPTS:5}
+  mail:
+    from: ${KYVC_MAIL_FROM:}

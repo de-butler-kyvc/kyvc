@@ -76,6 +76,8 @@ public enum ErrorCode {
     MFA_EXPIRED(HttpStatus.UNAUTHORIZED, "MFA_EXPIRED", "MFA 인증이 만료되었습니다."),
     MFA_INVALID_CODE(HttpStatus.UNAUTHORIZED, "MFA_INVALID_CODE", "MFA 인증 코드가 올바르지 않습니다."),
     MFA_ALREADY_USED(HttpStatus.CONFLICT, "MFA_ALREADY_USED", "이미 사용된 MFA 인증입니다."),
+    EMAIL_CONFIGURATION_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_CONFIGURATION_INVALID", "이메일 설정이 올바르지 않습니다."),
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_SEND_FAILED", "이메일 발송에 실패했습니다."),
     PASSWORD_RESET_TOKEN_NOT_FOUND(HttpStatus.NOT_FOUND, "PASSWORD_RESET_TOKEN_NOT_FOUND", "비밀번호 재설정 토큰을 찾을 수 없습니다."),
     PASSWORD_RESET_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "PASSWORD_RESET_TOKEN_EXPIRED", "비밀번호 재설정 토큰이 만료되었습니다."),
     AUDIT_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "AUDIT_LOG_NOT_FOUND", "감사 로그를 찾을 수 없습니다."),

@@ -17,6 +17,9 @@ import com.kyvc.backendadmin.global.jwt.TokenCookieUtil;
 import com.kyvc.backendadmin.global.response.CommonResponse;
 import com.kyvc.backendadmin.global.response.CommonResponseFactory;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -136,7 +139,15 @@ public class AdminAuthController {
      * @param request MFA 채널과 목적을 담은 요청 본문
      * @return challenge ID, 만료 시각, 마스킹된 대상 정보를 담은 공통 응답
      */
-    @Operation(summary = "MFA challenge 생성", description = "현재 관리자에게 이메일 MFA 인증번호를 생성합니다. 인증번호 원문은 저장하지 않고 해시만 저장합니다.")
+    @Operation(
+            summary = "MFA challenge 생성",
+            description = "Swagger 테스트 시 channel=EMAIL, purpose=KYC_APPROVE 또는 KYC_REJECT 등 MFA 목적을 입력합니다. 현재 인증된 관리자 이메일로 인증번호를 발송하고, 인증번호 원문은 저장하지 않고 해시만 저장합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "MFA challenge 생성 성공",
+            content = @Content(schema = @Schema(implementation = AdminMfaChallengeResponse.class))
+    )
     @PostMapping("/auth/mfa/challenge")
     public CommonResponse<AdminMfaChallengeResponse> challenge(@Valid @RequestBody AdminMfaChallengeRequest request) {
         return CommonResponseFactory.success(adminMfaService.challenge(request));
@@ -149,7 +160,15 @@ public class AdminAuthController {
      * @param request challenge ID와 인증번호를 담은 요청 본문
      * @return MFA 세션 토큰과 만료 시각을 담은 공통 응답
      */
-    @Operation(summary = "MFA 인증번호 검증", description = "MFA challenge와 인증번호를 검증하고 MFA_SESSION 토큰을 발급합니다.")
+    @Operation(
+            summary = "MFA 인증번호 검증",
+            description = "Swagger 테스트 시 challengeId와 이메일로 받은 verificationCode를 입력합니다. 검증에 성공하면 중요 작업 승인에 사용할 MFA_SESSION 토큰을 발급합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "MFA 인증번호 검증 성공",
+            content = @Content(schema = @Schema(implementation = AdminMfaVerifyResponse.class))
+    )
     @PostMapping("/auth/mfa/verify")
     public CommonResponse<AdminMfaVerifyResponse> verify(@Valid @RequestBody AdminMfaVerifyRequest request) {
         return CommonResponseFactory.success(adminMfaService.verify(request));

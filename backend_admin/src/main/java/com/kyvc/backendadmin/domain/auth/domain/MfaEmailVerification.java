@@ -137,6 +137,25 @@ public class MfaEmailVerification {
         this.failedCount++;
     }
 
+    /**
+     * 인증번호 입력 실패 횟수를 증가시키고 최대 실패 횟수에 도달하면 challenge를 실패 상태로 변경합니다.
+     *
+     * @param maxFailedAttempts 허용되는 최대 실패 횟수
+     */
+    public void increaseFailedCount(int maxFailedAttempts) {
+        this.failedCount++;
+        if (maxFailedAttempts > 0 && this.failedCount >= maxFailedAttempts) {
+            this.status = KyvcEnums.MfaStatus.FAILED;
+        }
+    }
+
+    /**
+     * challenge를 만료 상태로 변경합니다.
+     */
+    public void markExpired() {
+        this.status = KyvcEnums.MfaStatus.EXPIRED;
+    }
+
     // 인증 성공 처리
     public void verify(LocalDateTime verifiedAt) {
         this.status = KyvcEnums.MfaStatus.VERIFIED;
