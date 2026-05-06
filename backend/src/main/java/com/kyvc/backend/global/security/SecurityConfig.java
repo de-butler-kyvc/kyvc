@@ -75,7 +75,7 @@ public class SecurityConfig {
                                 "/api/mobile/**"
                         ).authenticated()
                         .anyRequest().authenticated())
-                .addFilterBefore(internalApiKeyFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(internalApiKeyFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

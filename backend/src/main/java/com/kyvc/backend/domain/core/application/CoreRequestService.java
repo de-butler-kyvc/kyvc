@@ -67,6 +67,16 @@ public class CoreRequestService {
         );
     }
 
+    // 요청 Payload JSON 갱신
+    public CoreRequest updateRequestPayloadJson(
+            String coreRequestId, // Core 요청 ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.updateRequestPayloadJson(requestPayloadJson);
+        return coreRequestRepository.save(coreRequest);
+    }
+
     // 요청 응답 상태 반영
     public CoreRequest markRequested(
             String coreRequestId, // Core 요청 ID

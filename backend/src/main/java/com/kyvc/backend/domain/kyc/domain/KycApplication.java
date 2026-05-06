@@ -149,6 +149,15 @@ public class KycApplication {
         this.submittedAt = submittedAt;
     }
 
+    // AI 심사 시작 처리
+    public void startAiReview(
+            LocalDateTime submittedAt // 제출 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.AI_REVIEWING;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.QUEUED;
+        this.submittedAt = submittedAt;
+    }
+
     // AI 심사 완료 후 수동심사 전환
     public void completeAiReviewAsManualReview(
             BigDecimal confidenceScore, // AI 신뢰도 점수

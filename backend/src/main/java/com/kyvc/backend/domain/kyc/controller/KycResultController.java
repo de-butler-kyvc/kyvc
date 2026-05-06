@@ -26,7 +26,10 @@ import org.springframework.web.bind.annotation.RestController;
  * KYC 결과 조회 API Controller
  */
 @RestController
-@RequestMapping("/api/corporate/kyc/applications/{kycId}")
+@RequestMapping({
+        "/api/corporate/kyc/applications/{kycId}",
+        "/api/user/kyc/applications/{kycId}"
+})
 @RequiredArgsConstructor
 @Tag(name = "KYC 결과 조회", description = "KYC 심사 결과 요약, 완료 화면 조회 API")
 public class KycResultController {

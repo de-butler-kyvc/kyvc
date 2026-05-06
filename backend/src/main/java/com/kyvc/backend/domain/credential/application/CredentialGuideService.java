@@ -37,22 +37,78 @@ public class CredentialGuideService {
         Credential credential = credentialRepository.findLatestByKycId(latestKyc.getKycId()).orElse(null);
 
         return switch (latestKyc.getKycStatus()) {
-            case DRAFT -> buildResponse(corporate, latestKyc, credential, false, "SUBMIT_KYC",
-                    "KYC 신청이 필요합니다.", "VC 발급을 위해 KYC 신청을 제출해 주세요.");
-            case SUBMITTED -> buildResponse(corporate, latestKyc, credential, false, "WAIT_REVIEW",
-                    "KYC 심사 대기 중입니다.", "KYC 신청이 접수되었습니다. 심사 결과를 기다려 주세요.");
-            case AI_REVIEWING -> buildResponse(corporate, latestKyc, credential, false, "WAIT_AI_REVIEW",
-                    "AI 심사 진행 중입니다.", "AI 심사가 진행 중입니다. 완료 후 결과를 확인할 수 있습니다.");
-            case NEED_SUPPLEMENT -> buildResponse(corporate, latestKyc, credential, false, "CHECK_SUPPLEMENT",
-                    "보완서류 제출이 필요합니다.", "보완요청 내용을 확인하고 필요한 서류를 제출해 주세요.");
-            case MANUAL_REVIEW -> buildResponse(corporate, latestKyc, credential, false, "WAIT_MANUAL_REVIEW",
-                    "수동심사 진행 중입니다.", "관리자 수동심사가 진행 중입니다.");
-            case REJECTED -> buildResponse(corporate, latestKyc, credential, false, "CONTACT_SUPPORT",
-                    "KYC 심사가 반려되었습니다.", "반려 사유를 확인한 뒤 재신청하거나 고객지원에 문의해 주세요.");
-            case APPROVED -> buildResponse(corporate, latestKyc, credential, true, "ISSUE_CREDENTIAL",
-                    "VC 발급이 가능합니다.", "KYC 심사가 승인되었습니다. VC 발급을 진행할 수 있습니다.");
-            case VC_ISSUED -> buildResponse(corporate, latestKyc, credential, false, "OPEN_WALLET",
-                    "VC 발급이 완료되었습니다.", "발급된 VC를 모바일 Wallet에서 확인할 수 있습니다.");
+            case DRAFT -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.SUBMIT_KYC.name(),
+                    "KYC 신청이 필요합니다.",
+                    "VC 발급을 위해 KYC 신청을 제출해 주세요."
+            );
+            case SUBMITTED -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.WAIT_REVIEW.name(),
+                    "KYC 심사 대기 중입니다.",
+                    "KYC 신청이 접수되었습니다. 심사 결과를 기다려 주세요."
+            );
+            case AI_REVIEWING -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.WAIT_AI_REVIEW.name(),
+                    "AI 심사 진행 중입니다.",
+                    "AI 심사가 진행 중입니다. 완료 후 결과를 확인할 수 있습니다."
+            );
+            case NEED_SUPPLEMENT -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.CHECK_SUPPLEMENT.name(),
+                    "보완서류 제출이 필요합니다.",
+                    "보완요청 내용을 확인하고 필요한 서류를 제출해 주세요."
+            );
+            case MANUAL_REVIEW -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.WAIT_MANUAL_REVIEW.name(),
+                    "수동심사 진행 중입니다.",
+                    "관리자 수동심사가 진행 중입니다."
+            );
+            case REJECTED -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.CONTACT_SUPPORT.name(),
+                    "KYC 심사가 반려되었습니다.",
+                    "반려 사유를 확인하고 재신청하거나 고객지원에 문의해 주세요."
+            );
+            case APPROVED -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    true,
+                    KyvcEnums.KycCompletionAction.ISSUE_CREDENTIAL.name(),
+                    "VC 발급이 가능합니다.",
+                    "KYC 심사가 승인되었습니다. VC 발급을 진행할 수 있습니다."
+            );
+            case VC_ISSUED -> buildResponse(
+                    corporate,
+                    latestKyc,
+                    credential,
+                    false,
+                    KyvcEnums.KycCompletionAction.OPEN_WALLET.name(),
+                    "VC 발급이 완료되었습니다.",
+                    "발급된 VC를 모바일 Wallet에서 확인할 수 있습니다."
+            );
         };
     }
 

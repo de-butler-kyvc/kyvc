@@ -87,6 +87,13 @@ public class CoreRequest {
         return coreRequest;
     }
 
+    // 요청 Payload JSON 갱신
+    public void updateRequestPayloadJson(
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        this.requestPayloadJson = requestPayloadJson;
+    }
+
     // 요청 완료 응답 반영
     public void markRequested(
             String responsePayloadJson // 요청 응답 Payload JSON

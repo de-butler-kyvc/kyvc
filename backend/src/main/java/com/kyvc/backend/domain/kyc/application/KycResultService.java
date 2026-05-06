@@ -80,7 +80,7 @@ public class KycResultService {
                     kycApplication.getApprovedAt(),
                     true,
                     credential == null ? null : credential.getCredentialId(),
-                    "OPEN_WALLET",
+                    KyvcEnums.KycCompletionAction.OPEN_WALLET.name(),
                     "VC 발급이 완료되었습니다."
             );
         }
@@ -94,7 +94,7 @@ public class KycResultService {
                     kycApplication.getApprovedAt(),
                     false,
                     null,
-                    "ISSUE_CREDENTIAL",
+                    KyvcEnums.KycCompletionAction.ISSUE_CREDENTIAL.name(),
                     "KYC 심사가 완료되었습니다. VC를 발급할 수 있습니다."
             );
         }
@@ -108,7 +108,9 @@ public class KycResultService {
                 kycApplication.getApprovedAt(),
                 credentialIssued,
                 credential.getCredentialId(),
-                credentialIssued ? "OPEN_WALLET" : "ISSUE_CREDENTIAL",
+                credentialIssued
+                        ? KyvcEnums.KycCompletionAction.OPEN_WALLET.name()
+                        : KyvcEnums.KycCompletionAction.ISSUE_CREDENTIAL.name(),
                 credentialIssued
                         ? "VC 발급이 완료되었습니다."
                         : "KYC 심사가 완료되었습니다. VC를 발급할 수 있습니다."
@@ -154,7 +156,7 @@ public class KycResultService {
                 .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
     }
 
-    // AI 심사 결과 조회 가능 여부
+    // AI 심사 결과 요약 조회 가능 여부
     private boolean isAiReviewSummaryAvailable(
             KyvcEnums.KycStatus kycStatus // KYC 상태
     ) {
@@ -184,7 +186,7 @@ public class KycResultService {
 
         if (StringUtils.hasText(kycApplication.getAiReviewSummary())) {
             findings.add(new KycReviewFindingResponse(
-                    "SUMMARY",
+                    KyvcEnums.KycReviewFindingType.SUMMARY.name(),
                     enumName(kycApplication.getAiReviewResult()),
                     kycApplication.getAiReviewSummary(),
                     kycApplication.getAiConfidenceScore()
@@ -192,7 +194,7 @@ public class KycResultService {
         }
         if (StringUtils.hasText(kycApplication.getManualReviewReason())) {
             findings.add(new KycReviewFindingResponse(
-                    "MANUAL_REVIEW_REASON",
+                    KyvcEnums.KycReviewFindingType.MANUAL_REVIEW_REASON.name(),
                     KyvcEnums.AiReviewResult.NEED_MANUAL_REVIEW.name(),
                     kycApplication.getManualReviewReason(),
                     kycApplication.getAiConfidenceScore()
@@ -200,7 +202,7 @@ public class KycResultService {
         }
         if (StringUtils.hasText(kycApplication.getRejectReason())) {
             findings.add(new KycReviewFindingResponse(
-                    "REJECT_REASON",
+                    KyvcEnums.KycReviewFindingType.REJECT_REASON.name(),
                     KyvcEnums.AiReviewResult.FAIL.name(),
                     kycApplication.getRejectReason(),
                     kycApplication.getAiConfidenceScore()
@@ -244,6 +246,15 @@ public class KycResultService {
         }
         if (StringUtils.hasText(kycApplication.getRejectReason())) {
             return kycApplication.getRejectReason();
+        }
+        if (KyvcEnums.AiReviewStatus.FAILED == kycApplication.getAiReviewStatus()) {
+            return "AI 심사 처리 중 문제가 발생하여 관리자 검토로 전환되었습니다.";
+        }
+        if (KyvcEnums.KycStatus.AI_REVIEWING == kycApplication.getKycStatus()) {
+            return "AI 심사가 진행 중입니다.";
+        }
+        if (KyvcEnums.KycStatus.MANUAL_REVIEW == kycApplication.getKycStatus()) {
+            return "AI 심사가 완료되어 관리자 검토가 진행 중입니다.";
         }
         return null;
     }
