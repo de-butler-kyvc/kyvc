@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 public class Notification {
 
     private static final String READ_YES = "Y"; // 읽음 여부 Y 값
+    private static final String READ_NO = "N"; // 읽지 않음 여부 N 값
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -46,6 +47,36 @@ public class Notification {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt; // 생성 일시
 
+    private Notification(
+            Long userId, // 수신 사용자 ID
+            String notificationType, // 알림 유형 코드
+            String title, // 알림 제목
+            String message, // 알림 메시지
+            String readYn // 읽음 여부
+    ) {
+        this.userId = userId;
+        this.notificationType = notificationType;
+        this.title = title;
+        this.message = message;
+        this.readYn = readYn;
+    }
+
+    // 내부 알림 생성
+    public static Notification create(
+            Long userId, // 수신 사용자 ID
+            String notificationType, // 알림 유형 코드
+            String title, // 알림 제목
+            String message // 알림 메시지
+    ) {
+        return new Notification(
+                userId,
+                notificationType,
+                title,
+                message,
+                READ_NO
+        );
+    }
+
     // 소유자 여부
     public boolean isOwner(
             Long userId // 사용자 ID
@@ -63,3 +94,4 @@ public class Notification {
         this.readYn = READ_YES;
     }
 }
+

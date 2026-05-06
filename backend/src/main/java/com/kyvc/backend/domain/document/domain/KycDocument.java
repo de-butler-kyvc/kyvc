@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-// KYC 제출문서 엔티티
+// KYC 제출문서 Entity
 @Entity
 @Table(name = "kyc_documents")
 @Getter
@@ -83,5 +83,20 @@ public class KycDocument {
             Long kycId // KYC 신청 ID
     ) {
         return this.kycId != null && this.kycId.equals(kycId);
+    }
+
+    // 삭제 상태 여부
+    public boolean isDeleted() {
+        return KyvcEnums.DocumentUploadStatus.DELETED == uploadStatus;
+    }
+
+    // 미리보기 가능 여부
+    public boolean isPreviewAvailable() {
+        return KyvcEnums.DocumentUploadStatus.UPLOADED == uploadStatus;
+    }
+
+    // 문서 삭제 처리
+    public void markDeleted() {
+        this.uploadStatus = KyvcEnums.DocumentUploadStatus.DELETED;
     }
 }

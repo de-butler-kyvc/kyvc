@@ -17,7 +17,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
-// 사용자 엔티티
+// 사용자 Entity
 @Entity
 @Table(name = "users")
 @Getter
@@ -67,5 +67,12 @@ public class User {
     // 로그인 가능 상태 여부
     public boolean isActive() {
         return KyvcEnums.UserStatus.ACTIVE == userStatusCode;
+    }
+
+    // 비밀번호 해시 변경
+    public void changePasswordHash(
+            String passwordHash // 신규 비밀번호 해시
+    ) {
+        this.passwordHash = passwordHash;
     }
 }

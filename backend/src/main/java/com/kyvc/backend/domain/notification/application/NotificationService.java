@@ -2,7 +2,10 @@ package com.kyvc.backend.domain.notification.application;
 
 import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
+import com.kyvc.backend.domain.notification.config.NotificationProperties;
 import com.kyvc.backend.domain.notification.domain.Notification;
+import com.kyvc.backend.domain.notification.dto.InternalNotificationSendRequest;
+import com.kyvc.backend.domain.notification.dto.InternalNotificationSendResponse;
 import com.kyvc.backend.domain.notification.dto.NotificationPageResponse;
 import com.kyvc.backend.domain.notification.dto.NotificationResponse;
 import com.kyvc.backend.domain.notification.dto.NotificationUnreadCountResponse;
@@ -17,8 +20,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Locale;
 
 // 알림 서비스
 @Service
@@ -26,8 +31,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class NotificationService {
 
+    private static final String INTERNAL_NOTIFICATION_SEND_ACTION = "INTERNAL_NOTIFICATION_SEND"; // 내부 알림 발송 작업 유형
+    private static final String INTERNAL_NOTIFICATION_SEND_SUMMARY = "내부 알림 발송 요청 저장"; // 내부 알림 발송 요약
+    private static final String INTERNAL_NOTIFICATION_SEND_STATUS = "SAVED"; // 내부 알림 발송 상태
+
     private final NotificationRepository notificationRepository;
     private final AuditLogService auditLogService;
+    private final NotificationProperties notificationProperties;
 
     // 알림 목록 조회
     @Transactional(readOnly = true)
@@ -121,6 +131,43 @@ public class NotificationService {
         return new NotificationUnreadCountResponse(notificationRepository.countUnreadByUserId(userId));
     }
 
+    // 내부 알림 발송 저장
+    public InternalNotificationSendResponse sendInternalNotification(
+            InternalNotificationSendRequest request // 내부 알림 발송 요청
+    ) {
+        validateInternalNotificationRequest(request);
+
+        String notificationType = normalizeNotificationType(request.type());
+        Notification notification = Notification.create(
+                request.recipientUserId(),
+                notificationType,
+                request.title().trim(),
+                request.message().trim()
+        );
+
+        Notification savedNotification;
+        try {
+            savedNotification = notificationRepository.save(notification);
+        } catch (Exception exception) {
+            throw new ApiException(ErrorCode.INTERNAL_NOTIFICATION_SAVE_FAILED);
+        }
+
+        auditLogService.saveSafely(new AuditLogCreateCommand(
+                KyvcEnums.ActorType.SYSTEM.name(),
+                0L,
+                INTERNAL_NOTIFICATION_SEND_ACTION,
+                KyvcEnums.AuditTargetType.NOTIFICATION.name(),
+                savedNotification.getNotificationId(),
+                INTERNAL_NOTIFICATION_SEND_SUMMARY,
+                null
+        ));
+
+        return new InternalNotificationSendResponse(
+                savedNotification.getNotificationId(),
+                INTERNAL_NOTIFICATION_SEND_STATUS
+        );
+    }
+
     // 사용자 ID 검증
     private void validateUserId(
             Long userId // 사용자 ID
@@ -139,6 +186,33 @@ public class NotificationService {
         }
     }
 
+    // 내부 알림 발송 요청 검증
+    private void validateInternalNotificationRequest(
+            InternalNotificationSendRequest request // 내부 알림 발송 요청
+    ) {
+        if (request == null
+                || request.recipientUserId() == null
+                || request.recipientUserId() <= 0
+                || !StringUtils.hasText(request.type())
+                || !StringUtils.hasText(request.title())
+                || !StringUtils.hasText(request.message())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    // 알림 유형 정규화
+    private String normalizeNotificationType(
+            String notificationType // 원본 알림 유형 코드
+    ) {
+        String normalizedNotificationType = notificationType.trim().toUpperCase(Locale.ROOT); // 정규화 알림 유형 코드
+        try {
+            KyvcEnums.NotificationType.valueOf(normalizedNotificationType);
+            return normalizedNotificationType;
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
     // 페이지 번호 보정
     private int normalizePage(
             int page // 원본 페이지 번호
@@ -150,10 +224,13 @@ public class NotificationService {
     private int normalizeSize(
             int size // 원본 페이지 크기
     ) {
+        int resolvedDefaultPageSize = notificationProperties.resolvedDefaultPageSize(); // 보정 기본 페이지 크기
+        int resolvedMaxPageSize = notificationProperties.resolvedMaxPageSize(); // 보정 최대 페이지 크기
+
         if (size < 1) {
-            return 20;
+            return resolvedDefaultPageSize;
         }
-        return Math.min(size, 100);
+        return Math.min(size, resolvedMaxPageSize);
     }
 
     // 소유 알림 조회
@@ -183,3 +260,4 @@ public class NotificationService {
         );
     }
 }
+

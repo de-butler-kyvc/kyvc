@@ -2,6 +2,7 @@ package com.kyvc.backend.domain.commoncode.repository;
 
 import com.kyvc.backend.domain.commoncode.domain.CommonCodeGroup;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -28,4 +29,18 @@ public interface CommonCodeGroupRepository {
     Optional<CommonCodeGroup> findEnabledByCodeGroup(
             String codeGroup // 공통코드 그룹 코드
     );
+
+    /**
+     * 공통코드 그룹 목록 조회
+     *
+     * @return 공통코드 그룹 목록
+     */
+    List<CommonCodeGroup> findAllOrderBySortOrderAscCodeGroupAsc();
+
+    /**
+     * 활성 공통코드 그룹 목록 조회
+     *
+     * @return 활성 공통코드 그룹 목록
+     */
+    List<CommonCodeGroup> findEnabledAllOrderBySortOrderAscCodeGroupAsc();
 }

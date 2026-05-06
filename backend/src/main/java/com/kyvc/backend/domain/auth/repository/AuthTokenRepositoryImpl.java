@@ -15,7 +15,6 @@ public class AuthTokenRepositoryImpl implements AuthTokenRepository {
 
     private final AuthTokenJpaRepository authTokenJpaRepository;
 
-    // 인증 토큰 저장
     @Override
     public AuthToken save(
             AuthToken authToken // 저장 대상 인증 토큰
@@ -23,7 +22,6 @@ public class AuthTokenRepositoryImpl implements AuthTokenRepository {
         return authTokenJpaRepository.save(authToken);
     }
 
-    // 활성 Refresh Token 조회
     @Override
     public Optional<AuthToken> findActiveRefreshTokenByHash(
             String tokenHash // SHA-256 토큰 해시
@@ -35,7 +33,6 @@ public class AuthTokenRepositoryImpl implements AuthTokenRepository {
         );
     }
 
-    // Refresh Token 조회
     @Override
     public Optional<AuthToken> findRefreshTokenByHash(
             String tokenHash // SHA-256 토큰 해시
@@ -46,7 +43,26 @@ public class AuthTokenRepositoryImpl implements AuthTokenRepository {
         );
     }
 
-    // 인증 토큰 폐기
+    @Override
+    public Optional<AuthToken> findByHashAndType(
+            String tokenHash, // SHA-256 토큰 해시
+            KyvcEnums.TokenType tokenType // 토큰 유형
+    ) {
+        return authTokenJpaRepository.findByTokenHashAndTokenTypeCode(tokenHash, tokenType);
+    }
+
+    @Override
+    public Optional<AuthToken> findActiveByHashAndType(
+            String tokenHash, // SHA-256 토큰 해시
+            KyvcEnums.TokenType tokenType // 토큰 유형
+    ) {
+        return authTokenJpaRepository.findByTokenHashAndTokenTypeCodeAndTokenStatusCode(
+                tokenHash,
+                tokenType,
+                KyvcEnums.TokenStatus.ACTIVE
+        );
+    }
+
     @Override
     public void revoke(
             AuthToken authToken // 폐기 대상 인증 토큰

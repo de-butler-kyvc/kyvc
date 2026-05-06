@@ -21,6 +21,10 @@ public enum ErrorCode {
     INVALID_STATUS(HttpStatus.CONFLICT, "INVALID_STATUS", "허용되지 않은 상태입니다."),
     // HTTP 500 - 파일 업로드 처리 실패
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_UPLOAD_FAILED", "파일 업로드에 실패했습니다."),
+    // HTTP 500 - 이메일 발송 실패
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_SEND_FAILED", "이메일 발송에 실패했습니다."),
+    // HTTP 500 - 이메일 발송 설정 오류
+    EMAIL_CONFIGURATION_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_CONFIGURATION_INVALID", "이메일 발송 설정이 올바르지 않습니다."),
     // HTTP 500 - 분류되지 않은 서버 내부 오류
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."),
 
@@ -113,10 +117,31 @@ public enum ErrorCode {
     // HTTP 403 - Issuer 정책 리소스 접근 권한 없음
     ISSUER_POLICY_ACCESS_DENIED(HttpStatus.FORBIDDEN, "ISSUER_POLICY_ACCESS_DENIED", "Issuer 정책 접근 권한이 없습니다."),
 
+    // HTTP 404 - MFA 인증 요청 조회 실패
+    MFA_CHALLENGE_NOT_FOUND(HttpStatus.NOT_FOUND, "MFA_CHALLENGE_NOT_FOUND", "MFA 인증 요청을 찾을 수 없습니다."),
+    // HTTP 400 - MFA 인증 코드 불일치
+    MFA_CODE_INVALID(HttpStatus.BAD_REQUEST, "MFA_CODE_INVALID", "MFA 인증 코드가 올바르지 않습니다."),
+    // HTTP 410 - MFA 인증 코드 만료
+    MFA_CODE_EXPIRED(HttpStatus.GONE, "MFA_CODE_EXPIRED", "MFA 인증 코드가 만료되었습니다."),
+    // HTTP 429 - MFA 인증 시도 횟수 초과
+    MFA_CODE_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "MFA_CODE_ATTEMPT_EXCEEDED", "MFA 인증 시도 횟수를 초과했습니다."),
+
+    // HTTP 400 - 비밀번호 재설정 토큰 오류
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "PASSWORD_RESET_TOKEN_INVALID", "비밀번호 재설정 토큰이 올바르지 않습니다."),
+    // HTTP 410 - 비밀번호 재설정 토큰 만료
+    PASSWORD_RESET_TOKEN_EXPIRED(HttpStatus.GONE, "PASSWORD_RESET_TOKEN_EXPIRED", "비밀번호 재설정 토큰이 만료되었습니다."),
+
     // HTTP 404 - 공통 코드 조회 실패
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통 코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통 코드 그룹 조회 실패
-    COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통 코드 그룹을 찾을 수 없습니다.");
+    COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통 코드 그룹을 찾을 수 없습니다."),
+
+    // HTTP 409 - 문서 미리보기 사용 불가
+    DOCUMENT_PREVIEW_NOT_AVAILABLE(HttpStatus.CONFLICT, "DOCUMENT_PREVIEW_NOT_AVAILABLE", "문서 미리보기를 사용할 수 없습니다."),
+    // HTTP 500 - 내부 알림 저장 실패
+    INTERNAL_NOTIFICATION_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_NOTIFICATION_SAVE_FAILED", "내부 알림 저장에 실패했습니다."),
+    // HTTP 500 - 내부 감사로그 저장 실패
+    INTERNAL_AUDIT_LOG_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_AUDIT_LOG_SAVE_FAILED", "내부 감사로그 저장에 실패했습니다.");
 
     private final HttpStatus status;
     private final String code;
