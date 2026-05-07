@@ -40,6 +40,7 @@ class Settings(BaseModel):
     azure_document_intelligence_api_version: str | None = Field(default=None)
     openai_api_key: str | None = Field(default=None)
     openai_model: str | None = Field(default=None)
+    openai_base_url: str = Field(default="https://api.openai.com/v1")
     azure_openai_endpoint: str | None = Field(default=None)
     azure_openai_api_key: str | None = Field(default=None)
     azure_openai_deployment: str | None = Field(default=None)
@@ -87,6 +88,7 @@ def get_settings() -> Settings:
         azure_document_intelligence_api_version=os.getenv("AZURE_DOCUMENT_INTELLIGENCE_API_VERSION"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         openai_model=os.getenv("OPENAI_MODEL"),
+        openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         azure_openai_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         azure_openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
         azure_openai_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT"),

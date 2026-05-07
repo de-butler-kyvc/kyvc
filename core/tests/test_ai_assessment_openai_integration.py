@@ -5,6 +5,12 @@ import httpx
 import pytest
 from dotenv import load_dotenv
 
+from app.ai_assessment import AssessmentService
+from app.ai_assessment.enums import ApplicantRole, AssessmentStatus, DocumentType, LegalEntityType
+from app.ai_assessment.providers.factory import build_document_extraction_provider
+from app.ai_assessment.schemas import DocumentMetadata, KycApplication
+from app.core.config import get_settings
+
 
 load_dotenv()
 
@@ -79,6 +85,79 @@ def test_openai_structured_extraction_smoke():
     assert extracted["legalName"] == "KYvC Labs"
     assert extracted["businessRegistrationNumber"] == "123-45-67890"
     assert extracted["representativeName"] == "Kim Representative"
+
+
+@pytest.mark.integration
+def test_openai_document_extraction_provider_runs_assessment(tmp_path):
+    if os.getenv("RUN_AI_INTEGRATION_TESTS") != "1":
+        pytest.skip("Set RUN_AI_INTEGRATION_TESTS=1 to call external AI providers.")
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is required for OpenAI integration smoke test.")
+
+    business = tmp_path / "business.txt"
+    business.write_text(
+        "Business Registration Certificate\n"
+        "Company: KYvC Labs\n"
+        "Business registration number: 123-45-67890\n"
+        "Representative: Kim Representative\n"
+        "Business address: Seoul\n",
+        encoding="utf-8",
+    )
+    registry = tmp_path / "registry.txt"
+    registry.write_text(
+        "Corporate Registry Full Certificate\n"
+        "Company: KYvC Labs\n"
+        "Corporate registration number: 110111-1234567\n"
+        "Representative: Kim Representative\n"
+        "Head office address: Seoul\n"
+        "Purpose: software business\n",
+        encoding="utf-8",
+    )
+    owners = tmp_path / "owners.txt"
+    owners.write_text(
+        "Shareholder Registry\n"
+        "Company: KYvC Labs\n"
+        "Total shares: 1000\n"
+        "Shareholder Owner One, individual, nationality KR, 600 shares, ownership 60 percent\n"
+        "Shareholder Owner Two, individual, nationality KR, 400 shares, ownership 40 percent\n",
+        encoding="utf-8",
+    )
+    settings = get_settings().model_copy(update={"llm_provider": "openai"})
+    provider = build_document_extraction_provider(settings)
+    assert provider is not None
+    assessment = AssessmentService(extraction_provider=provider).assess(
+        KycApplication(
+            kycApplicationId="app-openai",
+            legalEntityType=LegalEntityType.STOCK_COMPANY,
+            applicantRole=ApplicantRole.REPRESENTATIVE,
+            businessRegistrationNumber="1234567890",
+            corporateRegistrationNumber="1101111234567",
+        ),
+        [
+            _document("business", DocumentType.BUSINESS_REGISTRATION, business),
+            _document("registry", DocumentType.CORPORATE_REGISTRY, registry),
+            _document("owners", DocumentType.SHAREHOLDER_REGISTRY, owners),
+        ],
+    )
+
+    assert assessment.status == AssessmentStatus.NORMAL
+    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Owner One", "Owner Two"}
+    assert all(result.extracted for result in assessment.documentResults)
+
+
+def _document(document_id: str, document_type: DocumentType, path) -> DocumentMetadata:
+    return DocumentMetadata(
+        documentId=document_id,
+        kycApplicationId="app-openai",
+        originalFileName=path.name,
+        mimeType="text/plain",
+        sizeBytes=path.stat().st_size,
+        sha256=f"sha-{document_id}",
+        declaredDocumentType=document_type,
+        predictedDocumentType=document_type,
+        classificationConfidence=0.98,
+        storagePath=str(path),
+    )
 
 
 def _response_output_text(payload: dict) -> str:
