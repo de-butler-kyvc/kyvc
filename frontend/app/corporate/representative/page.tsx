@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import {
+  CorporateInfoCard,
+  type CorporateSummary
+} from "@/components/corporate/info-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextField } from "@/components/ui/text-field";
@@ -25,15 +29,6 @@ const DEFAULTS: RepresentativeForm = {
   email: "",
   nationality: "대한민국",
   isAgent: false
-};
-
-type CorporateSummary = {
-  corporateId?: number;
-  corporateName: string;
-  businessNo: string;
-  corporateNo: string;
-  representativeName: string;
-  corporateType: string;
 };
 
 export default function CorporateRepresentativePage() {
@@ -124,7 +119,7 @@ export default function CorporateRepresentativePage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[920px] flex-col gap-6 px-9 py-8">
-      <CorporateMini summary={corp} />
+      <CorporateInfoCard summary={corp} />
 
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[22px] font-bold tracking-[-0.4px] text-foreground">
@@ -233,34 +228,6 @@ export default function CorporateRepresentativePage() {
           </form>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function CorporateMini({ summary }: { summary: CorporateSummary | null }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 px-6 py-5">
-        <h2 className="text-[14px] font-bold text-foreground">법인 기본정보</h2>
-        <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2">
-          <MiniField label="법인명" value={summary?.corporateName} />
-          <MiniField label="사업자등록번호" value={summary?.businessNo} />
-          <MiniField label="법인등록번호" value={summary?.corporateNo} />
-          <MiniField label="대표자명" value={summary?.representativeName} />
-          <MiniField label="법인 유형" value={summary?.corporateType} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MiniField({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[12px] text-muted-foreground">{label}</span>
-      <div className="flex h-9 items-center rounded-md border border-accent-border bg-accent/40 px-3 text-[13px] font-medium text-foreground">
-        {value || "-"}
-      </div>
     </div>
   );
 }

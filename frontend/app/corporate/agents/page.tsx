@@ -1,250 +1,225 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  CorporateInfoCard,
+  type CorporateSummary
+} from "@/components/corporate/info-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
-import {
-  type AgentListItem,
-  ApiError,
-  corporate as corpApi
-} from "@/lib/api";
+import { ApiError, corporate as corpApi } from "@/lib/api";
 
 type AgentForm = {
   name: string;
   phone: string;
   email: string;
-  scopes: string[];
+  relation: string;
+  expiryDate: string;
+  scope: string;
+  memo: string;
 };
 
-const DEFAULTS: AgentForm = { name: "", phone: "", email: "", scopes: [] };
+const DEFAULTS: AgentForm = {
+  name: "",
+  phone: "",
+  email: "",
+  relation: "EMPLOYEE",
+  expiryDate: "",
+  scope: "KYC_VC",
+  memo: ""
+};
 
-const SCOPES = [
-  { value: "KYC_SUBMIT", label: "KYC 신청·제출" },
-  { value: "DOC_UPLOAD", label: "서류 업로드" },
-  { value: "VC_RECEIVE", label: "VC 수령" },
-  { value: "VC_REVOKE", label: "VC 폐기 요청" }
+const RELATION_OPTIONS = [
+  { value: "EMPLOYEE", label: "임직원" },
+  { value: "LAWYER", label: "변호사" },
+  { value: "LAW_FIRM", label: "법무법인" },
+  { value: "ACCOUNTANT", label: "회계사" },
+  { value: "FAMILY", label: "대표 가족" },
+  { value: "OTHER", label: "기타" }
 ];
 
-const STATUS_LABEL: Record<
-  string,
-  { label: string; variant: "success" | "warning" | "secondary" }
-> = {
-  ACTIVE: { label: "활성", variant: "success" },
-  PENDING: { label: "승인 대기", variant: "warning" },
-  REVOKED: { label: "해제", variant: "secondary" }
-};
+const SCOPE_OPTIONS = [
+  { value: "KYC_SUBMIT", label: "KYC 신청" },
+  { value: "KYC_VC", label: "KYC 신청 및 VC 수령" },
+  { value: "DOC_UPLOAD", label: "서류 업로드" },
+  { value: "VC_REVOKE", label: "VC 수령 및 폐기" },
+  { value: "FULL", label: "전체 권한" }
+];
 
 export default function CorporateAgentsPage() {
-  const [corporateId, setCorporateId] = useState<number | null>(null);
-  const [agents, setAgents] = useState<AgentListItem[]>([]);
+  const router = useRouter();
+  const [corp, setCorp] = useState<CorporateSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
-    reset,
-    control,
     formState: { errors, isSubmitting }
   } = useForm<AgentForm>({ defaultValues: DEFAULTS });
 
   useEffect(() => {
     corpApi
       .me()
-      .then(async (res) => {
-        const c = res.corporate as { corporateId?: number } | undefined;
-        if (!c?.corporateId) return;
-        setCorporateId(c.corporateId);
-        const list = await corpApi.agents(c.corporateId).catch(() => ({ items: [] }));
-        setAgents(list.items ?? []);
+      .then((res) => {
+        const c = res.corporate as
+          | {
+              corporateId?: number;
+              corporateName?: string;
+              businessNo?: string;
+              corporateNo?: string;
+            }
+          | undefined;
+        const corporateType =
+          (typeof window !== "undefined"
+            ? window.localStorage.getItem("kyvc.corporateType")
+            : null) ?? "";
+        setCorp({
+          corporateId: c?.corporateId,
+          corporateName: c?.corporateName ?? "",
+          businessNo: c?.businessNo ?? "",
+          corporateNo: c?.corporateNo ?? "",
+          representativeName: res.representative?.name ?? "",
+          corporateType
+        });
       })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
   }, []);
 
-  const onSave = handleSubmit(async (data) => {
-    if (!corporateId) {
+  const onSubmit = handleSubmit(async (data) => {
+    if (!corp?.corporateId) {
       setError("법인 기본정보를 먼저 등록하세요.");
       return;
     }
-    if (data.scopes.length === 0) {
-      setError("위임 권한 범위를 1개 이상 선택해 주세요.");
-      return;
-    }
     setError(null);
-    setMessage(null);
     try {
-      await corpApi.updateAgent(corporateId, {
+      await corpApi.updateAgent(corp.corporateId, {
         name: data.name,
         phone: data.phone,
         email: data.email,
-        authorityScope: data.scopes.join(",")
+        authorityScope: data.scope
       });
-      const list = await corpApi.agents(corporateId);
-      setAgents(list.items ?? []);
-      reset(DEFAULTS);
-      setMessage("대리인이 등록/수정되었습니다.");
+      router.push("/corporate/kyc/apply");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
     }
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5 px-9 py-8">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-6 px-9 py-8">
+      <CorporateInfoCard summary={corp} />
+
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-[22px] font-bold tracking-[-0.4px] text-foreground">대리인 정보</h1>
-        <p className="text-[13px] text-muted-foreground">
-          KYC 신청·서류 제출을 위임할 대리인을 관리합니다. 위임 권한 범위를 최소한으로 부여하는 것을 권장합니다.
+        <h1 className="text-[22px] font-bold tracking-[-0.4px] text-foreground">
+          대리인 정보 등록
+        </h1>
+        <p className="text-[13px] text-destructive">
+          대리 신청 시 대리인 정보 및 위임 관계를 입력해주세요.
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-            <h2 className="text-[14px] font-bold text-foreground">등록된 대리인</h2>
-            <span className="text-[12px] text-muted-foreground">{agents.length}명</span>
-          </div>
-          {agents.length === 0 ? (
-            <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">
-              등록된 대리인이 없습니다.
-            </p>
-          ) : (
-            <table className="w-full text-[13px]">
-              <thead className="bg-secondary text-left">
-                <tr className="border-b border-border">
-                  <Th>이름</Th>
-                  <Th>위임 권한</Th>
-                  <Th>상태</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {agents.map((a) => {
-                  const status =
-                    STATUS_LABEL[a.status] ?? { label: a.status, variant: "secondary" as const };
-                  const scopeLabels = a.authorityScope
-                    ? a.authorityScope
-                        .split(",")
-                        .map((v) => SCOPES.find((s) => s.value === v.trim())?.label ?? v)
-                        .join(", ")
-                    : "-";
-                  return (
-                    <tr key={a.agentId} className="border-b border-row-border last:border-0">
-                      <td className="px-4 py-4 font-medium text-foreground">{a.name}</td>
-                      <td className="px-4 py-4 text-muted-foreground">{scopeLabels}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex items-start gap-2 rounded-lg border border-accent-border bg-accent px-4 py-3 text-[13px] text-accent-foreground">
+        <span aria-hidden>ℹ</span>
+        <span>위임장은 다음 단계 서류 업로드에서 첨부합니다.</span>
+      </div>
 
       <Card>
-        <CardContent className="px-7 py-7">
-          <form onSubmit={onSave} className="flex flex-col gap-5" noValidate>
-            <h2 className="text-[15px] font-bold text-foreground">대리인 등록 / 수정</h2>
-            <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
-              <TextField
-                label="이름"
-                required
-                placeholder="이름 입력"
-                error={errors.name?.message}
-                {...register("name", { required: "이름은 필수입니다" })}
-              />
-              <TextField
-                label="휴대폰"
-                required
-                placeholder="010-0000-0000"
-                error={errors.phone?.message}
-                {...register("phone", {
-                  required: "휴대폰 번호는 필수입니다",
-                  pattern: { value: /^[0-9-]+$/, message: "숫자와 - 만 입력해 주세요" }
-                })}
-              />
-              <TextField
-                label="이메일"
-                required
-                type="email"
-                placeholder="email@example.com"
-                error={errors.email?.message}
-                {...register("email", {
-                  required: "이메일은 필수입니다",
-                  pattern: { value: /\S+@\S+\.\S+/, message: "이메일 형식이 올바르지 않습니다" }
-                })}
-              />
-            </div>
+        <CardContent className="flex flex-col gap-7 px-7 py-7">
+          <form onSubmit={onSubmit} className="flex flex-col gap-7" noValidate>
+            <section className="flex flex-col gap-4">
+              <h2 className="text-[15px] font-bold text-foreground">대리인 정보</h2>
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
+                <TextField
+                  label="대리인 성명"
+                  required
+                  placeholder="대리인 성명 입력"
+                  error={errors.name?.message}
+                  {...register("name", { required: "대리인 성명은 필수입니다" })}
+                />
+                <TextField
+                  label="연락처"
+                  required
+                  placeholder="010-0000-0000"
+                  error={errors.phone?.message}
+                  {...register("phone", {
+                    required: "연락처는 필수입니다",
+                    pattern: { value: /^[0-9-]+$/, message: "숫자와 - 만 입력해 주세요" }
+                  })}
+                />
+                <TextField
+                  label="이메일"
+                  type="email"
+                  placeholder="이메일 입력"
+                  error={errors.email?.message}
+                  {...register("email", {
+                    pattern: { value: /^$|\S+@\S+\.\S+/, message: "이메일 형식이 올바르지 않습니다" }
+                  })}
+                />
+                <SelectField
+                  label="위임 관계"
+                  options={RELATION_OPTIONS}
+                  {...register("relation")}
+                />
+              </div>
+            </section>
 
-            <div className="flex flex-col gap-2">
-              <Label className="text-[13px] text-foreground">
-                위임 권한 범위<span className="ml-0.5 text-destructive">*</span>
-              </Label>
-              <Controller
-                control={control}
-                name="scopes"
-                render={({ field }) => (
-                  <div className="flex flex-wrap gap-2">
-                    {SCOPES.map((s) => {
-                      const on = field.value.includes(s.value);
-                      return (
-                        <button
-                          type="button"
-                          key={s.value}
-                          onClick={() =>
-                            field.onChange(
-                              on
-                                ? field.value.filter((v: string) => v !== s.value)
-                                : [...field.value, s.value]
-                            )
-                          }
-                          className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                            on
-                              ? "border-accent-border bg-accent text-accent-foreground"
-                              : "border-border bg-card text-muted-foreground hover:bg-secondary"
-                          }`}
-                        >
-                          {s.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              />
-            </div>
+            <div className="h-px w-full bg-border" />
 
-            {error || message ? (
-              <p className="text-[12px]">
-                {message ? (
-                  <span className="text-success">{message}</span>
-                ) : (
-                  <span className="text-destructive">{error}</span>
-                )}
-              </p>
-            ) : null}
+            <section className="flex flex-col gap-4">
+              <h2 className="text-[15px] font-bold text-foreground">위임 정보</h2>
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
+                <TextField
+                  label="위임 유효기간"
+                  type="date"
+                  placeholder="YYYY-MM-DD"
+                  {...register("expiryDate")}
+                />
+                <SelectField
+                  label="위임 범위"
+                  options={SCOPE_OPTIONS}
+                  {...register("scope")}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="memo" className="text-[13px] text-foreground">
+                  위임 메모
+                </Label>
+                <textarea
+                  id="memo"
+                  rows={3}
+                  placeholder="추가 메모 입력 (선택)"
+                  className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  {...register("memo")}
+                />
+              </div>
+            </section>
 
-            <div className="flex items-center gap-2">
+            {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
+
+            <div className="flex items-center gap-2 pt-1">
               <Button type="submit" disabled={isSubmitting} className="rounded-[10px] px-5">
-                저장
+                저장하고 계속
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                className="rounded-[10px] px-5"
+                onClick={() => router.push("/corporate/representative")}
+              >
+                이전으로
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="px-4 py-2.5 text-[11px] font-bold text-subtle-foreground">{children}</th>
   );
 }
