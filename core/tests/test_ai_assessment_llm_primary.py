@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.ai_assessment.enums import ApplicantRole, AssessmentStatus, DocumentType, HolderType, LegalEntityType
+from app.ai_assessment.providers.base import LlmExtractionError
 from app.ai_assessment.providers.openai import OpenAiDocumentExtractionProvider
 from app.ai_assessment.schemas import DocumentMetadata, KycApplication
 from app.ai_assessment.service import AssessmentService
@@ -101,6 +102,18 @@ class RaisingLlmProvider:
         raise RuntimeError("LLM exploded")
 
 
+class RaisingLlmProviderWithSourceText:
+    provider_name = "raising_llm_with_source_text"
+
+    def extract(self, document):
+        raise LlmExtractionError(
+            "LLM exploded after OCR",
+            document=document,
+            source_text=document.extracted["ocrText"],
+            original_error=json.JSONDecodeError("bad json", "{bad", 0),
+        )
+
+
 class ExceptionLlmProvider:
     provider_name = "exception_llm"
 
@@ -171,6 +184,10 @@ def _document(document_id, document_type, extracted, *, storage_path=None):
     )
 
 
+def _ocr_document(document_id, document_type, text):
+    return _document(document_id, document_type, {"ocrText": text})
+
+
 def _fallback_documents(*, storage_dir=None):
     payloads = [
         ("business", DocumentType.BUSINESS_REGISTRATION, _business()),
@@ -199,6 +216,45 @@ def _application(app_id="app-fallback"):
 
 def _log_operations(assessment):
     return {(log.providerCategory, log.providerName, log.operation, log.error) for log in assessment.providerUsageLogs}
+
+
+def _document_result(assessment, document_id):
+    return next(result for result in assessment.documentResults if result.documentId == document_id)
+
+
+BUSINESS_OCR = """
+Company: KYvC Labs
+Business registration number: 123-45-67890
+Representative: Kim Representative
+Business address: Seoul
+Seal impression ID: seal-a
+"""
+
+REGISTRY_OCR = """
+Company: KYvC Labs
+Corporate registration number: 110111-1234567
+Representative: Kim Representative
+Head office address: Seoul
+Purpose: software business
+Seal impression ID: seal-a
+"""
+
+SHAREHOLDER_OCR = """
+Company: KYvC Labs
+Base date: 2026-01-01
+Total shares: 1000
+Alice Park | individual | 600 shares | 60%
+Bob Lee | individual | 400 shares | 40%
+Seal impression ID: seal-a
+"""
+
+
+def _ocr_fallback_documents():
+    return [
+        _ocr_document("business", DocumentType.BUSINESS_REGISTRATION, BUSINESS_OCR),
+        _ocr_document("registry", DocumentType.CORPORATE_REGISTRY, REGISTRY_OCR),
+        _ocr_document("owners", DocumentType.SHAREHOLDER_REGISTRY, SHAREHOLDER_OCR),
+    ]
 
 
 def test_llm_primary_assessment_api_accepts_documents_and_returns_assessment(tmp_path, monkeypatch):
@@ -349,6 +405,116 @@ def test_llm_provider_exception_falls_back_to_deterministic_extraction():
         for category, provider, operation, error in _log_operations(assessment)
     )
     assert any(error == "RuntimeError" for category, provider, operation, error in _log_operations(assessment))
+
+
+def test_llm_failure_with_ocr_text_uses_document_specific_fallback_extractor():
+    assessment = AssessmentService(extraction_provider=RaisingLlmProvider()).assess(
+        _application(),
+        _ocr_fallback_documents(),
+    )
+
+    assert assessment.status == AssessmentStatus.NORMAL
+    assert _document_result(assessment, "business").extracted["businessRegistrationNumber"]["normalized"] == "1234567890"
+    assert _document_result(assessment, "registry").extracted["corporateRegistrationNumber"]["normalized"] == "1101111234567"
+    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Alice Park", "Bob Lee"}
+    assert any(
+        category == "EXTRACTOR" and provider == "ocr_layout_extractor" and operation == "deterministic_fallback"
+        for category, provider, operation, error in _log_operations(assessment)
+    )
+
+
+def test_llm_failure_with_provider_source_text_uses_ocr_layout_fallback():
+    assessment = AssessmentService(extraction_provider=RaisingLlmProviderWithSourceText()).assess(
+        _application(),
+        _ocr_fallback_documents(),
+    )
+
+    assert assessment.status == AssessmentStatus.NORMAL
+    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Alice Park", "Bob Lee"}
+    assert any(
+        provider == "ocr_layout_extractor" and error == "JSONDecodeError"
+        for category, provider, operation, error in _log_operations(assessment)
+    )
+
+
+def test_shareholder_registry_ocr_fallback_resolves_beneficial_owners():
+    assessment = AssessmentService(extraction_provider=RaisingLlmProvider()).assess(
+        _application("app-ocr-owners"),
+        _ocr_fallback_documents(),
+    )
+
+    assert assessment.beneficialOwnership.method == "OWNERSHIP_THRESHOLD"
+    assert sorted(owner.ownershipPercent for owner in assessment.beneficialOwnership.owners) == [40.0, 60.0]
+    assert {owner.holderType for owner in assessment.beneficialOwnership.owners} == {HolderType.INDIVIDUAL}
+
+
+def test_business_and_corporate_registry_ocr_fallback_supports_consistency_checks():
+    assessment = AssessmentService(extraction_provider=RaisingLlmProvider()).assess(
+        _application("app-ocr-consistency"),
+        _ocr_fallback_documents(),
+    )
+
+    checks = {check.checkCode: check.status for check in assessment.crossDocumentChecks}
+    assert checks["BUSINESS_REGISTRATION_NUMBER_MATCH"] == "PASS"
+    assert checks["CORPORATE_REGISTRATION_NUMBER_MATCH"] == "PASS"
+    assert checks["COMPANY_NAME_MATCH"] == "PASS"
+    assert checks["REPRESENTATIVE_NAME_MATCH"] == "PASS"
+
+
+def test_poa_and_seal_certificate_ocr_fallback_supports_delegation_and_seal_checks():
+    poa_text = """
+Delegator: Kim Representative
+Delegate: Lee Delegate
+Company: KYvC Labs
+Authority: KYC application, document submission, VC receipt
+Valid until: 2999-12-31
+Seal impression ID: seal-a
+signature seal
+"""
+    seal_text = """
+Subject: Kim Representative
+Company: KYvC Labs
+Certificate number: CERT-1
+Seal impression ID: seal-a
+Issue date: 2026-01-01
+"""
+    assessment = AssessmentService(extraction_provider=RaisingLlmProvider()).assess(
+        KycApplication(
+            kycApplicationId="app-ocr-delegate",
+            legalEntityType=LegalEntityType.STOCK_COMPANY,
+            applicantRole=ApplicantRole.DELEGATE,
+            applicantName="Lee Delegate",
+            businessRegistrationNumber="1234567890",
+            corporateRegistrationNumber="1101111234567",
+        ),
+        [
+            *_ocr_fallback_documents(),
+            _ocr_document("poa", DocumentType.POWER_OF_ATTORNEY, poa_text),
+            _ocr_document("seal", DocumentType.SEAL_CERTIFICATE, seal_text),
+        ],
+    )
+
+    assert assessment.status == AssessmentStatus.NORMAL
+    assert assessment.delegation.result == "AUTHORIZED"
+    assert assessment.delegation.manualReviewRequired is False
+    assert any(
+        check.checkCode == "SAME_ENTITY_SEAL_MATCH" and check.status == "PASS"
+        for check in assessment.crossDocumentChecks
+    )
+
+
+def test_structured_payload_fallback_still_takes_structured_payload_when_richer():
+    assessment = AssessmentService(extraction_provider=RaisingLlmProvider()).assess(
+        _application("app-structured-still-works"),
+        _fallback_documents(),
+    )
+
+    assert assessment.status == AssessmentStatus.NORMAL
+    assert _document_result(assessment, "owners").extracted["shareholders"][0]["name"] == "Owner One"
+    assert any(
+        category == "EXTRACTOR" and provider == "structured_payload" and operation == "deterministic_fallback"
+        for category, provider, operation, error in _log_operations(assessment)
+    )
 
 
 def test_malformed_openai_json_falls_back_to_deterministic_extraction(tmp_path, monkeypatch):

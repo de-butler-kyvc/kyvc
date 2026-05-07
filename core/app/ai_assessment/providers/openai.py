@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from app.ai_assessment.enums import DocumentType, HolderType
+from app.ai_assessment.providers.base import LlmExtractionError
 from app.ai_assessment.providers.ocr import OcrTextProvider
 from app.ai_assessment.schemas import DocumentMetadata
 
@@ -32,9 +33,17 @@ class OpenAiDocumentExtractionProvider:
         source_text = self._document_text(document)
         if not source_text.strip():
             return document
-        extracted = self._extract_json(declared_document_type, source_text)
-        document_type = self._document_type(extracted.get("documentType"), declared_document_type)
-        normalized = self._normalize_extraction(document_type, extracted)
+        try:
+            extracted = self._extract_json(declared_document_type, source_text)
+            document_type = self._document_type(extracted.get("documentType"), declared_document_type)
+            normalized = self._normalize_extraction(document_type, extracted)
+        except Exception as exc:
+            raise LlmExtractionError(
+                f"OpenAI document extraction failed: {exc.__class__.__name__}",
+                document=document,
+                source_text=source_text,
+                original_error=exc,
+            ) from exc
         return document.model_copy(
             update={
                 "predictedDocumentType": document_type,

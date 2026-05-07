@@ -1,6 +1,7 @@
 import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable
 
 import httpx
@@ -14,8 +15,8 @@ from app.ai_assessment.engines import (
     RequiredDocumentsEngine,
 )
 from app.ai_assessment.enums import ApplicantRole, CheckStatus, DocumentType, Severity
-from app.ai_assessment.extractors import StructuredPayloadExtractor
-from app.ai_assessment.providers import DocumentExtractionProvider
+from app.ai_assessment.extractors import OcrLayoutDeterministicExtractor, StructuredPayloadExtractor
+from app.ai_assessment.providers import DocumentExtractionProvider, LlmExtractionError
 from app.ai_assessment.schemas import (
     BeneficialOwner,
     BusinessRegistrationExtraction,
@@ -51,6 +52,12 @@ class _DocumentAnalysis:
     provider_usage_logs: list[ProviderUsageLog]
 
 
+@dataclass(frozen=True)
+class _DeterministicExtraction:
+    extracted: Any | None
+    source: str
+
+
 class AssessmentService:
     OWNERSHIP_SOURCE_TYPES = {
         DocumentType.SHAREHOLDER_REGISTRY,
@@ -76,6 +83,7 @@ class AssessmentService:
         self.extraction_provider = extraction_provider
         self.strategy = strategy or AssessmentStrategy()
         self.extractor = StructuredPayloadExtractor()
+        self.ocr_layout_extractor = OcrLayoutDeterministicExtractor()
         self.required_documents = RequiredDocumentsEngine()
         self.consistency_checker = CrossDocumentConsistencyChecker()
         self.beneficial_owner_engine = BeneficialOwnerEngine(
@@ -190,13 +198,13 @@ class AssessmentService:
         )
 
     def _analyze_document(self, document: DocumentMetadata) -> _DocumentAnalysis:
-        deterministic_extracted = self._extract_structured(document)
+        deterministic = self._deterministic_extract(document)
         if self.extraction_provider is None:
             return _DocumentAnalysis(
                 document=document,
-                extracted=deterministic_extracted,
-                extraction_source="deterministic",
-                classification_reason="structured payload" if deterministic_extracted is not None else "metadata only",
+                extracted=deterministic.extracted,
+                extraction_source=deterministic.source,
+                classification_reason=self._deterministic_reason(deterministic.source),
                 provider_usage_logs=[],
             )
 
@@ -206,23 +214,24 @@ class AssessmentService:
             llm_document = self.extraction_provider.extract(document)
             llm_extracted = self._extract_structured(llm_document)
         except Exception as exc:
+            deterministic = self._deterministic_extract(document, source_text=self._fallback_source_text(exc))
             return self._fallback_analysis(
                 document=document,
-                deterministic_extracted=deterministic_extracted,
+                deterministic=deterministic,
                 provider_name=provider_name,
                 started=started,
                 exc=exc,
             )
 
-        if llm_extracted is None and deterministic_extracted is not None:
+        if llm_extracted is None and deterministic.extracted is not None:
             return _DocumentAnalysis(
                 document=document,
-                extracted=deterministic_extracted,
+                extracted=deterministic.extracted,
                 extraction_source="deterministic_fallback",
                 classification_reason="deterministic fallback: LLM extraction returned no structured payload",
                 provider_usage_logs=[
                     self._provider_usage_log(provider_name, started),
-                    self._fallback_usage_log("EmptyLlmExtraction"),
+                    self._fallback_usage_log(deterministic.source, "EmptyLlmExtraction"),
                 ],
             )
 
@@ -237,11 +246,93 @@ class AssessmentService:
     def _extract_structured(self, document: DocumentMetadata) -> Any | None:
         return self.extractor.extract(document)
 
+    def _deterministic_extract(self, document: DocumentMetadata, source_text: str | None = None) -> _DeterministicExtraction:
+        candidates: list[tuple[str, Any]] = []
+        try:
+            structured = self._extract_structured(document)
+        except (ValidationError, ValueError, TypeError):
+            structured = None
+        if structured is not None:
+            candidates.append(("structured_payload", structured))
+
+        ocr_text = source_text or self._document_ocr_text(document)
+        document_type = document.predictedDocumentType or document.declaredDocumentType or DocumentType.UNKNOWN
+        ocr_extracted = self.ocr_layout_extractor.extract(document_type, ocr_text)
+        if ocr_extracted is not None:
+            candidates.append(("ocr_layout_extractor", ocr_extracted))
+
+        if not candidates:
+            return _DeterministicExtraction(extracted=None, source="none")
+        source, extracted = max(candidates, key=lambda item: self._extraction_score(item[1]))
+        return _DeterministicExtraction(extracted=extracted, source=source)
+
+    def _document_ocr_text(self, document: DocumentMetadata) -> str | None:
+        if isinstance(document.extracted, dict):
+            for key in ("ocrText", "layoutText", "text", "content"):
+                value = document.extracted.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+        if document.storagePath:
+            path = Path(document.storagePath)
+            if path.exists() and path.is_file():
+                if path.suffix.lower() == ".json":
+                    try:
+                        payload = json.loads(path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        return None
+                    return self._text_from_json_payload(payload)
+                try:
+                    return path.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    return None
+        return None
+
+    def _text_from_json_payload(self, payload: Any) -> str | None:
+        if isinstance(payload, str):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("ocrText", "layoutText", "text", "content"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+            lines = payload.get("lines")
+            if isinstance(lines, list):
+                text_lines = [str(item.get("text") if isinstance(item, dict) else item) for item in lines]
+                return "\n".join(line for line in text_lines if line.strip()) or None
+        return None
+
+    def _extraction_score(self, value: Any) -> int:
+        if value is None:
+            return 0
+        if hasattr(value, "model_dump"):
+            value = value.model_dump()
+        if isinstance(value, dict):
+            if set(value) >= {"raw", "normalized", "confidence"}:
+                raw = value.get("raw")
+                normalized = value.get("normalized")
+                return 1 if raw not in (None, "") or normalized not in (None, "") else 0
+            return sum(self._extraction_score(item) for item in value.values())
+        if isinstance(value, list):
+            return sum(self._extraction_score(item) for item in value)
+        return 1 if value not in (None, "") else 0
+
+    def _deterministic_reason(self, source: str) -> str:
+        if source == "structured_payload":
+            return "structured payload"
+        if source == "ocr_layout_extractor":
+            return "OCR layout deterministic extraction"
+        return "metadata only"
+
+    def _fallback_source_text(self, exc: Exception) -> str | None:
+        if isinstance(exc, LlmExtractionError):
+            return exc.source_text
+        return None
+
     def _fallback_analysis(
         self,
         *,
         document: DocumentMetadata,
-        deterministic_extracted: Any | None,
+        deterministic: _DeterministicExtraction,
         provider_name: str,
         started: float,
         exc: Exception,
@@ -249,12 +340,12 @@ class AssessmentService:
         reason = self._fallback_error_name(exc)
         return _DocumentAnalysis(
             document=document,
-            extracted=deterministic_extracted,
+            extracted=deterministic.extracted,
             extraction_source="deterministic_fallback",
             classification_reason=f"deterministic fallback after LLM extraction failure: {reason}",
             provider_usage_logs=[
                 self._provider_usage_log(provider_name, started, error=reason),
-                self._fallback_usage_log(reason),
+                self._fallback_usage_log(deterministic.source, reason),
             ],
         )
 
@@ -267,15 +358,17 @@ class AssessmentService:
             error=error,
         )
 
-    def _fallback_usage_log(self, reason: str) -> ProviderUsageLog:
+    def _fallback_usage_log(self, source: str, reason: str) -> ProviderUsageLog:
         return ProviderUsageLog(
             providerCategory="EXTRACTOR",
-            providerName="structured_payload",
+            providerName=source,
             operation="deterministic_fallback",
             error=reason,
         )
 
     def _fallback_error_name(self, exc: Exception) -> str:
+        if isinstance(exc, LlmExtractionError) and exc.original_error is not None:
+            exc = exc.original_error
         if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
             return "RateLimitError"
         if isinstance(exc, httpx.HTTPStatusError):
