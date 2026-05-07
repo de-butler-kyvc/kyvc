@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import os
 from pathlib import Path
 
@@ -349,7 +350,7 @@ def _document(document_id: str, document_type: DocumentType, path) -> DocumentMe
         documentId=document_id,
         kycApplicationId="app-openai",
         originalFileName=path.name,
-        mimeType="text/plain",
+        mimeType=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
         sizeBytes=path.stat().st_size,
         sha256=f"sha-{document_id}",
         declaredDocumentType=document_type,
