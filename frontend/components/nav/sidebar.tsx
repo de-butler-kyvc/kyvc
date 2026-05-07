@@ -22,11 +22,17 @@ type SidebarProps = {
   sections: NavSection[];
 };
 
+const normalize = (p: string) => p.replace(/\/+$/, "") || "/";
+
 export function Sidebar({ brand, subtitle, sections }: SidebarProps) {
-  const pathname = usePathname();
+  const pathname = normalize(usePathname() ?? "/");
+  const allHrefs = sections.flatMap((s) => s.items.map((i) => normalize(i.href)));
+  const activeHref = allHrefs
+    .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+    .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r bg-card md:flex">
+    <aside className="hidden h-screen w-64 shrink-0 flex-col border-r bg-card md:flex">
       <div className="flex h-16 items-center border-b px-6">
         <div>
           <div className="text-base font-semibold tracking-tight">{brand}</div>
@@ -43,9 +49,7 @@ export function Sidebar({ brand, subtitle, sections }: SidebarProps) {
             </div>
             <ul className="space-y-1">
               {section.items.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(item.href));
+                const active = normalize(item.href) === activeHref;
                 return (
                   <li key={item.href}>
                     <Link
