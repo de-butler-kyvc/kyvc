@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { TextField } from "@/components/ui/text-field";
 import {
   ApiError,
   type CorporateBasicInfo,
@@ -22,40 +22,60 @@ const CORPORATE_TYPES = [
   { value: "FOREIGN", label: "외국법인 지점" }
 ];
 
+type ApplyForm = CorporateBasicInfo & { corporateType: string };
+
+const DEFAULTS: ApplyForm = {
+  corporateName: "",
+  businessNo: "",
+  corporateNo: "",
+  address: "",
+  businessType: "",
+  corporateType: CORPORATE_TYPES[0].value
+};
+
 export default function CorporateKycApplyPage() {
   const router = useRouter();
-  const [info, setInfo] = useState<CorporateBasicInfo>({
-    corporateName: "",
-    businessNo: "",
-    corporateNo: "",
-    address: "",
-    businessType: ""
-  });
   const [corporateId, setCorporateId] = useState<number | null>(null);
-  const [corporateType, setCorporateType] = useState(CORPORATE_TYPES[0].value);
   const [requirements, setRequirements] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting }
+  } = useForm<ApplyForm>({ defaultValues: DEFAULTS });
+
+  const corporateType = watch("corporateType");
 
   useEffect(() => {
     corpApi
       .me()
       .then((res) => {
-        const c = res.corporate as (CorporateBasicInfo & { corporateId?: number }) | undefined;
+        const c = res.corporate as
+          | (CorporateBasicInfo & { corporateId?: number })
+          | undefined;
         if (!c) return;
-        setInfo({
+        if (c.corporateId) setCorporateId(c.corporateId);
+        const stored =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("kyvc.corporateType")
+            : null;
+        const figmaToCode = (label: string) =>
+          CORPORATE_TYPES.find((t) => t.label.startsWith(label.replace("법인", "")))?.value;
+        reset({
           corporateName: c.corporateName ?? "",
           businessNo: c.businessNo ?? "",
           corporateNo: c.corporateNo ?? "",
           address: c.address ?? "",
-          businessType: c.businessType ?? ""
+          businessType: c.businessType ?? "",
+          corporateType: (stored && figmaToCode(stored)) || DEFAULTS.corporateType
         });
-        if (c.corporateId) setCorporateId(c.corporateId);
       })
-      .catch(() => {
-        /* 신규 사용자 */
-      });
-  }, []);
+      .catch(() => undefined);
+  }, [reset]);
 
   useEffect(() => {
     kycApi
@@ -64,29 +84,29 @@ export default function CorporateKycApplyPage() {
       .catch(() => setRequirements([]));
   }, [corporateType]);
 
-  const update = (key: keyof CorporateBasicInfo, value: string) =>
-    setInfo((prev) => ({ ...prev, [key]: value }));
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = handleSubmit(async (data) => {
     setError(null);
-    setSubmitting(true);
     try {
+      const basic: CorporateBasicInfo = {
+        corporateName: data.corporateName,
+        businessNo: data.businessNo,
+        corporateNo: data.corporateNo,
+        address: data.address,
+        businessType: data.businessType
+      };
       const id = corporateId
-        ? (await corpApi.updateBasicInfo(corporateId, info), corporateId)
-        : (await corpApi.create(info)).corporateId;
+        ? (await corpApi.updateBasicInfo(corporateId, basic), corporateId)
+        : (await corpApi.create(basic)).corporateId;
       const created = await kycApi.create({
         corporateId: id,
         applicationType: "ONLINE",
-        corporateType
+        corporateType: data.corporateType
       });
       router.push(`/corporate/kyc/detail?id=${created.kycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "신청 생성 중 오류가 발생했습니다.");
-    } finally {
-      setSubmitting(false);
     }
-  };
+  });
 
   return (
     <PageShell
@@ -94,19 +114,39 @@ export default function CorporateKycApplyPage() {
       description="법인 정보와 유형을 입력하면 신청이 생성되고 서류 업로드 단계로 이동합니다."
       module="UWEB-006~008 · M-02 / M-03"
     >
-      <form onSubmit={onSubmit} className="flex flex-col gap-6">
+      <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
         <Card>
           <CardHeader>
             <CardTitle>법인 기본 정보</CardTitle>
             <CardDescription>등기부등본·사업자등록증과 일치하도록 입력하세요.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
-            <Field id="corp-name" label="법인명" value={info.corporateName} onChange={(v) => update("corporateName", v)} />
-            <Field id="corp-no" label="법인등록번호" value={info.corporateNo} onChange={(v) => update("corporateNo", v)} placeholder="000000-0000000" />
-            <Field id="biz-no" label="사업자등록번호" value={info.businessNo} onChange={(v) => update("businessNo", v)} placeholder="000-00-00000" />
-            <Field id="biz-type" label="업종" value={info.businessType} onChange={(v) => update("businessType", v)} />
+            <TextField
+              label="법인명"
+              required
+              error={errors.corporateName?.message}
+              {...register("corporateName", { required: "법인명은 필수입니다" })}
+            />
+            <TextField
+              label="법인등록번호"
+              placeholder="000000-0000000"
+              error={errors.corporateNo?.message}
+              {...register("corporateNo")}
+            />
+            <TextField
+              label="사업자등록번호"
+              required
+              placeholder="000-00-00000"
+              error={errors.businessNo?.message}
+              {...register("businessNo", { required: "사업자등록번호는 필수입니다" })}
+            />
+            <TextField label="업종" {...register("businessType")} />
             <div className="md:col-span-2">
-              <Field id="address" label="주소" value={info.address} onChange={(v) => update("address", v)} />
+              <TextField
+                label="주소"
+                error={errors.address?.message}
+                {...register("address")}
+              />
             </div>
           </CardContent>
         </Card>
@@ -124,7 +164,7 @@ export default function CorporateKycApplyPage() {
                   type="button"
                   variant={t.value === corporateType ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setCorporateType(t.value)}
+                  onClick={() => setValue("corporateType", t.value, { shouldDirty: true })}
                 >
                   {t.label}
                 </Button>
@@ -143,32 +183,11 @@ export default function CorporateKycApplyPage() {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <div className="flex justify-end gap-2">
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "처리 중..." : "신청 생성 및 다음 단계"}
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "처리 중..." : "신청 생성 및 다음 단계"}
           </Button>
         </div>
       </form>
     </PageShell>
-  );
-}
-
-function Field({
-  id,
-  label,
-  value,
-  onChange,
-  placeholder
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-    </div>
   );
 }

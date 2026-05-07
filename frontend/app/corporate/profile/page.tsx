@@ -2,152 +2,168 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  ApiError,
-  type CorporateBasicInfo,
-  corporate as corpApi
-} from "@/lib/api";
+import { SelectField } from "@/components/ui/select-field";
+import { TextField } from "@/components/ui/text-field";
+import { ApiError, corporate as corpApi } from "@/lib/api";
 import { useDaumPostcode } from "@/lib/use-postcode";
 
-const EMPTY: CorporateBasicInfo = {
-  corporateName: "",
-  businessNo: "",
-  corporateNo: "",
-  address: "",
-  businessType: ""
+type ProfileForm = {
+  corporateName: string;
+  corporateType: string;
+  businessNo: string;
+  corporateNo: string;
+  representativeName: string;
+  zonecode: string;
+  baseAddress: string;
+  detailAddress: string;
+  industry: string;
+  phone: string;
 };
 
-const CORP_TYPES = ["주식회사", "유한회사", "재단법인", "사단법인", "외국법인 지점"];
+const DEFAULTS: ProfileForm = {
+  corporateName: "",
+  corporateType: "",
+  businessNo: "",
+  corporateNo: "",
+  representativeName: "",
+  zonecode: "",
+  baseAddress: "",
+  detailAddress: "",
+  industry: "",
+  phone: ""
+};
+
+const CORP_TYPE_OPTIONS = [
+  { value: "주식회사", label: "주식회사" },
+  { value: "유한회사", label: "유한회사" },
+  { value: "재단법인", label: "재단법인" },
+  { value: "사단법인", label: "사단법인" },
+  { value: "외국법인 지점", label: "외국법인 지점" }
+];
 
 export default function CorporateProfilePage() {
   const router = useRouter();
-  const [info, setInfo] = useState<CorporateBasicInfo>(EMPTY);
-  const [corporateType, setCorporateType] = useState("");
-  const [industry, setIndustry] = useState("");
-  const [zonecode, setZonecode] = useState("");
-  const [baseAddress, setBaseAddress] = useState("");
-  const [detailAddress, setDetailAddress] = useState("");
-  const [representativeName, setRepresentativeName] = useState("");
-  const [phone, setPhone] = useState("");
+  const openPostcode = useDaumPostcode();
   const [corporateId, setCorporateId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  const openPostcode = useDaumPostcode();
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<ProfileForm>({ defaultValues: DEFAULTS });
+
+  const zonecode = watch("zonecode");
+  const baseAddress = watch("baseAddress");
 
   useEffect(() => {
     corpApi
       .me()
       .then((res) => {
         const c = res.corporate as
-          | (CorporateBasicInfo & { corporateId?: number })
+          | {
+              corporateId?: number;
+              corporateName?: string;
+              businessNo?: string;
+              corporateNo?: string;
+              address?: string;
+              businessType?: string;
+            }
           | undefined;
+        const next: ProfileForm = { ...DEFAULTS };
         if (c) {
-          setInfo({
-            corporateName: c.corporateName ?? "",
-            businessNo: c.businessNo ?? "",
-            corporateNo: c.corporateNo ?? "",
-            address: c.address ?? "",
-            businessType: c.businessType ?? ""
-          });
-          setIndustry(c.businessType ?? "");
+          next.corporateName = c.corporateName ?? "";
+          next.businessNo = c.businessNo ?? "";
+          next.corporateNo = c.corporateNo ?? "";
+          next.industry = c.businessType ?? "";
           if (c.corporateId) setCorporateId(c.corporateId);
-          const stored =
-            typeof window !== "undefined"
-              ? window.localStorage.getItem("kyvc.corporateType")
-              : null;
-          if (stored) setCorporateType(stored);
           const m = (c.address ?? "").match(/^\((\d{5})\)\s*(.*?)\s*\|\s*(.*)$/);
           if (m) {
-            setZonecode(m[1]);
-            setBaseAddress(m[2]);
-            setDetailAddress(m[3]);
+            next.zonecode = m[1];
+            next.baseAddress = m[2];
+            next.detailAddress = m[3];
           } else {
-            setBaseAddress(c.address ?? "");
+            next.baseAddress = c.address ?? "";
           }
         }
         if (res.representative) {
-          setRepresentativeName(res.representative.name ?? "");
-          setPhone(res.representative.phone ?? "");
+          next.representativeName = res.representative.name ?? "";
+          next.phone = res.representative.phone ?? "";
         }
+        if (typeof window !== "undefined") {
+          next.corporateType = window.localStorage.getItem("kyvc.corporateType") ?? "";
+        }
+        reset(next);
       })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
-  }, []);
-
-  const update = (k: keyof CorporateBasicInfo, v: string) =>
-    setInfo((prev) => ({ ...prev, [k]: v }));
+  }, [reset]);
 
   const onSearchAddress = () =>
     openPostcode((data) => {
-      setZonecode(data.zonecode);
-      setBaseAddress(data.roadAddress || data.address);
+      setValue("zonecode", data.zonecode, { shouldDirty: true });
+      setValue("baseAddress", data.roadAddress || data.address, { shouldDirty: true });
     });
 
-  const persist = async () => {
+  const persist = async (data: ProfileForm) => {
     setError(null);
     setMessage(null);
-    const composedAddress = zonecode
-      ? `(${zonecode}) ${baseAddress} | ${detailAddress}`
-      : baseAddress;
-    const payload: CorporateBasicInfo = {
-      ...info,
+    const composedAddress = data.zonecode
+      ? `(${data.zonecode}) ${data.baseAddress} | ${data.detailAddress}`
+      : data.baseAddress;
+    const payload = {
+      corporateName: data.corporateName,
+      businessNo: data.businessNo,
+      corporateNo: data.corporateNo,
       address: composedAddress,
-      businessType: industry
+      businessType: data.industry
     };
     const id = corporateId
       ? (await corpApi.updateBasicInfo(corporateId, payload), corporateId)
       : (await corpApi.create(payload)).corporateId;
     setCorporateId(id);
-    setInfo(payload);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("kyvc.corporateType", corporateType);
+      window.localStorage.setItem("kyvc.corporateType", data.corporateType);
     }
-    if (representativeName.trim() || phone.trim()) {
+    if (data.representativeName.trim() || data.phone.trim()) {
       await corpApi
         .updateRepresentative(id, {
-          name: representativeName,
+          name: data.representativeName,
           birthDate: "",
-          phone,
+          phone: data.phone,
           email: ""
         })
-        .catch(() => {
-          /* 대표자 부분 저장 실패는 메인 흐름을 막지 않음 */
-        });
+        .catch(() => undefined);
     }
     return id;
   };
 
-  const onSaveDraft = async () => {
-    setBusy(true);
+  const onSaveDraft = handleSubmit(async (data) => {
     try {
-      await persist();
+      await persist(data);
       setMessage("임시 저장되었습니다.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
+  const onContinue = handleSubmit(async (data) => {
     try {
-      await persist();
+      await persist(data);
       router.push("/corporate/representative");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5 px-9 py-8">
@@ -162,52 +178,50 @@ export default function CorporateProfilePage() {
 
       <Card>
         <CardContent className="flex flex-col gap-7 px-7 py-7">
-          <form onSubmit={onSubmit} className="flex flex-col gap-7">
+          <form onSubmit={onContinue} className="flex flex-col gap-7" noValidate>
             <section className="flex flex-col gap-4">
               <h2 className="text-[15px] font-bold text-foreground">법인 식별정보</h2>
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
-                <Field label="법인명" required>
-                  <Input
-                    value={info.corporateName}
-                    onChange={(e) => update("corporateName", e.target.value)}
-                    placeholder="법인명 입력"
-                  />
-                </Field>
-                <Field label="법인 유형" required>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={corporateType}
-                    onChange={(e) => setCorporateType(e.target.value)}
-                  >
-                    <option value="">선택</option>
-                    {CORP_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="사업자등록번호" required>
-                  <Input
-                    value={info.businessNo}
-                    onChange={(e) => update("businessNo", e.target.value)}
-                    placeholder="000-00-00000"
-                  />
-                </Field>
-                <Field label="법인등록번호">
-                  <Input
-                    value={info.corporateNo}
-                    onChange={(e) => update("corporateNo", e.target.value)}
-                    placeholder="법인등록번호 입력"
-                  />
-                </Field>
-                <Field label="대표자명" required>
-                  <Input
-                    value={representativeName}
-                    onChange={(e) => setRepresentativeName(e.target.value)}
-                    placeholder="대표자명 입력"
-                  />
-                </Field>
+                <TextField
+                  label="법인명"
+                  required
+                  placeholder="법인명 입력"
+                  error={errors.corporateName?.message}
+                  {...register("corporateName", { required: "법인명은 필수입니다" })}
+                />
+                <SelectField
+                  label="법인 유형"
+                  required
+                  placeholder="선택"
+                  options={CORP_TYPE_OPTIONS}
+                  error={errors.corporateType?.message}
+                  {...register("corporateType", { required: "법인 유형을 선택하세요" })}
+                />
+                <TextField
+                  label="사업자등록번호"
+                  required
+                  placeholder="000-00-00000"
+                  error={errors.businessNo?.message}
+                  {...register("businessNo", {
+                    required: "사업자등록번호는 필수입니다",
+                    pattern: { value: /^\d{3}-?\d{2}-?\d{5}$/, message: "형식이 올바르지 않습니다 (000-00-00000)" }
+                  })}
+                />
+                <TextField
+                  label="법인등록번호"
+                  placeholder="법인등록번호 입력"
+                  error={errors.corporateNo?.message}
+                  {...register("corporateNo", {
+                    pattern: { value: /^\d{6}-?\d{7}$/, message: "형식이 올바르지 않습니다 (000000-0000000)" }
+                  })}
+                />
+                <TextField
+                  label="대표자명"
+                  required
+                  placeholder="대표자명 입력"
+                  error={errors.representativeName?.message}
+                  {...register("representativeName", { required: "대표자명은 필수입니다" })}
+                />
               </div>
             </section>
 
@@ -216,50 +230,42 @@ export default function CorporateProfilePage() {
             <section className="flex flex-col gap-4">
               <h2 className="text-[15px] font-bold text-foreground">주소 및 업종</h2>
 
-              <Field label="본점 주소" required>
-                <div className="flex gap-2">
-                  <Input
-                    className="flex-1"
-                    value={[zonecode && `(${zonecode})`, baseAddress]
-                      .filter(Boolean)
-                      .join(" ")}
-                    placeholder="주소를 검색하세요"
-                    readOnly
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="default"
-                    onClick={onSearchAddress}
-                  >
+              <TextField
+                label="본점 주소"
+                required
+                readOnly
+                placeholder="주소를 검색하세요"
+                value={[zonecode && `(${zonecode})`, baseAddress].filter(Boolean).join(" ")}
+                onChange={() => undefined}
+                error={errors.baseAddress?.message}
+                endAdornment={
+                  <Button type="button" variant="outline" onClick={onSearchAddress}>
                     주소 검색
                   </Button>
-                </div>
-              </Field>
+                }
+              />
+              <input type="hidden" {...register("zonecode")} />
+              <input
+                type="hidden"
+                {...register("baseAddress", { required: "주소를 검색해 주세요" })}
+              />
 
-              <Field label="상세 주소">
-                <Input
-                  value={detailAddress}
-                  onChange={(e) => setDetailAddress(e.target.value)}
-                  placeholder="상세 주소 입력"
-                />
-              </Field>
+              <TextField
+                label="상세 주소"
+                placeholder="상세 주소 입력"
+                {...register("detailAddress")}
+              />
 
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
-                <Field label="업종">
-                  <Input
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    placeholder="업종 입력"
-                  />
-                </Field>
-                <Field label="연락처">
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="대표 연락처"
-                  />
-                </Field>
+                <TextField label="업종" placeholder="업종 입력" {...register("industry")} />
+                <TextField
+                  label="연락처"
+                  placeholder="대표 연락처"
+                  error={errors.phone?.message}
+                  {...register("phone", {
+                    pattern: { value: /^[0-9-]+$/, message: "숫자와 - 만 입력해 주세요" }
+                  })}
+                />
               </div>
             </section>
 
@@ -274,13 +280,13 @@ export default function CorporateProfilePage() {
             ) : null}
 
             <div className="flex items-center gap-2 pt-1">
-              <Button type="submit" disabled={busy} className="rounded-[10px] px-5">
+              <Button type="submit" disabled={isSubmitting} className="rounded-[10px] px-5">
                 저장하고 계속
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                disabled={busy}
+                disabled={isSubmitting}
                 className="rounded-[10px] px-5"
                 onClick={onSaveDraft}
               >
@@ -290,26 +296,6 @@ export default function CorporateProfilePage() {
           </form>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[13px] text-foreground">
-        {label}
-        {required ? <span className="ml-0.5 text-destructive">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

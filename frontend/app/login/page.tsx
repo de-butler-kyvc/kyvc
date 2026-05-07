@@ -2,71 +2,65 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { TextField } from "@/components/ui/text-field";
 import { ApiError, auth, session } from "@/lib/api";
+
+type LoginForm = { email: string; password: string };
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting }
+  } = useForm<LoginForm>({ defaultValues: { email: "", password: "" } });
+
+  const onSubmit = handleSubmit(async ({ email, password }) => {
     setError(null);
-    setLoading(true);
     try {
       const res = await auth.login(email, password);
       session.set(res.accessToken, res.refreshToken);
       router.push("/corporate");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "로그인에 실패했습니다.");
-    } finally {
-      setLoading(false);
     }
-  };
+  });
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>KYvC 로그인</CardTitle>
-          <CardDescription>
-            법인 사용자 / 금융사 / 모바일 Wallet 공용 로그인
-          </CardDescription>
+          <CardDescription>법인 사용자 / 금융사 / 모바일 Wallet 공용 로그인</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <div className="grid gap-2">
-              <Label htmlFor="email">이메일</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">비밀번호</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error ? (
-              <p className="text-sm text-destructive">{error}</p>
-            ) : null}
-            <Button className="w-full" type="submit" disabled={loading}>
-              {loading ? "로그인 중..." : "로그인"}
+          <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+            <TextField
+              label="이메일"
+              type="email"
+              required
+              error={errors.email?.message}
+              {...register("email", {
+                required: "이메일을 입력해 주세요",
+                pattern: { value: /\S+@\S+\.\S+/, message: "이메일 형식이 올바르지 않습니다" }
+              })}
+            />
+            <TextField
+              label="비밀번호"
+              type="password"
+              required
+              error={errors.password?.message}
+              {...register("password", { required: "비밀번호를 입력해 주세요" })}
+            />
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "로그인 중..." : "로그인"}
             </Button>
           </form>
         </CardContent>
