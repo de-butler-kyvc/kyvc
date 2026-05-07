@@ -40,4 +40,26 @@ public interface CredentialJpaRepository extends JpaRepository<Credential, Long>
     List<Credential> findByCorporateIdOrderByCreatedAtDesc(
             Long corporateId // 법인 ID
     );
+
+    /**
+     * Credential ID 기준 Optional 조회
+     *
+     * @param credentialId Credential ID
+     * @return Credential 조회 결과
+     */
+    Optional<Credential> findByCredentialId(
+            Long credentialId // Credential ID
+    );
+
+    /**
+     * 법인 ID + Wallet 저장 여부 기준 Credential 목록 조회
+     *
+     * @param corporateId 법인 ID
+     * @param walletSavedYn Wallet 저장 여부
+     * @return Credential 목록
+     */
+    List<Credential> findAllByCorporateIdAndWalletSavedYnOrderByWalletSavedAtDesc(
+            Long corporateId, // 법인 ID
+            String walletSavedYn // Wallet 저장 여부
+    );
 }

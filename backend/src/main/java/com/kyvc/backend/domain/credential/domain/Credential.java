@@ -98,8 +98,82 @@ public class Credential {
     @Column(name = "credential_status_purpose_code", nullable = false, length = 50)
     private String credentialStatusPurposeCode;
 
+    @Column(name = "kyc_level_code", length = 50)
+    private String kycLevelCode;
+
+    @Column(name = "jurisdiction_code", length = 50)
+    private String jurisdictionCode;
+
+    @Column(name = "credential_salt_hash", length = 255)
+    private String credentialSaltHash;
+
     // 발급 완료 여부
     public boolean isIssued() {
         return KyvcEnums.CredentialStatus.VALID == credentialStatus;
+    }
+
+    // 법인 소유 여부
+    public boolean isOwnedByCorporate(
+            Long corporateId // 법인 ID
+    ) {
+        return this.corporateId != null && this.corporateId.equals(corporateId);
+    }
+
+    // 유효한 Credential 여부
+    public boolean isValid(
+            LocalDateTime now // 기준 일시
+    ) {
+        return KyvcEnums.CredentialStatus.VALID == credentialStatus
+                && expiresAt != null
+                && !expiresAt.isBefore(now);
+    }
+
+    // 만료 여부
+    public boolean isExpired(
+            LocalDateTime now // 기준 일시
+    ) {
+        return expiresAt != null && expiresAt.isBefore(now);
+    }
+
+    // Wallet 저장 여부
+    public boolean isWalletSaved() {
+        return KyvcEnums.Yn.Y.name().equals(walletSavedYn);
+    }
+
+    // Credential Offer 만료 여부
+    public boolean isOfferExpired(
+            LocalDateTime now // 기준 일시
+    ) {
+        return qrExpiresAt == null || qrExpiresAt.isBefore(now);
+    }
+
+    // Credential Offer 발급
+    public void issueOffer(
+            String qrToken, // QR 토큰
+            LocalDateTime qrExpiresAt // QR 만료 일시
+    ) {
+        this.qrToken = qrToken;
+        this.qrExpiresAt = qrExpiresAt;
+    }
+
+    // Wallet 저장 처리
+    public void acceptToWallet(
+            String walletDeviceId, // Wallet 기기 ID
+            String holderDid, // Holder DID
+            String holderXrplAddress, // Holder XRPL 주소
+            LocalDateTime walletSavedAt // Wallet 저장 일시
+    ) {
+        this.walletSavedYn = KyvcEnums.Yn.Y.name();
+        this.walletSavedAt = walletSavedAt;
+        this.walletDeviceId = walletDeviceId;
+        this.holderDid = holderDid;
+        this.holderXrplAddress = holderXrplAddress;
+    }
+
+    // 상태 갱신
+    public void refreshStatus(
+            KyvcEnums.CredentialStatus credentialStatus // Credential 상태
+    ) {
+        this.credentialStatus = credentialStatus;
     }
 }

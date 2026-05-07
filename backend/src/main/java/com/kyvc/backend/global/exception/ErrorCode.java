@@ -96,6 +96,22 @@ public enum ErrorCode {
     CREDENTIAL_GUIDE_NOT_AVAILABLE(HttpStatus.CONFLICT, "CREDENTIAL_GUIDE_NOT_AVAILABLE", "VC 발급 안내를 조회할 수 없습니다."),
     // HTTP 404 - Credential 조회 실패
     CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_NOT_FOUND", "Credential을 찾을 수 없습니다."),
+    // HTTP 403 - Credential 소유권 불일치
+    CREDENTIAL_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CREDENTIAL_ACCESS_DENIED", "Credential 접근 권한이 없습니다."),
+    // HTTP 409 - 유효하지 않은 Credential 상태
+    CREDENTIAL_NOT_VALID(HttpStatus.CONFLICT, "CREDENTIAL_NOT_VALID", "유효한 Credential 상태가 아닙니다."),
+    // HTTP 404 - Credential Offer 조회 실패
+    CREDENTIAL_OFFER_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_OFFER_NOT_FOUND", "Credential Offer를 찾을 수 없습니다."),
+    // HTTP 410 - Credential Offer 만료
+    CREDENTIAL_OFFER_EXPIRED(HttpStatus.GONE, "CREDENTIAL_OFFER_EXPIRED", "Credential Offer가 만료되었습니다."),
+    // HTTP 400 - Credential Offer 토큰 불일치
+    CREDENTIAL_OFFER_INVALID_TOKEN(HttpStatus.BAD_REQUEST, "CREDENTIAL_OFFER_INVALID_TOKEN", "Credential Offer 토큰이 올바르지 않습니다."),
+    // HTTP 409 - 사용 완료 Credential Offer
+    CREDENTIAL_OFFER_ALREADY_USED(HttpStatus.CONFLICT, "CREDENTIAL_OFFER_ALREADY_USED", "이미 사용된 Credential Offer입니다."),
+    // HTTP 404 - Wallet Credential 조회 실패
+    WALLET_CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "WALLET_CREDENTIAL_NOT_FOUND", "Wallet 저장 Credential을 찾을 수 없습니다."),
+    // HTTP 409 - Wallet Credential 중복 저장
+    WALLET_CREDENTIAL_ALREADY_SAVED(HttpStatus.CONFLICT, "WALLET_CREDENTIAL_ALREADY_SAVED", "이미 Wallet에 저장된 Credential입니다."),
     // HTTP 404 - 알림 조회 실패
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "알림을 찾을 수 없습니다."),
     // HTTP 403 - 알림 리소스 접근 권한 없음
@@ -110,6 +126,10 @@ public enum ErrorCode {
     MOBILE_DEVICE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "MOBILE_DEVICE_ALREADY_REGISTERED", "이미 등록된 모바일 기기입니다."),
     // HTTP 400 - 유효하지 않은 모바일 기기 정보
     MOBILE_INVALID_DEVICE(HttpStatus.BAD_REQUEST, "MOBILE_INVALID_DEVICE", "유효하지 않은 모바일 기기 정보입니다."),
+    // HTTP 404 - Wallet 기기 등록 정보 없음
+    WALLET_DEVICE_NOT_REGISTERED(HttpStatus.NOT_FOUND, "WALLET_DEVICE_NOT_REGISTERED", "Wallet 기기 등록 정보를 찾을 수 없습니다."),
+    // HTTP 403 - Wallet 기기 비활성 상태
+    WALLET_DEVICE_INACTIVE(HttpStatus.FORBIDDEN, "WALLET_DEVICE_INACTIVE", "Wallet 기기가 활성 상태가 아닙니다."),
     // HTTP 404 - 모바일 보안 설정 조회 실패
     MOBILE_SECURITY_SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "MOBILE_SECURITY_SETTING_NOT_FOUND", "모바일 보안 설정을 찾을 수 없습니다."),
     // HTTP 404 - Issuer 정책 조회 실패

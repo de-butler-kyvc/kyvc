@@ -105,4 +105,26 @@ public class MobileDeviceService {
                 deviceBinding.getLastUsedAt()
         );
     }
+
+    // 활성 모바일 기기 조회
+    @Transactional(readOnly = true)
+    public MobileDeviceBinding getActiveDeviceBinding(
+            Long userId, // 사용자 ID
+            String deviceId // 모바일 기기 ID
+    ) {
+        validateUserId(userId);
+        if (!StringUtils.hasText(deviceId)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        MobileDeviceBinding deviceBinding = mobileDeviceBindingRepository.findByUserIdAndDeviceId(userId, deviceId)
+                .orElseThrow(() -> new ApiException(ErrorCode.WALLET_DEVICE_NOT_REGISTERED));
+        if (!deviceBinding.isOwner(userId)) {
+            throw new ApiException(ErrorCode.MOBILE_DEVICE_ACCESS_DENIED);
+        }
+        if (!deviceBinding.isActive()) {
+            throw new ApiException(ErrorCode.WALLET_DEVICE_INACTIVE);
+        }
+        return deviceBinding;
+    }
 }

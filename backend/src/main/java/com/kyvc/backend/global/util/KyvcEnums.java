@@ -265,6 +265,18 @@ public final class KyvcEnums {
         REMOVED // 제거
     }
 
+    // Y/N 여부
+    public enum Yn {
+        Y, // 예
+        N // 아니오
+    }
+
+    // QR 유형
+    public enum QrType {
+        CREDENTIAL_OFFER, // Credential Offer QR
+        VP_REQUEST // VP 제출 요청 QR
+    }
+
     // 인증 토큰 유형
     public enum TokenType {
         REFRESH, // Refresh Token
