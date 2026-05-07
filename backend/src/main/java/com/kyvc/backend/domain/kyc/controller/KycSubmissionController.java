@@ -27,7 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
  * KYC 제출 API Controller
  */
 @RestController
-@RequestMapping("/api/corporate/kyc/applications/{kycId}")
+@RequestMapping({
+        "/api/corporate/kyc/applications/{kycId}",
+        "/api/user/kyc/applications/{kycId}"
+})
 @RequiredArgsConstructor
 @Tag(name = "KYC 제출", description = "KYC 제출 전 요약 조회 및 제출 API")
 public class KycSubmissionController {
@@ -71,7 +74,7 @@ public class KycSubmissionController {
      */
     @Operation(
             summary = "KYC 제출",
-            description = "KYC 제출 가능 조건을 모두 만족하면 상태를 SUBMITTED로 변경하고 제출일시를 저장합니다."
+            description = "KYC 제출 가능 조건을 모두 만족하면 Core Stub AI 심사 요청을 생성하고 상태를 AI_REVIEWING으로 변경합니다."
     )
     @ApiResponse(
             responseCode = "200",

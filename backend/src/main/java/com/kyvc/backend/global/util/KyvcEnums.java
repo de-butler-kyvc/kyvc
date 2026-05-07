@@ -29,7 +29,7 @@ public final class KyvcEnums {
         SUSPENDED // 정지
     }
 
-    // KYC 신청 상태
+    // KYC 요청 상태
     public enum KycStatus {
         DRAFT, // 임시저장
         SUBMITTED, // 제출완료
@@ -81,7 +81,7 @@ public final class KyvcEnums {
 
     // KYC 심사 이력 액션 유형
     public enum ReviewActionType {
-        SUBMIT, // KYC 신청 제출
+        SUBMIT, // KYC 요청 제출
         AI_START, // AI 심사 시작
         AI_COMPLETE, // AI 심사 완료
         AI_FAILED, // AI 심사 실패
@@ -102,6 +102,25 @@ public final class KyvcEnums {
         EXPIRED, // 만료
         REVOKED, // 폐기
         SUSPENDED // 일시중지
+    }
+
+    // KYC 완료 화면 액션
+    public enum KycCompletionAction {
+        SUBMIT_KYC, // KYC 제출 안내
+        WAIT_REVIEW, // 심사 대기
+        WAIT_AI_REVIEW, // AI 심사 대기
+        CHECK_SUPPLEMENT, // 보완 확인
+        WAIT_MANUAL_REVIEW, // 수동심사 대기
+        CONTACT_SUPPORT, // 고객지원 문의
+        OPEN_WALLET, // Wallet 열기
+        ISSUE_CREDENTIAL // Credential 발급 안내
+    }
+
+    // KYC 심사 요약 항목 유형
+    public enum KycReviewFindingType {
+        SUMMARY, // 요약
+        MANUAL_REVIEW_REASON, // 수동심사 사유
+        REJECT_REASON // 반려 사유
     }
 
     // VP 검증 상태
@@ -191,7 +210,7 @@ public final class KyvcEnums {
 
     // 감사로그 대상 유형
     public enum AuditTargetType {
-        KYC_APPLICATION, // KYC 신청
+        KYC_APPLICATION, // KYC 요청
         KYC_DOCUMENT, // KYC 문서
         KYC_SUPPLEMENT, // KYC 보완요청
         CREDENTIAL, // Credential
@@ -206,14 +225,14 @@ public final class KyvcEnums {
 
     // Core 요청 대상 유형
     public enum CoreTargetType {
-        KYC_APPLICATION, // KYC 신청
+        KYC_APPLICATION, // KYC 요청
         CREDENTIAL, // Credential
         VP_VERIFICATION // VP 검증
     }
 
     // 알림 유형
     public enum NotificationType {
-        KYC_SUBMITTED, // KYC 신청 접수
+        KYC_SUBMITTED, // KYC 요청 접수
         AI_REVIEW_STARTED, // AI 심사 시작
         AI_REVIEW_COMPLETED, // AI 심사 완료
         MANUAL_REVIEW, // 수동심사 전환
@@ -300,6 +319,13 @@ public final class KyvcEnums {
         FAILED, // 실패
         CALLBACK_RECEIVED, // Callback 수신
         RETRYING // 재시도중
+    }
+
+    // XRPL 트랜잭션 상태
+    public enum XrplTransactionStatus {
+        PENDING, // 대기
+        CONFIRMED, // 확정
+        FAILED // 실패
     }
 
     // 감사로그 작업 유형

@@ -1,0 +1,145 @@
+package com.kyvc.backend.domain.core.application;
+
+import com.kyvc.backend.domain.core.domain.CoreRequest;
+import com.kyvc.backend.domain.core.repository.CoreRequestRepository;
+import com.kyvc.backend.global.util.KyvcEnums;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+// Core 요청 추적 서비스
+@Service
+@Transactional
+@RequiredArgsConstructor
+public class CoreRequestService {
+
+    private final CoreRequestRepository coreRequestRepository;
+
+    // AI 심사 요청 생성
+    public CoreRequest createAiReviewRequest(
+            Long kycId, // KYC 요청 ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.AI_REVIEW,
+                KyvcEnums.CoreTargetType.KYC_APPLICATION,
+                kycId,
+                requestPayloadJson
+        );
+    }
+
+    // VC 발급 요청 생성
+    public CoreRequest createVcIssuanceRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.VC_ISSUE,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                requestPayloadJson
+        );
+    }
+
+    // VP 검증 요청 생성
+    public CoreRequest createVpVerificationRequest(
+            Long vpVerificationId, // VP 검증 ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                vpVerificationId,
+                requestPayloadJson
+        );
+    }
+
+    // XRPL 트랜잭션 요청 생성
+    public CoreRequest createXrplTransactionRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.XRPL_TX,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                requestPayloadJson
+        );
+    }
+
+    // 요청 Payload JSON 갱신
+    public CoreRequest updateRequestPayloadJson(
+            String coreRequestId, // Core 요청 ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.updateRequestPayloadJson(requestPayloadJson);
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // 요청 응답 상태 반영
+    public CoreRequest markRequested(
+            String coreRequestId, // Core 요청 ID
+            String responsePayloadJson // 응답 Payload JSON
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markRequested(responsePayloadJson);
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // Callback 수신 상태 반영
+    public CoreRequest markCallbackReceived(
+            String coreRequestId // Core 요청 ID
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markCallbackReceived();
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // Callback 성공 상태 반영
+    public CoreRequest markCallbackSuccess(
+            String coreRequestId, // Core 요청 ID
+            String responsePayloadJson // 성공 Payload JSON
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markSuccess(responsePayloadJson);
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // Callback 실패 상태 반영
+    public CoreRequest markCallbackFailed(
+            String coreRequestId, // Core 요청 ID
+            String errorMessage // 실패 메시지
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markFailed(errorMessage);
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // CoreRequest 조회
+    @Transactional(readOnly = true)
+    public CoreRequest getCoreRequest(
+            String coreRequestId // Core 요청 ID
+    ) {
+        return coreRequestRepository.getById(coreRequestId);
+    }
+
+    // 완료 처리 여부 조회
+    @Transactional(readOnly = true)
+    public boolean isAlreadyCompleted(
+            String coreRequestId // Core 요청 ID
+    ) {
+        return coreRequestRepository.existsCompletedCallback(coreRequestId);
+    }
+
+    // 공통 요청 생성
+    private CoreRequest createRequest(
+            KyvcEnums.CoreRequestType requestType, // Core 요청 유형
+            KyvcEnums.CoreTargetType targetType, // Core 대상 유형
+            Long targetId, // Core 대상 ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        CoreRequest coreRequest = CoreRequest.create(requestType, targetType, targetId, requestPayloadJson);
+        return coreRequestRepository.save(coreRequest);
+    }
+}

@@ -17,13 +17,13 @@ import java.time.LocalDateTime;
 public record KycSubmitResponse(
         @Schema(description = "KYC 신청 ID", example = "1")
         Long kycId, // KYC 신청 ID
-        @Schema(description = "KYC 상태", example = "SUBMITTED")
+        @Schema(description = "KYC 상태", example = "AI_REVIEWING")
         String kycStatus, // KYC 상태
         @Schema(description = "제출 일시", example = "2026-05-04T15:00:00")
         LocalDateTime submittedAt, // 제출 일시
         @Schema(description = "제출 가능 여부", example = "true")
         boolean submittable, // 제출 가능 여부
-        @Schema(description = "제출 결과 메시지", example = "KYC 신청이 제출되었습니다.")
+        @Schema(description = "제출 결과 메시지", example = "KYC 신청이 제출되었고 AI 심사가 요청되었습니다.")
         String message // 제출 결과 메시지
 ) {
 }
