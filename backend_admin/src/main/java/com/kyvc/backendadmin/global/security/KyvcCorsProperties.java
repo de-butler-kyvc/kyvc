@@ -14,4 +14,6 @@ import java.util.List;
 public class KyvcCorsProperties {
 
     private List<String> allowedOrigins = new ArrayList<>(List.of("http://localhost:3000"));
+    private List<String> allowedOriginPatterns = new ArrayList<>();
+    private boolean allowCredentials = true;
 }

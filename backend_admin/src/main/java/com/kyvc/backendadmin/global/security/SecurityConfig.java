@@ -83,7 +83,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfiguration = new CorsConfiguration(); // CORS 설정
         corsConfiguration.setAllowedOrigins(kyvcCorsProperties.getAllowedOrigins());
-        corsConfiguration.setAllowCredentials(true);
+        // 외부/로컬 개발 환경에서 credentials 요청도 테스트할 수 있도록 origin pattern을 env로 열 수 있다.
+        corsConfiguration.setAllowedOriginPatterns(kyvcCorsProperties.getAllowedOriginPatterns());
+        corsConfiguration.setAllowCredentials(kyvcCorsProperties.isAllowCredentials());
         corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         corsConfiguration.setAllowedHeaders(List.of("*"));
         corsConfiguration.setExposedHeaders(List.of("X-Request-Id"));
