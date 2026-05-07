@@ -15,6 +15,8 @@ DOCUMENT_TYPES = {
     "KR_BYLAWS",
     "KR_MEETING_MINUTES",
     "KR_OFFICIAL_LETTER",
+    "KR_POWER_OF_ATTORNEY",
+    "KR_SEAL_CERTIFICATE",
     "KR_ESTABLISHMENT_APPLICATION",
     "KR_PERMIT_APPLICATION",
     "KR_ESTABLISHMENT_PERMIT",
@@ -36,6 +38,7 @@ DOCUMENT_TYPES = {
     "FOREIGN_PERMIT_APPLICATION",
     "FOREIGN_ESTABLISHMENT_PERMIT",
     "FOREIGN_AUTHORIZATION_CERTIFICATE",
+    "UNKNOWN",
 }
 
 ORIGINAL_POLICIES = {"OPTIONAL", "REQUIRED", "NOT_ALLOWED"}
@@ -70,17 +73,35 @@ def stock_company_rules() -> list[DocumentRule]:
     ]
 
 
+DELEGATE_DOCUMENT_RULES = [
+    DocumentRule(
+        "delegate-authority-evidence",
+        one_of={"KR_POWER_OF_ATTORNEY"},
+        required_when={"applicantRole": "DELEGATE"},
+    ),
+    DocumentRule(
+        "delegate-seal-evidence",
+        one_of={"KR_SEAL_CERTIFICATE"},
+        required_when={"applicantRole": "DELEGATE"},
+    ),
+]
+
+
+def _with_delegate_rules(rules: list[DocumentRule]) -> list[DocumentRule]:
+    return [*rules, *DELEGATE_DOCUMENT_RULES]
+
+
 DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE: dict[str, list[DocumentRule]] = {
-    "STOCK_COMPANY": stock_company_rules(),
-    "LIMITED_OR_PARTNERSHIP_COMPANY": [
+    "STOCK_COMPANY": _with_delegate_rules(stock_company_rules()),
+    "LIMITED_OR_PARTNERSHIP_COMPANY": _with_delegate_rules([
         DocumentRule("entity-realname-evidence", one_of={"KR_BUSINESS_REGISTRATION_CERTIFICATE"}),
         DocumentRule("registry-evidence", one_of={"KR_CORPORATE_REGISTER_FULL_CERTIFICATE"}),
         DocumentRule(
             "ownership-or-member-evidence",
             one_of={"KR_CONTRIBUTOR_REGISTER", "KR_MEMBER_REGISTER", "KR_ARTICLES_OF_ASSOCIATION"},
         ),
-    ],
-    "INCORPORATED_ASSOCIATION_OR_FOUNDATION": [
+    ]),
+    "INCORPORATED_ASSOCIATION_OR_FOUNDATION": _with_delegate_rules([
         DocumentRule("entity-realname-evidence", one_of={"KR_BUSINESS_REGISTRATION_CERTIFICATE"}),
         DocumentRule("registry-evidence", one_of={"KR_CORPORATE_REGISTER_FULL_CERTIFICATE"}),
         DocumentRule(
@@ -103,8 +124,8 @@ DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE: dict[str, list[DocumentRule]] = {
             },
             not_allowed={"KR_OFFICIAL_LETTER"},
         ),
-    ],
-    "COOPERATIVE_OR_ASSOCIATION": [
+    ]),
+    "COOPERATIVE_OR_ASSOCIATION": _with_delegate_rules([
         DocumentRule("entity-realname-evidence", one_of={"KR_BUSINESS_REGISTRATION_CERTIFICATE"}),
         DocumentRule(
             "registry-or-rule-evidence",
@@ -132,8 +153,8 @@ DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE: dict[str, list[DocumentRule]] = {
             },
             not_allowed={"KR_OFFICIAL_LETTER"},
         ),
-    ],
-    "UNIQUE_NUMBER_ENTITY": [
+    ]),
+    "UNIQUE_NUMBER_ENTITY": _with_delegate_rules([
         DocumentRule("entity-realname-evidence", one_of={"KR_ENTITY_REALNAME_CERTIFICATE", "KR_UNIQUE_NUMBER_CERTIFICATE"}),
         DocumentRule(
             "governance-or-operation-evidence",
@@ -151,8 +172,8 @@ DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE: dict[str, list[DocumentRule]] = {
             },
             not_allowed={"KR_UNIQUE_NUMBER_CERTIFICATE", "KR_OFFICIAL_LETTER", "KR_MEETING_MINUTES"},
         ),
-    ],
-    "FOREIGN_COMPANY": [
+    ]),
+    "FOREIGN_COMPANY": _with_delegate_rules([
         DocumentRule(
             "entity-realname-evidence",
             one_of={"FOREIGN_INVESTMENT_REGISTRATION_CERTIFICATE", "FOREIGN_ENTITY_REALNAME_DOCUMENT"},
@@ -176,8 +197,20 @@ DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE: dict[str, list[DocumentRule]] = {
             not_allowed={"FOREIGN_OFFICIAL_LETTER"},
             required_when={"any": [{"nonProfit": True}, {"purposeCheckRequired": True}]},
         ),
-    ],
+    ]),
 }
+
+DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE.update(
+    {
+        "LIMITED_COMPANY": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["LIMITED_OR_PARTNERSHIP_COMPANY"],
+        "LIMITED_PARTNERSHIP": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["LIMITED_OR_PARTNERSHIP_COMPANY"],
+        "GENERAL_PARTNERSHIP": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["LIMITED_OR_PARTNERSHIP_COMPANY"],
+        "INCORPORATED_ASSOCIATION": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["INCORPORATED_ASSOCIATION_OR_FOUNDATION"],
+        "FOUNDATION": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["INCORPORATED_ASSOCIATION_OR_FOUNDATION"],
+        "COOPERATIVE": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["COOPERATIVE_OR_ASSOCIATION"],
+        "UNIQUE_NUMBER_ORGANIZATION": DEFAULT_RULES_BY_LEGAL_ENTITY_TYPE["UNIQUE_NUMBER_ENTITY"],
+    }
+)
 
 
 def document_rules_for_legal_entity_type(legal_entity_type: str | None) -> list[DocumentRule]:
