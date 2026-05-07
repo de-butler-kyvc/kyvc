@@ -115,6 +115,21 @@ def _codes(issues):
     return {issue.code for issue in issues}
 
 
+class RecordingExtractionProvider:
+    provider_name = "recording_test_provider"
+
+    def __init__(self, extracted_by_document_id):
+        self.extracted_by_document_id = extracted_by_document_id
+        self.calls = []
+
+    def extract(self, document):
+        self.calls.append(document.documentId)
+        extracted = self.extracted_by_document_id.get(document.documentId)
+        if extracted is None:
+            return document
+        return document.model_copy(update={"extracted": extracted})
+
+
 def test_normal_stock_company_scanned_case():
     assessment = _assess(_normal_application(), _normal_documents())
 
@@ -122,6 +137,54 @@ def test_normal_stock_company_scanned_case():
     assert [owner.name for owner in assessment.beneficialOwnership.owners] == ["Owner One", "Owner Two"]
     assert not assessment.supplementRequests
     assert not assessment.manualReviewReasons
+
+
+def test_assessment_service_invokes_extraction_provider():
+    documents = [
+        DocumentMetadata(
+            documentId="business",
+            kycApplicationId="app-provider",
+            declaredDocumentType=DocumentType.BUSINESS_REGISTRATION,
+            predictedDocumentType=DocumentType.BUSINESS_REGISTRATION,
+            classificationConfidence=0.98,
+            sizeBytes=128,
+            sha256="sha-business",
+        ),
+        DocumentMetadata(
+            documentId="registry",
+            kycApplicationId="app-provider",
+            declaredDocumentType=DocumentType.CORPORATE_REGISTRY,
+            predictedDocumentType=DocumentType.CORPORATE_REGISTRY,
+            classificationConfidence=0.98,
+            sizeBytes=128,
+            sha256="sha-registry",
+        ),
+        DocumentMetadata(
+            documentId="owners",
+            kycApplicationId="app-provider",
+            declaredDocumentType=DocumentType.SHAREHOLDER_REGISTRY,
+            predictedDocumentType=DocumentType.SHAREHOLDER_REGISTRY,
+            classificationConfidence=0.98,
+            sizeBytes=128,
+            sha256="sha-owners",
+        ),
+    ]
+    provider = RecordingExtractionProvider(
+        {
+            "business": _business(),
+            "registry": _registry(),
+            "owners": _shareholder_registry(),
+        }
+    )
+
+    assessment = AssessmentService(extraction_provider=provider).assess(
+        _normal_application("app-provider"),
+        documents,
+    )
+
+    assert provider.calls == ["business", "registry", "owners"]
+    assert assessment.status == AssessmentStatus.NORMAL
+    assert assessment.documentResults[0].extracted["legalName"]["normalized"] == "KYvC Labs"
 
 
 def test_declared_beneficial_owner_mismatch_requires_manual_review():

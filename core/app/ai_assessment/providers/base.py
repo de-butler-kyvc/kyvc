@@ -3,6 +3,21 @@ from typing import Protocol
 from app.ai_assessment.schemas import DocumentMetadata
 
 
+class LlmExtractionError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        document: DocumentMetadata,
+        source_text: str | None = None,
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.document = document
+        self.source_text = source_text
+        self.original_error = original_error
+
+
 class DocumentExtractionProvider(Protocol):
     """Provider boundary for OCR/LLM assisted extraction.
 
