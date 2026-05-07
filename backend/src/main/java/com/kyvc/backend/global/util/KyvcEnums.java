@@ -345,4 +345,10 @@ public final class KyvcEnums {
         NOTIFICATION_READ, // 알림 읽음 처리
         NOTIFICATION_READ_ALL // 알림 전체 읽음 처리
     }
+    // QR 다음 행위
+    public enum QrNextAction {
+        OPEN_CREDENTIAL_OFFER, // Credential Offer 화면 이동
+        OPEN_VP_REQUEST, // VP 요청 화면 이동
+        INVALID_QR // 유효하지 않은 QR
+    }
 }

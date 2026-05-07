@@ -7,6 +7,7 @@ import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -75,5 +76,19 @@ public class CredentialRepositoryImpl implements CredentialRepository {
                 corporateId,
                 KyvcEnums.Yn.Y.name()
         );
+    }
+
+    // VP 제출 가능 Credential 목록 조회
+    @Override
+    public List<Credential> findVpEligibleCredentialsByCorporateId(
+            Long corporateId // 법인 ID
+    ) {
+        return credentialJpaRepository
+                .findAllByCorporateIdAndWalletSavedYnAndCredentialStatusAndExpiresAtGreaterThanEqualOrderByIssuedAtDesc(
+                        corporateId,
+                        KyvcEnums.Yn.Y.name(),
+                        KyvcEnums.CredentialStatus.VALID,
+                        LocalDateTime.now()
+                );
     }
 }
