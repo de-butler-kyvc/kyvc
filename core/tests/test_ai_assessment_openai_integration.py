@@ -122,8 +122,8 @@ def test_openai_document_extraction_provider_runs_assessment(tmp_path):
         "Shareholder Registry\n"
         "Company: KYvC Labs\n"
         "Total shares: 1000\n"
-        "Shareholder Owner One, individual, nationality KR, 600 shares, ownership 60 percent\n"
-        "Shareholder Owner Two, individual, nationality KR, 400 shares, ownership 40 percent\n",
+        "Shareholder Alice Park, individual, nationality KR, 600 shares, ownership 60 percent\n"
+        "Shareholder Bob Lee, individual, nationality KR, 400 shares, ownership 40 percent\n",
         encoding="utf-8",
     )
     settings = get_settings().model_copy(update={"llm_provider": "openai", "ocr_provider": "structured_payload"})
@@ -145,7 +145,7 @@ def test_openai_document_extraction_provider_runs_assessment(tmp_path):
     )
 
     assert assessment.status == AssessmentStatus.NORMAL
-    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Owner One", "Owner Two"}
+    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Alice Park", "Bob Lee"}
     assert all(result.extracted for result in assessment.documentResults)
 
 
@@ -180,8 +180,8 @@ def test_openai_provider_uses_ocr_text_for_assessment(tmp_path):
                     "Shareholder Registry\n"
                     "Company: KYvC Labs\n"
                     "Total shares: 1000\n"
-                    "Shareholder Owner One, individual, nationality KR, 600 shares, ownership 60 percent\n"
-                    "Shareholder Owner Two, individual, nationality KR, 400 shares, ownership 40 percent\n"
+                    "Shareholder Alice Park, individual, nationality KR, 600 shares, ownership 60 percent\n"
+                    "Shareholder Bob Lee, individual, nationality KR, 400 shares, ownership 40 percent\n"
                 ),
             }
             return texts[document.documentId]
@@ -210,7 +210,7 @@ def test_openai_provider_uses_ocr_text_for_assessment(tmp_path):
     )
 
     assert assessment.status == AssessmentStatus.NORMAL
-    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Owner One", "Owner Two"}
+    assert {owner.name for owner in assessment.beneficialOwnership.owners} == {"Alice Park", "Bob Lee"}
 
 
 def test_azure_document_intelligence_ocr_text_provider_parses_content(tmp_path, monkeypatch):

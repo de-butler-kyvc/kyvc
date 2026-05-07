@@ -9,6 +9,7 @@ class Settings(BaseModel):
     app_name: str = Field(default="kyvc-core")
     app_env: str = Field(default="dev")
     app_port: int = Field(default=8090)
+    app_storage_path: str = Field(default="./storage")
     log_level: str = Field(default="INFO")
     db_host: str = Field(default="127.0.0.1")
     db_port: int = Field(default=3306)
@@ -57,6 +58,7 @@ def get_settings() -> Settings:
         app_name=os.getenv("APP_NAME", "kyvc-core"),
         app_env=os.getenv("APP_ENV", os.getenv("ENV", "dev")),
         app_port=int(os.getenv("APP_PORT", "8090")),
+        app_storage_path=os.getenv("APP_STORAGE_PATH", "./storage"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         db_host=os.getenv("DB_HOST", "127.0.0.1"),
         db_port=int(os.getenv("DB_PORT", "3306")),
