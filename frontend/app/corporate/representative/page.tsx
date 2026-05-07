@@ -95,7 +95,6 @@ export default function CorporateRepresentativePage() {
   const persist = async (data: RepresentativeForm) => {
     setError(null);
     setMessage(null);
-    if (data.isAgent) return;
     if (!corp?.corporateId) return;
     await corpApi.updateRepresentative(corp.corporateId, {
       name: data.name,
@@ -148,31 +147,20 @@ export default function CorporateRepresentativePage() {
                   label="대표자명"
                   required
                   placeholder="대표자명 입력"
-                  disabled={isAgent}
                   error={errors.name?.message}
-                  {...register("name", {
-                    validate: (v) =>
-                      isAgent || v.trim().length > 0 || "대표자명은 필수입니다"
-                  })}
+                  {...register("name", { required: "대표자명은 필수입니다" })}
                 />
                 <TextField
                   label="생년월일"
                   type="date"
                   placeholder="YYYY-MM-DD"
-                  disabled={isAgent}
                   error={errors.birthDate?.message}
                   {...register("birthDate")}
                 />
-                <TextField
-                  label="국적"
-                  placeholder="대한민국"
-                  disabled={isAgent}
-                  {...register("nationality")}
-                />
+                <TextField label="국적" placeholder="대한민국" {...register("nationality")} />
                 <TextField
                   label="연락처"
                   placeholder="010-0000-0000"
-                  disabled={isAgent}
                   error={errors.phone?.message}
                   {...register("phone", {
                     pattern: { value: /^[0-9-]*$/, message: "숫자와 - 만 입력해 주세요" }
@@ -182,7 +170,6 @@ export default function CorporateRepresentativePage() {
                   label="이메일"
                   type="email"
                   placeholder="이메일 입력"
-                  disabled={isAgent}
                   error={errors.email?.message}
                   {...register("email", {
                     pattern: { value: /^$|\S+@\S+\.\S+/, message: "이메일 형식이 올바르지 않습니다" }
