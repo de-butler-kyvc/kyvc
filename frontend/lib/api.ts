@@ -1,5 +1,5 @@
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 const TOKEN_KEY = "kyvc.accessToken";
 const REFRESH_KEY = "kyvc.refreshToken";
 

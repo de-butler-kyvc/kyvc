@@ -24,7 +24,7 @@ type SidebarProps = {
 
 const normalize = (p: string) => p.replace(/\/+$/, "") || "/";
 
-export function Sidebar({ brand, subtitle, sections }: SidebarProps) {
+export function Sidebar({ sections }: SidebarProps) {
   const pathname = normalize(usePathname() ?? "/");
   const allHrefs = sections.flatMap((s) => s.items.map((i) => normalize(i.href)));
   const activeHref = allHrefs
@@ -32,22 +32,14 @@ export function Sidebar({ brand, subtitle, sections }: SidebarProps) {
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <aside className="hidden h-screen w-64 shrink-0 flex-col border-r bg-card md:flex">
-      <div className="flex h-16 items-center border-b px-6">
-        <div>
-          <div className="text-base font-semibold tracking-tight">{brand}</div>
-          {subtitle ? (
-            <div className="text-xs text-muted-foreground">{subtitle}</div>
-          ) : null}
-        </div>
-      </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {sections.map((section) => (
-          <div key={section.title} className="mb-6">
-            <div className="px-3 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+    <aside className="hidden h-screen w-[220px] shrink-0 flex-col border-r border-border bg-card md:flex">
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pt-5 pb-4">
+        {sections.map((section, sectionIdx) => (
+          <div key={section.title} className={sectionIdx === 0 ? "" : "mt-3.5"}>
+            <div className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-[0.6px] text-subtle-foreground">
               {section.title}
             </div>
-            <ul className="space-y-1">
+            <ul>
               {section.items.map((item) => {
                 const active = normalize(item.href) === activeHref;
                 return (
@@ -55,18 +47,13 @@ export function Sidebar({ brand, subtitle, sections }: SidebarProps) {
                     <Link
                       href={item.href}
                       className={cn(
-                        "block rounded-md px-3 py-2 text-sm transition-colors",
+                        "block rounded-[10px] px-2.5 py-1.5 text-[13px] transition-colors",
                         active
-                          ? "bg-accent text-accent-foreground font-medium"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                          ? "bg-accent font-semibold text-accent-foreground"
+                          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                       )}
                     >
                       {item.label}
-                      {item.description ? (
-                        <div className="text-xs text-muted-foreground/80">
-                          {item.description}
-                        </div>
-                      ) : null}
                     </Link>
                   </li>
                 );
