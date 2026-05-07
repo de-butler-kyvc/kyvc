@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 from app.ai_assessment.engines.normalizer import Normalizer
 from app.ai_assessment.enums import DocumentType, HolderType
@@ -26,6 +26,13 @@ class LayoutLine:
 
 
 class OcrLayoutDeterministicExtractor:
+    PURPOSE_ACCEPTABLE_TYPES = {
+        DocumentType.ARTICLES_OF_ASSOCIATION,
+        DocumentType.OPERATING_RULES,
+        DocumentType.REGULATIONS,
+        DocumentType.PURPOSE_PROOF_DOCUMENT,
+        DocumentType.INVESTMENT_REGISTRATION_CERTIFICATE,
+    }
     OWNERSHIP_TYPES = {
         DocumentType.SHAREHOLDER_REGISTRY,
         DocumentType.STOCK_CHANGE_STATEMENT,
@@ -48,8 +55,8 @@ class OcrLayoutDeterministicExtractor:
     def __init__(self, normalizer: Normalizer | None = None) -> None:
         self.normalizer = normalizer or Normalizer()
 
-    def extract(self, document_type: DocumentType, text: str | None):
-        layout = self._layout(text)
+    def extract(self, document_type: DocumentType, source: Any):
+        layout = self._layout(source)
         if not layout:
             return None
         if document_type == DocumentType.BUSINESS_REGISTRATION:
@@ -73,6 +80,9 @@ class OcrLayoutDeterministicExtractor:
         result.representativeName = self._person_value(layout, ["대표자", "대표자명", "Representative"])
         result.representative = self._representative(result.representativeName, layout)
         result.businessAddress = self._line_value(layout, ["사업장 소재지", "사업장주소", "주소", "Business address"])
+        result.businessType = self._line_value(layout, ["업태", "Business type"])
+        result.businessItem = self._line_value(layout, ["종목", "Business item"])
+        result.openingDate = self._date_value(layout, ["개업연월일", "개업일", "Opening date"])
         result.issueDate = self._date_value(layout, ["발급일", "교부일", "Issue date"])
         result.sealImpressionId = self._seal_value(layout)
         return result
@@ -83,9 +93,10 @@ class OcrLayoutDeterministicExtractor:
         result.corporateRegistrationNumber = self._digits_value(layout, ["법인등록번호", "Corporate registration number", "CRN"])
         result.representativeName = self._person_value(layout, ["대표자", "대표자명", "Representative"])
         result.representative = self._representative(result.representativeName, layout)
-        result.headOfficeAddress = self._line_value(layout, ["본점", "본점소재지", "주소", "Head office address"])
+        result.headOfficeAddress = self._line_value(layout, ["본점", "본점 소재지", "본점소재지", "주소", "Head office address"])
+        result.directors = self._line_value(layout, ["임원", "이사", "Directors"])
         result.purpose = self._line_value(layout, ["목적", "사업목적", "Purpose"])
-        result.issueDate = self._date_value(layout, ["발급일", "교부일", "Issue date"])
+        result.issueDate = self._date_value(layout, ["발급일", "열람일", "교부일", "Issue date"])
         result.sealImpressionId = self._seal_value(layout)
         return result
 
@@ -96,9 +107,9 @@ class OcrLayoutDeterministicExtractor:
         result.totalShares = self._integer_value(layout, ["총주식수", "발행주식총수", "Total shares"])
         result.shareholders = self._shareholders(layout)
         if result.totalShares.normalized is None:
-            inferred_total = sum(shareholder.shares or 0 for shareholder in result.shareholders) or None
+            inferred_total = self._infer_total_shares(layout, result.shareholders)
             if inferred_total is not None:
-                result.totalShares = ExtractedValue(raw=str(inferred_total), normalized=inferred_total, confidence=0.8)
+                result.totalShares = ExtractedValue(raw=str(inferred_total), normalized=inferred_total, confidence=1.0)
         result.sealImpressionId = self._seal_value(layout)
         return result
 
@@ -122,7 +133,7 @@ class OcrLayoutDeterministicExtractor:
         result = SealCertificateExtraction()
         result.subjectName = self._person_value(layout, ["성명", "대표자", "Subject", "Representative"])
         result.corporateName = self._company_value(layout, ["법인명", "상호", "Company"])
-        result.certificateNumber = self._line_value(layout, ["증명서번호", "인감증명서번호", "Certificate number"])
+        result.certificateNumber = self._digits_value(layout, ["증명서번호", "인감증명서번호", "발급번호", "Certificate number"])
         result.sealImpressionId = self._seal_value(layout)
         result.issueDate = self._date_value(layout, ["발급일", "Issue date"])
         return result
@@ -133,20 +144,19 @@ class OcrLayoutDeterministicExtractor:
         representative = self._person_value(layout, ["대표자", "대표자명", "Representative"])
         result.representative = self._representative(representative, layout)
         result.purposeVerification = PurposeVerificationExtraction(
-            establishmentPurpose=self._line_value(layout, ["설립목적", "목적", "Establishment purpose", "Purpose"]),
-            acceptableForPurposeVerification=document_type not in {
-                DocumentType.OFFICIAL_LETTER,
-                DocumentType.MEETING_MINUTES,
-                DocumentType.ORGANIZATION_IDENTITY_CERTIFICATE,
-            },
-            purposeVerificationSatisfied=document_type not in {
-                DocumentType.OFFICIAL_LETTER,
-                DocumentType.MEETING_MINUTES,
-                DocumentType.ORGANIZATION_IDENTITY_CERTIFICATE,
-            },
+            establishmentPurpose=self._line_value(layout, ["설립목적", "설립 목적", "목적", "사업목적", "활동목적", "Establishment purpose", "Purpose"]),
+            acceptableForPurposeVerification=document_type in self.PURPOSE_ACCEPTABLE_TYPES,
         )
+        result.purposeVerification.purposeVerificationSatisfied = (
+            result.purposeVerification.acceptableForPurposeVerification
+            and bool(result.purposeVerification.establishmentPurpose.raw)
+        )
+        result.purposeVerification.evidenceRefs = self._first_evidence_ref(result.purposeVerification.establishmentPurpose)
+        result.beneficialOwners = self._shareholder_registry(layout).shareholders
         result.issueDate = self._date_value(layout, ["발급일", "작성일", "Issue date"])
-        result.documentSummary = ExtractedValue(raw="\n".join(item.text for item in layout), normalized=None, confidence=0.7)
+        result.documentSummary = self._line_value(layout, ["요약", "내용", "Summary", "Content"])
+        if not result.documentSummary.raw:
+            result.documentSummary = ExtractedValue(raw="\n".join(item.text for item in layout), normalized=None, confidence=0.7)
         result.sealImpressionId = self._seal_value(layout)
         return result
 
@@ -157,45 +167,65 @@ class OcrLayoutDeterministicExtractor:
                 parsed = self._parse_table_shareholder(line)
                 if parsed:
                     shareholders.append(parsed)
-                continue
-            parsed = self._parse_compact_shareholder(line)
-            if parsed:
-                shareholders.append(parsed)
-        return shareholders
+        if shareholders:
+            return shareholders
+        return self._parse_compact_shareholders(layout)
 
     def _parse_table_shareholder(self, line: LayoutLine) -> Shareholder | None:
         cells = [cell.strip() for cell in line.text.split("|")]
         if len(cells) < 4:
             return None
-        holder_type = self._holder_type(cells[1]) if len(cells) > 1 else HolderType.UNKNOWN
-        shares = next((self.normalizer.integer(cell) for cell in cells[2:] if "주" in cell.lower() or self.normalizer.integer(cell)), None)
-        percent = next((self.normalizer.percent(cell) for cell in cells[2:] if "%" in cell or "percent" in cell.lower()), None)
+        if len(cells) < 6:
+            holder_type = self._holder_type(cells[1]) if len(cells) > 1 else HolderType.UNKNOWN
+            shares = next((self.normalizer.integer(cell) for cell in cells[2:] if "주" in cell.lower() or "share" in cell.lower()), None)
+            percent = next((self.normalizer.percent(cell) for cell in cells[2:] if "%" in cell or "percent" in cell.lower()), None)
+            return Shareholder(
+                name=cells[0] or None,
+                holderType=holder_type,
+                shares=shares,
+                ownershipPercent=percent,
+                evidenceRefs=[line.evidence_id],
+            )
+        canonical_type_table = cells[1] in {"개인", "법인", "기타"} or cells[1].lower() in {"individual", "corporate", "company", "other"}
+        holder_type = self._holder_type(cells[1]) if canonical_type_table else self._infer_holder_type(cells)
+        birth_date = self.normalizer.date(cells[2]) if canonical_type_table else self._birth_date_from_identifier(cells[1])
+        nationality = cells[3] if canonical_type_table else None
+        shares = self.normalizer.integer(cells[4])
+        percent = self.normalizer.percent(cells[5]) if canonical_type_table else None
+        english_name = cells[6] if len(cells) > 6 and cells[6] else None
         return Shareholder(
             name=cells[0] or None,
             holderType=holder_type,
-            birthDate=self.normalizer.date(cells[2]) if len(cells) > 2 else None,
-            nationality=next((cell for cell in cells if cell.upper() in {"KR", "KOR", "US", "USA"}), None),
+            birthDate=birth_date,
+            nationality=nationality,
+            englishName=english_name,
             shares=shares,
             ownershipPercent=percent,
             evidenceRefs=[line.evidence_id],
         )
 
-    def _parse_compact_shareholder(self, line: LayoutLine) -> Shareholder | None:
+    def _parse_compact_shareholders(self, layout: list[LayoutLine]) -> list[Shareholder]:
+        shareholders = []
         pattern = re.compile(
-            r"(?:주주|Shareholder)\s*[:：]?\s*(?P<name>.+?),\s*(?P<type>개인|법인|기타|individual|corporate|company)"
+            r"(?:주주|투자자|회원|사원|실소유자|Shareholder|Owner)\s*[:：]\s*"
+            r"(?P<name>.+?),\s*(?P<type>개인|법인|기타|individual|corporate|company|other)"
             r".*?(?P<shares>[\d,]+)\s*(?:주|shares?).*?(?P<percent>\d+(?:\.\d+)?)\s*(?:%|percent)",
             re.IGNORECASE,
         )
-        match = pattern.search(line.text)
-        if not match:
-            return None
-        return Shareholder(
-            name=match.group("name").strip(),
-            holderType=self._holder_type(match.group("type")),
-            shares=self.normalizer.integer(match.group("shares")),
-            ownershipPercent=self.normalizer.percent(match.group("percent")),
-            evidenceRefs=[line.evidence_id],
-        )
+        for line in layout:
+            match = pattern.search(line.text)
+            if not match:
+                continue
+            shareholders.append(
+                Shareholder(
+                    name=match.group("name").strip(),
+                    holderType=self._holder_type(match.group("type")),
+                    shares=self.normalizer.integer(match.group("shares")),
+                    ownershipPercent=self.normalizer.percent(match.group("percent")),
+                    evidenceRefs=[line.evidence_id],
+                )
+            )
+        return shareholders
 
     def _representative(self, representative_name: ExtractedValue, layout: list[LayoutLine]) -> PersonExtraction:
         return PersonExtraction(
@@ -205,13 +235,81 @@ class OcrLayoutDeterministicExtractor:
             englishName=self._line_value(layout, ["대표자 영문명", "대표 영문명", "영문명", "English name"]),
         )
 
-    def _layout(self, text: str | None) -> list[LayoutLine]:
-        if not text:
+    def _layout(self, source: Any) -> list[LayoutLine]:
+        if not source:
             return []
-        lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+        if isinstance(source, dict):
+            return self._layout_from_dict(source)
+        if isinstance(source, list):
+            return self._layout_from_list(source)
+        lines = [line.strip() for line in str(source).splitlines() if line.strip()]
         if len(lines) <= 1:
-            lines = [part.strip() for part in re.split(r"[;\n]", str(text)) if part.strip()]
+            lines = [part.strip() for part in re.split(r"[;\n]", str(source)) if part.strip()]
         return [LayoutLine(evidence_id=f"ocr-line-{index + 1}", text=line) for index, line in enumerate(lines)]
+
+    def _layout_from_dict(self, payload: dict[str, Any]) -> list[LayoutLine]:
+        evidence = payload.get("evidence")
+        if isinstance(evidence, list):
+            lines = self._layout_from_list(evidence)
+        else:
+            lines = []
+        lines.extend(self._table_lines(payload.get("tables")))
+        if lines:
+            return lines
+        for key in ("ocrText", "layoutText", "text", "content"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return self._layout(value)
+        return []
+
+    def _layout_from_list(self, items: list[Any]) -> list[LayoutLine]:
+        lines = []
+        for index, item in enumerate(items, start=1):
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text is None:
+                    text = self._row_text(item)
+                if not text:
+                    continue
+                lines.append(
+                    LayoutLine(
+                        evidence_id=str(item.get("evidenceId") or item.get("id") or f"ocr-line-{index}"),
+                        text=str(text).strip(),
+                        confidence=float(item.get("confidence", 1.0)),
+                    )
+                )
+                continue
+            if str(item).strip():
+                lines.append(LayoutLine(evidence_id=f"ocr-line-{index}", text=str(item).strip()))
+        return lines
+
+    def _table_lines(self, tables: Any) -> list[LayoutLine]:
+        if not isinstance(tables, list):
+            return []
+        lines = []
+        for table_index, table in enumerate(tables, start=1):
+            rows = table.get("rows") if isinstance(table, dict) else table
+            if not isinstance(rows, list):
+                continue
+            for row_index, row in enumerate(rows, start=1):
+                row_text = self._row_text(row)
+                if row_text:
+                    lines.append(LayoutLine(evidence_id=f"ocr-table-{table_index}-row-{row_index}", text=row_text, confidence=1.0))
+        return lines
+
+    def _row_text(self, row: Any) -> str | None:
+        if isinstance(row, str):
+            return row
+        if isinstance(row, dict):
+            for key in ("text", "content"):
+                if isinstance(row.get(key), str):
+                    return row[key]
+            cells = row.get("cells")
+            if isinstance(cells, list):
+                return " | ".join(str(cell.get("text") if isinstance(cell, dict) else cell).strip() for cell in cells)
+        if isinstance(row, list):
+            return " | ".join(str(cell.get("text") if isinstance(cell, dict) else cell).strip() for cell in row)
+        return None
 
     def _line_value(self, layout: list[LayoutLine], labels: Iterable[str]) -> ExtractedValue:
         for line in layout:
@@ -268,4 +366,40 @@ class OcrLayoutDeterministicExtractor:
     def _is_header_or_total(self, text: str) -> bool:
         compact = text.replace(" ", "")
         first_cell = text.split("|", 1)[0].strip()
-        return "합계" in compact or first_cell in {"주주명", "투자자명", "회원명", "성명", "이름", "Name"}
+        return "합계" in compact or first_cell in {"주주명", "투자자명", "회원명", "사원명", "임원명", "실소유자명", "성명", "이름", "Name"}
+
+    def _infer_total_shares(self, layout: list[LayoutLine], shareholders: list[Shareholder]) -> int | None:
+        for line in layout:
+            normalized = line.text.replace(" ", "")
+            if "합계" not in normalized:
+                continue
+            cells = [cell.strip() for cell in line.text.split("|")]
+            for cell in cells[1:]:
+                if "주" in cell:
+                    total = self.normalizer.integer(cell)
+                    if total is not None:
+                        return total
+        share_counts = [shareholder.shares for shareholder in shareholders if shareholder.shares is not None]
+        return sum(share_counts) if share_counts else None
+
+    def _infer_holder_type(self, cells: list[str]) -> HolderType:
+        for cell in cells[1:3]:
+            inferred = self._holder_type(cell)
+            if inferred != HolderType.UNKNOWN:
+                return inferred
+        identifier = re.sub(r"\D", "", cells[1]) if len(cells) > 1 else ""
+        if len(identifier) in {6, 13}:
+            return HolderType.INDIVIDUAL
+        return HolderType.UNKNOWN
+
+    def _birth_date_from_identifier(self, value: str) -> str | None:
+        digits = re.sub(r"\D", "", value)
+        if len(digits) >= 6:
+            return digits[:6]
+        return None
+
+    def _first_evidence_ref(self, *fields: ExtractedValue) -> list[str]:
+        refs = []
+        for field in fields:
+            refs.extend(field.evidenceRefs)
+        return list(dict.fromkeys(refs))

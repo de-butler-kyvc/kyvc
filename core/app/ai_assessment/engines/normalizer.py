@@ -50,6 +50,7 @@ class Normalizer:
             return None
         for token in self.COMPANY_TOKENS:
             text = text.replace(token.upper(), "")
+        text = text.replace("(", "").replace(")", "")
         return text or None
 
     def canonical_company_name(self, value: Any) -> str | None:

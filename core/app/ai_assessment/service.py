@@ -255,7 +255,7 @@ class AssessmentService:
         if structured is not None:
             candidates.append(("structured_payload", structured))
 
-        ocr_text = source_text or self._document_ocr_text(document)
+        ocr_text = source_text or self._document_ocr_source(document)
         document_type = document.predictedDocumentType or document.declaredDocumentType or DocumentType.UNKNOWN
         ocr_extracted = self.ocr_layout_extractor.extract(document_type, ocr_text)
         if ocr_extracted is not None:
@@ -266,8 +266,10 @@ class AssessmentService:
         source, extracted = max(candidates, key=lambda item: self._extraction_score(item[1]))
         return _DeterministicExtraction(extracted=extracted, source=source)
 
-    def _document_ocr_text(self, document: DocumentMetadata) -> str | None:
+    def _document_ocr_source(self, document: DocumentMetadata) -> Any | None:
         if isinstance(document.extracted, dict):
+            if isinstance(document.extracted.get("layout"), dict):
+                return document.extracted["layout"]
             for key in ("ocrText", "layoutText", "text", "content"):
                 value = document.extracted.get(key)
                 if isinstance(value, str) and value.strip():
@@ -280,17 +282,21 @@ class AssessmentService:
                         payload = json.loads(path.read_text(encoding="utf-8"))
                     except (OSError, json.JSONDecodeError):
                         return None
-                    return self._text_from_json_payload(payload)
+                    return self._source_from_json_payload(payload)
                 try:
                     return path.read_text(encoding="utf-8", errors="ignore")
                 except OSError:
                     return None
         return None
 
-    def _text_from_json_payload(self, payload: Any) -> str | None:
+    def _source_from_json_payload(self, payload: Any) -> Any | None:
         if isinstance(payload, str):
             return payload
         if isinstance(payload, dict):
+            if isinstance(payload.get("layout"), dict):
+                return payload["layout"]
+            if isinstance(payload.get("evidence"), list) or isinstance(payload.get("tables"), list):
+                return payload
             for key in ("ocrText", "layoutText", "text", "content"):
                 value = payload.get(key)
                 if isinstance(value, str) and value.strip():

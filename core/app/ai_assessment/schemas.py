@@ -80,6 +80,9 @@ class BusinessRegistrationExtraction(BaseModel):
     representativeName: ExtractedValue = Field(default_factory=ExtractedValue)
     representative: PersonExtraction = Field(default_factory=PersonExtraction)
     businessAddress: ExtractedValue = Field(default_factory=ExtractedValue)
+    businessType: ExtractedValue = Field(default_factory=ExtractedValue)
+    businessItem: ExtractedValue = Field(default_factory=ExtractedValue)
+    openingDate: ExtractedValue = Field(default_factory=ExtractedValue)
     issueDate: ExtractedValue = Field(default_factory=ExtractedValue)
     sealImpressionId: ExtractedValue = Field(default_factory=ExtractedValue)
 
@@ -90,6 +93,7 @@ class CorporateRegistryExtraction(BaseModel):
     headOfficeAddress: ExtractedValue = Field(default_factory=ExtractedValue)
     representativeName: ExtractedValue = Field(default_factory=ExtractedValue)
     representative: PersonExtraction = Field(default_factory=PersonExtraction)
+    directors: ExtractedValue = Field(default_factory=ExtractedValue)
     purpose: ExtractedValue = Field(default_factory=ExtractedValue)
     issueDate: ExtractedValue = Field(default_factory=ExtractedValue)
     sealImpressionId: ExtractedValue = Field(default_factory=ExtractedValue)
