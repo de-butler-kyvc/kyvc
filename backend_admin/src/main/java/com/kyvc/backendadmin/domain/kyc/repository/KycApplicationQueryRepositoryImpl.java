@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.kyc.repository;
 
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationCorporateResponse;
+import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationDetailResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationListResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationSearchRequest;
 import jakarta.persistence.EntityManager;
@@ -133,6 +134,94 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 .map(row -> toCorporateResponse((Object[]) row));
     }
 
+    @Override
+    public Optional<AdminKycApplicationDetailResponse> findDetailByKycId(Long kycId) {
+        // 법인/문서/VC/Core 상태 조인 조회: 상세 화면에 필요한 집계와 최신 상태를 한 번에 읽어온다.
+        Query query = entityManager().createNativeQuery("""
+                with document_summary as (
+                    select document.kyc_id,
+                           count(*) as document_count
+                    from kyc_documents document
+                    where document.upload_status_code = 'UPLOADED'
+                    group by document.kyc_id
+                ),
+                latest_core_request as (
+                    select *
+                    from (
+                        select core_request.*,
+                               row_number() over (
+                                   partition by core_request.target_id
+                                   order by coalesce(core_request.requested_at, core_request.created_at) desc,
+                                            core_request.core_request_id desc
+                               ) as rn
+                        from core_requests core_request
+                        where core_request.core_target_type_code = 'KYC_APPLICATION'
+                    ) ranked_core_request
+                    where ranked_core_request.rn = 1
+                ),
+                latest_credential as (
+                    select *
+                    from (
+                        select credential.*,
+                               row_number() over (
+                                   partition by credential.kyc_id
+                                   order by coalesce(credential.issued_at, credential.updated_at, credential.created_at) desc,
+                                            credential.credential_id desc
+                               ) as rn
+                        from credentials credential
+                    ) ranked_credential
+                    where ranked_credential.rn = 1
+                ),
+                latest_review_history as (
+                    select *
+                    from (
+                        select review_history.*,
+                               row_number() over (
+                                   partition by review_history.kyc_id
+                                   order by review_history.created_at desc,
+                                            review_history.review_history_id desc
+                               ) as rn
+                        from kyc_review_histories review_history
+                    ) ranked_review_history
+                    where ranked_review_history.rn = 1
+                )
+                select kyc.kyc_id,
+                       kyc.corporate_id,
+                       corporate.corporate_name,
+                       corporate.business_registration_no,
+                       corporate.representative_name,
+                       kyc.kyc_status_code,
+                       kyc.ai_review_status_code,
+                       kyc.ai_review_result_code,
+                       coalesce(document_summary.document_count, 0) as document_count,
+                       latest_credential.credential_status_code,
+                       kyc.submitted_at,
+                       kyc.updated_at,
+                       case
+                           when kyc.kyc_status_code in ('MANUAL_REVIEW', 'APPROVED', 'REJECTED', 'NEED_SUPPLEMENT')
+                               then kyc.kyc_status_code
+                           else null
+                       end as manual_review_status,
+                       latest_core_request.core_request_status_code,
+                       latest_review_history.review_action_type_code,
+                       latest_review_history.comment,
+                       latest_review_history.created_at
+                from kyc_applications kyc
+                join corporates corporate on corporate.corporate_id = kyc.corporate_id
+                join users applicant on applicant.user_id = kyc.applicant_user_id
+                left join document_summary on document_summary.kyc_id = kyc.kyc_id
+                left join latest_core_request on latest_core_request.target_id = kyc.kyc_id
+                left join latest_credential on latest_credential.kyc_id = kyc.kyc_id
+                left join latest_review_history on latest_review_history.kyc_id = kyc.kyc_id
+                where kyc.kyc_id = :kycId
+                """);
+        query.setParameter("kycId", kycId);
+        List<?> rows = query.getResultList();
+        return rows.stream()
+                .findFirst()
+                .map(row -> toDetailResponse((Object[]) row));
+    }
+
     private QueryParts buildSearchQueryParts(AdminKycApplicationSearchRequest request) {
         // 검색 조건 조립: null이 아닌 조건만 native SQL where 절과 바인딩 파라미터에 추가한다.
         StringBuilder where = new StringBuilder("where 1 = 1");
@@ -219,6 +308,29 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toLong(row[17]),
                 toString(row[18]),
                 toLocalDateTime(row[19])
+        );
+    }
+
+    private AdminKycApplicationDetailResponse toDetailResponse(Object[] row) {
+        // 민감정보를 응답에서 제외: password_hash, file_path, vc_hash, qr_token 등은 select 대상에 포함하지 않는다.
+        return new AdminKycApplicationDetailResponse(
+                toLong(row[0]),
+                toLong(row[1]),
+                toString(row[2]),
+                toString(row[3]),
+                toString(row[4]),
+                toString(row[5]),
+                toString(row[6]),
+                toString(row[7]),
+                toLong(row[8]),
+                toString(row[9]),
+                toLocalDateTime(row[10]),
+                toLocalDateTime(row[11]),
+                toString(row[12]),
+                toString(row[13]),
+                toString(row[14]),
+                toString(row[15]),
+                toLocalDateTime(row[16])
         );
     }
 

@@ -48,6 +48,10 @@ public enum ErrorCode {
     CORPORATE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CORPORATE_ACCESS_DENIED", "기업 접근 권한이 없습니다."),
     // HTTP 404 - KYC 정보 조회 실패
     KYC_NOT_FOUND(HttpStatus.NOT_FOUND, "KYC_NOT_FOUND", "KYC 정보를 찾을 수 없습니다."),
+    AI_REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "AI_REVIEW_NOT_FOUND", "AI 심사 정보를 찾을 수 없습니다."),
+    AI_REVIEW_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "AI_REVIEW_POLICY_NOT_FOUND", "AI 심사 정책을 찾을 수 없습니다."),
+    INVALID_AI_REVIEW_POLICY(HttpStatus.BAD_REQUEST, "INVALID_AI_REVIEW_POLICY", "유효하지 않은 AI 심사 정책입니다."),
+    INVALID_AI_REVIEW_RETRY_STATUS(HttpStatus.BAD_REQUEST, "INVALID_AI_REVIEW_RETRY_STATUS", "현재 상태에서는 AI 재심사를 요청할 수 없습니다."),
     // HTTP 403 - KYC 리소스 접근 권한 없음
     KYC_ACCESS_DENIED(HttpStatus.FORBIDDEN, "KYC_ACCESS_DENIED", "KYC 접근 권한이 없습니다."),
     // HTTP 409 - 이미 제출된 KYC 재제출 시도
@@ -56,6 +60,15 @@ public enum ErrorCode {
     KYC_INVALID_STATUS(HttpStatus.CONFLICT, "KYC_INVALID_STATUS", "유효하지 않은 KYC 상태입니다."),
     // HTTP 404 - 문서 정보 조회 실패
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
+    CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_NOT_FOUND", "Credential 정보를 찾을 수 없습니다."),
+    INVALID_CREDENTIAL_ISSUE_STATUS(HttpStatus.CONFLICT, "INVALID_CREDENTIAL_ISSUE_STATUS", "현재 상태에서는 Credential 발급을 요청할 수 없습니다."),
+    ISSUER_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "ISSUER_POLICY_NOT_FOUND", "Issuer 정책을 찾을 수 없습니다."),
+    ISSUER_POLICY_DUPLICATED(HttpStatus.CONFLICT, "ISSUER_POLICY_DUPLICATED", "이미 존재하는 Issuer 정책입니다."),
+    ISSUER_POLICY_CONFLICT(HttpStatus.CONFLICT, "ISSUER_POLICY_CONFLICT", "기존 Issuer 정책과 충돌합니다."),
+    ISSUER_CONFIG_NOT_FOUND(HttpStatus.NOT_FOUND, "ISSUER_CONFIG_NOT_FOUND", "Issuer 설정을 찾을 수 없습니다."),
+    INVALID_CODE_VALUE(HttpStatus.BAD_REQUEST, "INVALID_CODE_VALUE", "유효하지 않은 코드 값입니다."),
+    MFA_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "MFA_TOKEN_INVALID", "MFA 토큰이 유효하지 않습니다."),
+    CORE_REQUEST_CREATE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "CORE_REQUEST_CREATE_FAILED", "Core 요청 생성에 실패했습니다."),
     // HTTP 403 - 문서 리소스 접근 권한 없음
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "문서 접근 권한이 없습니다."),
     // HTTP 400 - 필수 문서 누락

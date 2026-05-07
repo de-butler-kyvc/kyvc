@@ -181,6 +181,16 @@ public final class KyvcEnums {
         SYSTEM_ADMIN // 시스템 관리자
     }
 
+    // 관리자 권한 코드
+    public enum AdminRoleCode {
+        BACKEND_ADMIN, // 백엔드 관리자
+        CORE_ADMIN, // 코어 관리자
+        POLICY_MANAGER, // 정책 관리자
+        AUDITOR, // 감사담당자
+        VIEWER, // 조회 전용
+        SYSTEM_ADMIN // 시스템 관리자
+    }
+
     // 행위자 유형
     public enum ActorType {
         USER, // 일반 사용자
@@ -195,6 +205,7 @@ public final class KyvcEnums {
         KYC_DOCUMENT, // KYC 문서
         KYC_SUPPLEMENT, // KYC 보완요청
         DOCUMENT_REQUIREMENT, // KYC 필수서류 정책
+        AI_REVIEW_POLICY, // AI 심사 정책
         CREDENTIAL, // Credential
         VP_VERIFICATION, // VP 검증
         ISSUER_POLICY, // Issuer 정책
@@ -311,5 +322,11 @@ public final class KyvcEnums {
         FAILED, // 실패
         CALLBACK_RECEIVED, // Callback 수신
         RETRYING // 재시도중
+    }
+
+    // Y/N 여부
+    public enum Yn {
+        Y, // 예
+        N // 아니오
     }
 }

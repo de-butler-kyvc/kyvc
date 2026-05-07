@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.kyc.repository;
 
 import com.kyvc.backendadmin.domain.kyc.domain.KycApplication;
+import com.kyvc.backendadmin.global.util.KyvcEnums;
 
 import java.util.Optional;
 
@@ -19,4 +20,13 @@ public interface KycApplicationRepository {
      * @return KYC 신청 Optional
      */
     Optional<KycApplication> findById(Long kycId);
+
+    /**
+     * kyc_applications 테이블의 AI 심사 상태를 변경합니다.
+     *
+     * @param kycId 변경할 KYC 신청 ID
+     * @param aiReviewStatus 변경할 AI 심사 상태
+     * @return 변경된 row 수
+     */
+    int updateAiReviewStatus(Long kycId, KyvcEnums.AiReviewStatus aiReviewStatus);
 }

@@ -2,6 +2,7 @@ package com.kyvc.backendadmin.domain.kyc.controller;
 
 import com.kyvc.backendadmin.domain.kyc.application.AdminKycApplicationService;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationCorporateResponse;
+import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationDetailResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationListResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationSearchRequest;
 import com.kyvc.backendadmin.global.response.CommonResponse;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -27,7 +29,7 @@ import java.time.LocalDate;
  * <p>백엔드 관리자가 KYC 신청 목록을 검색하고, KYC 신청 ID 기준으로 신청 법인정보를 조회하는
  * 엔드포인트를 제공합니다.</p>
  */
-@Tag(name = "KYC Application Admin", description = "백엔드 관리자 KYC 신청 조회 API")
+@Tag(name = "Backend Admin KYC", description = "백엔드 관리자 KYC 심사 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/admin/backend/kyc/applications")
@@ -86,6 +88,28 @@ public class AdminKycApplicationController {
                 supplementYn
         );
         return CommonResponseFactory.success(adminKycApplicationService.searchApplications(request));
+    }
+
+    /**
+     * KYC 신청 상세 정보를 조회합니다.
+     *
+     * @param kycId KYC 신청 ID
+     * @return KYC 신청 상세 정보
+     */
+    @Operation(
+            summary = "KYC 신청 상세 조회",
+            description = "특정 KYC 신청 건의 기본 정보, 법인 정보, 제출 문서 요약, AI 심사 상태, VC 발급 상태를 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "KYC 신청 상세 조회 성공"),
+            @ApiResponse(responseCode = "404", description = "KYC 신청을 찾을 수 없음")
+    })
+    @GetMapping("/{kycId}")
+    public CommonResponse<AdminKycApplicationDetailResponse> getApplicationDetail(
+            @Parameter(description = "KYC 신청 ID", required = true)
+            @PathVariable Long kycId
+    ) {
+        return CommonResponseFactory.success(adminKycApplicationService.getApplicationDetail(kycId));
     }
 
     /**

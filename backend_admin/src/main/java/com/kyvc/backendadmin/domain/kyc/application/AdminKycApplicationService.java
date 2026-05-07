@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.kyc.application;
 
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationCorporateResponse;
+import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationDetailResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationListResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationSearchRequest;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationQueryRepository;
@@ -71,6 +72,24 @@ public class AdminKycApplicationService {
         kycApplicationRepository.findById(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
         return kycApplicationQueryRepository.findCorporateByKycId(kycId)
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+    }
+
+    /**
+     * KYC 신청 ID를 기준으로 관리자 심사용 상세 정보를 조회합니다.
+     *
+     * <p>KYC 신청 존재 여부를 먼저 확인한 뒤, 법인 정보, 제출 문서 수, 최근 Core 요청 상태,
+     * Credential 발급 상태, 최근 심사 이력 요약을 QueryRepository에서 조회합니다.</p>
+     *
+     * @param kycId KYC 신청 ID
+     * @return KYC 신청 상세 정보
+     */
+    @Transactional(readOnly = true)
+    public AdminKycApplicationDetailResponse getApplicationDetail(Long kycId) {
+        // KYC 존재 여부 확인: 없는 ID는 도메인 전용 KYC_NOT_FOUND로 변환한다.
+        kycApplicationRepository.findById(kycId)
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+        return kycApplicationQueryRepository.findDetailByKycId(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
     }
 

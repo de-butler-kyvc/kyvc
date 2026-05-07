@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.kyc.repository;
 
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationCorporateResponse;
+import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationDetailResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationListResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminKycApplicationSearchRequest;
 
@@ -46,4 +47,15 @@ public interface KycApplicationQueryRepository {
      * @return KYC 신청 법인정보 Optional
      */
     Optional<AdminKycApplicationCorporateResponse> findCorporateByKycId(Long kycId);
+
+    /**
+     * KYC 신청 ID 기준으로 관리자 심사용 상세 정보를 조회합니다.
+     *
+     * <p>kyc_applications, corporates, users, kyc_documents, core_requests,
+     * credentials, kyc_review_histories를 조인 또는 집계하여 상세 화면에 필요한 읽기 모델을 생성합니다.</p>
+     *
+     * @param kycId 조회할 KYC 신청 ID
+     * @return KYC 신청 상세 정보 Optional
+     */
+    Optional<AdminKycApplicationDetailResponse> findDetailByKycId(Long kycId);
 }
