@@ -11,10 +11,11 @@ const sections: NavSection[] = [
     ]
   },
   {
-    title: "계정",
+    title: "법인정보",
     items: [
-      { href: "/corporate/profile", label: "법인 정보" },
-      { href: "/corporate/agents", label: "대표자 · 대리인" }
+      { href: "/corporate/profile", label: "법인 기본정보" },
+      { href: "/corporate/representative", label: "대표자 정보" },
+      { href: "/corporate/agents", label: "대리인 정보" }
     ]
   }
 ];
