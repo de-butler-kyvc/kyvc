@@ -1,5 +1,10 @@
+import json
+import time
 from dataclasses import dataclass
 from typing import Any, Iterable
+
+import httpx
+from pydantic import ValidationError
 
 from app.ai_assessment.engines import (
     BeneficialOwnerEngine,
@@ -25,6 +30,7 @@ from app.ai_assessment.schemas import (
     ModelMetadata,
     OrganizationDocumentExtraction,
     PowerOfAttorneyExtraction,
+    ProviderUsageLog,
     SealCertificateExtraction,
     ShareholderRegistryExtraction,
 )
@@ -34,6 +40,15 @@ from app.ai_assessment.schemas import (
 class AssessmentStrategy:
     name: str = "deterministic_core"
     max_parallel_documents: int = 4
+
+
+@dataclass(frozen=True)
+class _DocumentAnalysis:
+    document: DocumentMetadata
+    extracted: Any | None
+    extraction_source: str
+    classification_reason: str
+    provider_usage_logs: list[ProviderUsageLog]
 
 
 class AssessmentService:
@@ -71,14 +86,17 @@ class AssessmentService:
         self.decision_engine = DecisionEngine()
 
     def assess(self, application: KycApplication, documents: list[DocumentMetadata]) -> KycAssessment:
-        analyzed_documents = [self.extraction_provider.extract(document) if self.extraction_provider else document for document in documents]
+        analyzed_documents = [self._analyze_document(document) for document in documents]
         document_results: list[DocumentResult] = []
         extracted_by_type: dict[DocumentType, Any] = {}
         extracted_items: list[tuple[DocumentType, Any]] = []
+        provider_usage_logs: list[ProviderUsageLog] = []
 
-        for document in analyzed_documents:
+        for analysis in analyzed_documents:
+            document = analysis.document
+            provider_usage_logs.extend(analysis.provider_usage_logs)
             predicted = document.predictedDocumentType or document.declaredDocumentType or DocumentType.UNKNOWN
-            extracted = self.extractor.extract(document)
+            extracted = analysis.extracted
             if extracted is not None:
                 extracted_by_type.setdefault(predicted, extracted)
                 extracted_items.append((predicted, extracted))
@@ -88,7 +106,7 @@ class AssessmentService:
                     declaredDocumentType=document.declaredDocumentType,
                     predictedDocumentType=predicted,
                     classificationConfidence=document.classificationConfidence or 1.0,
-                    classificationReason="structured payload" if extracted is not None else "metadata only",
+                    classificationReason=analysis.classification_reason,
                     extracted=extracted.model_dump(mode="json") if extracted is not None else {},
                 )
             )
@@ -167,9 +185,108 @@ class AssessmentService:
             delegation=delegation,
             supplementRequests=supplement_requests,
             manualReviewReasons=manual_review_reasons,
-            providerUsageLogs=[],
+            providerUsageLogs=provider_usage_logs,
             modelMetadata=ModelMetadata(),
         )
+
+    def _analyze_document(self, document: DocumentMetadata) -> _DocumentAnalysis:
+        deterministic_extracted = self._extract_structured(document)
+        if self.extraction_provider is None:
+            return _DocumentAnalysis(
+                document=document,
+                extracted=deterministic_extracted,
+                extraction_source="deterministic",
+                classification_reason="structured payload" if deterministic_extracted is not None else "metadata only",
+                provider_usage_logs=[],
+            )
+
+        started = time.perf_counter()
+        provider_name = getattr(self.extraction_provider, "provider_name", self.extraction_provider.__class__.__name__)
+        try:
+            llm_document = self.extraction_provider.extract(document)
+            llm_extracted = self._extract_structured(llm_document)
+        except Exception as exc:
+            return self._fallback_analysis(
+                document=document,
+                deterministic_extracted=deterministic_extracted,
+                provider_name=provider_name,
+                started=started,
+                exc=exc,
+            )
+
+        if llm_extracted is None and deterministic_extracted is not None:
+            return _DocumentAnalysis(
+                document=document,
+                extracted=deterministic_extracted,
+                extraction_source="deterministic_fallback",
+                classification_reason="deterministic fallback: LLM extraction returned no structured payload",
+                provider_usage_logs=[
+                    self._provider_usage_log(provider_name, started),
+                    self._fallback_usage_log("EmptyLlmExtraction"),
+                ],
+            )
+
+        return _DocumentAnalysis(
+            document=llm_document,
+            extracted=llm_extracted,
+            extraction_source="llm_primary",
+            classification_reason="llm primary extraction" if llm_extracted is not None else "metadata only",
+            provider_usage_logs=[self._provider_usage_log(provider_name, started)],
+        )
+
+    def _extract_structured(self, document: DocumentMetadata) -> Any | None:
+        return self.extractor.extract(document)
+
+    def _fallback_analysis(
+        self,
+        *,
+        document: DocumentMetadata,
+        deterministic_extracted: Any | None,
+        provider_name: str,
+        started: float,
+        exc: Exception,
+    ) -> _DocumentAnalysis:
+        reason = self._fallback_error_name(exc)
+        return _DocumentAnalysis(
+            document=document,
+            extracted=deterministic_extracted,
+            extraction_source="deterministic_fallback",
+            classification_reason=f"deterministic fallback after LLM extraction failure: {reason}",
+            provider_usage_logs=[
+                self._provider_usage_log(provider_name, started, error=reason),
+                self._fallback_usage_log(reason),
+            ],
+        )
+
+    def _provider_usage_log(self, provider_name: str, started: float, error: str | None = None) -> ProviderUsageLog:
+        return ProviderUsageLog(
+            providerCategory="LLM",
+            providerName=provider_name,
+            operation="extract_document",
+            latencyMs=(time.perf_counter() - started) * 1000,
+            error=error,
+        )
+
+    def _fallback_usage_log(self, reason: str) -> ProviderUsageLog:
+        return ProviderUsageLog(
+            providerCategory="EXTRACTOR",
+            providerName="structured_payload",
+            operation="deterministic_fallback",
+            error=reason,
+        )
+
+    def _fallback_error_name(self, exc: Exception) -> str:
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+            return "RateLimitError"
+        if isinstance(exc, httpx.HTTPStatusError):
+            return "HTTPStatusError"
+        if isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+            return "TimeoutError"
+        if isinstance(exc, json.JSONDecodeError):
+            return "JSONDecodeError"
+        if isinstance(exc, (ValidationError, ValueError, TypeError)):
+            return exc.__class__.__name__
+        return exc.__class__.__name__
 
     def _typed(self, extracted_by_type: dict[DocumentType, Any], document_type: DocumentType, model):
         value = extracted_by_type.get(document_type)
