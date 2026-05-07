@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.ai_assessment.enums import DocumentType, HolderType
+from app.ai_assessment.providers.ocr import OcrTextProvider
 from app.ai_assessment.schemas import DocumentMetadata
 
 
@@ -18,11 +19,13 @@ class OpenAiDocumentExtractionProvider:
         api_key: str,
         model: str = "gpt-5.5",
         base_url: str = "https://api.openai.com/v1",
+        ocr_provider: OcrTextProvider | None = None,
         timeout: float = 120.0,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
+        self.ocr_provider = ocr_provider
         self.timeout = timeout
 
     def extract(self, document: DocumentMetadata) -> DocumentMetadata:
@@ -218,6 +221,10 @@ class OpenAiDocumentExtractionProvider:
         }
 
     def _document_text(self, document: DocumentMetadata) -> str:
+        if self.ocr_provider is not None and document.storagePath:
+            text = self.ocr_provider.extract_text(document)
+            if text.strip():
+                return text
         if document.storagePath:
             path = Path(document.storagePath)
             if path.exists():
