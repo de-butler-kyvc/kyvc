@@ -24,6 +24,8 @@ type ProfileForm = {
   phone: string;
 };
 
+type Mode = "loading" | "view" | "register";
+
 const DEFAULTS: ProfileForm = {
   corporateName: "",
   corporateType: "",
@@ -48,6 +50,8 @@ const CORP_TYPE_OPTIONS = [
 export default function CorporateProfilePage() {
   const router = useRouter();
   const openPostcode = useDaumPostcode();
+  const [mode, setMode] = useState<Mode>("loading");
+  const [profile, setProfile] = useState<ProfileForm | null>(null);
   const [corporateId, setCorporateId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -102,10 +106,17 @@ export default function CorporateProfilePage() {
           next.corporateType = window.localStorage.getItem("kyvc.corporateType") ?? "";
         }
         reset(next);
+        if (c?.corporateId) {
+          setProfile(next);
+          setMode("view");
+        } else {
+          setMode("register");
+        }
       })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
+      .catch((err: unknown) => {
+        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.");
+        setMode("register");
+      });
   }, [reset]);
 
   const onSearchAddress = () =>
@@ -144,13 +155,14 @@ export default function CorporateProfilePage() {
         })
         .catch(() => undefined);
     }
+    setProfile(data);
     return id;
   };
 
   const onSaveDraft = handleSubmit(async (data) => {
     try {
       await persist(data);
-      setMessage("임시 저장되었습니다.");
+      setMode("view");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
     }
@@ -164,6 +176,18 @@ export default function CorporateProfilePage() {
       setError(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
     }
   });
+
+  if (mode === "loading") {
+    return (
+      <div className="mx-auto w-full max-w-[920px] px-9 py-8 text-[13px] text-muted-foreground">
+        불러오는 중...
+      </div>
+    );
+  }
+
+  if (mode === "view" && profile) {
+    return <ProfileView profile={profile} />;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5 px-9 py-8">
@@ -296,6 +320,62 @@ export default function CorporateProfilePage() {
           </form>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function ProfileView({ profile }: { profile: ProfileForm }) {
+  const fullAddress = [profile.zonecode && `(${profile.zonecode})`, profile.baseAddress]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5 px-9 py-8">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="text-[22px] font-bold tracking-[-0.4px] text-foreground">
+          법인 기본정보
+        </h1>
+        <p className="text-[13px] text-muted-foreground">
+          등록된 법인 기본정보입니다.
+        </p>
+      </div>
+
+      <Card>
+        <CardContent className="flex flex-col gap-7 px-7 py-7">
+          <section className="flex flex-col gap-4">
+            <h2 className="text-[15px] font-bold text-foreground">법인 식별정보</h2>
+            <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
+              <ViewField label="법인명" value={profile.corporateName} />
+              <ViewField label="법인 유형" value={profile.corporateType} />
+              <ViewField label="사업자등록번호" value={profile.businessNo} />
+              <ViewField label="법인등록번호" value={profile.corporateNo} />
+              <ViewField label="대표자명" value={profile.representativeName} />
+            </div>
+          </section>
+
+          <div className="h-px w-full bg-border" />
+
+          <section className="flex flex-col gap-4">
+            <h2 className="text-[15px] font-bold text-foreground">주소 및 업종</h2>
+            <ViewField label="본점 주소" value={fullAddress} />
+            <ViewField label="상세 주소" value={profile.detailAddress} />
+            <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
+              <ViewField label="업종" value={profile.industry} />
+              <ViewField label="연락처" value={profile.phone} />
+            </div>
+          </section>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ViewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      <div className="flex h-9 items-center rounded-md border border-border bg-secondary px-3 text-[13px] text-foreground">
+        {value || "-"}
+      </div>
     </div>
   );
 }
