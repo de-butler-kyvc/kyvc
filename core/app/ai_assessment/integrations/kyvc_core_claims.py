@@ -4,7 +4,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
-from app.ai_assessment.enums import AssessmentStatus, DocumentType, LegalEntityType
+from app.ai_assessment.enums import DocumentType, LegalEntityType
 from app.ai_assessment.schemas import DocumentMetadata, KycAssessment
 
 
@@ -48,8 +48,8 @@ def build_core_kyc_claims(
     assessment: KycAssessment,
     documents: list[DocumentMetadata] | None = None,
     *,
+    assurance_level: str,
     jurisdiction: str = "KR",
-    assurance_level: str | None = None,
     include_assessment_status: bool = False,
 ) -> dict[str, Any]:
     """Build claims for core's legal-entity SD-JWT issuer.
@@ -64,7 +64,7 @@ def build_core_kyc_claims(
     claims: dict[str, Any] = {
         "kyc": {
             "jurisdiction": jurisdiction,
-            "assuranceLevel": assurance_level or _assurance_level(assessment.status),
+            "assuranceLevel": assurance_level,
         },
         "legalEntity": {
             "type": CORE_LEGAL_ENTITY_TYPE_MAP.get(assessment.legalEntityType, assessment.legalEntityType.value),
@@ -126,14 +126,6 @@ def _document_bytes(document: DocumentMetadata) -> bytes:
         return Path(document.storagePath).read_bytes()
     seed = document.sha256 or document.documentId
     return str(seed).encode("utf-8")
-
-
-def _assurance_level(status: AssessmentStatus) -> str:
-    if status == AssessmentStatus.NORMAL:
-        return "STANDARD"
-    if status == AssessmentStatus.MANUAL_REVIEW_REQUIRED:
-        return "BASIC"
-    return "LOW"
 
 
 def _establishment_purpose(payload: dict[str, Any]) -> dict[str, Any]:

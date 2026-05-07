@@ -270,7 +270,7 @@ def test_core_sdjwt_issuance_from_generated_ai_claims():
     application = _normal_application()
     documents = _normal_documents()
     assessment = _assess(application, documents)
-    claims = build_core_kyc_claims(assessment, documents)
+    claims = build_core_kyc_claims(assessment, documents, assurance_level="STANDARD")
     issuer_key = generate_private_key()
     issuer = IssuerService("rIssuer", issuer_key)
     holder_did = did_from_account("rHolder")
