@@ -38,7 +38,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/corporate/kyc/applications/{kycId}/documents")
 @RequiredArgsConstructor
-@Tag(name = "KYC 문서", description = "KYC 문서 업로드 및 조회 API")
+@Tag(name = "KYC 신청 / 서류", description = "KYC 신청, 필수서류, 문서 업로드, 제출, 완료 및 Credential Offer API")
 public class KycDocumentController {
 
     private final KycDocumentService kycDocumentService;

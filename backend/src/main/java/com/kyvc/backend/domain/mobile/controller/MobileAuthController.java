@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/mobile/auth")
 @RequiredArgsConstructor
-@Tag(name = "모바일 인증", description = "모바일 로그인 API")
+@Tag(name = "인증 / 계정", description = "사용자 인증, 계정, 개발 토큰, 모바일 로그인 및 비밀번호 재설정 API")
 public class MobileAuthController {
 
     private final MobileAuthService mobileAuthService;

@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/internal/core")
 @RequiredArgsConstructor
-@Tag(name = "Core Callback", description = "Core Callback 수신 API")
+@Tag(name = "Core 연동 / Callback", description = "Core 내부 헬스체크, Issuer 정책, AI/VC/XRPL/VP callback 및 개발용 E2E API")
 public class CoreCallbackController {
 
     private final CoreCallbackService coreCallbackService;

@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/user")
 @RequiredArgsConstructor
-@Tag(name = "법인 사용자 대시보드", description = "로그인 사용자의 법인 사용자 대시보드 API")
+@Tag(name = "법인 사용자", description = "법인 사용자 대시보드, 법인 기본정보, 대표자, 대리인 관리 API")
 public class UserDashboardController {
 
     private final UserDashboardService userDashboardService;

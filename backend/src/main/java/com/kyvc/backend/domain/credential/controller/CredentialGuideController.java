@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/corporate/credentials")
 @RequiredArgsConstructor
-@Tag(name = "VC 발급 안내", description = "VC 발급 안내 조회 API")
+@Tag(name = "KYC 신청 / 서류", description = "KYC 신청, 필수서류, 문서 업로드, 제출, 완료 및 Credential Offer API")
 public class CredentialGuideController {
 
     private final CredentialGuideService credentialGuideService;

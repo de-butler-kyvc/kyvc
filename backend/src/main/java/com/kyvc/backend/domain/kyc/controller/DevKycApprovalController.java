@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/internal/dev/kyc")
 @RequiredArgsConstructor
-@Tag(name = "개발/E2E KYC 임시 승인", description = "개발/E2E 테스트용 KYC 임시 승인 API")
+@Tag(name = "Core 연동 / Callback", description = "Core 내부 헬스체크, Issuer 정책, AI/VC/XRPL/VP callback 및 개발용 E2E API")
 public class DevKycApprovalController {
 
     private final DevKycApprovalService devKycApprovalService;

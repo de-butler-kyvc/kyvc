@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/mobile")
 @RequiredArgsConstructor
-@Tag(name = "Mobile VP", description = "모바일 QR 및 VP API")
+@Tag(name = "VP / QR 검증", description = "QR 해석, VP 요청 조회, 제출 가능 VC 조회, VP 제출 및 검증 결과 API")
 public class MobileVpController {
 
     private final VpVerificationService vpVerificationService;

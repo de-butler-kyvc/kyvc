@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth/dev")
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "kyvc.dev-token", name = "enabled", havingValue = "true")
-@Tag(name = "개발 인증", description = "로컬 환경 Dev Token 발급 API")
+@Tag(name = "인증 / 계정", description = "사용자 인증, 계정, 개발 토큰, 모바일 로그인 및 비밀번호 재설정 API")
 public class DevAuthController {
 
     private final AuthService authService;

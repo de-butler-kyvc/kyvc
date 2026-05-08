@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/user")
 @RequiredArgsConstructor
-@Tag(name = "Credential", description = "사용자 Credential 조회 API")
+@Tag(name = "VC / Wallet", description = "모바일 기기, Wallet, Credential Offer 수락, VC 보관 및 조회 API")
 public class CredentialController {
 
     private final CredentialService credentialService;
@@ -95,4 +95,3 @@ public class CredentialController {
         return CommonResponseFactory.success(credentialService.getCredentialOffer(userDetails, kycId));
     }
 }
-

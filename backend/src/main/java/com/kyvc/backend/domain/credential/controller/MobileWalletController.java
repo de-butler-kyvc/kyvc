@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/mobile/wallet")
 @RequiredArgsConstructor
-@Tag(name = "Mobile Wallet", description = "모바일 Wallet Credential API")
+@Tag(name = "VC / Wallet", description = "모바일 기기, Wallet, Credential Offer 수락, VC 보관 및 조회 API")
 public class MobileWalletController {
 
     private final MobileWalletService mobileWalletService;
@@ -152,4 +152,3 @@ public class MobileWalletController {
         );
     }
 }
-
