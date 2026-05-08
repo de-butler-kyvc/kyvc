@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
         "/api/user/kyc/applications/{kycId}"
 })
 @RequiredArgsConstructor
-@Tag(name = "KYC 결과 조회", description = "KYC 심사 결과 요약, 완료 화면 조회 API")
+@Tag(name = "KYC 신청 / 서류", description = "KYC 신청, 필수서류, 문서 업로드, 제출, 완료 및 Credential Offer API")
 public class KycResultController {
 
     private final KycResultService kycResultService;

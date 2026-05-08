@@ -1,0 +1,38 @@
+package com.kyvc.backend.domain.vp.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.time.LocalDateTime;
+
+/**
+ * VP 요청 응답
+ *
+ * @param requestId VP 요청 ID
+ * @param requesterName 요청자명
+ * @param purpose 제출 목적
+ * @param requiredClaims 요구 Claim JSON
+ * @param challenge VP 요청 challenge
+ * @param nonce VP 요청 nonce
+ * @param expiresAt 요청 만료 일시
+ * @param status VP 요청 상태
+ */
+@Schema(description = "VP 요청 응답")
+public record VpRequestResponse(
+        @Schema(description = "VP 요청 ID", example = "vp-req-001")
+        String requestId, // VP 요청 ID
+        @Schema(description = "요청자명", example = "KYVC Verifier")
+        String requesterName, // 요청자명
+        @Schema(description = "제출 목적", example = "KYC 제출 증빙")
+        String purpose, // 제출 목적
+        @Schema(description = "요구 Claim JSON", example = "[\"businessName\",\"representativeName\"]")
+        String requiredClaims, // 요구 Claim JSON
+        @Schema(description = "VP 요청 challenge", example = "challenge-001")
+        String challenge, // VP 요청 challenge
+        @Schema(description = "VP 요청 nonce", example = "nonce-001")
+        String nonce, // VP 요청 nonce
+        @Schema(description = "요청 만료 일시", example = "2026-05-07T23:59:59")
+        LocalDateTime expiresAt, // 요청 만료 일시
+        @Schema(description = "VP 요청 상태", example = "REQUESTED")
+        String status // VP 요청 상태
+) {
+}

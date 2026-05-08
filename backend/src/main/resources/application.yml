@@ -92,3 +92,12 @@ kyvc:
     max-page-size: ${KYVC_NOTIFICATION_MAX_PAGE_SIZE:100}
   mail:
     from: ${KYVC_MAIL_FROM:}
+  core:
+    mode: ${KYVC_CORE_MODE:mock}
+    base-url: ${KYVC_CORE_BASE_URL:https://dev-core-kyvc.khuoo.synology.me}
+    connect-timeout-millis: ${KYVC_CORE_CONNECT_TIMEOUT_MILLIS:3000}
+    read-timeout-millis: ${KYVC_CORE_READ_TIMEOUT_MILLIS:10000}
+    dev-seed-enabled: ${KYVC_CORE_DEV_SEED_ENABLED:false}
+    failure-fallback-enabled: ${KYVC_CORE_FAILURE_FALLBACK_ENABLED:false}
+    api-key: ${KYVC_CORE_API_KEY:}
+    callback-base-url: ${KYVC_CORE_CALLBACK_BASE_URL:}

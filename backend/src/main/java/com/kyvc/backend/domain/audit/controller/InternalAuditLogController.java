@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/internal/audit-logs")
 @RequiredArgsConstructor
-@Tag(name = "내부 감사로그", description = "내부 감사로그 기록 API")
+@Tag(name = "공통 / 알림 / 코드", description = "공통코드, 사용자 알림, 내부 알림 및 감사로그 API")
 public class InternalAuditLogController {
 
     private final AuditLogService auditLogService;

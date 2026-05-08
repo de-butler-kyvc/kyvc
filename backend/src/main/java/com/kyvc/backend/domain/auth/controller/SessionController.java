@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/common/session")
 @RequiredArgsConstructor
-@Tag(name = "세션", description = "현재 로그인 세션 조회 API")
+@Tag(name = "인증 / 계정", description = "사용자 인증, 계정, 개발 토큰, 모바일 로그인 및 비밀번호 재설정 API")
 public class SessionController {
 
     private final SessionService sessionService;

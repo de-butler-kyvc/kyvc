@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth/mfa")
 @RequiredArgsConstructor
-@Tag(name = "MFA", description = "MFA challenge 생성 및 검증 API")
+@Tag(name = "인증 / 계정", description = "사용자 인증, 계정, 개발 토큰, 모바일 로그인 및 비밀번호 재설정 API")
 public class MfaController {
 
     private final MfaService mfaService;

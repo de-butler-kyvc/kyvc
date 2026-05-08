@@ -1,9 +1,13 @@
 package com.kyvc.backend.domain.credential.repository;
 
 import com.kyvc.backend.domain.credential.domain.Credential;
+import com.kyvc.backend.global.exception.ApiException;
+import com.kyvc.backend.global.exception.ErrorCode;
+import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,5 +40,55 @@ public class CredentialRepositoryImpl implements CredentialRepository {
             Long corporateId // 법인 ID
     ) {
         return credentialJpaRepository.findByCorporateIdOrderByCreatedAtDesc(corporateId);
+    }
+
+    // Credential ID 기준 Optional 조회
+    @Override
+    public Optional<Credential> findById(
+            Long credentialId // Credential ID
+    ) {
+        return credentialJpaRepository.findByCredentialId(credentialId);
+    }
+
+    // Credential ID 기준 조회
+    @Override
+    public Credential getById(
+            Long credentialId // Credential ID
+    ) {
+        return findById(credentialId)
+                .orElseThrow(() -> new ApiException(ErrorCode.CREDENTIAL_NOT_FOUND));
+    }
+
+    // Credential 저장
+    @Override
+    public Credential save(
+            Credential credential // 저장 대상 Credential
+    ) {
+        return credentialJpaRepository.save(credential);
+    }
+
+    // Wallet 저장 Credential 목록 조회
+    @Override
+    public List<Credential> findWalletCredentialsByCorporateId(
+            Long corporateId // 법인 ID
+    ) {
+        return credentialJpaRepository.findAllByCorporateIdAndWalletSavedYnOrderByWalletSavedAtDesc(
+                corporateId,
+                KyvcEnums.Yn.Y.name()
+        );
+    }
+
+    // VP 제출 가능 Credential 목록 조회
+    @Override
+    public List<Credential> findVpEligibleCredentialsByCorporateId(
+            Long corporateId // 법인 ID
+    ) {
+        return credentialJpaRepository
+                .findAllByCorporateIdAndWalletSavedYnAndCredentialStatusAndExpiresAtGreaterThanEqualOrderByIssuedAtDesc(
+                        corporateId,
+                        KyvcEnums.Yn.Y.name(),
+                        KyvcEnums.CredentialStatus.VALID,
+                        LocalDateTime.now()
+                );
     }
 }

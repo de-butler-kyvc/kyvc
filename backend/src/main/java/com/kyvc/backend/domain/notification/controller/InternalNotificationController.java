@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/internal/notifications")
 @RequiredArgsConstructor
-@Tag(name = "내부 알림", description = "내부 알림 발송 API")
+@Tag(name = "공통 / 알림 / 코드", description = "공통코드, 사용자 알림, 내부 알림 및 감사로그 API")
 public class InternalNotificationController {
 
     private final NotificationService notificationService;

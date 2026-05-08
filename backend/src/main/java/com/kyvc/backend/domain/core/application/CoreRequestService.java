@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 // Core 요청 추적 서비스
 @Service
 @Transactional
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CoreRequestService {
 
     private final CoreRequestRepository coreRequestRepository;
+    private final CorePayloadSanitizer corePayloadSanitizer;
 
     // AI 심사 요청 생성
     public CoreRequest createAiReviewRequest(
@@ -73,17 +76,17 @@ public class CoreRequestService {
             String requestPayloadJson // 요청 Payload JSON
     ) {
         CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
-        coreRequest.updateRequestPayloadJson(requestPayloadJson);
+        coreRequest.updateRequestPayloadJson(corePayloadSanitizer.sanitizePayload(requestPayloadJson));
         return coreRequestRepository.save(coreRequest);
     }
 
-    // 요청 응답 상태 반영
+    // 요청 수신 상태 반영
     public CoreRequest markRequested(
             String coreRequestId, // Core 요청 ID
             String responsePayloadJson // 응답 Payload JSON
     ) {
         CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
-        coreRequest.markRequested(responsePayloadJson);
+        coreRequest.markRequested(corePayloadSanitizer.sanitizePayload(responsePayloadJson));
         return coreRequestRepository.save(coreRequest);
     }
 
@@ -96,23 +99,33 @@ public class CoreRequestService {
         return coreRequestRepository.save(coreRequest);
     }
 
-    // Callback 성공 상태 반영
+    // 성공 상태 반영
     public CoreRequest markCallbackSuccess(
             String coreRequestId, // Core 요청 ID
             String responsePayloadJson // 성공 Payload JSON
     ) {
         CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
-        coreRequest.markSuccess(responsePayloadJson);
+        coreRequest.markSuccess(corePayloadSanitizer.sanitizePayload(responsePayloadJson));
         return coreRequestRepository.save(coreRequest);
     }
 
-    // Callback 실패 상태 반영
+    // 실패 상태 반영
     public CoreRequest markCallbackFailed(
             String coreRequestId, // Core 요청 ID
             String errorMessage // 실패 메시지
     ) {
         CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
-        coreRequest.markFailed(errorMessage);
+        coreRequest.markFailed(corePayloadSanitizer.sanitizeText(errorMessage));
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // Timeout 상태 반영
+    public CoreRequest markTimeout(
+            String coreRequestId, // Core 요청 ID
+            String errorMessage // Timeout 메시지
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markTimeout(corePayloadSanitizer.sanitizeText(errorMessage));
         return coreRequestRepository.save(coreRequest);
     }
 
@@ -125,6 +138,28 @@ public class CoreRequestService {
     }
 
     // 완료 처리 여부 조회
+    @Transactional(readOnly = true)
+    public Optional<CoreRequest> findLatestVcIssuanceRequest(
+            Long credentialId // Credential ID
+    ) {
+        return coreRequestRepository.findLatestByTarget(
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                KyvcEnums.CoreRequestType.VC_ISSUE
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<CoreRequest> findLatestXrplTransactionRequest(
+            Long credentialId // Credential ID
+    ) {
+        return coreRequestRepository.findLatestByTarget(
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                KyvcEnums.CoreRequestType.XRPL_TX
+        );
+    }
+
     @Transactional(readOnly = true)
     public boolean isAlreadyCompleted(
             String coreRequestId // Core 요청 ID
@@ -139,7 +174,12 @@ public class CoreRequestService {
             Long targetId, // Core 대상 ID
             String requestPayloadJson // 요청 Payload JSON
     ) {
-        CoreRequest coreRequest = CoreRequest.create(requestType, targetType, targetId, requestPayloadJson);
+        CoreRequest coreRequest = CoreRequest.create(
+                requestType,
+                targetType,
+                targetId,
+                corePayloadSanitizer.sanitizePayload(requestPayloadJson)
+        );
         return coreRequestRepository.save(coreRequest);
     }
 }

@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/mobile")
 @RequiredArgsConstructor
-@Tag(name = "모바일 기기 및 보안 설정", description = "모바일 기기 등록 및 보안 설정 API")
+@Tag(name = "VC / Wallet", description = "모바일 기기, Wallet, Credential Offer 수락, VC 보관 및 조회 API")
 public class MobileDeviceController {
 
     private final MobileDeviceService mobileDeviceService;

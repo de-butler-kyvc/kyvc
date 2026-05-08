@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/common/terms/consents")
 @RequiredArgsConstructor
-@Tag(name = "약관 동의", description = "로그인 사용자의 약관 동의 조회와 저장 API")
+@Tag(name = "인증 / 계정", description = "사용자 인증, 계정, 개발 토큰, 모바일 로그인 및 비밀번호 재설정 API")
 public class TermsConsentController {
 
     private final TermsConsentService termsConsentService;

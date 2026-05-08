@@ -66,7 +66,7 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers("/api/internal/core/**").permitAll()
+                        .requestMatchers("/api/internal/core/**", "/api/internal/dev/**").permitAll()
                         .requestMatchers("/api/admin/**").denyAll()
                         .requestMatchers(
                                 "/api/auth/logout",

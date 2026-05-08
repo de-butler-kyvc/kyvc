@@ -9,7 +9,8 @@ import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,10 +19,11 @@ import org.springframework.util.StringUtils;
 import java.util.Locale;
 
 // 감사로그 서비스
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuditLogService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuditLogService.class);
 
     private final AuditLogRepository auditLogRepository;
 
