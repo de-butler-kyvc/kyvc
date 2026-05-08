@@ -1,24 +1,24 @@
+import { Icon } from "@/components/design/icons";
+
 type HeaderProps = {
   channel: string;
-  channelTag: string;
+  channelTag?: string;
+  initial?: string;
 };
 
-export function Header({ channel }: HeaderProps) {
+export function Header({ channel, initial = "K" }: HeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-10">
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-[30px] items-center justify-center rounded-lg bg-primary text-[14px] font-bold text-primary-foreground">
-          K
-        </div>
-        <div className="text-[16px] font-bold tracking-[-0.4px] text-foreground">
-          KYvC
-        </div>
-        <div className="ml-3 hidden text-[12px] text-muted-foreground sm:block">
-          {channel}
-        </div>
-      </div>
-      <div className="flex size-8 items-center justify-center rounded-full border border-accent-border bg-accent text-[12px] font-bold text-accent-foreground">
-        K
+    <header className="dash-topbar">
+      <div className="dash-topbar-title">{channel}</div>
+      <div className="dash-topbar-right">
+        <button className="icon-btn" title="Search" type="button">
+          <Icon.Search />
+        </button>
+        <button className="icon-btn" title="Notifications" type="button">
+          <Icon.Bell />
+        </button>
+        <div style={{ width: 1, height: 22, background: "var(--border)" }} />
+        <div className="avatar">{initial}</div>
       </div>
     </header>
   );

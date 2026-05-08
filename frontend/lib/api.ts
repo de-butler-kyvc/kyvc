@@ -1,3 +1,5 @@
+import axios, { type AxiosInstance } from "axios";
+
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 const TOKEN_KEY = "kyvc.accessToken";
@@ -48,37 +50,68 @@ type RequestInput = {
   formData?: FormData;
 };
 
+function compactParams(query?: Record<string, string | number | boolean | undefined>) {
+  if (!query) return undefined;
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null) out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function isEnvelope<T>(data: unknown): data is Envelope<T> {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "success" in data &&
+    typeof (data as Envelope<T>).success === "boolean"
+  );
+}
+
+const apiClient: AxiosInstance = axios.create({
+  baseURL: BASE_URL,
+  validateStatus: () => true,
+  // withCredentials: true
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = session.token;
+  if (token) {
+    config.headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (config.data instanceof FormData) {
+    config.headers.delete("Content-Type");
+  }
+  return config;
+});
+
 export async function api<T>(path: string, input: RequestInput = {}): Promise<T> {
   const { method = "GET", query, body, formData } = input;
-  const url = new URL(BASE_URL + path, BASE_URL || "http://localhost");
-  if (query) {
-    for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  let res;
+  try {
+    res = await apiClient.request<unknown>({
+      url: path,
+      method,
+      params: compactParams(query),
+      data: formData ?? (body !== undefined ? body : undefined)
+    });
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      throw new ApiError(0, "NETWORK", err.message || "네트워크 오류");
     }
+    throw err;
   }
-
-  const headers: Record<string, string> = {};
-  const token = session.token;
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-
-  const res = await fetch(BASE_URL ? url.toString() : path + url.search, {
-    method,
-    headers,
-    body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined)
-  });
 
   let payload: Envelope<T> | null = null;
-  try {
-    payload = (await res.json()) as Envelope<T>;
-  } catch {
-    /* 빈 응답 허용 */
+  if (isEnvelope<T>(res.data)) {
+    payload = res.data;
   }
 
-  if (!res.ok || (payload && payload.success === false)) {
+  const status = res.status;
+  if (status < 200 || status >= 300 || (payload && payload.success === false)) {
     throw new ApiError(
-      res.status,
-      payload?.code ?? `HTTP_${res.status}`,
+      status,
+      payload?.code ?? `HTTP_${status}`,
       payload?.message ?? res.statusText
     );
   }
@@ -93,7 +126,19 @@ export type LoginResponse = {
   user: { userId: number; email: string; name?: string; userType?: string };
 };
 
+export type SignupResponse = {
+  userId: number;
+  email: string;
+  userType?: string;
+  userStatus?: string;
+};
+
 export const auth = {
+  signup: (email: string, password: string) =>
+    api<SignupResponse>("/api/auth/signup/corporate", {
+      method: "POST",
+      body: { email, password }
+    }),
   login: (email: string, password: string) =>
     api<LoginResponse>("/api/auth/login", {
       method: "POST",
@@ -115,12 +160,33 @@ export const auth = {
 };
 
 // ── Corporate ────────────────────────────────────────────────────────
-export type CorporateBasicInfo = {
+/** GET /api/user/corporates/me — 백엔드 CorporateResponse와 대응 */
+export type CorporateProfile = {
+  corporateId: number;
+  userId?: number;
   corporateName: string;
-  businessNo: string;
-  corporateNo: string;
+  businessRegistrationNo: string;
+  corporateRegistrationNo?: string | null;
+  representativeName: string;
+  representativePhone?: string | null;
+  representativeEmail?: string | null;
+  address?: string | null;
+  businessType?: string | null;
+  corporateStatusCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** POST /api/user/corporates, PUT .../basic-info 요청 본문 */
+export type CorporateBasicInfoBody = {
+  corporateName: string;
+  representativeName: string;
+  businessRegistrationNo: string;
+  corporateRegistrationNo: string;
   address: string;
-  businessType: string;
+  businessType?: string;
+  representativePhone?: string;
+  representativeEmail?: string;
 };
 export type Representative = {
   name: string;
@@ -140,17 +206,15 @@ export type AgentListItem = {
   authorityScope: string;
   status: string;
 };
-export type CorporateProfile = {
-  corporateId?: number;
-  corporate?: CorporateBasicInfo & { corporateId?: number };
-  representative?: Representative;
-  agent?: Agent;
-};
 
 export const corporate = {
   dashboard: () =>
     api<{
-      corporate?: { corporateId?: number; corporateName?: string; businessNo?: string };
+      corporate?: {
+        corporateId?: number;
+        corporateName?: string;
+        businessNo?: string;
+      };
       kycSummary?: {
         total?: number;
         inReview?: number;
@@ -158,7 +222,11 @@ export const corporate = {
         approved?: number;
       };
       credentialSummary?: { issued?: number };
-      notifications?: Array<{ message: string; createdAt: string; severity?: string }>;
+      notifications?: Array<{
+        message: string;
+        createdAt: string;
+        severity?: string;
+      }>;
       recentApplications?: Array<{
         kycId: number;
         applicationNo?: string;
@@ -167,31 +235,31 @@ export const corporate = {
         status?: string;
       }>;
     }>("/api/user/dashboard"),
-  create: (body: CorporateBasicInfo) =>
+  create: (body: CorporateBasicInfoBody) =>
     api<{ corporateId: number }>("/api/user/corporates", {
       method: "POST",
-      body
+      body,
     }),
   me: () => api<CorporateProfile>("/api/user/corporates/me"),
-  updateBasicInfo: (corporateId: number, body: CorporateBasicInfo) =>
+  updateBasicInfo: (corporateId: number, body: CorporateBasicInfoBody) =>
     api<{ updated: boolean }>(
       `/api/user/corporates/${corporateId}/basic-info`,
-      { method: "PUT", body }
+      { method: "PUT", body },
     ),
   updateRepresentative: (corporateId: number, body: Representative) =>
     api<{ updated: boolean }>(
       `/api/user/corporates/${corporateId}/representative`,
-      { method: "PUT", body }
+      { method: "PUT", body },
     ),
   updateAgent: (corporateId: number, body: Agent) =>
-    api<{ updated: boolean }>(
-      `/api/user/corporates/${corporateId}/agent`,
-      { method: "PUT", body }
-    ),
+    api<{ updated: boolean }>(`/api/user/corporates/${corporateId}/agent`, {
+      method: "PUT",
+      body,
+    }),
   agents: (corporateId: number) =>
     api<{ items: AgentListItem[] }>(
-      `/api/user/corporates/${corporateId}/agents`
-    )
+      `/api/user/corporates/${corporateId}/agents`,
+    ),
 };
 
 // ── KYC ──────────────────────────────────────────────────────────────
@@ -228,7 +296,7 @@ export const kyc = {
   detail: (kycId: number) =>
     api<{
       application: { kycId: number; status: string; corporateType?: string; submittedAt?: string };
-      corporate?: CorporateBasicInfo;
+      corporate?: CorporateProfile;
       documents: KycDocument[];
       statusTimeline?: Array<{ status: string; at: string }>;
     }>(`/api/user/kyc/applications/${kycId}`),
@@ -255,7 +323,7 @@ export const kyc = {
     ),
   submissionSummary: (kycId: number) =>
     api<{
-      corporate?: CorporateBasicInfo;
+      corporate?: CorporateProfile;
       documents: KycDocument[];
       missingItems: string[];
       storeOption?: string;

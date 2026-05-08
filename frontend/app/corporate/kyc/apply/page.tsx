@@ -38,14 +38,11 @@ export default function KycApplyStartPage() {
     corpApi
       .me()
       .then((res) => {
-        const c = res.corporate as
-          | { corporateId?: number; corporateName?: string; businessNo?: string }
-          | undefined;
         setIdentity({
-          corporateId: c?.corporateId,
-          corporateName: c?.corporateName ?? "",
-          businessNo: c?.businessNo ?? "",
-          representativeName: res.representative?.name ?? ""
+          corporateId: res.corporateId,
+          corporateName: res.corporateName ?? "",
+          businessNo: res.businessRegistrationNo ?? "",
+          representativeName: res.representativeName ?? ""
         });
       })
       .catch((err: unknown) =>

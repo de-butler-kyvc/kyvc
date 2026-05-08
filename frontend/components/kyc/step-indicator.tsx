@@ -1,6 +1,4 @@
-import { Check } from "lucide-react";
-
-import { cn } from "@/lib/utils";
+import * as React from "react";
 
 const STEPS = [
   { label: "시작" },
@@ -14,35 +12,20 @@ export type KycStepNumber = 1 | 2 | 3 | 4 | 5;
 
 export function StepIndicator({ current }: { current: KycStepNumber }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="stepper">
       {STEPS.map((s, i) => {
         const idx = i + 1;
         const done = idx < current;
         const active = idx === current;
+        const cls = active ? "active" : done ? "done" : "";
         return (
-          <div key={s.label} className="flex items-center gap-2">
-            <div
-              className={cn(
-                "flex size-6 items-center justify-center rounded-full text-[11px] font-bold",
-                done && "bg-success text-white",
-                active && "bg-primary text-white",
-                !done && !active && "bg-secondary text-muted-foreground"
-              )}
-            >
-              {done ? <Check className="size-3.5" /> : idx}
+          <React.Fragment key={s.label}>
+            <div className={`stepper-item ${cls}`}>
+              <div className="stepper-num">{done ? "✓" : idx}</div>
+              <div className="stepper-label">{s.label}</div>
             </div>
-            <span
-              className={cn(
-                "text-[13px]",
-                active ? "font-semibold text-foreground" : "text-muted-foreground"
-              )}
-            >
-              {s.label}
-            </span>
-            {idx < STEPS.length ? (
-              <div className="hidden h-px w-10 bg-border md:block" />
-            ) : null}
-          </div>
+            {idx < STEPS.length ? <div className="stepper-line" /> : null}
+          </React.Fragment>
         );
       })}
     </div>
