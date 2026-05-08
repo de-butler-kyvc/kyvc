@@ -50,7 +50,7 @@ public class CorporateService {
                 normalizeOptional(request.corporateRegistrationNo()),
                 corporateTypeCode,
                 request.establishedDate(),
-                normalizeRequired(request.representativeName()),
+                null,
                 null,
                 null,
                 normalizeOptional(request.address()),
@@ -112,8 +112,7 @@ public class CorporateService {
     ) {
         if (request == null
                 || !StringUtils.hasText(request.corporateName())
-                || !StringUtils.hasText(request.businessRegistrationNo())
-                || !StringUtils.hasText(request.representativeName())) {
+                || !StringUtils.hasText(request.businessRegistrationNo())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }

@@ -6,18 +6,17 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDate;
 
 /**
- * 법인 기본정보 최초 등록 요청
+ * 법인 기본정보 최초등록 요청
  *
  * @param corporateName 법인명
  * @param businessRegistrationNo 사업자등록번호
  * @param corporateRegistrationNo 법인등록번호
  * @param corporateTypeCode 법인 유형 코드
  * @param establishedDate 설립일
- * @param representativeName 대표자명
  * @param address 법인 주소
  * @param website 웹사이트 주소
  */
-@Schema(description = "법인 기본정보 최초 등록 요청")
+@Schema(description = "법인 기본정보 최초등록 요청")
 public record CorporateCreateRequest(
         @Schema(description = "법인명", example = "주식회사 케이와이브이씨")
         @NotBlank(message = "법인명은 필수입니다.")
@@ -31,9 +30,6 @@ public record CorporateCreateRequest(
         String corporateTypeCode, // 법인 유형 코드
         @Schema(description = "설립일", example = "2020-01-01")
         LocalDate establishedDate, // 설립일
-        @Schema(description = "대표자명", example = "홍길동")
-        @NotBlank(message = "대표자명은 필수입니다.")
-        String representativeName, // 대표자명
         @Schema(description = "법인 주소", example = "서울특별시 강남구 테헤란로 1")
         String address, // 법인 주소
         @Schema(description = "웹사이트 주소", example = "https://kyvc.local")

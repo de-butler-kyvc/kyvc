@@ -70,6 +70,8 @@ public class AuthService {
         return new CorporateSignupResponse(
                 savedUser.getUserId(),
                 savedUser.getEmail(),
+                savedUser.getUserName(),
+                savedUser.getPhone(),
                 savedUser.getUserTypeCode().name(),
                 savedUser.getUserStatusCode().name()
         );
