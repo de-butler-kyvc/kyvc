@@ -96,7 +96,7 @@ def build_sd_payload(payload: dict[str, Any]) -> DisclosureBuildResult:
     disclosures: list[str] = []
     paths: list[str] = []
 
-    for object_name in ("legalEntity", "representative", "establishmentPurpose"):
+    for object_name in ("legalEntity", "representative", "delegate", "delegation", "establishmentPurpose"):
         obj = transformed.get(object_name)
         if isinstance(obj, dict):
             for claim_name in list(obj.keys()):

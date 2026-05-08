@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.ai_assessment.providers.factory import build_document_extraction_provider
 from app.credentials.resolver import (
     CachingDidResolver,
     CompositeDidResolver,
@@ -149,7 +150,18 @@ def _service(
         verification_logger=logger,
         challenge_lookup=repository.get_verification_challenge,
         challenge_marker=repository.mark_verification_challenge_used,
+        document_extraction_provider=_document_extraction_provider(request),
     )
+
+
+def _document_extraction_provider(request: Request):
+    settings = request.app.state.settings
+    if getattr(settings, "llm_provider", "none").lower() in {"none", "structured_payload", "mock"}:
+        return None
+    try:
+        return build_document_extraction_provider(settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/credentials/verify", response_model=VerificationResponse)

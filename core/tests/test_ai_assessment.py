@@ -1,9 +1,11 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 from app.ai_assessment import AssessmentService, build_core_kyc_claims
 from app.ai_assessment.enums import ApplicantRole, AssessmentStatus, DocumentType, HolderType, LegalEntityType
 from app.ai_assessment.schemas import DeclaredBeneficialOwner, DocumentMetadata, KycApplication
 from app.credentials.crypto import decode_compact_jws, generate_private_key
+from app.credentials.delegate_identity import delegate_identity_digest
 from app.credentials.did import did_from_account
 from app.issuer.service import IssuerService
 
@@ -248,6 +250,9 @@ def _poa(seal="seal-a"):
     return {
         "delegatorName": _value("Kim Representative"),
         "delegateName": _value("Lee Delegate"),
+        "delegateAddress": _value("Seoul Gangnam-gu Teheran-ro 1"),
+        "delegateContact": _value("010-1234-5678"),
+        "delegateRrn": _value("900101-1234567"),
         "targetCorporateName": _value("KYvC Labs"),
         "authorityText": _value("KYC application, document submission, VC receipt"),
         "canApplyKyc": _value(True),
@@ -284,6 +289,43 @@ def test_poa_seal_mismatch_requires_manual_review():
 
     assert assessment.status == AssessmentStatus.MANUAL_REVIEW_REQUIRED
     assert "POA_SEAL_CERTIFICATE_MISMATCH" in _codes(assessment.manualReviewReasons)
+
+
+def test_delegate_claim_uses_identity_digest_without_raw_rrn():
+    application = _normal_application(
+        "app-delegate-claims",
+        applicantRole=ApplicantRole.DELEGATE,
+        applicantName="Lee Delegate",
+    )
+    documents = [
+        *_normal_documents("app-delegate-claims"),
+        _doc("poa", DocumentType.POWER_OF_ATTORNEY, _poa("seal-a"), app_id="app-delegate-claims"),
+        _doc("seal", DocumentType.SEAL_CERTIFICATE, _seal_certificate("seal-a"), app_id="app-delegate-claims"),
+    ]
+
+    assessment = _assess(application, documents)
+    claims = build_core_kyc_claims(assessment, documents, assurance_level="STANDARD")
+
+    expected_digest = delegate_identity_digest(
+        name="Lee Delegate",
+        rrn="900101-1234567",
+        address="Seoul Gangnam-gu Teheran-ro 1",
+        contact="010-1234-5678",
+    )
+    assert claims["delegate"] == {
+        "name": "Lee Delegate",
+        "address": "Seoul Gangnam-gu Teheran-ro 1",
+        "contact": "010-1234-5678",
+        "identityDigest": expected_digest,
+        "identityDigestAlgorithm": "sha-256",
+        "identityDigestVersion": "delegate-identity-v1",
+    }
+    assert claims["delegation"]["kycApplication"] is True
+    assert claims["delegation"]["documentSubmission"] is True
+    assert claims["delegation"]["vcReceipt"] is True
+    dumped = json.dumps(assessment.model_dump(mode="json"), ensure_ascii=False)
+    assert "900101-1234567" not in dumped
+    assert "9001011234567" not in dumped
 
 
 def test_same_entity_seal_mismatch_requires_manual_review():
