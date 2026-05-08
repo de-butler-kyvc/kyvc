@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,6 +20,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 // JWT 기반 보안 설정
@@ -32,6 +34,7 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final KyvcCorsProperties kyvcCorsProperties;
+    private final Environment environment;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http // HttpSecurity 설정 객체
@@ -92,51 +95,85 @@ public class SecurityConfig {
         CorsConfiguration corsConfiguration = new CorsConfiguration(); // CORS 설정
         corsConfiguration.setAllowedOrigins(resolveAllowedOrigins());
         corsConfiguration.setAllowedOriginPatterns(resolveAllowedOriginPatterns());
-        corsConfiguration.setAllowCredentials(true);
-        corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        corsConfiguration.setAllowedHeaders(List.of("*"));
-        corsConfiguration.setExposedHeaders(List.of("X-Request-Id"));
+        corsConfiguration.setAllowCredentials(kyvcCorsProperties.isAllowCredentials());
+        corsConfiguration.setAllowedMethods(configuredAllowedMethods());
+        corsConfiguration.setAllowedHeaders(configuredAllowedHeaders());
+        corsConfiguration.setExposedHeaders(configuredExposedHeaders());
+        corsConfiguration.setMaxAge(kyvcCorsProperties.getMaxAge());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource(); // 경로별 CORS 설정 소스
         source.registerCorsConfiguration("/**", corsConfiguration);
         return source;
     }
 
-    // credentials 허용 시 사용할 Origin 목록
     private List<String> resolveAllowedOrigins() {
-        return configuredAllowedOrigins().stream()
-                .map(String::trim)
-                .filter(origin -> !origin.isBlank())
+        return normalizedList(configuredAllowedOrigins()).stream()
                 .filter(origin -> !"*".equals(origin))
                 .toList();
     }
 
-    // credentials 허용 시 사용할 Origin Pattern 목록
     private List<String> resolveAllowedOriginPatterns() {
-        List<String> patterns = new ArrayList<>(configuredAllowedOriginPatterns().stream()
-                .map(String::trim)
-                .filter(pattern -> !pattern.isBlank())
-                .toList()); // Origin Pattern 목록
-        boolean wildcardOriginConfigured = configuredAllowedOrigins().stream()
-                .map(String::trim)
+        List<String> patterns = new ArrayList<>(normalizedList(configuredAllowedOriginPatterns())); // Origin Pattern 목록
+        boolean wildcardOriginConfigured = normalizedList(configuredAllowedOrigins()).stream()
                 .anyMatch("*"::equals); // wildcard Origin 설정 여부
-        if (wildcardOriginConfigured && patterns.isEmpty()) {
+        if (wildcardOriginConfigured && patterns.isEmpty() && isLocalOrDevProfile()) {
             patterns.add("*");
+        }
+        if (isProdProfile()) {
+            return patterns.stream()
+                    .filter(pattern -> !"*".equals(pattern))
+                    .toList();
         }
         return patterns;
     }
 
-    // 설정된 Origin 목록
     private List<String> configuredAllowedOrigins() {
         return kyvcCorsProperties.getAllowedOrigins() == null
                 ? List.of()
                 : kyvcCorsProperties.getAllowedOrigins();
     }
 
-    // 설정된 Origin Pattern 목록
     private List<String> configuredAllowedOriginPatterns() {
         return kyvcCorsProperties.getAllowedOriginPatterns() == null
                 ? List.of()
                 : kyvcCorsProperties.getAllowedOriginPatterns();
+    }
+
+    private List<String> configuredAllowedMethods() {
+        return normalizedList(kyvcCorsProperties.getAllowedMethods());
+    }
+
+    private List<String> configuredAllowedHeaders() {
+        return normalizedList(kyvcCorsProperties.getAllowedHeaders());
+    }
+
+    private List<String> configuredExposedHeaders() {
+        return normalizedList(kyvcCorsProperties.getExposedHeaders());
+    }
+
+    private List<String> normalizedList(
+            List<String> values // 설정값 목록
+    ) {
+        return values == null
+                ? List.of()
+                : values.stream()
+                        .map(String::trim)
+                        .filter(value -> !value.isBlank())
+                        .toList();
+    }
+
+    private boolean isLocalOrDevProfile() {
+        return activeProfiles().stream()
+                .anyMatch(profile -> "local".equals(profile) || "dev".equals(profile));
+    }
+
+    private boolean isProdProfile() {
+        return activeProfiles().stream()
+                .anyMatch("prod"::equals);
+    }
+
+    private List<String> activeProfiles() {
+        return Arrays.stream(environment.getActiveProfiles())
+                .toList();
     }
 }
