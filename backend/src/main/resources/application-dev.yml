@@ -11,6 +11,9 @@ logging:
   level:
     com.kyvc.backend: DEBUG
 
+server:
+  forward-headers-strategy: framework
+
 kyvc:
   jwt:
     issuer: ${KYVC_JWT_ISSUER:kyvc-backend}
