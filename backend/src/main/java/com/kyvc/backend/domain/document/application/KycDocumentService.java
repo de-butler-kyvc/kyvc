@@ -14,7 +14,9 @@ import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
+import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -68,9 +70,15 @@ public class KycDocumentService {
                 storedFile.storedFilePath(),
                 storedFile.contentType(),
                 storedFile.fileSize(),
-                storedFile.fileHash()
+                storedFile.fileHash(),
+                KyvcEnums.UploadActorType.USER,
+                userId
         );
-        return toResponse(kycDocumentRepository.save(kycDocument));
+        try {
+            return toResponse(kycDocumentRepository.save(kycDocument));
+        } catch (DataAccessException exception) {
+            throw new ApiException(ErrorCode.DOCUMENT_SAVE_FAILED, exception);
+        }
     }
 
     // KYC 문서 목록 조회
@@ -185,8 +193,11 @@ public class KycDocumentService {
     private void validateUploadRequest(
             KycDocumentUploadRequest request // KYC 문서 업로드 요청
     ) {
-        if (request == null || !StringUtils.hasText(request.documentTypeCode()) || request.file() == null) {
+        if (request == null || !StringUtils.hasText(request.documentTypeCode())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        if (request.file() == null) {
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_REQUIRED);
         }
     }
 
@@ -195,7 +206,7 @@ public class KycDocumentService {
             MultipartFile file // 업로드 파일
     ) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST);
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_REQUIRED);
         }
         if (file.getSize() > documentStorageProperties.getMaxFileSizeBytes()) {
             throw new ApiException(ErrorCode.DOCUMENT_SIZE_EXCEEDED);
@@ -231,7 +242,7 @@ public class KycDocumentService {
     ) {
         String contentType = file.getContentType();
         if (StringUtils.hasText(contentType) && !documentStorageProperties.isAllowedMimeType(contentType)) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST);
+            throw new ApiException(ErrorCode.DOCUMENT_MIME_TYPE_NOT_ALLOWED);
         }
     }
 

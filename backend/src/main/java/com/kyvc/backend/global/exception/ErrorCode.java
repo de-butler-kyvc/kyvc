@@ -68,10 +68,16 @@ public enum ErrorCode {
     DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DOCUMENT_ACCESS_DENIED", "문서 접근 권한이 없습니다."),
     // HTTP 400 - 필수 문서 누락
     DOCUMENT_REQUIRED_MISSING(HttpStatus.BAD_REQUEST, "DOCUMENT_REQUIRED_MISSING", "필수 문서가 누락되었습니다."),
+    // HTTP 400 - 문서 파일 누락
+    DOCUMENT_FILE_REQUIRED(HttpStatus.BAD_REQUEST, "DOCUMENT_FILE_REQUIRED", "업로드할 문서 파일이 필요합니다."),
     // HTTP 400 - 문서 확장자 오류
     DOCUMENT_INVALID_EXTENSION(HttpStatus.BAD_REQUEST, "DOCUMENT_INVALID_EXTENSION", "허용되지 않는 문서 확장자입니다."),
+    // HTTP 400 - 문서 MIME 유형 오류
+    DOCUMENT_MIME_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "DOCUMENT_MIME_TYPE_NOT_ALLOWED", "허용되지 않는 문서 MIME 유형입니다."),
     // HTTP 400 - 문서 크기 초과
     DOCUMENT_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "DOCUMENT_SIZE_EXCEEDED", "문서 크기가 허용 범위를 초과했습니다."),
+    // HTTP 500 - 문서 저장 실패
+    DOCUMENT_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_SAVE_FAILED", "문서 저장에 실패했습니다."),
     // HTTP 500 - 문서 저장 경로 오류
     DOCUMENT_STORAGE_PATH_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_STORAGE_PATH_INVALID", "문서 저장 경로가 올바르지 않습니다."),
 

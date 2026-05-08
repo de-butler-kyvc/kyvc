@@ -35,6 +35,26 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "user_name", length = 100)
+    private String userName;
+
+    @Column(name = "phone", length = 30)
+    private String phone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "notification_enabled_yn", length = 1)
+    private KyvcEnums.Yn notificationEnabledYn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mfa_enabled_yn", length = 1)
+    private KyvcEnums.Yn mfaEnabledYn;
+
+    @Column(name = "mfa_type_code", length = 30)
+    private String mfaTypeCode;
+
+    @Column(name = "last_password_changed_at")
+    private LocalDateTime lastPasswordChangedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type_code", nullable = false, length = 50)
     private KyvcEnums.UserType userTypeCode;
@@ -56,9 +76,24 @@ public class User {
             String email, // 사용자 이메일
             String passwordHash // 비밀번호 해시
     ) {
+        return createCorporateUser(email, passwordHash, null, null);
+    }
+
+    // 법인 사용자 생성
+    public static User createCorporateUser(
+            String email, // 사용자 이메일
+            String passwordHash, // 비밀번호 해시
+            String userName, // 사용자명
+            String phone // 사용자 연락처
+    ) {
         User user = new User();
         user.email = email;
         user.passwordHash = passwordHash;
+        user.userName = userName;
+        user.phone = phone;
+        user.notificationEnabledYn = KyvcEnums.Yn.Y;
+        user.mfaEnabledYn = KyvcEnums.Yn.N;
+        user.lastPasswordChangedAt = LocalDateTime.now();
         user.userTypeCode = KyvcEnums.UserType.CORPORATE_USER;
         user.userStatusCode = KyvcEnums.UserStatus.ACTIVE;
         return user;

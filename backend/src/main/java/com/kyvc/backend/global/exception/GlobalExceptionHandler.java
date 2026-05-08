@@ -17,6 +17,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -158,6 +160,40 @@ public class GlobalExceptionHandler {
     }
 
     // 예상하지 못한 예외 처리, error 로그
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<CommonResponse<Object>> handleNoResourceFoundException(
+            NoResourceFoundException exception, // 미매핑 리소스 예외
+            HttpServletRequest request // 요청 정보
+    ) {
+        ErrorCode errorCode = ErrorCode.RESOURCE_NOT_FOUND;
+        logEventLogger.warn(
+                "exception.resource_not_found",
+                errorCode.getMessage(),
+                buildExceptionFields(request, errorCode, exception.getClass().getName())
+        );
+
+        return ResponseEntity
+                .status(errorCode.getStatus())
+                .body(CommonResponseFactory.fail(errorCode));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<CommonResponse<Object>> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException exception, // 업로드 크기 초과 예외
+            HttpServletRequest request // 요청 정보
+    ) {
+        ErrorCode errorCode = ErrorCode.DOCUMENT_SIZE_EXCEEDED;
+        logEventLogger.warn(
+                "exception.upload_size_exceeded",
+                errorCode.getMessage(),
+                buildExceptionFields(request, errorCode, exception.getClass().getName())
+        );
+
+        return ResponseEntity
+                .status(errorCode.getStatus())
+                .body(CommonResponseFactory.fail(errorCode));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<CommonResponse<Object>> handleException(
             Exception exception, // 미처리 예외

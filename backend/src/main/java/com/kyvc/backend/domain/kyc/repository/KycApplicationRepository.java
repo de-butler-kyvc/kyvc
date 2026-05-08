@@ -31,12 +31,32 @@ public interface KycApplicationRepository {
     );
 
     /**
+     * 신청 사용자 ID 기준 현재 KYC 목록 조회
+     *
+     * @param userId 사용자 ID
+     * @return 현재 KYC 신청 목록
+     */
+    List<KycApplication> findCurrentByApplicantUserId(
+            Long userId // 사용자 ID
+    );
+
+    /**
      * 신청 사용자 ID 기준 최신 KYC 조회
      *
      * @param userId 사용자 ID
      * @return 최신 KYC 신청 조회 결과
      */
     Optional<KycApplication> findLatestByApplicantUserId(
+            Long userId // 사용자 ID
+    );
+
+    /**
+     * 신청 사용자 ID 기준 최신 현재 KYC 조회
+     *
+     * @param userId 사용자 ID
+     * @return 최신 현재 KYC 신청 조회 결과
+     */
+    Optional<KycApplication> findLatestCurrentByApplicantUserId(
             Long userId // 사용자 ID
     );
 

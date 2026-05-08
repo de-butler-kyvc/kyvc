@@ -9,7 +9,11 @@ import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
+import com.kyvc.backend.domain.corporate.domain.CorporateAgent;
+import com.kyvc.backend.domain.corporate.domain.CorporateRepresentative;
+import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
+import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
 import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.dto.KycDocumentResponse;
@@ -53,6 +57,8 @@ public class KycSubmissionService {
 
     private final KycApplicationRepository kycApplicationRepository;
     private final CorporateRepository corporateRepository;
+    private final CorporateRepresentativeRepository corporateRepresentativeRepository;
+    private final CorporateAgentRepository corporateAgentRepository;
     private final KycDocumentRepository kycDocumentRepository;
     private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
     private final CoreRequestService coreRequestService;
@@ -172,12 +178,37 @@ public class KycSubmissionService {
             KycApplication kycApplication // KYC ?遺욧퍕 ?類ｋ궖
     ) {
         Corporate corporate = findOwnedCorporate(userId, kycApplication.getCorporateId()); // ???? 甕곕벡???類ｋ궖
+        CorporateRepresentative representative = corporateRepresentativeRepository.findByCorporateId(corporate.getCorporateId())
+                .orElse(null); // 대표자 정보
+        CorporateAgent agent = corporateAgentRepository.findByCorporateId(corporate.getCorporateId()).stream()
+                .findFirst()
+                .orElse(null); // 대리인 정보
+        String representativeName = representative == null
+                ? corporate.getRepresentativeName()
+                : representative.getRepresentativeName(); // 대표자명
+        String representativePhone = representative == null
+                ? corporate.getRepresentativePhone()
+                : representative.getPhone(); // 대표자 연락처
+        String representativeEmail = representative == null
+                ? corporate.getRepresentativeEmail()
+                : representative.getEmail(); // 대표자 이메일
+        String agentName = agent == null ? corporate.getAgentName() : agent.getAgentName(); // 대리인명
+        String agentPhone = agent == null ? corporate.getAgentPhone() : agent.getAgentPhone(); // 대리인 연락처
+        String agentEmail = agent == null ? corporate.getAgentEmail() : agent.getAgentEmail(); // 대리인 이메일
+        String agentAuthorityScope = agent == null
+                ? corporate.getAgentAuthorityScope()
+                : agent.getAuthorityScope(); // 대리인 권한 범위
         List<KycDocument> documents = kycDocumentRepository.findByKycId(kycApplication.getKycId()); // ??낆쨮???얜챷苑?筌뤴뫖以?
         List<KycDocumentResponse> documentResponses = documents.stream()
                 .map(this::toDocumentResponse)
                 .toList();
         List<RequiredDocumentResponse> requiredDocuments = buildRequiredDocuments(kycApplication, documents); // ?袁⑸땾??뺤첒 ?겸뫗????? 筌뤴뫖以?
-        List<KycMissingItemResponse> missingItems = buildMissingItems(corporate, kycApplication, documents); // ?袁⑥뵭 ????筌뤴뫖以?
+        List<KycMissingItemResponse> missingItems = buildMissingItems(
+                corporate,
+                representativeName,
+                kycApplication,
+                documents
+        ); // ?袁⑥뵭 ????筌뤴뫖以?
         boolean submittable = kycApplication.isDraft() && isSubmittable(missingItems); // ??뽱뀱 揶쎛?????
 
         return new KycApplicationSummaryResponse(
@@ -187,13 +218,13 @@ public class KycSubmissionService {
                 corporate.getCorporateName(),
                 corporate.getBusinessRegistrationNo(),
                 corporate.getCorporateRegistrationNo(),
-                corporate.getRepresentativeName(),
-                corporate.getRepresentativePhone(),
-                corporate.getRepresentativeEmail(),
-                corporate.getAgentName(),
-                corporate.getAgentPhone(),
-                corporate.getAgentEmail(),
-                corporate.getAgentAuthorityScope(),
+                representativeName,
+                representativePhone,
+                representativeEmail,
+                agentName,
+                agentPhone,
+                agentEmail,
+                agentAuthorityScope,
                 kycApplication.getCorporateTypeCode(),
                 enumName(kycApplication.getOriginalDocumentStoreOption()),
                 documentResponses,
@@ -228,6 +259,7 @@ public class KycSubmissionService {
     // ?袁⑥뵭 ????筌뤴뫖以???밴쉐
     private List<KycMissingItemResponse> buildMissingItems(
             Corporate corporate, // 甕곕벡???類ｋ궖
+            String representativeName, // 대표자명
             KycApplication kycApplication, // KYC ?遺욧퍕 ?類ｋ궖
             List<KycDocument> documents // ??낆쨮???얜챷苑?筌뤴뫖以?
     ) {
@@ -247,7 +279,7 @@ public class KycSubmissionService {
                     "businessRegistrationNo"
             ));
         }
-        if (!StringUtils.hasText(corporate.getRepresentativeName())) {
+        if (!StringUtils.hasText(representativeName)) {
             missingItems.add(new KycMissingItemResponse(
                     REPRESENTATIVE_REQUIRED,
                     "????뽰쁽 ?類ｋ궖 ??낆젾 ?袁⑹뒄",
