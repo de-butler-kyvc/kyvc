@@ -58,7 +58,8 @@ public class AuthService {
                 email,
                 passwordEncoder.encode(request.password()),
                 normalizeRequired(request.userName()),
-                normalizeOptional(request.phone())
+                normalizeOptional(request.phone()),
+                normalizeRequired(request.corporateName())
         );
         User savedUser = userRepository.save(user);
 
@@ -68,6 +69,7 @@ public class AuthService {
         ));
 
         return new CorporateSignupResponse(
+                savedUser.getOnboardingCorporateName(),
                 savedUser.getUserId(),
                 savedUser.getEmail(),
                 savedUser.getUserName(),
@@ -254,7 +256,7 @@ public class AuthService {
     private void validateSignupRequest(
             CorporateSignupRequest request // 회원가입 요청 데이터
     ) {
-        if (request == null || !StringUtils.hasText(request.userName())) {
+        if (request == null || !StringUtils.hasText(request.userName()) || !StringUtils.hasText(request.corporateName())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
         if (!StringUtils.hasText(request.email()) || !StringUtils.hasText(request.password())) {
