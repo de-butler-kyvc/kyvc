@@ -75,7 +75,7 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = session.token;
+  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzIiwiZW1haWwiOiJ0ZXN0QGFiYy5jb20iLCJ1c2VyVHlwZSI6IkNPUlBPUkFURV9VU0VSIiwicm9sZXMiOlsiUk9MRV9DT1JQT1JBVEVfVVNFUiJdLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJpc3MiOiJreXZjLWJhY2tlbmQtZGV2IiwiaWF0IjoxNzc4MjIxMDg5LCJleHAiOjE3NzgyMjI4ODksImp0aSI6IjcyZDM0ZjIzLWU5YTUtNGY0Mi05MjVkLWY4ZWI2YzUyZjhlZCJ9.vounMErDs8moYZM3QQFh3VtdK7RwDKzFgzM0OwGVQbU';
   if (token) {
     config.headers.set("Authorization", `Bearer ${token}`);
   }
@@ -200,6 +200,21 @@ export type Agent = {
   email: string;
   authorityScope: string;
 };
+export type RepresentativeResponse = {
+  representativeId: number;
+  corporateId: number;
+  name: string;
+  phoneNumber?: string | null;
+  email?: string | null;
+};
+export type AgentResponse = {
+  agentId: number;
+  corporateId: number;
+  name: string;
+  phoneNumber?: string | null;
+  email?: string | null;
+  authorityScope?: string | null;
+};
 export type AgentListItem = {
   agentId: number;
   name: string;
@@ -247,17 +262,33 @@ export const corporate = {
       { method: "PUT", body },
     ),
   updateRepresentative: (corporateId: number, body: Representative) =>
-    api<{ updated: boolean }>(
-      `/api/user/corporates/${corporateId}/representative`,
-      { method: "PUT", body },
+    api<RepresentativeResponse>(
+      `/api/user/corporates/${corporateId}/representatives`,
+      {
+        method: "POST",
+        body: {
+          name: body.name,
+          phoneNumber: body.phone,
+          email: body.email
+        }
+      },
+    ),
+  representatives: (corporateId: number) =>
+    api<RepresentativeResponse[]>(
+      `/api/user/corporates/${corporateId}/representatives`,
     ),
   updateAgent: (corporateId: number, body: Agent) =>
-    api<{ updated: boolean }>(`/api/user/corporates/${corporateId}/agent`, {
-      method: "PUT",
-      body,
+    api<AgentResponse>(`/api/user/corporates/${corporateId}/agents`, {
+      method: "POST",
+      body: {
+        name: body.name,
+        phoneNumber: body.phone,
+        email: body.email,
+        authorityScope: body.authorityScope
+      },
     }),
   agents: (corporateId: number) =>
-    api<{ items: AgentListItem[] }>(
+    api<AgentResponse[]>(
       `/api/user/corporates/${corporateId}/agents`,
     ),
 };
@@ -274,6 +305,10 @@ export type KycListItem = {
 
 export type KycStatus = {
   status: string;
+  kycStatus?: string;
+  corporateTypeCode?: string;
+  originalDocumentStoreOption?: string;
+  submittedAt?: string;
   aiReviewStatus?: string;
   vcStatus?: string;
   nextAction?: string;
@@ -281,10 +316,27 @@ export type KycStatus = {
 
 export type KycDocument = {
   documentId: number;
-  documentType: string;
+  kycId?: number;
+  documentType?: string;
+  documentTypeCode?: string;
   fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
   fileHash?: string;
+  documentHash?: string;
   status?: string;
+  uploadStatus?: string;
+  uploadedAt?: string;
+};
+
+export type RequiredDocument = {
+  documentTypeCode: string;
+  documentTypeName: string;
+  required: boolean;
+  uploaded: boolean;
+  description?: string;
+  allowedExtensions?: string[];
+  maxFileSizeMb?: number;
 };
 
 export const kyc = {
@@ -295,31 +347,42 @@ export const kyc = {
     ),
   detail: (kycId: number) =>
     api<{
-      application: { kycId: number; status: string; corporateType?: string; submittedAt?: string };
+      application?: { kycId: number; status?: string; kycStatus?: string; corporateType?: string; corporateTypeCode?: string; submittedAt?: string };
+      kycId?: number;
+      kycStatus?: string;
+      corporateTypeCode?: string;
+      submittedAt?: string;
       corporate?: CorporateProfile;
       documents: KycDocument[];
       statusTimeline?: Array<{ status: string; at: string }>;
-    }>(`/api/user/kyc/applications/${kycId}`),
+    }>(`/api/corporate/kyc/applications/${kycId}`),
   status: (kycId: number) =>
-    api<KycStatus>(`/api/user/kyc/applications/${kycId}/status`),
+    api<KycStatus>(`/api/corporate/kyc/applications/${kycId}/status`),
   create: (body: {
-    corporateId: number;
-    applicationType: string;
+    corporateId?: number;
+    applicationType?: string;
     corporateType?: string;
+    corporateTypeCode?: string;
   }) =>
-    api<{ kycId: number; status: string }>("/api/user/kyc/applications", {
+    api<{ kycId: number; kycStatus?: string; status?: string; corporateTypeCode?: string }>("/api/corporate/kyc/applications", {
       method: "POST",
-      body
+      body: { corporateTypeCode: body.corporateTypeCode ?? body.corporateType ?? "CORPORATION" }
     }),
   setCorporateType: (kycId: number, corporateType: string) =>
-    api<{ updated: boolean; requiredDocuments: string[] }>(
-      `/api/user/kyc/applications/${kycId}/corporate-type`,
-      { method: "PATCH", body: { corporateType } }
+    api<{ kycId: number; kycStatus?: string; corporateTypeCode?: string; requiredDocuments?: string[] }>(
+      `/api/corporate/kyc/applications/${kycId}/corporate-type`,
+      { method: "PUT", body: { corporateTypeCode: corporateType } }
     ),
   documentRequirements: (corporateType: string) =>
-    api<{ requiredDocuments: string[]; optionalDocuments: string[] }>(
-      "/api/user/kyc/document-requirements",
-      { query: { corporateType } }
+    api<RequiredDocument[]>("/api/corporate/kyc/required-documents", {
+      query: { corporateTypeCode: corporateType }
+    }),
+  requiredDocumentsByKyc: (kycId: number) =>
+    api<RequiredDocument[]>(`/api/corporate/kyc/applications/${kycId}/required-documents`),
+  setDocumentStoreOption: (kycId: number, storeOption: "STORE" | "DELETE") =>
+    api<{ kycId: number; kycStatus?: string; originalDocumentStoreOption?: string }>(
+      `/api/corporate/kyc/applications/${kycId}/document-store-option`,
+      { method: "PUT", body: { storeOption } }
     ),
   submissionSummary: (kycId: number) =>
     api<{
@@ -327,28 +390,27 @@ export const kyc = {
       documents: KycDocument[];
       missingItems: string[];
       storeOption?: string;
-    }>(`/api/user/kyc/applications/${kycId}/submission-summary`),
+      canSubmit?: boolean;
+    }>(`/api/corporate/kyc/applications/${kycId}/summary`),
   submit: (kycId: number) =>
-    api<{ kycId: number; status: string; submittedAt: string }>(
-      `/api/user/kyc/applications/${kycId}/submit`,
+    api<{ kycId: number; status?: string; kycStatus?: string; submittedAt: string; submittable?: boolean; message?: string }>(
+      `/api/corporate/kyc/applications/${kycId}/submit`,
       { method: "POST" }
     ),
   documents: (kycId: number) =>
-    api<{ items: KycDocument[] }>(
-      `/api/user/kyc/applications/${kycId}/documents`
-    ),
+    api<KycDocument[]>(`/api/corporate/kyc/applications/${kycId}/documents`),
   uploadDocument: (kycId: number, file: File, documentType: string) => {
     const fd = new FormData();
     fd.append("file", file);
-    fd.append("documentType", documentType);
-    return api<{ documentId: number; fileHash: string; mimeType: string; fileSize: number }>(
-      `/api/user/kyc/applications/${kycId}/documents`,
+    fd.append("documentTypeCode", documentType);
+    return api<KycDocument>(
+      `/api/corporate/kyc/applications/${kycId}/documents`,
       { method: "POST", formData: fd }
     );
   },
   deleteDocument: (kycId: number, documentId: number) =>
     api<{ deleted: boolean }>(
-      `/api/user/kyc/applications/${kycId}/documents/${documentId}`,
+      `/api/corporate/kyc/applications/${kycId}/documents/${documentId}`,
       { method: "DELETE" }
     ),
   uploadSupplement: (kycId: number, supplementId: number, file: File) => {

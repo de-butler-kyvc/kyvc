@@ -39,7 +39,7 @@ function KycDetail() {
     Promise.all([kycApi.status(kycId), kycApi.documents(kycId)])
       .then(([s, d]) => {
         setStatus(s);
-        setDocuments(d.items ?? []);
+        setDocuments(d);
       })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
@@ -77,7 +77,10 @@ function KycDetail() {
     setError(null);
     try {
       const res = await kycApi.submit(kycId);
-      setStatus((prev) => ({ ...(prev ?? {}), status: res.status }));
+      setStatus((prev) => ({
+        ...(prev ?? { status: "..." }),
+        status: res.status ?? res.kycStatus ?? prev?.status ?? "..."
+      }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
     } finally {
@@ -151,9 +154,9 @@ function KycDetail() {
                   className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                 >
                   <div className="flex flex-col">
-                    <span className="font-medium">{d.documentType}</span>
+                    <span className="font-medium">{d.documentTypeCode ?? d.documentType}</span>
                     <span className="font-mono text-xs text-muted-foreground">
-                      {d.fileName ?? d.fileHash?.slice(0, 16)}
+                      {d.fileName ?? d.documentHash?.slice(0, 16) ?? d.fileHash?.slice(0, 16)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -186,7 +189,7 @@ function UploadField({
 }: {
   onPick: (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => void;
 }) {
-  const [documentType, setDocumentType] = useState("CORP_REGISTRY");
+  const [documentType, setDocumentType] = useState("CORPORATE_REGISTRATION");
   return (
     <div className="grid gap-2 rounded-md border border-dashed p-3">
       <div className="grid gap-2 md:grid-cols-[200px_1fr]">
@@ -195,11 +198,11 @@ function UploadField({
           value={documentType}
           onChange={(e) => setDocumentType(e.target.value)}
         >
-          <option value="CORP_REGISTRY">등기사항전부증명서</option>
-          <option value="BUSINESS_LICENSE">사업자등록증</option>
-          <option value="SHAREHOLDERS">주주명부</option>
-          <option value="ARTICLES">정관</option>
-          <option value="POA">위임장</option>
+          <option value="CORPORATE_REGISTRATION">등기사항전부증명서</option>
+          <option value="BUSINESS_REGISTRATION">사업자등록증</option>
+          <option value="SHAREHOLDER_LIST">주주명부</option>
+          <option value="ARTICLES_OF_INCORPORATION">정관</option>
+          <option value="POWER_OF_ATTORNEY">위임장</option>
           <option value="OTHER">기타</option>
         </select>
         <input
