@@ -51,11 +51,11 @@ public class CorporateRepresentativeController {
      */
     @Operation(
             summary = "대표자 정보 등록 또는 저장",
-            description = "로그인 사용자가 소유한 법인의 대표자 정보를 저장합니다. 입력값은 법인 ID, 대표자명, 생년월일, 연락처, 이메일, 신분증 사본 파일입니다."
+            description = "로그인 사용자가 소유한 법인의 대표자 정보를 저장합니다. 입력값은 법인 ID, 대표자명, 생년월일, 국적 코드, 연락처, 이메일, 신분증 사본 파일입니다."
     )
     @ApiResponse(
             responseCode = "200",
-            description = "대표자 ID, 법인 ID, 대표자명, 연락처, 이메일 반환",
+            description = "대표자 ID, 법인 ID, 대표자명, 생년월일, 국적 코드, 연락처, 이메일 반환",
             content = @Content(schema = @Schema(implementation = RepresentativeResponse.class))
     )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -123,7 +123,7 @@ public class CorporateRepresentativeController {
     )
     @ApiResponse(
             responseCode = "200",
-            description = "수정된 대표자 ID, 법인 ID, 대표자명, 연락처, 이메일 반환",
+            description = "수정된 대표자 ID, 법인 ID, 대표자명, 생년월일, 국적 코드, 연락처, 이메일 반환",
             content = @Content(schema = @Schema(implementation = RepresentativeResponse.class))
     )
     @PutMapping(value = "/{representativeId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

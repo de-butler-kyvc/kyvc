@@ -51,11 +51,11 @@ public class CorporateAgentController {
      */
     @Operation(
             summary = "대리인 정보 등록 또는 저장",
-            description = "로그인 사용자가 소유한 법인의 대리인 정보를 저장합니다. 입력값은 법인 ID, 대리인명, 생년월일, 연락처, 이메일, 권한 범위, 위임장 파일입니다."
+            description = "로그인 사용자가 소유한 법인의 대리인 정보를 저장합니다. 입력값은 법인 ID, 대리인명, 관계/직책, 연락처, 이메일, 위임장 파일입니다."
     )
     @ApiResponse(
             responseCode = "200",
-            description = "대리인 ID, 법인 ID, 대리인명, 연락처, 이메일, 권한 범위 반환",
+            description = "대리인 ID, 법인 ID, 대리인명, 관계/직책, 연락처, 이메일 반환",
             content = @Content(schema = @Schema(implementation = AgentResponse.class))
     )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -119,11 +119,11 @@ public class CorporateAgentController {
      */
     @Operation(
             summary = "대리인 정보 수정",
-            description = "로그인 사용자가 소유한 법인의 대리인 정보를 수정합니다. 위임장 파일이 포함되면 새 파일로 교체합니다."
+            description = "로그인 사용자가 소유한 법인의 대리인 정보를 수정합니다. 입력값은 대리인명, 관계/직책, 연락처, 이메일, 위임장 파일입니다."
     )
     @ApiResponse(
             responseCode = "200",
-            description = "수정된 대리인 ID, 법인 ID, 대리인명, 연락처, 이메일, 권한 범위 반환",
+            description = "수정된 대리인 ID, 법인 ID, 대리인명, 관계/직책, 연락처, 이메일 반환",
             content = @Content(schema = @Schema(implementation = AgentResponse.class))
     )
     @PutMapping(value = "/{agentId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

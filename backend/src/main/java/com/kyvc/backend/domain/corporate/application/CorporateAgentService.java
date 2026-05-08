@@ -49,10 +49,10 @@ public class CorporateAgentService {
         CorporateAgent agent = CorporateAgent.create(
                 corporateId,
                 normalizeRequired(request.name()),
-                request.birthDate(),
+                null,
                 normalizeOptional(request.phoneNumber()),
                 normalizeOptional(request.email()),
-                normalizeOptional(request.authorityScope()),
+                normalizeRequired(request.relationshipOrPosition()),
                 delegationDocumentId
         );
         CorporateAgent savedAgent = saveAgentEntity(agent); // 저장된 대리인
@@ -96,17 +96,17 @@ public class CorporateAgentService {
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND));
         validateAgentRelation(corporateId, agent);
 
-        Long delegationDocumentId = storeDelegationDocument(
+        Long delegationDocumentId = storeRequiredDelegationDocument(
                 userId,
                 corporateId,
                 request.powerOfAttorneyFile()
         ); // 위임장 문서 ID
         agent.update(
                 normalizeRequired(request.name()),
-                request.birthDate(),
+                null,
                 normalizeOptional(request.phoneNumber()),
                 normalizeOptional(request.email()),
-                normalizeOptional(request.authorityScope()),
+                normalizeRequired(request.relationshipOrPosition()),
                 delegationDocumentId
         );
         CorporateAgent savedAgent = saveAgentEntity(agent); // 저장된 대리인
@@ -118,7 +118,9 @@ public class CorporateAgentService {
     private void validateAgentRequest(
             AgentRequest request // 대리인 정보 저장 요청
     ) {
-        if (request == null || !StringUtils.hasText(request.name())) {
+        if (request == null
+                || !StringUtils.hasText(request.name())
+                || !StringUtils.hasText(request.relationshipOrPosition())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
@@ -154,10 +156,9 @@ public class CorporateAgentService {
                 agent.getAgentId(),
                 agent.getCorporateId(),
                 agent.getAgentName(),
-                agent.getAgentBirthDate(),
+                agent.getAuthorityScope(),
                 agent.getAgentPhone(),
                 agent.getAgentEmail(),
-                agent.getAuthorityScope(),
                 agent.getDelegationDocumentId()
         );
     }
@@ -173,10 +174,9 @@ public class CorporateAgentService {
                 corporate.getCorporateId(),
                 corporate.getCorporateId(),
                 corporate.getAgentName(),
-                null,
+                corporate.getAgentAuthorityScope(),
                 corporate.getAgentPhone(),
                 corporate.getAgentEmail(),
-                corporate.getAgentAuthorityScope(),
                 null
         ));
     }

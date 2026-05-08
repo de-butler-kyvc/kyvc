@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
  * @param corporateRegistrationNo 법인등록번호
  * @param corporateTypeCode 법인 유형 코드
  * @param establishedDate 설립일
+ * @param corporatePhone 법인 대표전화
  * @param representativeName 대표자명
  * @param representativePhone 대표자 연락처
  * @param representativeEmail 대표자 이메일
@@ -41,6 +42,8 @@ public record CorporateResponse(
         String corporateTypeCode, // 법인 유형 코드
         @Schema(description = "설립일", example = "2020-01-01")
         LocalDate establishedDate, // 설립일
+        @Schema(description = "법인 대표전화", example = "02-1234-5678")
+        String corporatePhone, // 법인 대표전화
         @Schema(description = "대표자명", example = "홍길동")
         String representativeName, // 대표자명
         @Schema(description = "대표자 연락처", example = "010-1234-5678")

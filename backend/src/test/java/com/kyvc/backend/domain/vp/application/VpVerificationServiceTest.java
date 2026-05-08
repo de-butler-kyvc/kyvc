@@ -448,6 +448,7 @@ class VpVerificationServiceTest {
                 "110111-1234567",
                 "CORPORATION",
                 null,
+                null,
                 "대표자",
                 "010-0000-0000",
                 "rep@test.com",
