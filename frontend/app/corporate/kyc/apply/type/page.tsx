@@ -50,24 +50,16 @@ export default function KycApplyTypePage() {
     corpApi
       .me()
       .then((res) => {
-        const c = res.corporate as
-          | {
-              corporateId?: number;
-              corporateName?: string;
-              businessNo?: string;
-              corporateNo?: string;
-            }
-          | undefined;
         const stored =
           typeof window !== "undefined"
             ? window.localStorage.getItem("kyvc.corporateType")
             : null;
         setCorp({
-          corporateId: c?.corporateId,
-          corporateName: c?.corporateName ?? "",
-          businessNo: c?.businessNo ?? "",
-          corporateNo: c?.corporateNo ?? "",
-          representativeName: res.representative?.name ?? "",
+          corporateId: res.corporateId,
+          corporateName: res.corporateName ?? "",
+          businessNo: res.businessRegistrationNo ?? "",
+          corporateNo: res.corporateRegistrationNo ?? "",
+          representativeName: res.representativeName ?? "",
           corporateType:
             OPTIONS.find((o) => o.value === stored)?.label ?? stored ?? ""
         });

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { cn } from "@/lib/utils";
+import { Logo } from "@/components/design/primitives";
 
 export type NavItem = {
   href: string;
   label: string;
   description?: string;
+  icon?: React.ReactNode;
 };
 
 export type NavSection = {
@@ -17,14 +18,15 @@ export type NavSection = {
 };
 
 type SidebarProps = {
-  brand: string;
+  brand?: string;
   subtitle?: string;
   sections: NavSection[];
+  homeHref?: string;
 };
 
 const normalize = (p: string) => p.replace(/\/+$/, "") || "/";
 
-export function Sidebar({ sections }: SidebarProps) {
+export function Sidebar({ sections, homeHref = "/corporate" }: SidebarProps) {
   const pathname = normalize(usePathname() ?? "/");
   const allHrefs = sections.flatMap((s) => s.items.map((i) => normalize(i.href)));
   const activeHref = allHrefs
@@ -32,36 +34,28 @@ export function Sidebar({ sections }: SidebarProps) {
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <aside className="hidden h-screen w-[220px] shrink-0 flex-col border-r border-border bg-card md:flex">
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pt-5 pb-4">
-        {sections.map((section, sectionIdx) => (
-          <div key={section.title} className={sectionIdx === 0 ? "" : "mt-3.5"}>
-            <div className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-[0.6px] text-subtle-foreground">
-              {section.title}
-            </div>
-            <ul>
-              {section.items.map((item) => {
-                const active = normalize(item.href) === activeHref;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={cn(
-                        "block rounded-[10px] px-2.5 py-1.5 text-[13px] transition-colors",
-                        active
-                          ? "bg-accent font-semibold text-accent-foreground"
-                          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                      )}
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
+    <aside className="sidebar">
+      <Link href={homeHref} className="sidebar-header" style={{ textDecoration: "none" }}>
+        <Logo theme="dark" size={20} />
+      </Link>
+      {sections.map((section) => (
+        <div className="sidebar-section" key={section.title}>
+          <div className="sidebar-section-label">{section.title}</div>
+          {section.items.map((item) => {
+            const active = normalize(item.href) === activeHref;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`sidebar-link${active ? " active" : ""}`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </aside>
   );
 }

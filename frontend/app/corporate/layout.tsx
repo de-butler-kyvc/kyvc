@@ -1,20 +1,22 @@
 import { Header } from "@/components/nav/header";
 import { Sidebar, type NavSection } from "@/components/nav/sidebar";
+import { Icon } from "@/components/design/icons";
 
 const sections: NavSection[] = [
   {
-    title: "법인정보",
+    title: "KYC 신청",
     items: [
-      { href: "/corporate/profile", label: "법인 기본정보" },
-      { href: "/corporate/representative", label: "대표자 정보" },
-      { href: "/corporate/agents", label: "대리인 정보" }
+      { href: "/corporate", label: "대시보드", icon: <Icon.Grid /> },
+      { href: "/corporate/kyc/apply", label: "KYC 신청", icon: <Icon.FilePlus /> },
+      { href: "/corporate/kyc", label: "진행상태 조회", icon: <Icon.Activity /> }
     ]
   },
   {
-    title: "KYC 신청",
+    title: "법인정보",
     items: [
-      { href: "/corporate", label: "대시보드" },
-      { href: "/corporate/kyc/apply", label: "KYC 신청 시작" }
+      { href: "/corporate/profile", label: "법인 기본정보", icon: <Icon.Home /> },
+      { href: "/corporate/representative", label: "대표자 정보", icon: <Icon.User /> },
+      { href: "/corporate/agents", label: "대리인 정보", icon: <Icon.UserCheck /> }
     ]
   }
 ];
@@ -25,21 +27,20 @@ export default function CorporateLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="dash-shell">
       <Sidebar
         brand="KYvC"
         subtitle="법인 사용자 웹"
         sections={sections}
+        homeHref="/corporate"
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="dash-main">
         <Header channel="법인 사용자 웹" channelTag="CW · CORPORATE" />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-          <footer className="border-t border-border px-9 py-4 text-[12px] text-subtle-foreground">
-            © 2025 KYvC. All rights reserved.
-          </footer>
-        </main>
-      </div>
+        <div className="dash-content">{children}</div>
+        <footer className="footer">
+          © 2025 KYvC. All rights reserved.
+        </footer>
+      </main>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "KYvC",
+  title: "KYvC — 법인 KYC 자동 심사 플랫폼",
   description: "KYvC 법인 KYC 플랫폼"
 };
 
