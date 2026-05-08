@@ -4,7 +4,15 @@ import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreCredentialSchemaResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationRequest;
+import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationResponse;
+import com.kyvc.backend.domain.core.dto.CoreDidDocumentResponse;
 import com.kyvc.backend.domain.core.dto.CoreHealthResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
+import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialRequest;
+import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceStatusResponse;
@@ -12,24 +20,33 @@ import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreXrplTransactionResponse;
+import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
 import com.kyvc.backend.global.util.KyvcEnums;
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
-// Core Stub 어댑터
+// Core Mock Adapter
 @Component
+@RequiredArgsConstructor
+@ConditionalOnExpression("'${kyvc.core.mode:mock}'.toLowerCase() == 'mock'")
 public class StubCoreAdapter implements CoreAdapter {
 
-    private static final String STUB_MODE = "STUB";
+    private static final String MOCK_MODE = "MOCK";
 
-    // Core 헬스 체크
+    private final CoreMockResponseFactory coreMockResponseFactory;
+
+    // Core 상태 체크
     @Override
     public CoreHealthResponse checkHealth() {
         return new CoreHealthResponse(
-                STUB_MODE,
+                MOCK_MODE,
                 true,
-                "Core is not implemented. StubCoreAdapter is active."
+                "Core mock adapter is active."
         );
     }
 
@@ -38,12 +55,7 @@ public class StubCoreAdapter implements CoreAdapter {
     public CoreAiReviewResponse requestAiReview(
             CoreAiReviewRequest request // AI 심사 요청
     ) {
-        return new CoreAiReviewResponse(
-                request.coreRequestId(),
-                KyvcEnums.AiReviewStatus.QUEUED.name(),
-                "AI review request accepted by stub core.",
-                LocalDateTime.now()
-        );
+        return coreMockResponseFactory.mockAiReviewAccepted(request);
     }
 
     // AI 심사 상태 조회
@@ -51,12 +63,7 @@ public class StubCoreAdapter implements CoreAdapter {
     public CoreAiReviewStatusResponse getAiReviewStatus(
             String coreRequestId // Core 요청 ID
     ) {
-        return new CoreAiReviewStatusResponse(
-                coreRequestId,
-                KyvcEnums.AiReviewStatus.QUEUED.name(),
-                "AI review is queued in stub core.",
-                LocalDateTime.now()
-        );
+        return coreMockResponseFactory.mockAiReviewStatus(coreRequestId);
     }
 
     // VC 발급 요청
@@ -67,8 +74,15 @@ public class StubCoreAdapter implements CoreAdapter {
         return new CoreVcIssuanceResponse(
                 request.coreRequestId(),
                 KyvcEnums.CredentialStatus.ISSUING.name(),
-                "VC issuance request accepted by stub core.",
-                LocalDateTime.now()
+                "VC issuance request accepted by mock core.",
+                LocalDateTime.now(),
+                "mock-" + request.coreRequestId(),
+                request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
+                null,
+                null,
+                null,
+                LocalDateTime.now(),
+                request.validUntil()
         );
     }
 
@@ -80,21 +94,57 @@ public class StubCoreAdapter implements CoreAdapter {
         return new CoreVcIssuanceStatusResponse(
                 coreRequestId,
                 KyvcEnums.CredentialStatus.ISSUING.name(),
-                "VC issuance is in progress in stub core.",
+                "VC issuance is in progress in mock core.",
                 LocalDateTime.now()
+        );
+    }
+
+    // Credential 폐기 요청
+    @Override
+    public CoreRevokeCredentialResponse revokeCredential(
+            CoreRevokeCredentialRequest request // Credential 폐기 요청
+    ) {
+        return new CoreRevokeCredentialResponse(
+                true,
+                "local",
+                "Credential revoked by mock core."
+        );
+    }
+
+    // Credential 상태 조회
+    @Override
+    public CoreCredentialStatusResponse getCredentialStatus(
+            String issuerAccount, // Issuer XRPL Account
+            String holderAccount, // Holder XRPL Account
+            String credentialType // Credential 유형
+    ) {
+        return new CoreCredentialStatusResponse(
+                issuerAccount,
+                holderAccount,
+                credentialType,
+                true,
+                true,
+                KyvcEnums.CredentialStatus.VALID.name(),
+                LocalDateTime.now(),
+                "Credential status returned by mock core."
         );
     }
 
     // VP 검증 요청
     @Override
     public CoreVpVerificationResponse requestVpVerification(
-            CoreVpVerificationRequest request // VP 검증 요청
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String vpJwt // VP JWT 원문
     ) {
         return new CoreVpVerificationResponse(
                 request.coreRequestId(),
-                KyvcEnums.VpVerificationStatus.REQUESTED.name(),
-                "VP verification request accepted by stub core.",
-                LocalDateTime.now()
+                KyvcEnums.VpVerificationStatus.VALID.name(),
+                "VP verification handled by mock core.",
+                LocalDateTime.now(),
+                true,
+                true,
+                false,
+                "VP 검증 성공"
         );
     }
 
@@ -106,8 +156,54 @@ public class StubCoreAdapter implements CoreAdapter {
         return new CoreVpVerificationStatusResponse(
                 coreRequestId,
                 KyvcEnums.VpVerificationStatus.REQUESTED.name(),
-                "VP verification is requested in stub core.",
+                "VP verification is requested in mock core.",
                 LocalDateTime.now()
+        );
+    }
+
+    // VP Challenge 발급
+    @Override
+    public CorePresentationChallengeResponse issuePresentationChallenge(
+            CorePresentationChallengeRequest request // VP Challenge 발급 요청
+    ) {
+        return new CorePresentationChallengeResponse(
+                CoreMockSeedData.DEV_VP_CHALLENGE,
+                CoreMockSeedData.DEV_VP_NONCE,
+                request.domain(),
+                request.aud(),
+                CoreMockSeedData.vpExpiresAt(),
+                request.presentationDefinition()
+        );
+    }
+
+    // Credential 검증
+    @Override
+    public CoreCredentialVerificationResponse verifyCredential(
+            CoreCredentialVerificationRequest request // Credential 검증 요청
+    ) {
+        return new CoreCredentialVerificationResponse(
+                true,
+                List.of(),
+                Map.of("message", "Credential verified by mock core.")
+        );
+    }
+
+    // DID Document 조회
+    @Override
+    public CoreDidDocumentResponse getDidDocument(
+            String account // XRPL Account
+    ) {
+        return new CoreDidDocumentResponse(
+                account,
+                Map.of(
+                        "id", "did:xrpl:1:" + account,
+                        "verificationMethod", List.of(
+                                Map.of(
+                                        "id", "did:xrpl:1:" + account + "#issuer-key-1",
+                                        "type", "JsonWebKey2020"
+                                )
+                        )
+                )
         );
     }
 
@@ -116,12 +212,7 @@ public class StubCoreAdapter implements CoreAdapter {
     public CoreXrplTransactionResponse getXrplTransaction(
             String txHash // 트랜잭션 해시
     ) {
-        return new CoreXrplTransactionResponse(
-                txHash,
-                KyvcEnums.XrplTransactionStatus.PENDING.name(),
-                "XRPL transaction is pending in stub core.",
-                LocalDateTime.now()
-        );
+        return coreMockResponseFactory.mockXrplTransactionStatus(txHash);
     }
 
     // Credential 스키마 조회
@@ -129,12 +220,6 @@ public class StubCoreAdapter implements CoreAdapter {
     public CoreCredentialSchemaResponse getCredentialSchema(
             String schemaId // 스키마 ID
     ) {
-        return new CoreCredentialSchemaResponse(
-                schemaId,
-                "Stub KYVC Credential Schema",
-                "1.0",
-                true,
-                "Credential schema metadata returned by stub core."
-        );
+        return coreMockResponseFactory.mockCredentialSchema(schemaId);
     }
 }

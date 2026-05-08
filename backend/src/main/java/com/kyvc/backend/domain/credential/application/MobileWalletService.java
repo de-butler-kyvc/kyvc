@@ -1,5 +1,9 @@
 package com.kyvc.backend.domain.credential.application;
 
+import com.kyvc.backend.domain.core.config.CoreProperties;
+import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
+import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
+import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
@@ -16,6 +20,7 @@ import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.logging.LogEventLogger;
 import com.kyvc.backend.global.security.CustomUserDetails;
+import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +30,23 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 // 모바일 Wallet Credential 서비스
 @Service
 @RequiredArgsConstructor
 public class MobileWalletService {
 
-    private static final String REFRESH_STATUS_MESSAGE = "Core 상태조회는 아직 연결하지 않았습니다. 현재 DB 상태를 반환합니다.";
+    private static final String REFRESH_STATUS_DB_FALLBACK_MESSAGE = "Core 상태조회에 필요한 holder/issuer 정보가 없어 DB 상태를 반환했습니다.";
+    private static final String REFRESH_STATUS_SYNCED_MESSAGE = "Core credential status를 동기화했습니다.";
+    private static final String REFRESH_STATUS_NOT_FOUND_MESSAGE = "Core 상태 엔트리가 없어 DB 상태를 유지했습니다.";
+    private static final String REFRESH_STATUS_CORE_FAILED_MESSAGE = "Core 상태조회 실패로 DB 상태를 반환했습니다.";
 
     private final CredentialRepository credentialRepository;
     private final MobileDeviceService mobileDeviceService;
     private final CorporateRepository corporateRepository;
+    private final CoreAdapter coreAdapter;
+    private final CoreProperties coreProperties;
     private final LogEventLogger logEventLogger;
 
     // 모바일 Wallet Credential Offer 조회
@@ -100,7 +111,7 @@ public class MobileWalletService {
             throw new ApiException(ErrorCode.CREDENTIAL_OFFER_INVALID_TOKEN);
         }
 
-        LocalDateTime now = LocalDateTime.now(); // 기준 일시
+        LocalDateTime now = LocalDateTime.now(); // 기준 시각
         if (credential.isOfferExpired(now)) {
             throw new ApiException(ErrorCode.CREDENTIAL_OFFER_EXPIRED);
         }
@@ -148,7 +159,7 @@ public class MobileWalletService {
                 true,
                 savedCredential.getWalletSavedAt(),
                 createCredentialPayload(savedCredential),
-                "Credential이 Wallet에 저장되었습니다."
+                "Credential가 Wallet에 저장되었습니다."
         );
     }
 
@@ -198,7 +209,7 @@ public class MobileWalletService {
     }
 
     // 모바일 Wallet Credential 상태 갱신
-    @Transactional(readOnly = true)
+    @Transactional
     public WalletCredentialStatusRefreshResponse refreshCredentialStatus(
             CustomUserDetails userDetails, // 인증 사용자 정보
             Long credentialId // Credential ID
@@ -212,29 +223,75 @@ public class MobileWalletService {
             throw new ApiException(ErrorCode.WALLET_CREDENTIAL_NOT_FOUND);
         }
 
-        // TODO(core-integration): Core credential status 계약 확정 후 CoreAdapter 상태 조회로 동기화한다.
-        LocalDateTime refreshedAt = LocalDateTime.now(); // 상태 갱신 응답 시각
+        String issuerAccount = resolveIssuerAccount(credential); // Issuer XRPL Account
+        String holderAccount = resolveHolderAccount(credential); // Holder XRPL Account
+        String credentialType = resolveCredentialType(credential); // Credential 유형
 
-        logEventLogger.info(
-                "wallet.credential.status.refreshed",
-                "Wallet credential status refreshed",
-                createWalletLogFields(authContext.userId(), authContext.corporateId(), credentialId, null)
-        );
+        if (!StringUtils.hasText(issuerAccount)
+                || !StringUtils.hasText(holderAccount)
+                || !StringUtils.hasText(credentialType)) {
+            return new WalletCredentialStatusRefreshResponse(
+                    credential.getCredentialId(),
+                    enumName(credential.getCredentialStatus()),
+                    credential.getXrplTxHash(),
+                    false,
+                    LocalDateTime.now(),
+                    REFRESH_STATUS_DB_FALLBACK_MESSAGE
+            );
+        }
 
-        return new WalletCredentialStatusRefreshResponse(
-                credential.getCredentialId(),
-                enumName(credential.getCredentialStatus()),
-                credential.getXrplTxHash(),
-                true,
-                refreshedAt,
-                REFRESH_STATUS_MESSAGE
-        );
+        try {
+            CoreCredentialStatusResponse coreStatus = coreAdapter.getCredentialStatus(
+                    issuerAccount,
+                    holderAccount,
+                    credentialType
+            );
+
+            KyvcEnums.CredentialStatus mappedStatus = parseCredentialStatus(coreStatus.credentialStatusCode()); // Core 매핑 상태
+            if (coreStatus.found() && mappedStatus != null && mappedStatus != credential.getCredentialStatus()) {
+                credential.refreshStatus(mappedStatus);
+                credentialRepository.save(credential);
+            }
+
+            logEventLogger.info(
+                    "wallet.credential.status.refreshed",
+                    "Wallet credential status refreshed",
+                    createWalletLogFields(authContext.userId(), authContext.corporateId(), credentialId, null)
+            );
+
+            String message = coreStatus.found() ? REFRESH_STATUS_SYNCED_MESSAGE : REFRESH_STATUS_NOT_FOUND_MESSAGE;
+            return new WalletCredentialStatusRefreshResponse(
+                    credential.getCredentialId(),
+                    enumName(credential.getCredentialStatus()),
+                    credential.getXrplTxHash(),
+                    true,
+                    LocalDateTime.now(),
+                    message
+            );
+        } catch (ApiException exception) {
+            if (isCoreRefreshFallbackError(exception.getErrorCode())) {
+                logEventLogger.warn(
+                        "wallet.credential.status.refresh.failed",
+                        exception.getMessage(),
+                        createWalletLogFields(authContext.userId(), authContext.corporateId(), credentialId, null)
+                );
+                return new WalletCredentialStatusRefreshResponse(
+                        credential.getCredentialId(),
+                        enumName(credential.getCredentialStatus()),
+                        credential.getXrplTxHash(),
+                        false,
+                        LocalDateTime.now(),
+                        REFRESH_STATUS_CORE_FAILED_MESSAGE
+                );
+            }
+            throw exception;
+        }
     }
 
     // Offer 상태 검증
     private void validateOfferState(
             Credential credential, // Credential 엔티티
-            LocalDateTime now // 기준 일시
+            LocalDateTime now // 기준 시각
     ) {
         if (!StringUtils.hasText(credential.getQrToken())) {
             throw new ApiException(ErrorCode.CREDENTIAL_OFFER_NOT_FOUND);
@@ -297,6 +354,97 @@ public class MobileWalletService {
         payload.put("issuerDid", credential.getIssuerDid());
         payload.put("vcHash", credential.getVcHash());
         return payload;
+    }
+
+    // Issuer XRPL Account 결정
+    private String resolveIssuerAccount(
+            Credential credential // Credential 엔티티
+    ) {
+        String issuerDid = normalizeOptional(credential.getIssuerDid());
+        String accountFromDid = resolveAccountFromDid(issuerDid); // DID 기반 XRPL Account
+        if (StringUtils.hasText(accountFromDid)) {
+            return accountFromDid;
+        }
+        return useDevSeedIfEnabled("issuerAccount", CoreMockSeedData.DEV_ISSUER_ACCOUNT);
+    }
+
+    // Holder XRPL Account 결정
+    private String resolveHolderAccount(
+            Credential credential // Credential 엔티티
+    ) {
+        String holderAccount = normalizeOptional(credential.getHolderXrplAddress());
+        if (StringUtils.hasText(holderAccount)) {
+            return holderAccount;
+        }
+        return useDevSeedIfEnabled("holderAccount", CoreMockSeedData.DEV_HOLDER_ACCOUNT);
+    }
+
+    // Credential 유형 결정
+    private String resolveCredentialType(
+            Credential credential // Credential 엔티티
+    ) {
+        String credentialType = normalizeOptional(credential.getCredentialTypeCode());
+        if (StringUtils.hasText(credentialType)) {
+            return credentialType;
+        }
+        return useDevSeedIfEnabled("credentialType", CoreMockSeedData.DEV_CREDENTIAL_TYPE);
+    }
+
+    // 개발 seed 사용
+    private String useDevSeedIfEnabled(
+            String fieldName, // 누락 필드명
+            String seedValue // seed 값
+    ) {
+        if (!coreProperties.isDevSeedEnabled()) {
+            return null;
+        }
+        logEventLogger.warn(
+                "core.dev-seed.used",
+                "Core 상태조회에 개발 seed 값을 사용합니다.",
+                Map.of("fieldName", fieldName, "devSeedUsed", true)
+        );
+        return seedValue;
+    }
+
+    // DID에서 XRPL Account 추출
+    private String resolveAccountFromDid(
+            String did // DID 문자열
+    ) {
+        if (!StringUtils.hasText(did)) {
+            return null;
+        }
+        String normalized = did.trim();
+        String prefix = "did:xrpl:1:";
+        if (!normalized.startsWith(prefix)) {
+            return null;
+        }
+        String account = normalized.substring(prefix.length()).trim();
+        return StringUtils.hasText(account) ? account : null;
+    }
+
+    // Core refresh fallback 대상 에러 여부
+    private boolean isCoreRefreshFallbackError(
+            ErrorCode errorCode // 에러 코드
+    ) {
+        return ErrorCode.CORE_API_CALL_FAILED == errorCode
+                || ErrorCode.CORE_API_TIMEOUT == errorCode
+                || ErrorCode.CORE_API_RESPONSE_INVALID == errorCode
+                || ErrorCode.CORE_REQUIRED_DATA_MISSING == errorCode
+                || ErrorCode.CORE_DEV_SEED_DISABLED == errorCode;
+    }
+
+    // Credential 상태 코드 파싱
+    private KyvcEnums.CredentialStatus parseCredentialStatus(
+            String statusCode // 상태 코드 문자열
+    ) {
+        if (!StringUtils.hasText(statusCode)) {
+            return null;
+        }
+        try {
+            return KyvcEnums.CredentialStatus.valueOf(statusCode.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     // 인증 컨텍스트 조회

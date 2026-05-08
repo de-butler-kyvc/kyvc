@@ -28,3 +28,12 @@ kyvc:
     enabled: ${KYVC_DEV_TOKEN_ENABLED:false}
     auto-create-user: ${KYVC_DEV_TOKEN_AUTO_CREATE_USER:true}
     default-email: ${KYVC_DEV_TOKEN_DEFAULT_EMAIL:dev-corporate-user@kyvc.local}
+  core:
+    mode: ${KYVC_CORE_MODE:http}
+    base-url: ${KYVC_CORE_BASE_URL:https://dev-core-kyvc.khuoo.synology.me}
+    connect-timeout-millis: ${KYVC_CORE_CONNECT_TIMEOUT_MILLIS:3000}
+    read-timeout-millis: ${KYVC_CORE_READ_TIMEOUT_MILLIS:10000}
+    dev-seed-enabled: ${KYVC_CORE_DEV_SEED_ENABLED:true}
+    failure-fallback-enabled: ${KYVC_CORE_FAILURE_FALLBACK_ENABLED:false}
+    api-key: ${KYVC_CORE_API_KEY:}
+    callback-base-url: ${KYVC_CORE_CALLBACK_BASE_URL:https://dev-api-kyvc.khuoo.synology.me}

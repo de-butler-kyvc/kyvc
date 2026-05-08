@@ -107,9 +107,135 @@ public class Credential {
     @Column(name = "credential_salt_hash", length = 255)
     private String credentialSaltHash;
 
+    // Core VC 발급 대기 Credential 생성
+    public static Credential createIssuing(
+            Long corporateId, // 법인 ID
+            Long kycId, // KYC 신청 ID
+            String credentialExternalId, // Core Credential 외부 ID
+            String credentialTypeCode, // Credential 유형 코드
+            String issuerDid, // Issuer DID
+            String credentialStatusPurposeCode, // Credential Status 목적 코드
+            String kycLevelCode, // KYC 레벨 코드
+            String jurisdictionCode, // 관할 코드
+            String holderDid, // Holder DID
+            String holderXrplAddress // Holder XRPL 주소
+    ) {
+        Credential credential = new Credential();
+        credential.corporateId = corporateId;
+        credential.kycId = kycId;
+        credential.credentialExternalId = credentialExternalId;
+        credential.credentialTypeCode = credentialTypeCode;
+        credential.issuerDid = issuerDid;
+        credential.credentialStatus = KyvcEnums.CredentialStatus.ISSUING;
+        credential.walletSavedYn = KyvcEnums.Yn.N.name();
+        credential.holderDid = holderDid;
+        credential.holderXrplAddress = holderXrplAddress;
+        credential.credentialStatusPurposeCode = credentialStatusPurposeCode;
+        credential.kycLevelCode = kycLevelCode;
+        credential.jurisdictionCode = jurisdictionCode;
+        return credential;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public Long getCorporateId() {
+        return corporateId;
+    }
+
+    public Long getKycId() {
+        return kycId;
+    }
+
+    public String getCredentialExternalId() {
+        return credentialExternalId;
+    }
+
+    public String getCredentialTypeCode() {
+        return credentialTypeCode;
+    }
+
+    public String getIssuerDid() {
+        return issuerDid;
+    }
+
+    public KyvcEnums.CredentialStatus getCredentialStatus() {
+        return credentialStatus;
+    }
+
+    public String getVcHash() {
+        return vcHash;
+    }
+
+    public String getXrplTxHash() {
+        return xrplTxHash;
+    }
+
+    public String getQrToken() {
+        return qrToken;
+    }
+
+    public LocalDateTime getQrExpiresAt() {
+        return qrExpiresAt;
+    }
+
+    public LocalDateTime getIssuedAt() {
+        return issuedAt;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public LocalDateTime getRevokedAt() {
+        return revokedAt;
+    }
+
+    public String getWalletSavedYn() {
+        return walletSavedYn;
+    }
+
+    public LocalDateTime getWalletSavedAt() {
+        return walletSavedAt;
+    }
+
+    public String getWalletDeviceId() {
+        return walletDeviceId;
+    }
+
+    public String getHolderDid() {
+        return holderDid;
+    }
+
+    public String getHolderXrplAddress() {
+        return holderXrplAddress;
+    }
+
+    public String getCredentialStatusId() {
+        return credentialStatusId;
+    }
+
+    public String getCredentialStatusPurposeCode() {
+        return credentialStatusPurposeCode;
+    }
+
+    public String getKycLevelCode() {
+        return kycLevelCode;
+    }
+
+    public String getJurisdictionCode() {
+        return jurisdictionCode;
+    }
+
     // 발급 완료 여부
     public boolean isIssued() {
         return KyvcEnums.CredentialStatus.VALID == credentialStatus;
+    }
+
+    // Core 발급 진행 중 여부
+    public boolean isIssuing() {
+        return KyvcEnums.CredentialStatus.ISSUING == credentialStatus;
     }
 
     // 법인 소유 여부
@@ -175,5 +301,57 @@ public class Credential {
             KyvcEnums.CredentialStatus credentialStatus // Credential 상태
     ) {
         this.credentialStatus = credentialStatus;
+    }
+
+    // XRPL 기록 메타데이터 반영
+    public void applyXrplTransactionMetadata(
+            String xrplTxHash // XRPL 트랜잭션 해시
+    ) {
+        if (hasText(xrplTxHash)) {
+            this.xrplTxHash = xrplTxHash;
+        }
+    }
+
+    // Core VC 발급 메타데이터 반영
+    public void applyIssuanceMetadata(
+            String credentialExternalId, // Core Credential 외부 ID
+            String issuerDid, // Issuer DID
+            KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
+            String vcHash, // VC 해시
+            String xrplTxHash, // XRPL 트랜잭션 해시
+            String credentialStatusId, // Credential Status ID
+            LocalDateTime issuedAt, // 발급 일시
+            LocalDateTime expiresAt // 만료 일시
+    ) {
+        if (hasText(credentialExternalId)) {
+            this.credentialExternalId = credentialExternalId;
+        }
+        if (hasText(issuerDid)) {
+            this.issuerDid = issuerDid;
+        }
+        if (credentialStatus != null) {
+            this.credentialStatus = credentialStatus;
+        }
+        if (hasText(vcHash)) {
+            this.vcHash = vcHash;
+        }
+        if (hasText(xrplTxHash)) {
+            this.xrplTxHash = xrplTxHash;
+        }
+        if (hasText(credentialStatusId)) {
+            this.credentialStatusId = credentialStatusId;
+        }
+        if (issuedAt != null) {
+            this.issuedAt = issuedAt;
+        }
+        if (expiresAt != null) {
+            this.expiresAt = expiresAt;
+        }
+    }
+
+    private static boolean hasText(
+            String value // 검증 대상 문자열
+    ) {
+        return value != null && !value.isBlank();
     }
 }

@@ -1,0 +1,942 @@
+package com.kyvc.backend.domain.core.infrastructure;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kyvc.backend.domain.core.config.CoreProperties;
+import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
+import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
+import com.kyvc.backend.domain.core.dto.CoreAiReviewStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialSchemaResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationRequest;
+import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationResponse;
+import com.kyvc.backend.domain.core.dto.CoreDidDocumentResponse;
+import com.kyvc.backend.domain.core.dto.CoreHealthResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
+import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialRequest;
+import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
+import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
+import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
+import com.kyvc.backend.domain.core.dto.CoreVcIssuanceStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
+import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
+import com.kyvc.backend.domain.core.dto.CoreVpVerificationStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreXrplTransactionResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.CoreHealthApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.CredentialStatusApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiRequest;
+import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.IssuePresentationChallengeApiRequest;
+import com.kyvc.backend.domain.core.infrastructure.dto.IssuePresentationChallengeApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.RevokeCredentialApiRequest;
+import com.kyvc.backend.domain.core.infrastructure.dto.RevokeCredentialApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.VerificationApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.VerifyCredentialApiRequest;
+import com.kyvc.backend.domain.core.infrastructure.dto.VerifyPresentationApiRequest;
+import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
+import com.kyvc.backend.global.exception.ApiException;
+import com.kyvc.backend.global.exception.ErrorCode;
+import com.kyvc.backend.global.logging.LogEventLogger;
+import com.kyvc.backend.global.util.KyvcEnums;
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+// Core 실제 HTTP Adapter
+@Component
+@RequiredArgsConstructor
+@ConditionalOnExpression("'${kyvc.core.mode:mock}'.toLowerCase() == 'http' || '${kyvc.core.mode:mock}'.toLowerCase() == 'hybrid'")
+public class CoreHttpAdapter implements CoreAdapter {
+
+    private static final String HEALTH_ENDPOINT = "/health";
+    private static final String ISSUE_KYC_CREDENTIAL_ENDPOINT = "/issuer/credentials/kyc";
+    private static final String REVOKE_CREDENTIAL_ENDPOINT = "/issuer/credentials/revoke";
+    private static final String CREDENTIAL_STATUS_ENDPOINT = "/credential-status/credentials/{issuerAccount}/{holderAccount}/{credentialType}";
+    private static final String VERIFY_PRESENTATION_ENDPOINT = "/verifier/presentations/verify";
+    private static final String ISSUE_PRESENTATION_CHALLENGE_ENDPOINT = "/verifier/presentations/challenges";
+    private static final String VERIFY_CREDENTIAL_ENDPOINT = "/verifier/credentials/verify";
+    private static final String DID_DOCUMENT_ENDPOINT = "/dids/{account}/diddoc.json";
+    private static final String CORE_API_KEY_HEADER = "X-API-Key";
+    private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
+
+    private final RestClient coreRestClient;
+    private final CoreProperties coreProperties;
+    private final CoreMockResponseFactory coreMockResponseFactory;
+    private final LogEventLogger logEventLogger;
+    private final ObjectMapper objectMapper;
+
+    @Override
+    public CoreHealthResponse checkHealth() {
+        String endpoint = HEALTH_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core health API call started", fields);
+        try {
+            ResponseEntity<CoreHealthApiResponse> responseEntity = coreRestClient.get()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .retrieve()
+                    .toEntity(CoreHealthApiResponse.class);
+            CoreHealthApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            logEventLogger.info("core.response.mapped", "Core health response mapped", fields);
+            return new CoreHealthResponse(
+                    coreProperties.normalizedMode().toUpperCase(Locale.ROOT),
+                    true,
+                    body.service() + ":" + body.status() + " (" + body.environment() + ")"
+            );
+        } catch (RestClientException exception) {
+            ApiException mapped = mapCoreException(endpoint, exception, fields);
+            if (coreProperties.isFailureFallbackEnabled()) {
+                logFallbackUsed(endpoint, mapped.getMessage(), fields);
+                return new CoreHealthResponse(
+                        coreProperties.normalizedMode().toUpperCase(Locale.ROOT),
+                        false,
+                        "Core health 장애 fallback 적용: " + mapped.getMessage()
+                );
+            }
+            throw mapped;
+        }
+    }
+
+    @Override
+    public CoreAiReviewResponse requestAiReview(
+            CoreAiReviewRequest request // AI 심사 요청
+    ) {
+        logEventLogger.info(
+                "core.ai.mock.created",
+                "Core AI API 미구현으로 Mock 응답 생성",
+                Map.of("coreRequestId", request.coreRequestId())
+        );
+        return coreMockResponseFactory.mockAiReviewAccepted(request);
+    }
+
+    @Override
+    public CoreAiReviewStatusResponse getAiReviewStatus(
+            String coreRequestId // Core 요청 ID
+    ) {
+        logEventLogger.info(
+                "core.ai.mock.created",
+                "Core AI 상태 API 미구현으로 Mock 응답 생성",
+                Map.of("coreRequestId", coreRequestId)
+        );
+        return coreMockResponseFactory.mockAiReviewStatus(coreRequestId);
+    }
+
+    @Override
+    public CoreVcIssuanceResponse requestVcIssuance(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        validateVcIssuanceRequest(request);
+
+        String issuerAccount = resolveIssuerAccount(request);
+        String issuerDid = resolveIssuerDid(request);
+        String issuerVerificationMethodId = resolveIssuerVerificationMethodId(request, issuerDid);
+        String holderAccount = resolveHolderAccount(request);
+        String holderDid = resolveHolderDid(request, holderAccount);
+        LocalDateTime validFrom = request.validFrom() == null ? LocalDateTime.now() : request.validFrom();
+        LocalDateTime validUntil = request.validUntil() == null ? CoreMockSeedData.validUntil() : request.validUntil();
+
+        IssueKycCredentialApiRequest apiRequest = new IssueKycCredentialApiRequest(
+                issuerAccount,
+                issuerDid,
+                extractKeyId(issuerVerificationMethodId),
+                holderAccount,
+                holderDid,
+                resolveClaims(request.claims()),
+                validFrom,
+                validUntil,
+                true,
+                true,
+                false,
+                true,
+                null,
+                "xrpl",
+                "jwt",
+                "vc+jwt",
+                coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
+                request.credentialType()
+        );
+
+        String endpoint = ISSUE_KYC_CREDENTIAL_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core VC issuance API call started", fields);
+        try {
+            ResponseEntity<IssueKycCredentialApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(IssueKycCredentialApiResponse.class);
+            IssueKycCredentialApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            CoreVcIssuanceResponse mapped = mapVcIssuanceResponse(request, body);
+            logEventLogger.info("core.response.mapped", "Core VC issuance response mapped", fields);
+            return mapped;
+        } catch (RestClientException exception) {
+            ApiException mapped = mapCoreException(endpoint, exception, fields);
+            if (coreProperties.isFailureFallbackEnabled()) {
+                logFallbackUsed(endpoint, mapped.getMessage(), fields);
+                return coreMockResponseFactory.fallbackIssueKycCredentialOnFailure(request, mapped.getMessage());
+            }
+            throw mapped;
+        }
+    }
+
+    @Override
+    public CoreVcIssuanceStatusResponse getVcIssuanceStatus(
+            String coreRequestId // Core 요청 ID
+    ) {
+        return new CoreVcIssuanceStatusResponse(
+                coreRequestId,
+                KyvcEnums.CredentialStatus.ISSUING.name(),
+                "Core VC 발급 상태 전용 API가 없어 진행 상태를 유지합니다.",
+                LocalDateTime.now()
+        );
+    }
+
+    @Override
+    public CoreRevokeCredentialResponse revokeCredential(
+            CoreRevokeCredentialRequest request // Credential 폐기 요청
+    ) {
+        if (request == null || !StringUtils.hasText(request.holderAccount())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Credential 폐기에 필요한 holderAccount가 없습니다.");
+        }
+        RevokeCredentialApiRequest apiRequest = new RevokeCredentialApiRequest(
+                request.issuerAccount(),
+                request.holderAccount(),
+                request.credentialType(),
+                request.credentialStatusId(),
+                request.credentialExternalId(),
+                "xrpl"
+        );
+
+        String endpoint = REVOKE_CREDENTIAL_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core revoke credential API call started", fields);
+        try {
+            ResponseEntity<RevokeCredentialApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(RevokeCredentialApiResponse.class);
+            RevokeCredentialApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            return new CoreRevokeCredentialResponse(
+                    body.revoked(),
+                    body.statusMode(),
+                    body.revoked() ? "Credential 폐기 성공" : "Credential 폐기 실패"
+            );
+        } catch (RestClientException exception) {
+            ApiException mapped = mapCoreException(endpoint, exception, fields);
+            if (coreProperties.isFailureFallbackEnabled()) {
+                logFallbackUsed(endpoint, mapped.getMessage(), fields);
+                return new CoreRevokeCredentialResponse(false, "fallback", "Core 장애 fallback으로 폐기 미확정 응답을 반환했습니다.");
+            }
+            throw mapped;
+        }
+    }
+
+    @Override
+    public CoreCredentialStatusResponse getCredentialStatus(
+            String issuerAccount, // Issuer XRPL Account
+            String holderAccount, // Holder XRPL Account
+            String credentialType // Credential 유형
+    ) {
+        if (!StringUtils.hasText(issuerAccount) || !StringUtils.hasText(holderAccount) || !StringUtils.hasText(credentialType)) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Credential 상태조회 필수 데이터가 부족합니다.");
+        }
+
+        String endpoint = CREDENTIAL_STATUS_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core credential-status API call started", fields);
+        try {
+            ResponseEntity<CredentialStatusApiResponse> responseEntity = coreRestClient.get()
+                    .uri(endpoint, issuerAccount.trim(), holderAccount.trim(), credentialType.trim())
+                    .headers(this::applyApiKeyHeader)
+                    .retrieve()
+                    .toEntity(CredentialStatusApiResponse.class);
+            CredentialStatusApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            CoreCredentialStatusResponse mapped = new CoreCredentialStatusResponse(
+                    body.issuerAccount(),
+                    body.holderAccount(),
+                    body.credentialType(),
+                    body.found(),
+                    body.active(),
+                    mapCredentialStatusCode(body),
+                    parseDateTime(body.checkedAt()),
+                    body.found() ? "Core credential status synced." : "Core credential status entry not found."
+            );
+            logEventLogger.info("core.response.mapped", "Core credential-status response mapped", fields);
+            return mapped;
+        } catch (RestClientException exception) {
+            ApiException mapped = mapCoreException(endpoint, exception, fields);
+            if (coreProperties.isFailureFallbackEnabled()) {
+                logFallbackUsed(endpoint, mapped.getMessage(), fields);
+                return new CoreCredentialStatusResponse(
+                        issuerAccount,
+                        holderAccount,
+                        credentialType,
+                        false,
+                        false,
+                        null,
+                        LocalDateTime.now(),
+                        "Core 장애 fallback으로 상태 미확정 응답을 반환했습니다."
+                );
+            }
+            throw mapped;
+        }
+    }
+
+    @Override
+    public CoreVpVerificationResponse requestVpVerification(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String vpJwt // VP JWT 또는 SD-JWT 원문
+    ) {
+        if (request == null || !StringUtils.hasText(request.coreRequestId())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VP 검증 요청 필수 데이터가 부족합니다.");
+        }
+        if (!StringUtils.hasText(vpJwt)) {
+            throw new ApiException(ErrorCode.VP_JWT_REQUIRED);
+        }
+
+        VerifyPresentationApiRequest apiRequest = new VerifyPresentationApiRequest(
+                "kyvc-sd-jwt-presentation-v1",
+                request.aud(),
+                request.requestNonce(),
+                request.challenge(),
+                parseRequiredClaims(request.requiredClaimsJson()),
+                null,
+                null,
+                vpJwt
+        );
+
+        String endpoint = VERIFY_PRESENTATION_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), request.vpVerificationId());
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core VP verify API call started", fields);
+        try {
+            ResponseEntity<VerificationApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(VerificationApiResponse.class);
+            VerificationApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            CoreVpVerificationResponse mapped = mapVpVerificationResponse(request, body);
+            logEventLogger.info("core.response.mapped", "Core VP verify response mapped", fields);
+            return mapped;
+        } catch (RestClientException exception) {
+            ApiException mapped = mapCoreException(endpoint, exception, fields);
+            if (coreProperties.isFailureFallbackEnabled()) {
+                logFallbackUsed(endpoint, mapped.getMessage(), fields);
+                return coreMockResponseFactory.fallbackVerifyPresentationOnFailure(request, mapped.getMessage());
+            }
+            throw mapped;
+        }
+    }
+
+    @Override
+    public CoreVpVerificationStatusResponse getVpVerificationStatus(
+            String coreRequestId // Core 요청 ID
+    ) {
+        return new CoreVpVerificationStatusResponse(
+                coreRequestId,
+                KyvcEnums.VpVerificationStatus.PRESENTED.name(),
+                "Core VP 검증 상태 전용 API가 없어 PRESENTED 상태를 유지합니다.",
+                LocalDateTime.now()
+        );
+    }
+
+    @Override
+    public CorePresentationChallengeResponse issuePresentationChallenge(
+            CorePresentationChallengeRequest request // VP Challenge 발급 요청
+    ) {
+        if (request == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        IssuePresentationChallengeApiRequest apiRequest = new IssuePresentationChallengeApiRequest(
+                request.domain(),
+                request.aud(),
+                request.definitionId(),
+                request.format(),
+                request.presentationDefinition()
+        );
+
+        String endpoint = ISSUE_PRESENTATION_CHALLENGE_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core VP challenge API call started", fields);
+        try {
+            ResponseEntity<IssuePresentationChallengeApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(IssuePresentationChallengeApiResponse.class);
+            IssuePresentationChallengeApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            return new CorePresentationChallengeResponse(
+                    body.challenge(),
+                    body.nonce(),
+                    body.domain(),
+                    body.aud(),
+                    parseDateTime(StringUtils.hasText(body.expiresAtCamelCase()) ? body.expiresAtCamelCase() : body.expiresAtSnakeCase()),
+                    body.presentationDefinition()
+            );
+        } catch (RestClientException exception) {
+            throw mapCoreException(endpoint, exception, fields);
+        }
+    }
+
+    @Override
+    public CoreCredentialVerificationResponse verifyCredential(
+            CoreCredentialVerificationRequest request // Credential 검증 요청
+    ) {
+        if (request == null || request.credential() == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        VerifyCredentialApiRequest apiRequest = new VerifyCredentialApiRequest(
+                request.format(),
+                request.credential(),
+                request.didDocuments(),
+                request.policy(),
+                true,
+                "xrpl"
+        );
+
+        String endpoint = VERIFY_CREDENTIAL_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core credential verify API call started", fields);
+        try {
+            ResponseEntity<VerificationApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(VerificationApiResponse.class);
+            VerificationApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            return new CoreCredentialVerificationResponse(body.ok(), safeErrors(body.errors()), safeDetails(body.details()));
+        } catch (RestClientException exception) {
+            throw mapCoreException(endpoint, exception, fields);
+        }
+    }
+
+    @Override
+    public CoreDidDocumentResponse getDidDocument(
+            String account // XRPL Account
+    ) {
+        if (!StringUtils.hasText(account)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        String endpoint = DID_DOCUMENT_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.http.call.started", "Core DID document API call started", fields);
+        try {
+            ResponseEntity<Map> responseEntity = coreRestClient.get()
+                    .uri(endpoint, account.trim())
+                    .headers(this::applyApiKeyHeader)
+                    .retrieve()
+                    .toEntity(Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            return new CoreDidDocumentResponse(account.trim(), body);
+        } catch (RestClientException exception) {
+            throw mapCoreException(endpoint, exception, fields);
+        }
+    }
+
+    @Override
+    public CoreXrplTransactionResponse getXrplTransaction(
+            String txHash // 트랜잭션 해시
+    ) {
+        logEventLogger.info("core.ai.mock.created", "Core XRPL API 미구현으로 Mock 응답 생성");
+        return coreMockResponseFactory.mockXrplTransactionStatus(txHash);
+    }
+
+    @Override
+    public CoreCredentialSchemaResponse getCredentialSchema(
+            String schemaId // 스키마 ID
+    ) {
+        logEventLogger.info("core.ai.mock.created", "Core Credential Schema API 미구현으로 Mock 응답 생성");
+        return coreMockResponseFactory.mockCredentialSchema(schemaId);
+    }
+
+    private void validateVcIssuanceRequest(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        if (request == null || !StringUtils.hasText(request.coreRequestId())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 요청 필수 데이터가 부족합니다.");
+        }
+    }
+
+    private String resolveIssuerAccount(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        if (StringUtils.hasText(request.issuerAccount())) {
+            return request.issuerAccount().trim();
+        }
+        String issuerFromDid = resolveAccountFromDid(request.issuerDid());
+        if (StringUtils.hasText(issuerFromDid)) {
+            return issuerFromDid;
+        }
+        return resolveDevSeedOrThrow("issuerAccount", CoreMockSeedData.DEV_ISSUER_ACCOUNT);
+    }
+
+    private String resolveIssuerDid(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        if (StringUtils.hasText(request.issuerDid())) {
+            return request.issuerDid().trim();
+        }
+        return resolveDevSeedOrThrow("issuerDid", CoreMockSeedData.DEV_ISSUER_DID);
+    }
+
+    private String resolveIssuerVerificationMethodId(
+            CoreVcIssuanceRequest request, // VC 발급 요청
+            String issuerDid // Issuer DID
+    ) {
+        if (StringUtils.hasText(request.issuerVerificationMethodId())) {
+            return request.issuerVerificationMethodId().trim();
+        }
+        if (StringUtils.hasText(issuerDid)) {
+            return issuerDid + "#issuer-key-1";
+        }
+        return resolveDevSeedOrThrow("issuerVerificationMethodId", CoreMockSeedData.DEV_ISSUER_VERIFICATION_METHOD_ID);
+    }
+
+    private String resolveHolderAccount(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        if (StringUtils.hasText(request.holderAccount())) {
+            return request.holderAccount().trim();
+        }
+        return resolveDevSeedOrThrow("holderAccount", CoreMockSeedData.DEV_HOLDER_ACCOUNT);
+    }
+
+    private String resolveHolderDid(
+            CoreVcIssuanceRequest request, // VC 발급 요청
+            String holderAccount // Holder XRPL Account
+    ) {
+        if (StringUtils.hasText(request.holderDid())) {
+            return request.holderDid().trim();
+        }
+        if (StringUtils.hasText(holderAccount)) {
+            return "did:xrpl:1:" + holderAccount;
+        }
+        return resolveDevSeedOrThrow("holderDid", CoreMockSeedData.DEV_HOLDER_DID);
+    }
+
+    private Map<String, Object> resolveClaims(
+            Map<String, Object> claims // VC Claim 데이터
+    ) {
+        if (claims != null && !claims.isEmpty()) {
+            return claims;
+        }
+        if (coreProperties.isDevSeedEnabled()) {
+            return CoreMockSeedData.legalEntityClaims();
+        }
+        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 claims 데이터가 부족합니다.");
+    }
+
+    private String resolveDevSeedOrThrow(
+            String fieldName, // 누락 필드명
+            String seedValue // 대체 seed 값
+    ) {
+        if (coreProperties.isDevSeedEnabled()) {
+            logEventLogger.warn(
+                    "core.dev-seed.used",
+                    "Core 개발 seed 데이터 사용",
+                    Map.of("fieldName", fieldName, "devSeedUsed", true)
+            );
+            return seedValue;
+        }
+        throw new ApiException(ErrorCode.CORE_DEV_SEED_DISABLED, "Core 요청 필수 데이터 누락: " + fieldName);
+    }
+
+    private CoreVcIssuanceResponse mapVcIssuanceResponse(
+            CoreVcIssuanceRequest request, // VC 발급 요청
+            IssueKycCredentialApiResponse body // Core 응답 DTO
+    ) {
+        Map<String, Object> status = safeDetails(body.status());
+        Map<String, Object> tx = safeDetails(body.credentialCreateTransaction());
+        String statusCode = mapCredentialStatusFromStatusObject(status);
+        String credentialStatusId = extractString(status, "id", "status_id", "credentialStatusId");
+        String credentialExternalId = StringUtils.hasText(body.credentialId())
+                ? body.credentialId()
+                : extractString(status, "credential_id", "credentialId", "jti");
+        String issuerDid = extractString(status, "issuer_did", "issuerDid");
+        String vcHash = StringUtils.hasText(body.vcCoreHash()) ? body.vcCoreHash() : extractString(status, "vc_hash", "vcHash");
+        String xrplTxHash = extractString(tx, "hash", "tx_hash", "transaction_hash");
+        LocalDateTime issuedAt = parseDateTime(extractString(status, "issued_at", "issuedAt", "created_at"));
+        LocalDateTime expiresAt = parseDateTime(extractString(status, "expires_at", "expiresAt", "valid_until"));
+
+        return new CoreVcIssuanceResponse(
+                request.coreRequestId(),
+                statusCode,
+                "Core VC 발급 API 호출 성공",
+                LocalDateTime.now(),
+                credentialExternalId,
+                StringUtils.hasText(issuerDid) ? issuerDid : request.issuerDid(),
+                vcHash,
+                xrplTxHash,
+                credentialStatusId,
+                issuedAt,
+                expiresAt
+        );
+    }
+
+    private String mapCredentialStatusCode(
+            CredentialStatusApiResponse body // Core 상태 응답
+    ) {
+        if (!body.found()) {
+            return null;
+        }
+        if (body.active()) {
+            return KyvcEnums.CredentialStatus.VALID.name();
+        }
+        Map<String, Object> entry = safeDetails(body.entry());
+        if (extractBoolean(entry, "suspended", "is_suspended")) {
+            return KyvcEnums.CredentialStatus.SUSPENDED.name();
+        }
+        if (extractBoolean(entry, "expired", "is_expired")) {
+            return KyvcEnums.CredentialStatus.EXPIRED.name();
+        }
+        if (extractBoolean(entry, "revoked", "is_revoked")) {
+            return KyvcEnums.CredentialStatus.REVOKED.name();
+        }
+        String entryStatus = extractString(entry, "status", "state");
+        if (!StringUtils.hasText(entryStatus)) {
+            return null;
+        }
+        try {
+            return KyvcEnums.CredentialStatus.valueOf(entryStatus.trim().toUpperCase(Locale.ROOT)).name();
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private String mapCredentialStatusFromStatusObject(
+            Map<String, Object> status // Core status 객체
+    ) {
+        if (extractBoolean(status, "active")) {
+            return KyvcEnums.CredentialStatus.VALID.name();
+        }
+        if (extractBoolean(status, "suspended")) {
+            return KyvcEnums.CredentialStatus.SUSPENDED.name();
+        }
+        if (extractBoolean(status, "expired")) {
+            return KyvcEnums.CredentialStatus.EXPIRED.name();
+        }
+        if (extractBoolean(status, "revoked")) {
+            return KyvcEnums.CredentialStatus.REVOKED.name();
+        }
+        return KyvcEnums.CredentialStatus.ISSUING.name();
+    }
+
+    private CoreVpVerificationResponse mapVpVerificationResponse(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            VerificationApiResponse body // Core 검증 응답
+    ) {
+        List<String> errors = safeErrors(body.errors());
+        Map<String, Object> details = safeDetails(body.details());
+        boolean replaySuspected = containsReplaySignal(errors, details);
+        if (body.ok()) {
+            return new CoreVpVerificationResponse(
+                    request.coreRequestId(),
+                    KyvcEnums.VpVerificationStatus.VALID.name(),
+                    "Core VP 검증 성공",
+                    LocalDateTime.now(),
+                    true,
+                    true,
+                    false,
+                    resolveSummary(errors, details, "VP 검증 성공")
+            );
+        }
+        if (replaySuspected) {
+            return new CoreVpVerificationResponse(
+                    request.coreRequestId(),
+                    KyvcEnums.VpVerificationStatus.REPLAY_SUSPECTED.name(),
+                    "Core VP 검증 Replay 의심",
+                    LocalDateTime.now(),
+                    true,
+                    false,
+                    true,
+                    resolveSummary(errors, details, "VP Replay 의심")
+            );
+        }
+        return new CoreVpVerificationResponse(
+                request.coreRequestId(),
+                KyvcEnums.VpVerificationStatus.INVALID.name(),
+                "Core VP 검증 실패",
+                LocalDateTime.now(),
+                true,
+                false,
+                false,
+                resolveSummary(errors, details, "VP 검증 실패")
+        );
+    }
+
+    private void applyApiKeyHeader(
+            HttpHeaders headers // HTTP 헤더
+    ) {
+        String apiKey = coreProperties.resolveApiKey();
+        if (StringUtils.hasText(apiKey)) {
+            headers.set(CORE_API_KEY_HEADER, apiKey);
+            headers.set(INTERNAL_API_KEY_HEADER, apiKey);
+        }
+    }
+
+    private <T> T requireResponseBody(
+            T responseBody, // 응답 body
+            String endpoint // 호출 endpoint
+    ) {
+        if (responseBody == null) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core 응답 body 누락: " + endpoint);
+        }
+        return responseBody;
+    }
+
+    private ApiException mapCoreException(
+            String endpoint, // 호출 endpoint
+            Exception exception, // 원본 예외
+            Map<String, Object> baseFields // 로그 필드
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
+        if (exception instanceof RestClientResponseException responseException) {
+            fields.put("httpStatus", responseException.getRawStatusCode());
+            logEventLogger.warn("core.http.call.failed", "Core API call failed", fields);
+            return new ApiException(
+                    ErrorCode.CORE_API_CALL_FAILED,
+                    "Core API 호출 실패 [" + endpoint + "], status=" + responseException.getRawStatusCode(),
+                    exception
+            );
+        }
+        if (exception instanceof ResourceAccessException && isTimeoutException(exception)) {
+            logEventLogger.warn("core.http.call.timeout", "Core API call timeout", fields);
+            return new ApiException(ErrorCode.CORE_API_TIMEOUT, "Core API 타임아웃 [" + endpoint + "]", exception);
+        }
+        logEventLogger.error("core.http.call.failed", "Core API call failed", fields, exception);
+        return new ApiException(ErrorCode.CORE_API_CALL_FAILED, "Core API 호출 실패 [" + endpoint + "]", exception);
+    }
+
+    private boolean isTimeoutException(
+            Throwable throwable // 원본 예외
+    ) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase(Locale.ROOT).contains("timed out")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private void logHttpCompleted(
+            String endpoint, // 호출 endpoint
+            int httpStatus, // HTTP 상태 코드
+            long startedAt, // 시작 시각
+            Map<String, Object> baseFields // 로그 필드
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
+        fields.put("httpStatus", httpStatus);
+        fields.put("durationMillis", System.currentTimeMillis() - startedAt);
+        logEventLogger.info("core.http.call.completed", "Core API call completed", fields);
+    }
+
+    private void logFallbackUsed(
+            String endpoint, // 호출 endpoint
+            String reason, // fallback 사유
+            Map<String, Object> baseFields // 로그 필드
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
+        fields.put("mockReason", reason);
+        fields.put("endpoint", endpoint);
+        logEventLogger.warn("core.mock.fallback.used", "Core 장애 fallback 사용", fields);
+    }
+
+    private Map<String, Object> createHttpLogFields(
+            String endpoint, // 호출 endpoint
+            String coreRequestId, // Core 요청 ID
+            Long credentialId, // Credential ID
+            Long vpVerificationId // VP 검증 ID
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("endpoint", endpoint);
+        fields.put("coreRequestId", coreRequestId);
+        fields.put("credentialId", credentialId);
+        fields.put("vpVerificationId", vpVerificationId);
+        return fields;
+    }
+
+    private String resolveAccountFromDid(
+            String did // DID 문자열
+    ) {
+        if (!StringUtils.hasText(did)) {
+            return null;
+        }
+        String prefix = "did:xrpl:1:";
+        String normalized = did.trim();
+        if (!normalized.startsWith(prefix)) {
+            return null;
+        }
+        String account = normalized.substring(prefix.length()).trim();
+        return StringUtils.hasText(account) ? account : null;
+    }
+
+    private String extractKeyId(
+            String verificationMethodId // Verification Method ID
+    ) {
+        if (!StringUtils.hasText(verificationMethodId)) {
+            return "issuer-key-1";
+        }
+        String normalized = verificationMethodId.trim();
+        int hashIndex = normalized.lastIndexOf('#');
+        if (hashIndex < 0 || hashIndex + 1 >= normalized.length()) {
+            return normalized;
+        }
+        return normalized.substring(hashIndex + 1);
+    }
+
+    private List<String> parseRequiredClaims(
+            String requiredClaimsJson // claim JSON 문자열
+    ) {
+        if (!StringUtils.hasText(requiredClaimsJson)) {
+            return CoreMockSeedData.requiredClaims();
+        }
+        try {
+            return objectMapper.readValue(requiredClaimsJson, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException exception) {
+            return CoreMockSeedData.requiredClaims();
+        }
+    }
+
+    private String extractString(
+            Map<String, Object> source, // 대상 Map
+            String... keys // 조회 키 후보
+    ) {
+        if (source == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = source.get(key);
+            if (value instanceof String stringValue && StringUtils.hasText(stringValue)) {
+                return stringValue.trim();
+            }
+            if (value != null && !(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
+                return String.valueOf(value);
+            }
+        }
+        return null;
+    }
+
+    private boolean extractBoolean(
+            Map<String, Object> source, // 대상 Map
+            String... keys // 조회 키 후보
+    ) {
+        if (source == null || keys == null) {
+            return false;
+        }
+        for (String key : keys) {
+            Object value = source.get(key);
+            if (value instanceof Boolean booleanValue) {
+                return booleanValue;
+            }
+            if (value instanceof String stringValue && StringUtils.hasText(stringValue)) {
+                return Boolean.parseBoolean(stringValue.trim());
+            }
+            if (value instanceof Number numberValue) {
+                return numberValue.intValue() != 0;
+            }
+        }
+        return false;
+    }
+
+    private List<String> safeErrors(
+            List<String> errors // 원본 오류 목록
+    ) {
+        return errors == null ? List.of() : errors;
+    }
+
+    private Map<String, Object> safeDetails(
+            Map<String, Object> details // 원본 상세 Map
+    ) {
+        return details == null ? Map.of() : details;
+    }
+
+    private boolean containsReplaySignal(
+            List<String> errors, // 오류 목록
+            Map<String, Object> details // 상세 Map
+    ) {
+        for (String error : safeErrors(errors)) {
+            if (StringUtils.hasText(error) && error.toLowerCase(Locale.ROOT).contains("replay")) {
+                return true;
+            }
+        }
+        String summary = extractString(details, "summary", "reason", "message", "error");
+        return StringUtils.hasText(summary) && summary.toLowerCase(Locale.ROOT).contains("replay");
+    }
+
+    private String resolveSummary(
+            List<String> errors, // 오류 목록
+            Map<String, Object> details, // 상세 Map
+            String defaultSummary // 기본 요약 문구
+    ) {
+        String summary = extractString(details, "summary", "reason", "message", "error");
+        if (StringUtils.hasText(summary)) {
+            return summary;
+        }
+        if (!safeErrors(errors).isEmpty() && StringUtils.hasText(errors.get(0))) {
+            return errors.get(0);
+        }
+        return defaultSummary;
+    }
+
+    private LocalDateTime parseDateTime(
+            String value // 날짜 문자열
+    ) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value.trim());
+        } catch (DateTimeParseException ignoreLocalDateTime) {
+            try {
+                return OffsetDateTime.parse(value.trim()).toLocalDateTime();
+            } catch (DateTimeParseException ignoreOffsetDateTime) {
+                return null;
+            }
+        }
+    }
+}

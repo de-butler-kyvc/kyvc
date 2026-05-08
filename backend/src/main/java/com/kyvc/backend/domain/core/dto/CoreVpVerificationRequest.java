@@ -12,7 +12,10 @@ import java.time.LocalDateTime;
  * @param credentialId Credential ID
  * @param corporateId 법인 ID
  * @param requestNonce 요청 nonce
+ * @param challenge 요청 challenge
  * @param purpose 검증 목적
+ * @param aud 검증 aud
+ * @param requiredClaimsJson 요청 claim 조건 JSON
  * @param callbackUrl Callback URL
  * @param requestedAt 요청 시각
  */
@@ -28,8 +31,14 @@ public record CoreVpVerificationRequest(
         Long corporateId, // 법인 ID
         @Schema(description = "요청 nonce", example = "nonce-20260506-001")
         String requestNonce, // 요청 nonce
-        @Schema(description = "검증 목적", example = "KYC 제출 증빙")
+        @Schema(description = "요청 challenge", example = "challenge-20260506-001")
+        String challenge, // 요청 challenge
+        @Schema(description = "검증 목적", example = "KYC 제출 증명")
         String purpose, // 검증 목적
+        @Schema(description = "검증 aud", example = "https://dev-api-kyvc.khuoo.synology.me")
+        String aud, // 검증 aud
+        @Schema(description = "요청 claim 조건 JSON")
+        String requiredClaimsJson, // 요청 claim 조건 JSON
         @Schema(description = "Callback URL", example = "http://localhost:8080/api/internal/core/callbacks/vp-verification")
         String callbackUrl, // Callback URL
         @Schema(description = "요청 시각", example = "2026-05-06T10:20:00")

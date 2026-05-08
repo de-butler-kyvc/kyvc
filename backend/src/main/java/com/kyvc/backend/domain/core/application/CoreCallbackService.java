@@ -8,6 +8,8 @@ import com.kyvc.backend.domain.core.dto.CoreCallbackResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceCallbackRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationCallbackRequest;
 import com.kyvc.backend.domain.core.dto.CoreXrplTransactionCallbackRequest;
+import com.kyvc.backend.domain.credential.domain.Credential;
+import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.domain.vp.domain.VpVerification;
@@ -34,6 +36,8 @@ public class CoreCallbackService {
 
     private static final String SUCCESS_STATUS = KyvcEnums.CoreRequestStatus.SUCCESS.name();
     private static final String FAILED_STATUS = KyvcEnums.CoreRequestStatus.FAILED.name();
+    private static final String ERROR_STATUS = "ERROR";
+    private static final String XRPL_CONFIRMED_STATUS = "CONFIRMED";
     private static final String VALID_STATUS = KyvcEnums.VpVerificationStatus.VALID.name();
     private static final String INVALID_VP_STATUS = KyvcEnums.VpVerificationStatus.INVALID.name();
     private static final String REPLAY_SUSPECTED_STATUS = KyvcEnums.VpVerificationStatus.REPLAY_SUSPECTED.name();
@@ -45,6 +49,7 @@ public class CoreCallbackService {
     private static final String AI_REVIEW_FAILED_MANUAL_REASON = "AI 심사 실패로 수동 심사 전환";
 
     private final CoreRequestService coreRequestService;
+    private final CredentialRepository credentialRepository;
     private final KycApplicationRepository kycApplicationRepository;
     private final VpVerificationRepository vpVerificationRepository;
     private final ObjectMapper objectMapper;
@@ -97,14 +102,21 @@ public class CoreCallbackService {
                 KyvcEnums.CoreRequestType.VC_ISSUE
         );
         if (callbackContext.duplicated()) {
+            if (KyvcEnums.CoreRequestStatus.SUCCESS == callbackContext.coreRequest().getCoreRequestStatus()) {
+                applyVcIssuanceSuccess(callbackContext.coreRequest(), request);
+            }
             return duplicatedResponse(callbackContext.coreRequest());
         }
 
-        CoreRequest updatedCoreRequest = processCoreRequestStatusOnly(
-                callbackContext,
-                request,
-                request.errorMessage()
-        );
+        CoreRequest updatedCoreRequest;
+        if (SUCCESS_STATUS.equals(callbackContext.status())) {
+            String payloadJson = toJson(request, callbackContext.coreRequestId());
+            updatedCoreRequest = coreRequestService.markCallbackSuccess(callbackContext.coreRequestId(), payloadJson);
+            applyVcIssuanceSuccess(updatedCoreRequest, request);
+        } else {
+            updatedCoreRequest = coreRequestService.markCallbackFailed(callbackContext.coreRequestId(), request.errorMessage());
+            applyVcIssuanceFailed(updatedCoreRequest);
+        }
         logProcessed(updatedCoreRequest, callbackContext.status());
         return processedResponse(updatedCoreRequest);
     }
@@ -131,12 +143,7 @@ public class CoreCallbackService {
             CoreXrplTransactionCallbackRequest request // XRPL Callback 요청
     ) {
         validateRequestBody(request);
-        CallbackContext callbackContext = prepareCallback(
-                pathCoreRequestId,
-                request.coreRequestId(),
-                request.status(),
-                KyvcEnums.CoreRequestType.XRPL_TX
-        );
+        CallbackContext callbackContext = prepareXrplTransactionCallback(pathCoreRequestId, request);
         if (callbackContext.duplicated()) {
             return duplicatedResponse(callbackContext.coreRequest());
         }
@@ -146,6 +153,7 @@ public class CoreCallbackService {
                 request,
                 request.errorMessage()
         );
+        applyXrplTransactionCallback(updatedCoreRequest, request, callbackContext.status());
         logProcessed(updatedCoreRequest, callbackContext.status());
         return processedResponse(updatedCoreRequest);
     }
@@ -188,6 +196,25 @@ public class CoreCallbackService {
         }
 
         String resolvedStatus = resolveVpStatus(request.status(), resolvedCoreRequestId, coreRequest);
+        return new CallbackContext(coreRequest, resolvedCoreRequestId, resolvedStatus, false);
+    }
+
+    // XRPL Callback 준비 처리
+    private CallbackContext prepareXrplTransactionCallback(
+            String pathCoreRequestId, // 경로 Core 요청 ID
+            CoreXrplTransactionCallbackRequest request // XRPL Callback 요청
+    ) {
+        String resolvedCoreRequestId = resolveCoreRequestId(pathCoreRequestId, request.coreRequestId());
+        CoreRequest coreRequest = coreRequestService.getCoreRequest(resolvedCoreRequestId);
+        validateCoreRequestType(coreRequest, KyvcEnums.CoreRequestType.XRPL_TX);
+        logReceived(coreRequest, request.status());
+
+        if (coreRequest.isCompleted()) {
+            logDuplicated(coreRequest);
+            return new CallbackContext(coreRequest, resolvedCoreRequestId, coreRequest.getCoreRequestStatus().name(), true);
+        }
+
+        String resolvedStatus = resolveXrplStatus(request.status(), resolvedCoreRequestId, coreRequest);
         return new CallbackContext(coreRequest, resolvedCoreRequestId, resolvedStatus, false);
     }
 
@@ -244,6 +271,59 @@ public class CoreCallbackService {
         kycApplicationRepository.save(kycApplication);
     }
 
+    // VC 발급 성공 결과 반영
+    private void applyVcIssuanceSuccess(
+            CoreRequest coreRequest, // Core 요청 Entity
+            CoreVcIssuanceCallbackRequest request // VC 발급 Callback 요청
+    ) {
+        Credential credential = findCredentialTarget(coreRequest);
+        LocalDateTime issuedAt = resolveIssuedAt(credential, request.issuedAt());
+        credential.applyIssuanceMetadata(
+                resolveCredentialExternalId(request),
+                request.issuerDid(),
+                KyvcEnums.CredentialStatus.VALID,
+                resolveVcHash(request),
+                request.xrplTxHash(),
+                request.credentialStatusId(),
+                issuedAt,
+                resolveExpiresAt(credential, request.expiresAt())
+        );
+        Credential savedCredential = credentialRepository.save(credential);
+
+        KycApplication kycApplication = kycApplicationRepository.findById(savedCredential.getKycId())
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+        kycApplication.markVcIssued(issuedAt);
+        kycApplicationRepository.save(kycApplication);
+
+        ensureXrplTransactionRequest(savedCredential);
+    }
+
+    // VC 발급 실패 결과 반영
+    private void applyVcIssuanceFailed(
+            CoreRequest coreRequest // Core 요청 Entity
+    ) {
+        Credential credential = findCredentialTarget(coreRequest);
+        if (!credential.isIssued()) {
+            credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+            credentialRepository.save(credential);
+        }
+    }
+
+    // XRPL 기록 결과 반영
+    private void applyXrplTransactionCallback(
+            CoreRequest coreRequest, // Core 요청 Entity
+            CoreXrplTransactionCallbackRequest request, // XRPL Callback 요청
+            String status // Callback 상태값
+    ) {
+        if (!SUCCESS_STATUS.equals(status)) {
+            return;
+        }
+
+        Credential credential = findCredentialTarget(coreRequest);
+        credential.applyXrplTransactionMetadata(request.txHash());
+        credentialRepository.save(credential);
+    }
+
     // AI 심사 대상 KYC 조회
     private KycApplication findAiReviewTarget(
             CoreRequest coreRequest // Core 요청 Entity
@@ -254,6 +334,100 @@ public class CoreCallbackService {
         }
         return kycApplicationRepository.findById(coreRequest.getTargetId())
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+    }
+
+    // Credential 대상 조회
+    private Credential findCredentialTarget(
+            CoreRequest coreRequest // Core 요청 Entity
+    ) {
+        if (KyvcEnums.CoreTargetType.CREDENTIAL != coreRequest.getCoreTargetType()
+                || coreRequest.getTargetId() == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        return credentialRepository.getById(coreRequest.getTargetId());
+    }
+
+    // XRPL 기록 요청 생성
+    private void ensureXrplTransactionRequest(
+            Credential credential // Credential Entity
+    ) {
+        if (credential == null || credential.getCredentialId() == null) {
+            return;
+        }
+        if (coreRequestService.findLatestXrplTransactionRequest(credential.getCredentialId()).isPresent()) {
+            return;
+        }
+
+        coreRequestService.createXrplTransactionRequest(
+                credential.getCredentialId(),
+                toJson(createXrplRequestPayload(credential), String.valueOf(credential.getCredentialId()))
+        );
+    }
+
+    // XRPL 요청 Payload 생성
+    private Map<String, Object> createXrplRequestPayload(
+            Credential credential // Credential Entity
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("credentialId", credential.getCredentialId());
+        payload.put("kycId", credential.getKycId());
+        payload.put("issuerDid", credential.getIssuerDid());
+        payload.put("vcHash", credential.getVcHash());
+        payload.put("credentialStatus", enumName(credential.getCredentialStatus()));
+        payload.put("issuedAt", credential.getIssuedAt());
+        payload.put("expiresAt", credential.getExpiresAt());
+        return payload;
+    }
+
+    // 발급 외부 ID 결정
+    private String resolveCredentialExternalId(
+            CoreVcIssuanceCallbackRequest request // VC 발급 Callback 요청
+    ) {
+        if (StringUtils.hasText(request.credentialExternalId())) {
+            return request.credentialExternalId().trim();
+        }
+        if (StringUtils.hasText(request.credentialId())) {
+            return request.credentialId().trim();
+        }
+        return null;
+    }
+
+    // VC 해시 결정
+    private String resolveVcHash(
+            CoreVcIssuanceCallbackRequest request // VC 발급 Callback 요청
+    ) {
+        if (StringUtils.hasText(request.vcHash())) {
+            return request.vcHash().trim();
+        }
+        if (StringUtils.hasText(request.credentialHash())) {
+            return request.credentialHash().trim();
+        }
+        return null;
+    }
+
+    // 발급 시각 결정
+    private LocalDateTime resolveIssuedAt(
+            Credential credential, // Credential Entity
+            LocalDateTime issuedAt // Callback 발급 시각
+    ) {
+        if (issuedAt != null) {
+            return issuedAt;
+        }
+        if (credential.getIssuedAt() != null) {
+            return credential.getIssuedAt();
+        }
+        return LocalDateTime.now();
+    }
+
+    // 만료 시각 결정
+    private LocalDateTime resolveExpiresAt(
+            Credential credential, // Credential Entity
+            LocalDateTime expiresAt // Callback 만료 시각
+    ) {
+        if (expiresAt != null) {
+            return expiresAt;
+        }
+        return credential.getExpiresAt();
     }
 
     // VP 검증 결과 반영
@@ -340,10 +514,41 @@ public class CoreCallbackService {
         }
 
         String normalizedStatus = rawStatus.trim().toUpperCase(Locale.ROOT);
+        if (ERROR_STATUS.equals(normalizedStatus)) {
+            return FAILED_STATUS;
+        }
         if (!SUCCESS_STATUS.equals(normalizedStatus) && !FAILED_STATUS.equals(normalizedStatus)) {
             logEventLogger.warn(
                     "core.callback.failed",
                     "Unsupported callback status",
+                    createLogFields(coreRequestId, coreRequest, normalizedStatus)
+            );
+            throw new ApiException(ErrorCode.INVALID_STATUS);
+        }
+        return normalizedStatus;
+    }
+
+    // XRPL Callback 상태값 검증
+    private String resolveXrplStatus(
+            String rawStatus, // 원본 상태값
+            String coreRequestId, // Core 요청 ID
+            CoreRequest coreRequest // Core 요청 Entity
+    ) {
+        if (!StringUtils.hasText(rawStatus)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        String normalizedStatus = rawStatus.trim().toUpperCase(Locale.ROOT);
+        if (XRPL_CONFIRMED_STATUS.equals(normalizedStatus)) {
+            return SUCCESS_STATUS;
+        }
+        if (ERROR_STATUS.equals(normalizedStatus)) {
+            return FAILED_STATUS;
+        }
+        if (!SUCCESS_STATUS.equals(normalizedStatus) && !FAILED_STATUS.equals(normalizedStatus)) {
+            logEventLogger.warn(
+                    "core.callback.failed",
+                    "Unsupported XRPL callback status",
                     createLogFields(coreRequestId, coreRequest, normalizedStatus)
             );
             throw new ApiException(ErrorCode.INVALID_STATUS);
@@ -536,6 +741,12 @@ public class CoreCallbackService {
         fields.put("callbackType", coreRequest.getCoreRequestType().name());
         fields.put("status", status);
         return fields;
+    }
+
+    private String enumName(
+            Enum<?> value // enum 값
+    ) {
+        return value == null ? null : value.name();
     }
 
     private record CallbackContext(

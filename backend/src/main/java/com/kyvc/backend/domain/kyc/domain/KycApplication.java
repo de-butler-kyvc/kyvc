@@ -119,6 +119,82 @@ public class KycApplication {
         return kycApplication;
     }
 
+    public Long getKycId() {
+        return kycId;
+    }
+
+    public Long getCorporateId() {
+        return corporateId;
+    }
+
+    public Long getApplicantUserId() {
+        return applicantUserId;
+    }
+
+    public String getCorporateTypeCode() {
+        return corporateTypeCode;
+    }
+
+    public KyvcEnums.KycStatus getKycStatus() {
+        return kycStatus;
+    }
+
+    public KyvcEnums.OriginalDocumentStoreOption getOriginalDocumentStoreOption() {
+        return originalDocumentStoreOption;
+    }
+
+    public KyvcEnums.AiReviewStatus getAiReviewStatus() {
+        return aiReviewStatus;
+    }
+
+    public KyvcEnums.AiReviewResult getAiReviewResult() {
+        return aiReviewResult;
+    }
+
+    public BigDecimal getAiConfidenceScore() {
+        return aiConfidenceScore;
+    }
+
+    public String getAiReviewSummary() {
+        return aiReviewSummary;
+    }
+
+    public String getAiReviewDetailJson() {
+        return aiReviewDetailJson;
+    }
+
+    public String getManualReviewReason() {
+        return manualReviewReason;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public LocalDateTime getSubmittedAt() {
+        return submittedAt;
+    }
+
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public Long getAppliedAiPolicyId() {
+        return appliedAiPolicyId;
+    }
+
+    public String getAiReviewReasonCode() {
+        return aiReviewReasonCode;
+    }
+
+    public String getRejectReasonCode() {
+        return rejectReasonCode;
+    }
+
     // 법인 유형 변경
     public void changeCorporateType(
             String corporateTypeCode // 법인 유형 코드
@@ -172,6 +248,37 @@ public class KycApplication {
         this.aiReviewSummary = summary;
         this.aiReviewDetailJson = detailJson;
         this.manualReviewReason = manualReviewReason;
+    }
+
+    // Credential 발급 가능 상태 여부
+    public boolean isCredentialIssuable() {
+        return KyvcEnums.KycStatus.APPROVED == kycStatus;
+    }
+
+    // VC 발급 완료 상태 반영
+    public void markVcIssued(
+            LocalDateTime issuedAt // VC 발급 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.VC_ISSUED;
+        if (this.approvedAt == null) {
+            this.approvedAt = issuedAt;
+        }
+    }
+
+    // 개발/E2E 테스트용 임시 승인 가능 여부
+    public boolean canApproveForDevTest() {
+        return KyvcEnums.KycStatus.SUBMITTED == kycStatus
+                || KyvcEnums.KycStatus.AI_REVIEWING == kycStatus
+                || KyvcEnums.KycStatus.MANUAL_REVIEW == kycStatus
+                || KyvcEnums.KycStatus.NEED_SUPPLEMENT == kycStatus;
+    }
+
+    // 개발/E2E 테스트용 임시 승인 처리
+    public void approveForDevTest(
+            LocalDateTime approvedAt // 임시 승인 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.APPROVED;
+        this.approvedAt = approvedAt;
     }
 
     // AI 심사 실패 후 수동심사 전환

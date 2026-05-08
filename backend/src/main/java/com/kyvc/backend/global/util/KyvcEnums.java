@@ -3,7 +3,7 @@ package com.kyvc.backend.global.util;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
-// KYvC 업무 고정상수 enum 모음
+// KYvC 공통 enum 모음
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class KyvcEnums {
 
@@ -14,8 +14,8 @@ public final class KyvcEnums {
 
     // 사용자 상태
     public enum UserStatus {
-        PENDING, // 가입 및 인증 대기
-        ACTIVE, // 정상
+        PENDING, // 가입 대기
+        ACTIVE, // 활성
         LOCKED, // 잠금
         INACTIVE, // 비활성
         WITHDRAWN // 탈퇴
@@ -23,44 +23,44 @@ public final class KyvcEnums {
 
     // 법인 상태
     public enum CorporateStatus {
-        PENDING, // 법인정보 등록 및 검증 대기
+        PENDING, // 심사 대기
         ACTIVE, // 활성
         INACTIVE, // 비활성
         SUSPENDED // 정지
     }
 
-    // KYC 요청 상태
+    // KYC 상태
     public enum KycStatus {
-        DRAFT, // 임시저장
-        SUBMITTED, // 제출완료
-        AI_REVIEWING, // AI 심사중
-        NEED_SUPPLEMENT, // 보완필요
-        MANUAL_REVIEW, // 수동심사
+        DRAFT, // 임시 저장
+        SUBMITTED, // 제출 완료
+        AI_REVIEWING, // AI 심사 중
+        NEED_SUPPLEMENT, // 보완 필요
+        MANUAL_REVIEW, // 수동 심사 중
         APPROVED, // 승인
         REJECTED, // 반려
-        VC_ISSUED // VC 발급완료
+        VC_ISSUED // VC 발급 완료
     }
 
-    // 원본서류 저장 옵션
+    // 원본 문서 저장 옵션
     public enum OriginalDocumentStoreOption {
-        STORE, // 원본 저장
-        DO_NOT_STORE // 원본 미저장
+        STORE, // 저장
+        DO_NOT_STORE // 미저장
     }
 
     // AI 심사 상태
     public enum AiReviewStatus {
         QUEUED, // 대기
-        RUNNING, // 처리중
+        RUNNING, // 진행
         SUCCESS, // 성공
-        LOW_CONFIDENCE, // 낮은 신뢰도
+        LOW_CONFIDENCE, // 신뢰도 낮음
         FAILED // 실패
     }
 
-    // AI 심사 결과
+    // AI 심사 판정
     public enum AiReviewResult {
         PASS, // 통과
         FAIL, // 실패
-        NEED_MANUAL_REVIEW // 수동심사 필요
+        NEED_MANUAL_REVIEW // 수동 심사 필요
     }
 
     // 문서 업로드 상태
@@ -70,63 +70,64 @@ public final class KyvcEnums {
         DELETED // 삭제
     }
 
-    // 보완요청 상태
+    // 보완 요청 상태
     public enum SupplementStatus {
-        REQUESTED, // 보완 요청됨
-        SUBMITTED, // 보완 제출됨
-        COMPLETED, // 보완 완료
+        REQUESTED, // 요청
+        SUBMITTED, // 제출
+        COMPLETED, // 완료
         CANCELLED, // 취소
         EXPIRED // 만료
     }
 
-    // KYC 심사 이력 액션 유형
+    // 심사 이력 액션
     public enum ReviewActionType {
-        SUBMIT, // KYC 요청 제출
-        AI_START, // AI 심사 시작
-        AI_COMPLETE, // AI 심사 완료
-        AI_FAILED, // AI 심사 실패
-        REQUEST_AI_REVIEW, // AI 심사요청
-        REQUEST_SUPPLEMENT, // 보완요청 생성
-        SUPPLEMENT_SUBMIT, // 보완서류 제출
-        MANUAL_REVIEW, // 수동심사 전환
+        SUBMIT, // KYC 제출
+        AI_START, // AI 시작
+        AI_COMPLETE, // AI 완료
+        AI_FAILED, // AI 실패
+        REQUEST_AI_REVIEW, // AI 심사 요청
+        REQUEST_SUPPLEMENT, // 보완 요청
+        SUPPLEMENT_SUBMIT, // 보완 제출
+        MANUAL_REVIEW, // 수동 심사
         APPROVE, // 승인
         REJECT, // 반려
-        ISSUE_VC, // VC 발급 처리
-        CHANGE_STATUS // 기타 상태 변경
+        ISSUE_VC, // VC 발급
+        CHANGE_STATUS // 상태 변경
     }
 
     // Credential 상태
     public enum CredentialStatus {
-        ISSUING, // 발급중
+        ISSUING, // 발급 중
         VALID, // 유효
         EXPIRED, // 만료
         REVOKED, // 폐기
-        SUSPENDED // 일시중지
+        SUSPENDED, // 중지
+        FAILED // 발급 실패
     }
 
-    // KYC 완료 화면 액션
+    // KYC 완료 후 가이드 액션
     public enum KycCompletionAction {
-        SUBMIT_KYC, // KYC 제출 안내
+        SUBMIT_KYC, // KYC 제출
         WAIT_REVIEW, // 심사 대기
-        WAIT_AI_REVIEW, // AI 심사 대기
+        WAIT_AI_REVIEW, // AI 대기
         CHECK_SUPPLEMENT, // 보완 확인
-        WAIT_MANUAL_REVIEW, // 수동심사 대기
-        CONTACT_SUPPORT, // 고객지원 문의
-        OPEN_WALLET, // Wallet 열기
-        ISSUE_CREDENTIAL // Credential 발급 안내
+        WAIT_MANUAL_REVIEW, // 수동 심사 대기
+        CONTACT_SUPPORT, // 고객센터 문의
+        OPEN_WALLET, // 지갑 열기
+        ISSUE_CREDENTIAL // Credential 발급
     }
 
-    // KYC 심사 요약 항목 유형
+    // KYC 심사 결과 유형
     public enum KycReviewFindingType {
         SUMMARY, // 요약
-        MANUAL_REVIEW_REASON, // 수동심사 사유
+        MANUAL_REVIEW_REASON, // 수동 심사 사유
         REJECT_REASON // 반려 사유
     }
 
     // VP 검증 상태
     public enum VpVerificationStatus {
-        REQUESTED, // 요청됨
-        PRESENTED, // 제출됨
+        REQUESTED, // 요청
+        PRESENTED, // 제출
         VALID, // 유효
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
@@ -135,37 +136,37 @@ public final class KyvcEnums {
 
     // Credential 유형
     public enum CredentialType {
-        KYC_CREDENTIAL, // 법인 KYC VC
-        BUSINESS_CREDENTIAL // 기업 인증 VC
+        KYC_CREDENTIAL, // KYC VC
+        BUSINESS_CREDENTIAL // 사업자 VC
     }
 
-    // Credential 상태 목적
+    // Credential Status 목적 코드
     public enum CredentialStatusPurpose {
-        revocation // 폐기 상태 확인
+        revocation // 폐기 관리 목적
     }
 
-    // KYC 검증 수준
+    // KYC 레벨
     public enum KycLevel {
-        BASIC, // 기본 KYC
-        STANDARD, // 표준 KYC
-        ENHANCED // 강화 KYC
+        BASIC, // 기본
+        STANDARD, // 표준
+        ENHANCED // 강화
     }
 
-    // 관할 국가 및 지역
+    // 관할 코드
     public enum Jurisdiction {
         KR // 대한민국
     }
 
     // Issuer 정책 유형
     public enum IssuerPolicyType {
-        WHITELIST, // 허용 목록
-        BLACKLIST, // 차단 목록
+        WHITELIST, // 화이트리스트
+        BLACKLIST, // 블랙리스트
         CREDENTIAL_TYPE_POLICY // Credential 유형 정책
     }
 
     // Issuer 정책 상태
     public enum IssuerPolicyStatus {
-        PENDING, // 승인 및 검토 대기
+        PENDING, // 승인 대기
         ACTIVE, // 활성
         INACTIVE, // 비활성
         REJECTED // 반려
@@ -183,78 +184,78 @@ public final class KyvcEnums {
         INACTIVE // 비활성
     }
 
-    // 관리자 사용자 상태
+    // 관리자 상태
     public enum AdminUserStatus {
-        ACTIVE, // 정상
+        ACTIVE, // 활성
         LOCKED, // 잠금
         INACTIVE // 비활성
     }
 
-    // 관리자 권한 코드
+    // 관리자 역할 코드
     public enum RoleCode {
         BACKEND_ADMIN, // 백엔드 관리자
         CORE_ADMIN, // 코어 관리자
         POLICY_MANAGER, // 정책 관리자
-        AUDITOR, // 감사담당자
-        VIEWER, // 조회 전용
+        AUDITOR, // 감사자
+        VIEWER, // 조회자
         SYSTEM_ADMIN // 시스템 관리자
     }
 
     // 행위자 유형
     public enum ActorType {
-        USER, // 일반 사용자
+        USER, // 사용자
         ADMIN, // 관리자
         SYSTEM, // 시스템
         CORE // Core
     }
 
-    // 감사로그 대상 유형
+    // 감사 대상 유형
     public enum AuditTargetType {
-        KYC_APPLICATION, // KYC 요청
+        KYC_APPLICATION, // KYC 신청
         KYC_DOCUMENT, // KYC 문서
-        KYC_SUPPLEMENT, // KYC 보완요청
+        KYC_SUPPLEMENT, // KYC 보완
         CREDENTIAL, // Credential
         VP_VERIFICATION, // VP 검증
         ISSUER_POLICY, // Issuer 정책
-        ADMIN_USER, // 관리자 계정
+        ADMIN_USER, // 관리자 사용자
         ADMIN_ROLE, // 관리자 권한
         USER, // 사용자
         CORPORATE, // 법인
         NOTIFICATION // 알림
     }
 
-    // Core 요청 대상 유형
+    // Core 대상 유형
     public enum CoreTargetType {
-        KYC_APPLICATION, // KYC 요청
+        KYC_APPLICATION, // KYC 신청
         CREDENTIAL, // Credential
         VP_VERIFICATION // VP 검증
     }
 
     // 알림 유형
     public enum NotificationType {
-        KYC_SUBMITTED, // KYC 요청 접수
+        KYC_SUBMITTED, // KYC 제출
         AI_REVIEW_STARTED, // AI 심사 시작
         AI_REVIEW_COMPLETED, // AI 심사 완료
-        MANUAL_REVIEW, // 수동심사 전환
-        NEED_SUPPLEMENT, // 보완요청
-        SUPPLEMENT_SUBMITTED, // 보완서류 제출 완료
+        MANUAL_REVIEW, // 수동 심사
+        NEED_SUPPLEMENT, // 보완 필요
+        SUPPLEMENT_SUBMITTED, // 보완 제출
         KYC_APPROVED, // KYC 승인
         KYC_REJECTED, // KYC 반려
-        VC_ISSUED, // VC 발급 완료
+        VC_ISSUED, // VC 발급
         VC_EXPIRED, // VC 만료
-        WALLET_SAVED, // Wallet 저장 완료
-        VP_REQUESTED, // VP 제출 요청
-        VP_PRESENTED, // VP 제출 완료
-        VP_VERIFIED, // VP 검증 완료
-        VP_VERIFICATION_COMPLETED // VP 검증 처리 완료
+        WALLET_SAVED, // 지갑 저장
+        VP_REQUESTED, // VP 요청
+        VP_PRESENTED, // VP 제출
+        VP_VERIFIED, // VP 검증
+        VP_VERIFICATION_COMPLETED // VP 검증 완료
     }
 
-    // 사용자 동의 유형
+    // 동의 유형
     public enum ConsentType {
         TERMS_OF_SERVICE, // 서비스 이용약관
         PRIVACY_POLICY, // 개인정보 처리방침
         KYC_PROCESSING, // KYC 처리 동의
-        ORIGINAL_DOCUMENT_STORAGE, // 원본서류 저장 동의
+        ORIGINAL_DOCUMENT_STORAGE, // 원본 문서 저장 동의
         MARKETING // 마케팅 동의
     }
 
@@ -262,10 +263,10 @@ public final class KyvcEnums {
     public enum DeviceBindingStatus {
         ACTIVE, // 활성
         BLOCKED, // 차단
-        REMOVED // 제거
+        REMOVED // 해제
     }
 
-    // Y/N 여부
+    // Y/N 값
     public enum Yn {
         Y, // 예
         N // 아니오
@@ -273,24 +274,24 @@ public final class KyvcEnums {
 
     // QR 유형
     public enum QrType {
-        CREDENTIAL_OFFER, // Credential Offer QR
-        VP_REQUEST // VP 제출 요청 QR
+        CREDENTIAL_OFFER, // Credential Offer
+        VP_REQUEST // VP 요청
     }
 
-    // 인증 토큰 유형
+    // 토큰 유형
     public enum TokenType {
-        REFRESH, // Refresh Token
-        ACCESS_JTI, // Access Token JTI
+        REFRESH, // Refresh 토큰
+        ACCESS_JTI, // Access JTI
         PASSWORD_RESET, // 비밀번호 재설정 토큰
         MFA_SESSION // MFA 세션 토큰
     }
 
-    // 인증 토큰 상태
+    // 토큰 상태
     public enum TokenStatus {
         ACTIVE, // 활성
         EXPIRED, // 만료
         REVOKED, // 폐기
-        USED // 사용완료
+        USED // 사용 완료
     }
 
     // MFA 목적
@@ -306,18 +307,18 @@ public final class KyvcEnums {
 
     // MFA 상태
     public enum MfaStatus {
-        REQUESTED, // 요청됨
-        VERIFIED, // 검증됨
+        REQUESTED, // 요청
+        VERIFIED, // 인증 완료
         EXPIRED, // 만료
         FAILED, // 실패
-        USED // 사용완료
+        USED // 사용 완료
     }
 
     // Core 요청 유형
     public enum CoreRequestType {
         AI_REVIEW, // AI 심사
         VC_ISSUE, // VC 발급
-        VC_STATUS_CHECK, // VC 상태조회
+        VC_STATUS_CHECK, // VC 상태 조회
         VP_VERIFY, // VP 검증
         XRPL_TX // XRPL 트랜잭션
     }
@@ -325,12 +326,13 @@ public final class KyvcEnums {
     // Core 요청 상태
     public enum CoreRequestStatus {
         QUEUED, // 대기
-        REQUESTED, // 요청됨
-        PROCESSING, // 처리중
+        REQUESTED, // 요청
+        PROCESSING, // 처리 중
         SUCCESS, // 성공
         FAILED, // 실패
-        CALLBACK_RECEIVED, // Callback 수신
-        RETRYING // 재시도중
+        TIMEOUT, // 타임아웃
+        CALLBACK_RECEIVED, // 콜백 수신
+        RETRYING // 재시도 중
     }
 
     // XRPL 트랜잭션 상태
@@ -340,15 +342,16 @@ public final class KyvcEnums {
         FAILED // 실패
     }
 
-    // 감사로그 작업 유형
+    // 감사 액션 유형
     public enum AuditActionType {
-        NOTIFICATION_READ, // 알림 읽음 처리
-        NOTIFICATION_READ_ALL // 알림 전체 읽음 처리
+        NOTIFICATION_READ, // 알림 단건 읽음
+        NOTIFICATION_READ_ALL // 알림 전체 읽음
     }
-    // QR 다음 행위
+
+    // QR 해석 다음 액션
     public enum QrNextAction {
-        OPEN_CREDENTIAL_OFFER, // Credential Offer 화면 이동
-        OPEN_VP_REQUEST, // VP 요청 화면 이동
-        INVALID_QR // 유효하지 않은 QR
+        OPEN_CREDENTIAL_OFFER, // Credential Offer 열기
+        OPEN_VP_REQUEST, // VP 요청 열기
+        INVALID_QR // 잘못된 QR
     }
 }

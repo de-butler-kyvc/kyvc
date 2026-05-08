@@ -1,7 +1,7 @@
 package com.kyvc.backend.global.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kyvc.backend.domain.core.config.CoreInternalProperties;
+import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.response.CommonResponseFactory;
 import jakarta.servlet.FilterChain;
@@ -22,17 +22,26 @@ import java.io.IOException;
 public class InternalApiKeyFilter extends OncePerRequestFilter {
 
     private static final String INTERNAL_CORE_PATH_PREFIX = "/api/internal/core";
+    private static final String INTERNAL_DEV_PATH_PREFIX = "/api/internal/dev";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
 
-    private final CoreInternalProperties coreInternalProperties;
+    private final CoreProperties coreProperties;
     private final ObjectMapper objectMapper;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request // 요청 정보
     ) {
         String requestPath = request.getRequestURI(); // 요청 경로
-        return !(INTERNAL_CORE_PATH_PREFIX.equals(requestPath)
-                || requestPath.startsWith(INTERNAL_CORE_PATH_PREFIX + "/"));
+        return !isInternalPath(requestPath);
+    }
+
+    private boolean isInternalPath(
+            String requestPath // 요청 경로
+    ) {
+        return INTERNAL_CORE_PATH_PREFIX.equals(requestPath)
+                || requestPath.startsWith(INTERNAL_CORE_PATH_PREFIX + "/")
+                || INTERNAL_DEV_PATH_PREFIX.equals(requestPath)
+                || requestPath.startsWith(INTERNAL_DEV_PATH_PREFIX + "/");
     }
 
     @Override
@@ -41,7 +50,7 @@ public class InternalApiKeyFilter extends OncePerRequestFilter {
             HttpServletResponse response, // 응답 정보
             FilterChain filterChain // 다음 필터 체인
     ) throws ServletException, IOException {
-        String expectedInternalApiKey = coreInternalProperties.getInternalApiKey(); // 설정 API Key
+        String expectedInternalApiKey = coreProperties.resolveApiKey(); // 설정 API Key
         String requestInternalApiKey = request.getHeader(INTERNAL_API_KEY_HEADER); // 요청 API Key
 
         if (!StringUtils.hasText(expectedInternalApiKey)

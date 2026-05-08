@@ -4,7 +4,15 @@ import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreCredentialSchemaResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationRequest;
+import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationResponse;
+import com.kyvc.backend.domain.core.dto.CoreDidDocumentResponse;
 import com.kyvc.backend.domain.core.dto.CoreHealthResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
+import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialRequest;
+import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceStatusResponse;
@@ -19,9 +27,9 @@ import com.kyvc.backend.domain.core.dto.CoreXrplTransactionResponse;
 public interface CoreAdapter {
 
     /**
-     * Core 헬스 체크
+     * Core 상태 체크
      *
-     * @return Core 헬스 체크 응답
+     * @return Core 상태 체크 응답
      */
     CoreHealthResponse checkHealth();
 
@@ -66,13 +74,39 @@ public interface CoreAdapter {
     );
 
     /**
+     * Credential 폐기 요청
+     *
+     * @param request Credential 폐기 요청
+     * @return Credential 폐기 응답
+     */
+    CoreRevokeCredentialResponse revokeCredential(
+            CoreRevokeCredentialRequest request // Credential 폐기 요청
+    );
+
+    /**
+     * Credential 상태 조회
+     *
+     * @param issuerAccount Issuer XRPL Account
+     * @param holderAccount Holder XRPL Account
+     * @param credentialType Credential 유형
+     * @return Credential 상태 조회 응답
+     */
+    CoreCredentialStatusResponse getCredentialStatus(
+            String issuerAccount, // Issuer XRPL Account
+            String holderAccount, // Holder XRPL Account
+            String credentialType // Credential 유형
+    );
+
+    /**
      * VP 검증 요청
      *
      * @param request VP 검증 요청
+     * @param vpJwt VP JWT 원문
      * @return VP 검증 요청 응답
      */
     CoreVpVerificationResponse requestVpVerification(
-            CoreVpVerificationRequest request // VP 검증 요청
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String vpJwt // VP JWT 원문
     );
 
     /**
@@ -83,6 +117,36 @@ public interface CoreAdapter {
      */
     CoreVpVerificationStatusResponse getVpVerificationStatus(
             String coreRequestId // Core 요청 ID
+    );
+
+    /**
+     * VP Challenge 발급 요청
+     *
+     * @param request VP Challenge 발급 요청
+     * @return VP Challenge 발급 응답
+     */
+    CorePresentationChallengeResponse issuePresentationChallenge(
+            CorePresentationChallengeRequest request // VP Challenge 발급 요청
+    );
+
+    /**
+     * Credential 검증 요청
+     *
+     * @param request Credential 검증 요청
+     * @return Credential 검증 응답
+     */
+    CoreCredentialVerificationResponse verifyCredential(
+            CoreCredentialVerificationRequest request // Credential 검증 요청
+    );
+
+    /**
+     * DID Document 조회
+     *
+     * @param account XRPL Account
+     * @return DID Document 조회 응답
+     */
+    CoreDidDocumentResponse getDidDocument(
+            String account // XRPL Account
     );
 
     /**

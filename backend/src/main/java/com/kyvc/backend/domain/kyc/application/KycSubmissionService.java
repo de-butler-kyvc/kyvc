@@ -3,7 +3,7 @@ package com.kyvc.backend.domain.kyc.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
-import com.kyvc.backend.domain.core.config.CoreInternalProperties;
+import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
@@ -37,18 +37,18 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// KYC 제출 서비스
+// KYC ??뽱뀱 ??뺥돩??
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class KycSubmissionService {
 
-    private static final String CORPORATE_NAME_REQUIRED = "CORPORATE_NAME_REQUIRED"; // 법인명 누락 코드
-    private static final String BUSINESS_REGISTRATION_NO_REQUIRED = "BUSINESS_REGISTRATION_NO_REQUIRED"; // 사업자등록번호 누락 코드
-    private static final String REPRESENTATIVE_REQUIRED = "REPRESENTATIVE_REQUIRED"; // 대표자 정보 누락 코드
-    private static final String CORPORATE_TYPE_REQUIRED = "CORPORATE_TYPE_REQUIRED"; // 법인 유형 누락 코드
-    private static final String DOCUMENT_STORE_OPTION_REQUIRED = "DOCUMENT_STORE_OPTION_REQUIRED"; // 원본서류 저장 옵션 누락 코드
-    private static final String DOCUMENT_REQUIRED = "DOCUMENT_REQUIRED"; // 필수서류 누락 코드
+    private static final String CORPORATE_NAME_REQUIRED = "CORPORATE_NAME_REQUIRED"; // 甕곕벡?ㅿ쭗??袁⑥뵭 ?꾨뗀諭?
+    private static final String BUSINESS_REGISTRATION_NO_REQUIRED = "BUSINESS_REGISTRATION_NO_REQUIRED"; // ??毓?癒?쾻嚥≪빖苡???袁⑥뵭 ?꾨뗀諭?
+    private static final String REPRESENTATIVE_REQUIRED = "REPRESENTATIVE_REQUIRED"; // ????뽰쁽 ?類ｋ궖 ?袁⑥뵭 ?꾨뗀諭?
+    private static final String CORPORATE_TYPE_REQUIRED = "CORPORATE_TYPE_REQUIRED"; // 甕곕벡???醫륁굨 ?袁⑥뵭 ?꾨뗀諭?
+    private static final String DOCUMENT_STORE_OPTION_REQUIRED = "DOCUMENT_STORE_OPTION_REQUIRED"; // ?癒?궚??뺤첒 ?????????袁⑥뵭 ?꾨뗀諭?
+    private static final String DOCUMENT_REQUIRED = "DOCUMENT_REQUIRED"; // ?袁⑸땾??뺤첒 ?袁⑥뵭 ?꾨뗀諭?
     private static final String AI_REVIEW_REQUESTED_MESSAGE = "KYC 신청이 제출되었고 AI 심사가 요청되었습니다.";
 
     private final KycApplicationRepository kycApplicationRepository;
@@ -57,39 +57,39 @@ public class KycSubmissionService {
     private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
-    private final CoreInternalProperties coreInternalProperties;
+    private final CoreProperties coreProperties;
     private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
 
-    // KYC 제출 요약 조회
+    // KYC ??뽱뀱 ?遺용튋 鈺곌퀬??
     @Transactional(readOnly = true)
     public KycApplicationSummaryResponse getSummary(
-            Long userId, // 사용자 ID
-            Long kycId // KYC 요청 ID
+            Long userId, // ?????ID
+            Long kycId // KYC ?遺욧퍕 ID
     ) {
         validateUserId(userId);
         validateKycId(kycId);
         return buildSummary(userId, findOwnedKyc(userId, kycId));
     }
 
-    // KYC 제출
+    // KYC ??뽱뀱
     public KycSubmitResponse submit(
-            Long userId, // 사용자 ID
-            Long kycId // KYC 요청 ID
+            Long userId, // ?????ID
+            Long kycId // KYC ?遺욧퍕 ID
     ) {
         validateUserId(userId);
         validateKycId(kycId);
 
-        KycApplication kycApplication = findOwnedKyc(userId, kycId); // 사용자 소유 KYC
+        KycApplication kycApplication = findOwnedKyc(userId, kycId); // ????????? KYC
         if (!kycApplication.isDraft()) {
             throw new ApiException(ErrorCode.KYC_INVALID_STATUS);
         }
 
-        KycApplicationSummaryResponse summary = buildSummary(userId, kycApplication); // 제출 전 요약 정보
+        KycApplicationSummaryResponse summary = buildSummary(userId, kycApplication); // ??뽱뀱 ???遺용튋 ?類ｋ궖
         validateSubmittable(summary);
 
-        LocalDateTime submittedAt = LocalDateTime.now(); // 제출 일시
-        String coreRequestId = null; // Core 요청 ID
+        LocalDateTime submittedAt = LocalDateTime.now(); // ??뽱뀱 ??깅뻻
+        String coreRequestId = null; // Core ?遺욧퍕 ID
 
         logEventLogger.info(
                 "kyc.submit.started",
@@ -109,7 +109,7 @@ public class KycSubmissionService {
                     summary,
                     submittedAt,
                     buildAiReviewCallbackUrl(coreRequestId)
-            ); // Core AI 심사 API 미연동 상태의 Stub 요청
+            ); // Core AI ??沅?API 沃섎챷肉???怨밴묶??Stub ?遺욧퍕
 
             String requestPayloadJson = toJson(coreAiReviewRequest);
             coreRequestService.updateRequestPayloadJson(coreRequestId, requestPayloadJson);
@@ -134,7 +134,7 @@ public class KycSubmissionService {
             );
 
             kycApplication.startAiReview(submittedAt);
-            KycApplication savedApplication = kycApplicationRepository.save(kycApplication); // 저장 완료 KYC
+            KycApplication savedApplication = kycApplicationRepository.save(kycApplication); // ?????袁⑥┷ KYC
 
             logEventLogger.info(
                     "kyc.submit.completed",
@@ -166,19 +166,19 @@ public class KycSubmissionService {
         }
     }
 
-    // 제출 전 요약 생성
+    // ??뽱뀱 ???遺용튋 ??밴쉐
     private KycApplicationSummaryResponse buildSummary(
-            Long userId, // 사용자 ID
-            KycApplication kycApplication // KYC 요청 정보
+            Long userId, // ?????ID
+            KycApplication kycApplication // KYC ?遺욧퍕 ?類ｋ궖
     ) {
-        Corporate corporate = findOwnedCorporate(userId, kycApplication.getCorporateId()); // 소유 법인 정보
-        List<KycDocument> documents = kycDocumentRepository.findByKycId(kycApplication.getKycId()); // 업로드 문서 목록
+        Corporate corporate = findOwnedCorporate(userId, kycApplication.getCorporateId()); // ???? 甕곕벡???類ｋ궖
+        List<KycDocument> documents = kycDocumentRepository.findByKycId(kycApplication.getKycId()); // ??낆쨮???얜챷苑?筌뤴뫖以?
         List<KycDocumentResponse> documentResponses = documents.stream()
                 .map(this::toDocumentResponse)
                 .toList();
-        List<RequiredDocumentResponse> requiredDocuments = buildRequiredDocuments(kycApplication, documents); // 필수서류 충족 여부 목록
-        List<KycMissingItemResponse> missingItems = buildMissingItems(corporate, kycApplication, documents); // 누락 항목 목록
-        boolean submittable = kycApplication.isDraft() && isSubmittable(missingItems); // 제출 가능 여부
+        List<RequiredDocumentResponse> requiredDocuments = buildRequiredDocuments(kycApplication, documents); // ?袁⑸땾??뺤첒 ?겸뫗????? 筌뤴뫖以?
+        List<KycMissingItemResponse> missingItems = buildMissingItems(corporate, kycApplication, documents); // ?袁⑥뵭 ????筌뤴뫖以?
+        boolean submittable = kycApplication.isDraft() && isSubmittable(missingItems); // ??뽱뀱 揶쎛?????
 
         return new KycApplicationSummaryResponse(
                 kycApplication.getKycId(),
@@ -206,12 +206,12 @@ public class KycSubmissionService {
         );
     }
 
-    // 필수서류 충족 여부 목록 생성
+    // ?袁⑸땾??뺤첒 ?겸뫗????? 筌뤴뫖以???밴쉐
     private List<RequiredDocumentResponse> buildRequiredDocuments(
-            KycApplication kycApplication, // KYC 요청 정보
-            List<KycDocument> documents // 업로드 문서 목록
+            KycApplication kycApplication, // KYC ?遺욧퍕 ?類ｋ궖
+            List<KycDocument> documents // ??낆쨮???얜챷苑?筌뤴뫖以?
     ) {
-        Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // 업로드 문서 유형 코드 목록
+        Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // ??낆쨮???얜챷苑??醫륁굨 ?꾨뗀諭?筌뤴뫖以?
         return requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode()).stream()
                 .map(policy -> new RequiredDocumentResponse(
                         policy.documentTypeCode(),
@@ -225,57 +225,57 @@ public class KycSubmissionService {
                 .toList();
     }
 
-    // 누락 항목 목록 생성
+    // ?袁⑥뵭 ????筌뤴뫖以???밴쉐
     private List<KycMissingItemResponse> buildMissingItems(
-            Corporate corporate, // 법인 정보
-            KycApplication kycApplication, // KYC 요청 정보
-            List<KycDocument> documents // 업로드 문서 목록
+            Corporate corporate, // 甕곕벡???類ｋ궖
+            KycApplication kycApplication, // KYC ?遺욧퍕 ?類ｋ궖
+            List<KycDocument> documents // ??낆쨮???얜챷苑?筌뤴뫖以?
     ) {
-        Set<KycMissingItemResponse> missingItems = new LinkedHashSet<>(); // 누락 항목 목록
+        Set<KycMissingItemResponse> missingItems = new LinkedHashSet<>(); // ?袁⑥뵭 ????筌뤴뫖以?
 
         if (!StringUtils.hasText(corporate.getCorporateName())) {
             missingItems.add(new KycMissingItemResponse(
                     CORPORATE_NAME_REQUIRED,
-                    "법인명 입력 필요",
+                    "甕곕벡?ㅿ쭗???낆젾 ?袁⑹뒄",
                     "corporateName"
             ));
         }
         if (!StringUtils.hasText(corporate.getBusinessRegistrationNo())) {
             missingItems.add(new KycMissingItemResponse(
                     BUSINESS_REGISTRATION_NO_REQUIRED,
-                    "사업자등록번호 입력 필요",
+                    "??毓?癒?쾻嚥≪빖苡????낆젾 ?袁⑹뒄",
                     "businessRegistrationNo"
             ));
         }
         if (!StringUtils.hasText(corporate.getRepresentativeName())) {
             missingItems.add(new KycMissingItemResponse(
                     REPRESENTATIVE_REQUIRED,
-                    "대표자 정보 입력 필요",
+                    "????뽰쁽 ?類ｋ궖 ??낆젾 ?袁⑹뒄",
                     "representativeName"
             ));
         }
         if (!StringUtils.hasText(kycApplication.getCorporateTypeCode())) {
             missingItems.add(new KycMissingItemResponse(
                     CORPORATE_TYPE_REQUIRED,
-                    "법인 유형 선택 필요",
+                    "甕곕벡???醫륁굨 ?醫뤾문 ?袁⑹뒄",
                     "corporateTypeCode"
             ));
         }
         if (kycApplication.getOriginalDocumentStoreOption() == null) {
             missingItems.add(new KycMissingItemResponse(
                     DOCUMENT_STORE_OPTION_REQUIRED,
-                    "원본서류 저장 옵션 선택 필요",
+                    "?癒?궚??뺤첒 ?????????醫뤾문 ?袁⑹뒄",
                     "documentStoreOption"
             ));
         }
 
-        Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // 업로드 문서 유형 코드 목록
+        Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // ??낆쨮???얜챷苑??醫륁굨 ?꾨뗀諭?筌뤴뫖以?
         for (RequiredDocumentPolicyProvider.RequiredDocumentPolicy policy
                 : requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode())) {
             if (!uploadedDocumentTypeCodes.contains(policy.documentTypeCode())) {
                 missingItems.add(new KycMissingItemResponse(
                         DOCUMENT_REQUIRED,
-                        policy.documentTypeName() + " 업로드가 필요합니다.",
+                        policy.documentTypeName() + " ??낆쨮??? ?袁⑹뒄??몃빍??",
                         policy.documentTypeCode()
                 ));
             }
@@ -284,37 +284,37 @@ public class KycSubmissionService {
         return List.copyOf(missingItems);
     }
 
-    // 제출 가능 여부 판단
+    // ??뽱뀱 揶쎛????? ?癒?뼊
     private boolean isSubmittable(
-            List<KycMissingItemResponse> missingItems // 누락 항목 목록
+            List<KycMissingItemResponse> missingItems // ?袁⑥뵭 ????筌뤴뫖以?
     ) {
         return missingItems == null || missingItems.isEmpty();
     }
 
-    // 제출 가능 여부 검증
+    // ??뽱뀱 揶쎛????? 野꺜筌?
     private void validateSubmittable(
-            KycApplicationSummaryResponse summary // 제출 전 요약 정보
+            KycApplicationSummaryResponse summary // ??뽱뀱 ???遺용튋 ?類ｋ궖
     ) {
         if (!summary.submittable()) {
             boolean documentMissing = summary.missingItems().stream()
-                    .anyMatch(item -> DOCUMENT_REQUIRED.equals(item.code())); // 필수서류 누락 여부
+                    .anyMatch(item -> DOCUMENT_REQUIRED.equals(item.code())); // ?袁⑸땾??뺤첒 ?袁⑥뵭 ???
             throw new ApiException(documentMissing ? ErrorCode.DOCUMENT_REQUIRED_MISSING : ErrorCode.INVALID_REQUEST);
         }
     }
 
-    // 업로드 문서 유형 코드 목록 생성
+    // ??낆쨮???얜챷苑??醫륁굨 ?꾨뗀諭?筌뤴뫖以???밴쉐
     private Set<String> getUploadedDocumentTypeCodes(
-            List<KycDocument> documents // 업로드 문서 목록
+            List<KycDocument> documents // ??낆쨮???얜챷苑?筌뤴뫖以?
     ) {
         return documents == null ? Set.of() : documents.stream()
                 .map(KycDocument::getDocumentTypeCode)
                 .collect(Collectors.toSet());
     }
 
-    // 사용자 소유 KYC 조회
+    // ????????? KYC 鈺곌퀬??
     private KycApplication findOwnedKyc(
-            Long userId, // 사용자 ID
-            Long kycId // KYC 요청 ID
+            Long userId, // ?????ID
+            Long kycId // KYC ?遺욧퍕 ID
     ) {
         KycApplication kycApplication = kycApplicationRepository.findById(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
@@ -324,10 +324,10 @@ public class KycSubmissionService {
         return kycApplication;
     }
 
-    // 사용자 소유 법인 조회
+    // ????????? 甕곕벡??鈺곌퀬??
     private Corporate findOwnedCorporate(
-            Long userId, // 사용자 ID
-            Long corporateId // 법인 ID
+            Long userId, // ?????ID
+            Long corporateId // 甕곕벡??ID
     ) {
         Corporate corporate = corporateRepository.findById(corporateId)
                 .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
@@ -337,9 +337,9 @@ public class KycSubmissionService {
         return corporate;
     }
 
-    // KYC 문서 응답 변환
+    // KYC ?얜챷苑??臾먮뼗 癰궰??
     private KycDocumentResponse toDocumentResponse(
-            KycDocument kycDocument // KYC 문서
+            KycDocument kycDocument // KYC ?얜챷苑?
     ) {
         return new KycDocumentResponse(
                 kycDocument.getDocumentId(),
@@ -354,11 +354,11 @@ public class KycSubmissionService {
         );
     }
 
-    // Core AI 심사 요청 DTO 생성
+    // Core AI ??沅??遺욧퍕 DTO ??밴쉐
     private CoreAiReviewRequest buildAiReviewRequest(
-            String coreRequestId, // Core 요청 ID
-            KycApplicationSummaryResponse summary, // KYC 제출 요약 정보
-            LocalDateTime requestedAt, // 요청 시각
+            String coreRequestId, // Core ?遺욧퍕 ID
+            KycApplicationSummaryResponse summary, // KYC ??뽱뀱 ?遺용튋 ?類ｋ궖
+            LocalDateTime requestedAt, // ?遺욧퍕 ??볦퍟
             String callbackUrl // Callback URL
     ) {
         return new CoreAiReviewRequest(
@@ -374,9 +374,9 @@ public class KycSubmissionService {
         );
     }
 
-    // Core AI 심사 문서 목록 생성
+    // Core AI ??沅??얜챷苑?筌뤴뫖以???밴쉐
     private List<CoreAiReviewRequest.CoreAiReviewDocumentRequest> buildAiReviewDocuments(
-            List<KycDocumentResponse> documents // 제출 문서 목록
+            List<KycDocumentResponse> documents // ??뽱뀱 ?얜챷苑?筌뤴뫖以?
     ) {
         if (documents == null) {
             return List.of();
@@ -393,11 +393,11 @@ public class KycSubmissionService {
                 .toList();
     }
 
-    // Core AI 심사 Callback URL 생성
+    // Core AI ??沅?Callback URL ??밴쉐
     private String buildAiReviewCallbackUrl(
-            String coreRequestId // Core 요청 ID
+            String coreRequestId // Core ?遺욧퍕 ID
     ) {
-        String callbackBaseUrl = coreInternalProperties.getCallbackBaseUrl(); // Callback 기준 URL
+        String callbackBaseUrl = coreProperties.getCallbackBaseUrl(); // Callback 疫꿸퀣? URL
         if (!StringUtils.hasText(callbackBaseUrl) || !StringUtils.hasText(coreRequestId)) {
             return null;
         }
@@ -407,9 +407,9 @@ public class KycSubmissionService {
         return normalizedCallbackBaseUrl + "/api/internal/core/ai-reviews/" + coreRequestId + "/callback";
     }
 
-    // JSON 직렬화
+    // JSON 筌욊낮???
     private String toJson(
-            Object value // 직렬화 대상
+            Object value // 筌욊낮???????
     ) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -419,10 +419,10 @@ public class KycSubmissionService {
         }
     }
 
-    // KYC 제출 로그 필드 생성
+    // KYC ??뽱뀱 嚥≪뮄???袁⑤굡 ??밴쉐
     private Map<String, Object> createSubmitLogFields(
-            KycApplication kycApplication, // KYC 엔티티
-            String coreRequestId // Core 요청 ID
+            KycApplication kycApplication, // KYC ?酉???
+            String coreRequestId // Core ?遺욧퍕 ID
     ) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("kycId", kycApplication.getKycId());
@@ -433,28 +433,30 @@ public class KycSubmissionService {
         return fields;
     }
 
-    // enum 이름 변환
+    // enum ??已?癰궰??
     private String enumName(
-            Enum<?> value // enum 값
+            Enum<?> value // enum 揶?
     ) {
         return value == null ? null : value.name();
     }
 
-    // 사용자 ID 검증
+    // ?????ID 野꺜筌?
     private void validateUserId(
-            Long userId // 사용자 ID
+            Long userId // ?????ID
     ) {
         if (userId == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
         }
     }
 
-    // KYC 요청 ID 검증
+    // KYC ?遺욧퍕 ID 野꺜筌?
     private void validateKycId(
-            Long kycId // KYC 요청 ID
+            Long kycId // KYC ?遺욧퍕 ID
     ) {
         if (kycId == null || kycId <= 0) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
 }
+
+
