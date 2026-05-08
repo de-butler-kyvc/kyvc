@@ -50,6 +50,7 @@ public class CorporateService {
                 normalizeOptional(request.corporateRegistrationNo()),
                 corporateTypeCode,
                 request.establishedDate(),
+                normalizeOptional(request.corporatePhone()),
                 null,
                 null,
                 null,
@@ -96,9 +97,10 @@ public class CorporateService {
                 normalizeOptional(request.corporateRegistrationNo()),
                 corporateTypeCode,
                 request.establishedDate(),
-                normalizeRequired(request.representativeName()),
-                normalizeOptional(request.representativePhone()),
-                normalizeOptional(request.representativeEmail()),
+                normalizeOptional(request.corporatePhone()),
+                corporate.getRepresentativeName(),
+                corporate.getRepresentativePhone(),
+                corporate.getRepresentativeEmail(),
                 normalizeOptional(request.address()),
                 normalizeOptional(request.website()),
                 corporate.getBusinessType()
@@ -123,8 +125,7 @@ public class CorporateService {
     ) {
         if (request == null
                 || !StringUtils.hasText(request.corporateName())
-                || !StringUtils.hasText(request.businessRegistrationNo())
-                || !StringUtils.hasText(request.representativeName())) {
+                || !StringUtils.hasText(request.businessRegistrationNo())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
@@ -154,6 +155,7 @@ public class CorporateService {
                 corporate.getCorporateRegistrationNo(),
                 corporate.getCorporateTypeCode(),
                 corporate.getEstablishedDate(),
+                corporate.getCorporatePhone(),
                 corporate.getRepresentativeName(),
                 corporate.getRepresentativePhone(),
                 corporate.getRepresentativeEmail(),

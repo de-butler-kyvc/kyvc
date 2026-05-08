@@ -68,6 +68,7 @@ public class CorporateRepresentative {
             Long corporateId, // 법인 ID
             String representativeName, // 대표자명
             LocalDate birthDate, // 생년월일
+            String nationalityCode, // 대표자 국적 코드
             String phone, // 대표자 연락처
             String email, // 대표자 이메일
             Long identityDocumentId // 신분증 문서 ID
@@ -75,7 +76,7 @@ public class CorporateRepresentative {
         CorporateRepresentative representative = new CorporateRepresentative();
         representative.corporateId = corporateId;
         representative.activeYn = KyvcEnums.Yn.Y;
-        representative.update(representativeName, birthDate, phone, email, identityDocumentId);
+        representative.update(representativeName, birthDate, nationalityCode, phone, email, identityDocumentId);
         return representative;
     }
 
@@ -83,12 +84,14 @@ public class CorporateRepresentative {
     public void update(
             String representativeName, // 대표자명
             LocalDate birthDate, // 생년월일
+            String nationalityCode, // 대표자 국적 코드
             String phone, // 대표자 연락처
             String email, // 대표자 이메일
             Long identityDocumentId // 신분증 문서 ID
     ) {
         this.representativeName = representativeName;
         this.birthDate = birthDate;
+        this.nationalityCode = nationalityCode;
         this.phone = phone;
         this.email = email;
         if (identityDocumentId != null) {

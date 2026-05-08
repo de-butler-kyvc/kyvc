@@ -2,6 +2,8 @@ package com.kyvc.backend.domain.corporate.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
@@ -11,6 +13,7 @@ import java.time.LocalDate;
  *
  * @param name 대표자명
  * @param birthDate 생년월일
+ * @param nationalityCode 대표자 국적 코드
  * @param phoneNumber 대표자 연락처
  * @param email 대표자 이메일
  * @param identityFile 신분증 사본 파일
@@ -21,6 +24,10 @@ public record RepresentativeRequest(
         String name, // 대표자명
         @Schema(description = "생년월일", example = "1980-01-01")
         LocalDate birthDate, // 생년월일
+        @Schema(description = "대표자 국적 코드", example = "KR")
+        @NotBlank(message = "국적은 필수입니다.")
+        @Size(max = 30, message = "국적 코드는 30자 이하여야 합니다.")
+        String nationalityCode, // 대표자 국적 코드
         @Schema(description = "대표자 연락처", example = "010-1234-5678")
         String phoneNumber, // 대표자 연락처
         @Schema(description = "대표자 이메일", example = "representative@kyvc.local")

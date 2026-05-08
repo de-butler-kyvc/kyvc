@@ -42,12 +42,14 @@ public class CorporateRepresentativeService {
 
         Corporate corporate = getOwnedCorporate(userId, corporateId);
         String representativeName = resolveRepresentativeName(corporate, request); // 대표자명
+        String nationalityCode = normalizeRequired(request.nationalityCode()); // 대표자 국적 코드
         Long identityDocumentId = storeRequiredIdentityDocument(userId, corporateId, request.identityFile()); // 신분증 문서 ID
         CorporateRepresentative representative = corporateRepresentativeRepository.findByCorporateId(corporateId)
                 .map(existing -> {
                     existing.update(
                             representativeName,
                             request.birthDate(),
+                            nationalityCode,
                             normalizeOptional(request.phoneNumber()),
                             normalizeOptional(request.email()),
                             identityDocumentId
@@ -58,6 +60,7 @@ public class CorporateRepresentativeService {
                         corporateId,
                         representativeName,
                         request.birthDate(),
+                        nationalityCode,
                         normalizeOptional(request.phoneNumber()),
                         normalizeOptional(request.email()),
                         identityDocumentId
@@ -101,10 +104,12 @@ public class CorporateRepresentativeService {
         validateRepresentativeRelation(corporateId, representative);
 
         String representativeName = resolveRepresentativeName(corporate, request); // 대표자명
+        String nationalityCode = normalizeRequired(request.nationalityCode()); // 대표자 국적 코드
         Long identityDocumentId = storeIdentityDocument(userId, corporateId, request.identityFile()); // 신분증 문서 ID
         representative.update(
                 representativeName,
                 request.birthDate(),
+                nationalityCode,
                 normalizeOptional(request.phoneNumber()),
                 normalizeOptional(request.email()),
                 identityDocumentId
@@ -118,7 +123,7 @@ public class CorporateRepresentativeService {
     private void validateRepresentativeRequest(
             RepresentativeRequest request // 대표자 정보 저장 요청
     ) {
-        if (request == null) {
+        if (request == null || !StringUtils.hasText(request.nationalityCode())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
@@ -169,6 +174,7 @@ public class CorporateRepresentativeService {
                 representative.getCorporateId(),
                 representative.getRepresentativeName(),
                 representative.getBirthDate(),
+                representative.getNationalityCode(),
                 representative.getPhone(),
                 representative.getEmail(),
                 representative.getIdentityDocumentId()
@@ -186,6 +192,7 @@ public class CorporateRepresentativeService {
                 corporate.getCorporateId(),
                 corporate.getCorporateId(),
                 corporate.getRepresentativeName(),
+                null,
                 null,
                 corporate.getRepresentativePhone(),
                 corporate.getRepresentativeEmail(),

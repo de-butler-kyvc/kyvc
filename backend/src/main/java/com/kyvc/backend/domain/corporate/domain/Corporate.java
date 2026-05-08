@@ -48,6 +48,9 @@ public class Corporate {
     @Column(name = "established_date")
     private LocalDate establishedDate;
 
+    @Column(name = "corporate_phone", length = 50)
+    private String corporatePhone;
+
     @Column(name = "representative_name", length = 100)
     private String representativeName;
 
@@ -98,6 +101,7 @@ public class Corporate {
             String corporateRegistrationNo, // 법인등록번호
             String corporateTypeCode, // 법인 유형 코드
             LocalDate establishedDate, // 설립일
+            String corporatePhone, // 법인 대표전화
             String representativeName, // 대표자명
             String representativePhone, // 대표자 연락처
             String representativeEmail, // 대표자 이메일
@@ -115,6 +119,7 @@ public class Corporate {
                 corporateRegistrationNo,
                 corporateTypeCode,
                 establishedDate,
+                corporatePhone,
                 representativeName,
                 representativePhone,
                 representativeEmail,
@@ -132,6 +137,7 @@ public class Corporate {
             String corporateRegistrationNo, // 법인등록번호
             String corporateTypeCode, // 법인 유형 코드
             LocalDate establishedDate, // 설립일
+            String corporatePhone, // 법인 대표전화
             String representativeName, // 대표자명
             String representativePhone, // 대표자 연락처
             String representativeEmail, // 대표자 이메일
@@ -144,6 +150,7 @@ public class Corporate {
         this.corporateRegistrationNo = corporateRegistrationNo;
         this.corporateTypeCode = corporateTypeCode;
         this.establishedDate = establishedDate;
+        this.corporatePhone = corporatePhone;
         this.representativeName = representativeName;
         this.representativePhone = representativePhone;
         this.representativeEmail = representativeEmail;
