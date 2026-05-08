@@ -12,9 +12,14 @@ import jakarta.validation.constraints.Size;
  * @param password 로그인 비밀번호
  * @param userName 사용자명
  * @param phone 사용자 연락처
+ * @param corporateName 회원가입 온보딩 단계 입력 법인명
  */
 @Schema(description = "법인 사용자 회원가입 요청")
 public record CorporateSignupRequest(
+        @Schema(description = "회원가입 온보딩 단계 입력 법인명. 정식 법인 기본정보는 POST /api/user/corporates에서 별도 등록", example = "주식회사 케이원")
+        @NotBlank(message = "법인명은 필수입니다.")
+        @Size(max = 255, message = "법인명은 255자 이하여야 합니다.")
+        String corporateName, // 회원가입 온보딩 단계 입력 법인명
         @Schema(description = "로그인 이메일", example = "user@kyvc.local")
         @NotBlank(message = "이메일은 필수입니다.")
         @Email(message = "올바른 이메일 형식이어야 합니다.")

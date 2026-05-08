@@ -41,6 +41,9 @@ public class User {
     @Column(name = "phone", length = 30)
     private String phone;
 
+    @Column(name = "onboarding_corporate_name", length = 255)
+    private String onboardingCorporateName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "notification_enabled_yn", length = 1)
     private KyvcEnums.Yn notificationEnabledYn;
@@ -76,7 +79,7 @@ public class User {
             String email, // 사용자 이메일
             String passwordHash // 비밀번호 해시
     ) {
-        return createCorporateUser(email, passwordHash, null, null);
+        return createCorporateUser(email, passwordHash, null, null, null);
     }
 
     // 법인 사용자 생성
@@ -100,6 +103,19 @@ public class User {
     }
 
     // 로그인 가능 상태 여부
+    // 회원가입 온보딩 법인명 포함 법인 사용자 생성
+    public static User createCorporateUser(
+            String email, // 사용자 이메일
+            String passwordHash, // 비밀번호 해시
+            String userName, // 사용자명
+            String phone, // 사용자 연락처
+            String onboardingCorporateName // 회원가입 온보딩 단계 입력 법인명
+    ) {
+        User user = createCorporateUser(email, passwordHash, userName, phone);
+        user.onboardingCorporateName = onboardingCorporateName;
+        return user;
+    }
+
     public boolean isActive() {
         return KyvcEnums.UserStatus.ACTIVE == userStatusCode;
     }

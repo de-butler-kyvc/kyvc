@@ -27,15 +27,18 @@ public class SessionService {
             CustomUserDetails userDetails // 인증 사용자 정보
     ) {
         if (userDetails == null) {
-            return new SessionResponse(false, null, null, null, null, List.of(), null, false);
+            return new SessionResponse(null, null, false, null, null, null, null, List.of(), null, false);
         }
 
         Optional<Corporate> corporate = corporateRepository.findByUserId(userDetails.getUserId());
+        User user = userRepository.findById(userDetails.getUserId()).orElse(null); // 세션 표시용 사용자 정보
         String userName = userRepository.findById(userDetails.getUserId())
                 .map(User::getUserName)
                 .orElse(null); // 사용자명
 
         return new SessionResponse(
+                user == null ? null : user.getOnboardingCorporateName(),
+                user == null ? null : user.getUserStatusCode().name(),
                 true,
                 userDetails.getUserId(),
                 userDetails.getEmail(),
