@@ -120,6 +120,9 @@ class OrganizationDocumentExtraction(BaseModel):
 class PowerOfAttorneyExtraction(BaseModel):
     delegatorName: ExtractedValue = Field(default_factory=ExtractedValue)
     delegateName: ExtractedValue = Field(default_factory=ExtractedValue)
+    delegateAddress: ExtractedValue = Field(default_factory=ExtractedValue)
+    delegateContact: ExtractedValue = Field(default_factory=ExtractedValue)
+    delegateRrn: ExtractedValue = Field(default_factory=ExtractedValue, exclude=True)
     targetCorporateName: ExtractedValue = Field(default_factory=ExtractedValue)
     authorityText: ExtractedValue = Field(default_factory=ExtractedValue)
     canApplyKyc: ExtractedValue = Field(default_factory=ExtractedValue)

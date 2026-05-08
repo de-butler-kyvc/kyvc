@@ -61,6 +61,8 @@ def build_core_kyc_claims(
     corporate_profile = assessment.extractedFields.get("corporateProfile") or {}
     purpose_payload = assessment.extractedFields.get("purposeVerification") or {}
     representative = corporate_profile.get("representative") or {}
+    delegate = assessment.extractedFields.get("delegate") or {}
+    delegation = assessment.extractedFields.get("delegation") or {}
     claims: dict[str, Any] = {
         "kyc": {
             "jurisdiction": jurisdiction,
@@ -94,6 +96,26 @@ def build_core_kyc_claims(
             )
             for owner in assessment.beneficialOwnership.owners
         ],
+        "delegate": _compact(
+            {
+                "name": delegate.get("name"),
+                "address": delegate.get("address"),
+                "contact": delegate.get("contact"),
+                "identityDigest": delegate.get("identityDigest"),
+                "identityDigestAlgorithm": delegate.get("identityDigestAlgorithm"),
+                "identityDigestVersion": delegate.get("identityDigestVersion"),
+            }
+        ),
+        "delegation": _compact(
+            {
+                "kycApplication": delegation.get("kycApplication"),
+                "documentSubmission": delegation.get("documentSubmission"),
+                "vcReceipt": delegation.get("vcReceipt"),
+                "validFrom": delegation.get("validFrom"),
+                "validUntil": delegation.get("validUntil"),
+                "targetCorporateName": delegation.get("targetCorporateName"),
+            }
+        ),
         "establishmentPurpose": _establishment_purpose(purpose_payload),
         "extra": {"aiAssessmentRef": {"assessmentId": assessment.assessmentId, "applicationId": assessment.kycApplicationId}},
     }
@@ -170,7 +192,7 @@ def _evidence_for(document_type: DocumentType) -> list[str]:
     }:
         return ["establishmentPurpose"]
     if document_type == DocumentType.POWER_OF_ATTORNEY:
-        return ["extra.aiAssessmentRef.delegation"]
+        return ["delegate", "delegation"]
     if document_type == DocumentType.SEAL_CERTIFICATE:
         return ["extra.aiAssessmentRef.sealConsistency"]
     return []
@@ -189,4 +211,4 @@ def _compact(value: Any) -> Any:
 
 
 def _present(value: Any) -> bool:
-    return value is not None and value != "" and value != []
+    return value is not None and value != "" and value != [] and value != {}

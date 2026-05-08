@@ -35,6 +35,11 @@ from app.ai_assessment.schemas import (
     SealCertificateExtraction,
     ShareholderRegistryExtraction,
 )
+from app.credentials.delegate_identity import (
+    DELEGATE_IDENTITY_DIGEST_ALGORITHM,
+    DELEGATE_IDENTITY_DIGEST_VERSION,
+    delegate_identity_digest,
+)
 
 
 @dataclass(frozen=True)
@@ -182,11 +187,13 @@ class AssessmentService:
             extractedFields=self._extracted_fields(
                 br,
                 cr,
+                poa,
                 shareholder_registry,
                 beneficial_ownership.owners,
                 extracted_items,
                 representative_profile,
                 application,
+                delegation,
             ),
             crossDocumentChecks=checks,
             beneficialOwnership=beneficial_ownership,
@@ -567,11 +574,13 @@ class AssessmentService:
         self,
         br: BusinessRegistrationExtraction | None,
         cr: CorporateRegistryExtraction | None,
+        poa: PowerOfAttorneyExtraction | None,
         shareholder_registry: ShareholderRegistryExtraction | None,
         owners: list[BeneficialOwner],
         extracted_items: Iterable[tuple[DocumentType, Any]],
         representative_profile: dict[str, Any],
         application: KycApplication,
+        delegation: Any | None,
     ) -> dict[str, Any]:
         purpose_documents = []
         for document_type, extracted in extracted_items:
@@ -593,8 +602,52 @@ class AssessmentService:
                 "satisfied": any(doc.get("purposeVerificationSatisfied") for doc in purpose_documents),
                 "documents": purpose_documents,
             },
+            "delegate": self._delegate_profile(poa),
+            "delegation": self._delegation_payload(poa, delegation),
             "legalName": legal_name,
         }
+
+    def _delegate_profile(self, poa: PowerOfAttorneyExtraction | None) -> dict[str, Any] | None:
+        if poa is None:
+            return None
+        name = _field_value(poa.delegateName)
+        rrn = _field_value(poa.delegateRrn)
+        address = _field_value(poa.delegateAddress)
+        contact = _field_value(poa.delegateContact)
+        payload = {
+            "name": name,
+            "address": address,
+            "contact": contact,
+        }
+        if name and rrn:
+            payload.update(
+                {
+                    "identityDigest": delegate_identity_digest(name=name, rrn=rrn, address=address, contact=contact),
+                    "identityDigestAlgorithm": DELEGATE_IDENTITY_DIGEST_ALGORITHM,
+                    "identityDigestVersion": DELEGATE_IDENTITY_DIGEST_VERSION,
+                }
+            )
+        return {key: value for key, value in payload.items() if value not in (None, "", [])}
+
+    def _delegation_payload(self, poa: PowerOfAttorneyExtraction | None, delegation: Any | None) -> dict[str, Any] | None:
+        if poa is None and delegation is None:
+            return None
+        authority = getattr(delegation, "authority", None)
+        payload = {
+            "kycApplication": getattr(authority, "kycApplication", None)
+            if authority is not None
+            else _field_value(getattr(poa, "canApplyKyc", None)),
+            "documentSubmission": getattr(authority, "documentSubmission", None)
+            if authority is not None
+            else _field_value(getattr(poa, "canSubmitDocuments", None)),
+            "vcReceipt": getattr(authority, "vcReceipt", None)
+            if authority is not None
+            else _field_value(getattr(poa, "canReceiveVc", None)),
+            "validFrom": _field_value(getattr(poa, "validFrom", None)),
+            "validUntil": _field_value(getattr(poa, "validUntil", None)),
+            "targetCorporateName": _field_value(getattr(poa, "targetCorporateName", None)),
+        }
+        return {key: value for key, value in payload.items() if value not in (None, "", [])}
 
     def _overall_confidence(
         self,
@@ -619,6 +672,8 @@ class AssessmentService:
 
 
 def _field_value(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
     if isinstance(value, dict):
         normalized = value.get("normalized")
         return normalized if normalized not in (None, "") else value.get("raw")

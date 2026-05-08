@@ -43,6 +43,24 @@ class BeneficialOwner(BaseModel):
     ownershipPercentage: float | None = None
 
 
+class Delegate(BaseModel):
+    name: str | None = None
+    address: str | None = None
+    contact: str | None = None
+    identityDigest: str | None = None
+    identityDigestAlgorithm: str | None = None
+    identityDigestVersion: str | None = None
+
+
+class Delegation(BaseModel):
+    kycApplication: bool | None = None
+    documentSubmission: bool | None = None
+    vcReceipt: bool | None = None
+    validFrom: str | None = None
+    validUntil: str | None = None
+    targetCorporateName: str | None = None
+
+
 class EstablishmentPurpose(BaseModel):
     checked: bool | None = None
     purposeText: str | None = None
@@ -73,6 +91,8 @@ class LegalEntityKycCredential(BaseModel):
     legalEntity: LegalEntity | None = None
     representative: Representative | None = None
     beneficialOwners: list[BeneficialOwner] = Field(default_factory=list)
+    delegate: Delegate | None = None
+    delegation: Delegation | None = None
     establishmentPurpose: EstablishmentPurpose | None = None
     documentEvidence: list[DocumentEvidence] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)

@@ -111,6 +111,20 @@ paths:
                         birthDate: "1985-02-02"
                         nationality: KR
                         ownershipPercentage: 35
+                    delegate:
+                      name: Lee Delegate
+                      address: Seoul Gangnam-gu Teheran-ro 1
+                      contact: "01012345678"
+                      identityDigest: sha256-BASE64URL_DIGEST
+                      identityDigestAlgorithm: sha-256
+                      identityDigestVersion: delegate-identity-v1
+                    delegation:
+                      kycApplication: true
+                      documentSubmission: true
+                      vcReceipt: true
+                      validFrom: "2026-01-01"
+                      validUntil: "2999-12-31"
+                      targetCorporateName: Example Co Ltd
                     documentEvidence:
                       - documentId: urn:kyvc:doc:registry:001
                         documentType: KR_CORPORATE_REGISTER_FULL_CERTIFICATE
@@ -670,6 +684,42 @@ components:
                 nullable: true
               ownershipPercentage:
                 type: number
+        delegate:
+          type: object
+          description: Delegate claim. Raw RRN is not emitted; identityDigest is the public comparison digest.
+          properties:
+            name:
+              type: string
+            address:
+              type: string
+            contact:
+              type: string
+            identityDigest:
+              type: string
+              example: sha256-BASE64URL_DIGEST
+            identityDigestAlgorithm:
+              type: string
+              example: sha-256
+            identityDigestVersion:
+              type: string
+              example: delegate-identity-v1
+        delegation:
+          type: object
+          properties:
+            kycApplication:
+              type: boolean
+            documentSubmission:
+              type: boolean
+            vcReceipt:
+              type: boolean
+            validFrom:
+              type: string
+              format: date
+            validUntil:
+              type: string
+              format: date
+            targetCorporateName:
+              type: string
         establishmentPurpose:
           type: object
           additionalProperties: true
@@ -699,7 +749,7 @@ components:
           nullable: true
         digestSRI:
           type: string
-          description: SRI digest over original file bytes, for example sha384-...
+          description: SRI digest over original file bytes, for example sha384-.... Delegate identity comparison uses delegate.identityDigest, not this field.
         mediaType:
           type: string
           nullable: true
@@ -1012,6 +1062,7 @@ components:
           example:
             - legalEntity.type
             - representative.name
+            - delegate.identityDigest
             - beneficialOwners[].name
         documentRules:
           type: array
