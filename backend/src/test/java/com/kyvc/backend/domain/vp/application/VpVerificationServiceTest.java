@@ -2,7 +2,7 @@ package com.kyvc.backend.domain.vp.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
-import com.kyvc.backend.domain.core.config.CoreInternalProperties;
+import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
@@ -82,8 +82,8 @@ class VpVerificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        CoreInternalProperties coreInternalProperties = new CoreInternalProperties();
-        coreInternalProperties.setCallbackBaseUrl("https://backend.test");
+        CoreProperties coreProperties = new CoreProperties();
+        coreProperties.setCallbackBaseUrl("https://backend.test");
 
         service = new VpVerificationService(
                 vpVerificationRepository,
@@ -91,7 +91,7 @@ class VpVerificationServiceTest {
                 corporateRepository,
                 coreRequestService,
                 coreAdapter,
-                coreInternalProperties,
+                coreProperties,
                 new ObjectMapper().findAndRegisterModules(),
                 logEventLogger
         );
@@ -114,6 +114,16 @@ class VpVerificationServiceTest {
 
     @Test
     void resolveQr_parsesVpRequestQr() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce",
+                "challenge",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+
         QrResolveResponse response = service.resolveQr(
                 userDetails(),
                 new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"nonce\":\"nonce\",\"challenge\":\"challenge\"}")
@@ -251,14 +261,18 @@ class VpVerificationServiceTest {
         when(credentialRepository.getById(100L)).thenReturn(credential);
         when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
         when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
-        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class)))
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq(vpJwt)))
                 .thenAnswer(invocation -> {
                     CoreVpVerificationRequest request = invocation.getArgument(0);
                     return new CoreVpVerificationResponse(
                             request.coreRequestId(),
                             KyvcEnums.CoreRequestStatus.REQUESTED.name(),
                             "accepted",
-                            LocalDateTime.now()
+                            LocalDateTime.now(),
+                            false,
+                            null,
+                            null,
+                            null
                     );
                 });
         when(vpVerificationRepository.save(any(VpVerification.class)))
@@ -298,7 +312,15 @@ class VpVerificationServiceTest {
                 "challenge-001",
                 LocalDateTime.now().plusMinutes(30)
         );
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -322,7 +344,15 @@ class VpVerificationServiceTest {
                 "challenge-001",
                 LocalDateTime.now().plusMinutes(30)
         );
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -416,10 +446,13 @@ class VpVerificationServiceTest {
                 "KYVC Corp",
                 "123-45-67890",
                 "110111-1234567",
+                "CORPORATION",
+                null,
                 "대표자",
                 "010-0000-0000",
                 "rep@test.com",
                 "서울",
+                null,
                 "IT",
                 KyvcEnums.CorporateStatus.ACTIVE
         );

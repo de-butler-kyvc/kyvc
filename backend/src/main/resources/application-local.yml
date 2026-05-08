@@ -31,7 +31,8 @@ kyvc:
     same-site: ${KYVC_JWT_SAME_SITE:Lax}
     cookie-path: ${KYVC_JWT_COOKIE_PATH:/}
   cors:
-    allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origin-patterns: ${KYVC_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   dev-token:
     enabled: ${KYVC_DEV_TOKEN_ENABLED:true}
     auto-create-user: ${KYVC_DEV_TOKEN_AUTO_CREATE_USER:true}

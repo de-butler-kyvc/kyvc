@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // JWT 기반 보안 설정
@@ -89,8 +90,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfiguration = new CorsConfiguration(); // CORS 설정
-        corsConfiguration.setAllowedOrigins(kyvcCorsProperties.getAllowedOrigins());
-        corsConfiguration.setAllowCredentials(false);
+        corsConfiguration.setAllowedOrigins(resolveAllowedOrigins());
+        corsConfiguration.setAllowedOriginPatterns(resolveAllowedOriginPatterns());
+        corsConfiguration.setAllowCredentials(true);
         corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         corsConfiguration.setAllowedHeaders(List.of("*"));
         corsConfiguration.setExposedHeaders(List.of("X-Request-Id"));
@@ -98,5 +100,43 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource(); // 경로별 CORS 설정 소스
         source.registerCorsConfiguration("/**", corsConfiguration);
         return source;
+    }
+
+    // credentials 허용 시 사용할 Origin 목록
+    private List<String> resolveAllowedOrigins() {
+        return configuredAllowedOrigins().stream()
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .filter(origin -> !"*".equals(origin))
+                .toList();
+    }
+
+    // credentials 허용 시 사용할 Origin Pattern 목록
+    private List<String> resolveAllowedOriginPatterns() {
+        List<String> patterns = new ArrayList<>(configuredAllowedOriginPatterns().stream()
+                .map(String::trim)
+                .filter(pattern -> !pattern.isBlank())
+                .toList()); // Origin Pattern 목록
+        boolean wildcardOriginConfigured = configuredAllowedOrigins().stream()
+                .map(String::trim)
+                .anyMatch("*"::equals); // wildcard Origin 설정 여부
+        if (wildcardOriginConfigured && patterns.isEmpty()) {
+            patterns.add("*");
+        }
+        return patterns;
+    }
+
+    // 설정된 Origin 목록
+    private List<String> configuredAllowedOrigins() {
+        return kyvcCorsProperties.getAllowedOrigins() == null
+                ? List.of()
+                : kyvcCorsProperties.getAllowedOrigins();
+    }
+
+    // 설정된 Origin Pattern 목록
+    private List<String> configuredAllowedOriginPatterns() {
+        return kyvcCorsProperties.getAllowedOriginPatterns() == null
+                ? List.of()
+                : kyvcCorsProperties.getAllowedOriginPatterns();
     }
 }

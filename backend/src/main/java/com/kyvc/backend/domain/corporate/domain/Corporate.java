@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // 법인 엔티티
@@ -41,7 +42,13 @@ public class Corporate {
     @Column(name = "corporate_registration_no", length = 50)
     private String corporateRegistrationNo;
 
-    @Column(name = "representative_name", nullable = false, length = 100)
+    @Column(name = "corporate_type_code", length = 50)
+    private String corporateTypeCode;
+
+    @Column(name = "established_date")
+    private LocalDate establishedDate;
+
+    @Column(name = "representative_name", length = 100)
     private String representativeName;
 
     @Column(name = "representative_phone", length = 50)
@@ -65,6 +72,9 @@ public class Corporate {
     @Column(name = "address", length = 500)
     private String address;
 
+    @Column(name = "website", length = 500)
+    private String website;
+
     @Column(name = "business_type", length = 100)
     private String businessType;
 
@@ -86,10 +96,13 @@ public class Corporate {
             String corporateName, // 법인명
             String businessRegistrationNo, // 사업자등록번호
             String corporateRegistrationNo, // 법인등록번호
+            String corporateTypeCode, // 법인 유형 코드
+            LocalDate establishedDate, // 설립일
             String representativeName, // 대표자명
             String representativePhone, // 대표자 연락처
             String representativeEmail, // 대표자 이메일
             String address, // 법인 주소
+            String website, // 웹사이트 주소
             String businessType, // 업종
             KyvcEnums.CorporateStatus corporateStatusCode // 법인 상태 코드
     ) {
@@ -100,10 +113,13 @@ public class Corporate {
                 corporateName,
                 businessRegistrationNo,
                 corporateRegistrationNo,
+                corporateTypeCode,
+                establishedDate,
                 representativeName,
                 representativePhone,
                 representativeEmail,
                 address,
+                website,
                 businessType
         );
         return corporate;
@@ -114,19 +130,25 @@ public class Corporate {
             String corporateName, // 법인명
             String businessRegistrationNo, // 사업자등록번호
             String corporateRegistrationNo, // 법인등록번호
+            String corporateTypeCode, // 법인 유형 코드
+            LocalDate establishedDate, // 설립일
             String representativeName, // 대표자명
             String representativePhone, // 대표자 연락처
             String representativeEmail, // 대표자 이메일
             String address, // 법인 주소
+            String website, // 웹사이트 주소
             String businessType // 업종
     ) {
         this.corporateName = corporateName;
         this.businessRegistrationNo = businessRegistrationNo;
         this.corporateRegistrationNo = corporateRegistrationNo;
+        this.corporateTypeCode = corporateTypeCode;
+        this.establishedDate = establishedDate;
         this.representativeName = representativeName;
         this.representativePhone = representativePhone;
         this.representativeEmail = representativeEmail;
         this.address = address;
+        this.website = website;
         this.businessType = businessType;
     }
 

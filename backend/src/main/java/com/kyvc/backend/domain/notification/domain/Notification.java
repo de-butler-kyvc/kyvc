@@ -1,7 +1,10 @@
 package com.kyvc.backend.domain.notification.domain;
 
+import com.kyvc.backend.global.util.KyvcEnums;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -42,6 +45,29 @@ public class Notification {
 
     @Column(name = "read_yn", nullable = false, length = 1)
     private String readYn; // 읽음 여부
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "channel_code", length = 30)
+    private KyvcEnums.NotificationChannel channelCode; // 알림 채널
+
+    @Column(name = "target_type_code", length = 30)
+    private String targetTypeCode; // 대상 유형 코드
+
+    @Column(name = "target_id")
+    private Long targetId; // 대상 ID
+
+    @Column(name = "template_code", length = 100)
+    private String templateCode; // 템플릿 코드
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sent_status_code", length = 30)
+    private KyvcEnums.NotificationSendStatus sentStatusCode; // 발송 상태
+
+    @Column(name = "sent_at")
+    private LocalDateTime sentAt; // 발송 일시
+
+    @Column(name = "read_at")
+    private LocalDateTime readAt; // 읽음 일시
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -92,6 +118,7 @@ public class Notification {
     // 읽음 처리
     public void markAsRead() {
         this.readYn = READ_YES;
+        this.readAt = LocalDateTime.now();
     }
 }
 

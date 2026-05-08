@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+
 // KYC 신청 서비스
 @Service
 @Transactional
@@ -85,6 +87,28 @@ public class KycApplicationService {
         validateUserId(userId);
         validateKycId(kycId);
         return toResponse(findOwnedKyc(userId, kycId));
+    }
+
+    // 사용자 기준 현재 KYC 신청 목록 조회
+    @Transactional(readOnly = true)
+    public List<KycApplicationResponse> getCurrentKycApplications(
+            Long userId // 사용자 ID
+    ) {
+        validateUserId(userId);
+        return kycApplicationRepository.findCurrentByApplicantUserId(userId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    // 사용자 기준 현재 KYC 신청 단건 조회
+    @Transactional(readOnly = true)
+    public KycApplicationResponse getCurrentKycApplication(
+            Long userId // 사용자 ID
+    ) {
+        validateUserId(userId);
+        KycApplication kycApplication = kycApplicationRepository.findLatestCurrentByApplicantUserId(userId)
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+        return toResponse(kycApplication);
     }
 
     // KYC 진행상태 조회

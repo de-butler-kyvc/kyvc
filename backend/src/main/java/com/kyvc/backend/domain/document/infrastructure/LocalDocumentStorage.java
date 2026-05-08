@@ -37,11 +37,28 @@ public class LocalDocumentStorage implements DocumentStorage {
             String documentTypeCode, // 문서 유형 코드
             MultipartFile file // 업로드 파일
     ) {
+        return storeToDirectory(resolveTargetDirectory(kycId, documentTypeCode), file);
+    }
+
+    // 법인 단위 문서 파일 저장
+    @Override
+    public StoredFile storeCorporateDocument(
+            Long corporateId, // 법인 ID
+            String documentTypeCode, // 문서 유형 코드
+            MultipartFile file // 업로드 파일
+    ) {
+        return storeToDirectory(resolveCorporateTargetDirectory(corporateId, documentTypeCode), file);
+    }
+
+    // 지정 디렉터리에 파일 저장
+    private StoredFile storeToDirectory(
+            Path targetDirectory, // 저장 디렉터리
+            MultipartFile file // 업로드 파일
+    ) {
         validateFile(file);
 
         String originalFileName = safeOriginalFileName(file); // 원본 파일명
         String extension = extractExtension(originalFileName); // 파일 확장자
-        Path targetDirectory = resolveTargetDirectory(kycId, documentTypeCode); // 저장 디렉터리
         String storedFileName = UUID.randomUUID() + "." + extension; // 저장 파일명
         Path targetPath = targetDirectory.resolve(storedFileName).normalize(); // 저장 파일 경로
 
@@ -65,7 +82,7 @@ public class LocalDocumentStorage implements DocumentStorage {
                     HexFormat.of().formatHex(messageDigest.digest())
             );
         } catch (IOException | NoSuchAlgorithmException exception) {
-            throw new ApiException(ErrorCode.FILE_UPLOAD_FAILED);
+            throw new ApiException(ErrorCode.DOCUMENT_SAVE_FAILED, exception);
         }
     }
 
@@ -84,12 +101,28 @@ public class LocalDocumentStorage implements DocumentStorage {
         return targetDirectory;
     }
 
+    // 법인 문서 저장 디렉터리 결정
+    private Path resolveCorporateTargetDirectory(
+            Long corporateId, // 법인 ID
+            String documentTypeCode // 문서 유형 코드
+    ) {
+        Path targetDirectory = properties.getRootPath()
+                .resolve("corporates")
+                .resolve(String.valueOf(corporateId))
+                .resolve(documentTypeCode)
+                .normalize();
+        if (!targetDirectory.startsWith(properties.getRootPath())) {
+            throw new ApiException(ErrorCode.DOCUMENT_STORAGE_PATH_INVALID);
+        }
+        return targetDirectory;
+    }
+
     // 파일 검증
     private void validateFile(
             MultipartFile file // 업로드 파일
     ) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST);
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_REQUIRED);
         }
         if (file.getSize() > properties.getMaxFileSizeBytes()) {
             throw new ApiException(ErrorCode.DOCUMENT_SIZE_EXCEEDED);

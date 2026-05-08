@@ -60,6 +60,16 @@ public class Credential {
     @Column(name = "qr_expires_at")
     private LocalDateTime qrExpiresAt;
 
+    @Column(name = "offer_token_hash", length = 255)
+    private String offerTokenHash;
+
+    @Column(name = "offer_expires_at")
+    private LocalDateTime offerExpiresAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "offer_used_yn", length = 1)
+    private KyvcEnums.Yn offerUsedYn;
+
     @Column(name = "issued_at")
     private LocalDateTime issuedAt;
 
@@ -128,6 +138,7 @@ public class Credential {
         credential.issuerDid = issuerDid;
         credential.credentialStatus = KyvcEnums.CredentialStatus.ISSUING;
         credential.walletSavedYn = KyvcEnums.Yn.N.name();
+        credential.offerUsedYn = KyvcEnums.Yn.N;
         credential.holderDid = holderDid;
         credential.holderXrplAddress = holderXrplAddress;
         credential.credentialStatusPurposeCode = credentialStatusPurposeCode;

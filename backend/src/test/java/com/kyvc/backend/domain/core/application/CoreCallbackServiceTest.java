@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreCallbackResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationCallbackRequest;
+import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.domain.vp.domain.VpVerification;
 import com.kyvc.backend.domain.vp.repository.VpVerificationRepository;
@@ -33,6 +34,9 @@ class CoreCallbackServiceTest {
 
     @Mock
     private CoreRequestService coreRequestService;
+
+    @Mock
+    private CredentialRepository credentialRepository;
 
     @Mock
     private KycApplicationRepository kycApplicationRepository;
@@ -189,6 +193,7 @@ class CoreCallbackServiceTest {
     private CoreCallbackService createService() {
         return new CoreCallbackService(
                 coreRequestService,
+                credentialRepository,
                 kycApplicationRepository,
                 vpVerificationRepository,
                 new ObjectMapper().findAndRegisterModules(),

@@ -13,5 +13,10 @@ import java.util.List;
 @ConfigurationProperties(prefix = "kyvc.cors")
 public class KyvcCorsProperties {
 
-    private List<String> allowedOrigins = new ArrayList<>(List.of("http://localhost:3000"));
+    private List<String> allowedOrigins = new ArrayList<>(List.of(
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
+    ));
+
+    private List<String> allowedOriginPatterns = new ArrayList<>();
 }
