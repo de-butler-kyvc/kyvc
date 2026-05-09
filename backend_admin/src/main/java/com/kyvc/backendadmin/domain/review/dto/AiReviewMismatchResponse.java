@@ -26,33 +26,41 @@ public record AiReviewMismatchResponse(
     @Schema(description = "AI 문서 불일치 항목")
     public record Mismatch(
 
-            /** 불일치 필드명 */
-            @Schema(description = "불일치 필드명", example = "representativeName")
-            String fieldName,
+            /** 불일치 유형 코드 */
+            @Schema(description = "불일치 유형 코드", example = "CORPORATE_NAME_MISMATCH")
+            String mismatchTypeCode,
 
-            /** 비교 원천 A */
-            @Schema(description = "비교 원천 A", example = "BUSINESS_REGISTRATION")
-            String sourceA,
+            /** 불일치 유형명 */
+            @Schema(description = "불일치 유형명", example = "법인명 불일치")
+            String mismatchTypeName,
 
-            /** 비교 값 A */
-            @Schema(description = "비교 값 A", example = "홍길동")
-            String valueA,
+            /** 기준 문서 유형 코드 */
+            @Schema(description = "기준 문서 유형 코드", example = "BUSINESS_REGISTRATION")
+            String sourceDocumentTypeCode,
 
-            /** 비교 원천 B */
-            @Schema(description = "비교 원천 B", example = "CORPORATE_REGISTRATION")
-            String sourceB,
+            /** 비교 문서 유형 코드 */
+            @Schema(description = "비교 문서 유형 코드", example = "CORPORATE_REGISTRATION")
+            String targetDocumentTypeCode,
 
-            /** 비교 값 B */
-            @Schema(description = "비교 값 B", example = "김길동")
-            String valueB,
+            /** 기준 문서 값 */
+            @Schema(description = "기준 문서 값", example = "케이와이브이씨")
+            String sourceValue,
 
-            /** 불일치 심각도 */
-            @Schema(description = "불일치 심각도", example = "HIGH")
-            String severity,
+            /** 비교 문서 값 */
+            @Schema(description = "비교 문서 값", example = "케이와이브이씨 주식회사")
+            String targetValue,
 
-            /** 판단 신뢰도 */
-            @Schema(description = "판단 신뢰도", example = "88.30")
-            BigDecimal confidence
+            /** 일치 여부 */
+            @Schema(description = "일치 여부", example = "N")
+            String matchedYn,
+
+            /** 신뢰도 점수 */
+            @Schema(description = "신뢰도 점수", example = "88.30")
+            BigDecimal confidenceScore,
+
+            /** 판단 사유 */
+            @Schema(description = "판단 사유", example = "문서 간 법인명 표기가 다릅니다.")
+            String reason
     ) {
     }
 }

@@ -49,6 +49,7 @@ public enum ErrorCode {
     // HTTP 404 - KYC 정보 조회 실패
     KYC_NOT_FOUND(HttpStatus.NOT_FOUND, "KYC_NOT_FOUND", "KYC 정보를 찾을 수 없습니다."),
     AI_REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "AI_REVIEW_NOT_FOUND", "AI 심사 정보를 찾을 수 없습니다."),
+    AI_REVIEW_DETAIL_JSON_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "AI_REVIEW_DETAIL_JSON_INVALID", "AI 심사 상세 JSON을 처리할 수 없습니다."),
     AI_REVIEW_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "AI_REVIEW_POLICY_NOT_FOUND", "AI 심사 정책을 찾을 수 없습니다."),
     INVALID_AI_REVIEW_POLICY(HttpStatus.BAD_REQUEST, "INVALID_AI_REVIEW_POLICY", "유효하지 않은 AI 심사 정책입니다."),
     INVALID_AI_REVIEW_RETRY_STATUS(HttpStatus.BAD_REQUEST, "INVALID_AI_REVIEW_RETRY_STATUS", "현재 상태에서는 AI 재심사를 요청할 수 없습니다."),

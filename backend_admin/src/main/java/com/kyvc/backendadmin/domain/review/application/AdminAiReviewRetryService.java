@@ -2,6 +2,8 @@ package com.kyvc.backendadmin.domain.review.application;
 
 import com.kyvc.backendadmin.domain.audit.application.AuditLogWriter;
 import com.kyvc.backendadmin.domain.core.application.CoreRequestService;
+import com.kyvc.backendadmin.domain.document.domain.KycDocument;
+import com.kyvc.backendadmin.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backendadmin.domain.kyc.domain.KycApplication;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backendadmin.domain.review.domain.KycReviewHistory;
@@ -39,6 +41,7 @@ public class AdminAiReviewRetryService {
     private final CoreRequestService coreRequestService;
     private final AdminReviewRepository adminReviewRepository;
     private final AuditLogWriter auditLogWriter;
+    private final KycDocumentRepository kycDocumentRepository;
 
     /**
      * KYC 신청 건에 대해 AI 재심사 요청을 생성합니다.
@@ -52,6 +55,7 @@ public class AdminAiReviewRetryService {
         KycApplication application = findKycApplication(kycId);
         validateReason(request);
         validateRetryableStatus(application.getKycStatusCode());
+        validateDocumentsBelongToKyc(kycId, request.documentIds());
 
         // core_requests row 생성: 실제 AI 심사는 Core에서 수행하므로 요청 대기 row만 생성한다.
         String coreRequestId = coreRequestService.createAiReviewRequest(kycId, request.reason(), request.documentIds());
@@ -108,6 +112,19 @@ public class AdminAiReviewRetryService {
         // 재심사 가능 상태 검증: 제출 완료, 수동 심사, 보완 필요 상태에서만 AI 재심사를 요청할 수 있다.
         if (!RETRYABLE_KYC_STATUSES.contains(kycStatus)) {
             throw new ApiException(ErrorCode.INVALID_AI_REVIEW_RETRY_STATUS);
+        }
+    }
+
+    private void validateDocumentsBelongToKyc(Long kycId, java.util.List<Long> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return;
+        }
+        for (Long documentId : documentIds) {
+            KycDocument document = kycDocumentRepository.findById(documentId)
+                    .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
+            if (!kycId.equals(document.getKycId())) {
+                throw new ApiException(ErrorCode.DOCUMENT_ACCESS_DENIED);
+            }
         }
     }
 }

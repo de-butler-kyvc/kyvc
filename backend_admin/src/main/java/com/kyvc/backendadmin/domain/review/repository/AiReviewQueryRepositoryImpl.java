@@ -26,48 +26,17 @@ public class AiReviewQueryRepositoryImpl implements AiReviewQueryRepository {
 
     @Override
     public Optional<AdminAiReviewDetailResponse> findAiReviewDetail(Long kycId) {
-        // 최근 Core 요청 조회: KYC 신청을 대상으로 한 AI_REVIEW 요청 중 가장 최근 요청을 가져온다.
         Query query = entityManager().createNativeQuery("""
-                with latest_ai_core_request as (
-                    select *
-                    from (
-                        select core_request.*,
-                               row_number() over (
-                                   partition by core_request.target_id
-                                   order by coalesce(core_request.requested_at, core_request.created_at) desc,
-                                            core_request.core_request_id desc
-                               ) as rn
-                        from core_requests core_request
-                        where core_request.core_target_type_code = 'KYC_APPLICATION'
-                          and core_request.core_request_type_code = 'AI_REVIEW'
-                    ) ranked_core_request
-                    where ranked_core_request.rn = 1
-                ),
-                latest_ai_history as (
-                    select *
-                    from (
-                        select review_history.*,
-                               row_number() over (
-                                   partition by review_history.kyc_id
-                                   order by review_history.created_at desc,
-                                            review_history.review_history_id desc
-                               ) as rn
-                        from kyc_review_histories review_history
-                        where review_history.review_action_type_code in ('AI_COMPLETE', 'AI_FAILED')
-                    ) ranked_review_history
-                    where ranked_review_history.rn = 1
-                )
                 select kyc.kyc_id,
                        kyc.ai_review_status_code,
                        kyc.ai_review_result_code,
                        kyc.ai_confidence_score,
+                       kyc.ai_review_summary,
+                       kyc.ai_review_detail_json,
                        kyc.manual_review_reason,
-                       latest_ai_core_request.core_request_id,
-                       latest_ai_core_request.core_request_status_code,
-                       coalesce(latest_ai_history.created_at, latest_ai_core_request.completed_at) as reviewed_at
+                       kyc.ai_review_reason_code,
+                       kyc.updated_at
                 from kyc_applications kyc
-                left join latest_ai_core_request on latest_ai_core_request.target_id = kyc.kyc_id
-                left join latest_ai_history on latest_ai_history.kyc_id = kyc.kyc_id
                 where kyc.kyc_id = :kycId
                 """);
         query.setParameter("kycId", kycId);
@@ -97,27 +66,15 @@ public class AiReviewQueryRepositoryImpl implements AiReviewQueryRepository {
     public List<KycReviewHistoryResponse> findReviewHistories(Long kycId) {
         Query query = entityManager().createNativeQuery("""
                 select review_history.review_history_id,
+                       review_history.kyc_id,
                        review_history.review_action_type_code,
+                       review_history.before_kyc_status_code,
+                       review_history.after_kyc_status_code,
                        review_history.admin_id,
-                       admin_user.name,
                        review_history.comment,
                        review_history.created_at
                 from kyc_review_histories review_history
-                left join admin_users admin_user on admin_user.admin_id = review_history.admin_id
                 where review_history.kyc_id = :kycId
-                  and review_history.review_action_type_code in (
-                      'AI_START',
-                      'AI_COMPLETE',
-                      'AI_FAILED',
-                      'REQUEST_AI_REVIEW',
-                      'MANUAL_REVIEW',
-                      'APPROVE',
-                      'REJECT',
-                      'REQUEST_SUPPLEMENT',
-                      'SUPPLEMENT_SUBMIT',
-                      'ISSUE_VC',
-                      'CHANGE_STATUS'
-                  )
                 order by review_history.created_at desc, review_history.review_history_id desc
                 """);
         query.setParameter("kycId", kycId);
@@ -136,35 +93,38 @@ public class AiReviewQueryRepositoryImpl implements AiReviewQueryRepository {
                 toString(row[4]),
                 toString(row[5]),
                 toString(row[6]),
-                toLocalDateTime(row[7])
+                toString(row[7]),
+                toLocalDateTime(row[8])
         );
     }
 
     private AiReviewAgentAuthorityResponse.AgentAuthority toAgentAuthorityBase(Object[] row) {
         return new AiReviewAgentAuthorityResponse.AgentAuthority(
                 toString(row[0]),
-                null,
-                null,
-                null,
                 toString(row[1]),
+                null,
+                null,
+                null,
                 null,
                 null
         );
     }
 
     private KycReviewHistoryResponse toReviewHistory(Object[] row) {
-        Long actorId = toLong(row[2]);
-        // actorType에 따라 actorName을 결정한다. 현재 kyc_review_histories는 admin_id만 보관하므로 없으면 SYSTEM으로 보정한다.
-        String actorType = actorId == null ? "SYSTEM" : "ADMIN";
-        String actorName = actorId == null ? "SYSTEM" : toString(row[3]);
+        Long reviewerId = toLong(row[5]);
+        String reviewerType = reviewerId == null ? "SYSTEM" : "ADMIN";
         return new KycReviewHistoryResponse(
                 toLong(row[0]),
-                toString(row[1]),
-                actorType,
-                actorId,
-                actorName,
+                toLong(row[1]),
+                toString(row[2]),
+                toString(row[3]),
                 toString(row[4]),
-                toLocalDateTime(row[5])
+                null,
+                null,
+                toString(row[6]),
+                reviewerType,
+                reviewerId,
+                toLocalDateTime(row[7])
         );
     }
 
