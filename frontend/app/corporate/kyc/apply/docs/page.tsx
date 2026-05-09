@@ -47,7 +47,7 @@ export default function KycApplyDocsPage() {
   const optional = docs.filter((doc) => !doc.required);
 
   return (
-    <div className="mx-auto flex w-full max-w-[920px] flex-col px-9 py-8">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">필수서류 안내</h1>

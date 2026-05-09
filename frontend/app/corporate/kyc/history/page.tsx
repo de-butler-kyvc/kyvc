@@ -16,6 +16,7 @@ const TABS = [
 ] as const;
 
 const REVIEW = new Set(["SUBMITTED", "IN_REVIEW", "AI_REVIEWING"]);
+const SUPPLEMENT = new Set(["NEED_SUPPLEMENT"]);
 const DONE = new Set(["APPROVED", "COMPLETED", "VC_ISSUED"]);
 
 export default function CorporateKycHistoryPage() {
@@ -144,7 +145,7 @@ function label(status?: string | null) {
       SUBMITTED: "제출됨",
       IN_REVIEW: "심사중",
       AI_REVIEWING: "AI 심사중",
-      SUPPLEMENT_REQUESTED: "보완필요",
+      NEED_SUPPLEMENT: "보완필요",
       APPROVED: "승인",
       COMPLETED: "완료",
       VC_ISSUED: "VC 발급완료",
@@ -154,7 +155,7 @@ function label(status?: string | null) {
 }
 
 function variant(status?: string | null) {
-  if (status === "SUPPLEMENT_REQUESTED" || status === "REJECTED") return "destructive";
+  if (SUPPLEMENT.has(status ?? "") || status === "REJECTED") return "destructive";
   if (DONE.has(status ?? "")) return "success";
   if (REVIEW.has(status ?? "")) return "secondary";
   return "outline";

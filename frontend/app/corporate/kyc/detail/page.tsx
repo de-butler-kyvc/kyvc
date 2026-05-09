@@ -115,7 +115,7 @@ function KycDetail() {
 
   if (!valid) {
     return (
-      <div className="mx-auto flex w-full max-w-[1180px] flex-col px-9 py-8">
+      <div className="mx-auto flex w-full max-w-[1180px] flex-col">
         <div className="page-head">
           <div>
             <h1 className="page-head-title">KYC 진행상태 조회</h1>
@@ -470,7 +470,7 @@ function AiReviewSummary({
                 <Icon.Alert size={13} />
               </div>
               <span style={{ fontSize: 13.5 }}>
-                {f.findingType ?? "검토 필요"}
+                {f.message ?? "검토 필요"}
               </span>
               <Badge variant="warning" style={{ marginLeft: "auto" }}>
                 보완
@@ -498,7 +498,7 @@ function AiReviewSummary({
           <div style={{ marginTop: 12 }}>
             <InfoRow
               label="신뢰도"
-              value={`${Math.round((review.confidenceScore ?? 0) * 100)}%`}
+              value={`${Math.round(review.confidenceScore ?? 0)}%`}
             />
           </div>
         ) : null}
@@ -533,7 +533,7 @@ function PendingSupplements({
   supplements: Supplement[];
 }) {
   return (
-    <section className="form-card">
+    <section className="form-card" style={{ marginTop: 16 }}>
       <div className="form-card-header">
         <div>
           <div className="form-card-title">보완 요청 {supplements.length}건</div>
@@ -807,7 +807,7 @@ function stepMeta(key: StepKey, kycStatus: string, active: boolean) {
   if (!active) return undefined;
   if (key === "ai" && kycStatus === "AI_REVIEWING") return "진행 중...";
   if (key === "manual" && kycStatus === "MANUAL_REVIEW") return "진행 중...";
-  if (key === "manual" && kycStatus === "NEED_SUPPLEMENT") return "보완 요청됨";
+  if (key === "manual" && kycStatus === "NEED_SUPPLEMENT") return "보완 필요";
   if (key === "result") {
     if (kycStatus === "APPROVED") return "승인";
     if (kycStatus === "REJECTED") return "반려";
