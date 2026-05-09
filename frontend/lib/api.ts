@@ -1,7 +1,6 @@
 import axios, { type AxiosInstance } from "axios";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+const BASE_URL = "https://dev-api-kyvc.khuoo.synology.me";
 
 type Envelope<T> = {
   success: boolean;
