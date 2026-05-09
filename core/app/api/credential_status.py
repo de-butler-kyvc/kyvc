@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
 from app.credential_status.api_models import CredentialStatusResponse
 from app.credential_status.service import CredentialStatusService
@@ -29,10 +29,7 @@ def get_credential_status(
     else:
         settings = request.app.state.settings
         rpc_url = xrpl_json_rpc_url or settings.xrpl_json_rpc_url
-        try:
-            enforce_mainnet_policy(rpc_url, settings.allow_mainnet, allow_mainnet)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        enforce_mainnet_policy(rpc_url, settings.allow_mainnet, allow_mainnet)
         client = make_client(rpc_url)
 
         def status_lookup(issuer: str, holder: str, credential_type_hex: str):

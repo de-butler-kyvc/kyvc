@@ -182,10 +182,7 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
             detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
         )
         rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
-        try:
-            enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
         client = make_client(rpc_url)
         issuer_wallet = wallet_from_seed(seed)
         if issuer_account is not None and issuer_account != issuer_wallet.address:
@@ -253,17 +250,14 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
     ledger_entry = None
     if payload.status_mode == "xrpl":
         assert client is not None and issuer_wallet is not None
-        try:
-            create_tx = submit_credential_create(
-                client,
-                issuer_wallet,
-                payload.holder_account,
-                credential_type,
-                payload.valid_until,
-                payload.status_uri,
-            )
-        except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        create_tx = submit_credential_create(
+            client,
+            issuer_wallet,
+            payload.holder_account,
+            credential_type,
+            payload.valid_until,
+            payload.status_uri,
+        )
         ledger_entry = get_xrpl_credential_entry(client, issuer_account, payload.holder_account, credential_type)
         if payload.persist_status:
             sync_status_mirror(
@@ -326,24 +320,18 @@ def revoke_credential(payload: RevokeCredentialRequest, request: Request) -> Rev
             detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
         )
         rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
-        try:
-            enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
         client = make_client(rpc_url)
         issuer_wallet = wallet_from_seed(seed)
         if issuer_account is not None and issuer_account != issuer_wallet.address:
             raise HTTPException(status_code=400, detail="issuer_account does not match issuer_seed wallet address")
         issuer_account = issuer_wallet.address
-        try:
-            delete_tx = submit_credential_delete(
-                client,
-                issuer_wallet,
-                payload.holder_account,
-                credential_type,
-            )
-        except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        delete_tx = submit_credential_delete(
+            client,
+            issuer_wallet,
+            payload.holder_account,
+            credential_type,
+        )
         ledger_entry = get_xrpl_credential_entry(client, issuer_account, payload.holder_account, credential_type)
     elif issuer_account is None:
         raise HTTPException(status_code=400, detail="issuer_account is required for local status mode")
