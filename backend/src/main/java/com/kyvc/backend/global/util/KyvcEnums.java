@@ -157,7 +157,8 @@ public final class KyvcEnums {
         VALID, // 유효
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
-        EXPIRED // 만료
+        EXPIRED, // 만료
+        FAILED // 실패
     }
 
     // VP 요청 유형

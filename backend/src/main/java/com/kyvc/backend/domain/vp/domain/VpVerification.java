@@ -106,6 +106,46 @@ public class VpVerification {
     @Column(name = "callback_sent_at")
     private LocalDateTime callbackSentAt;
 
+    // VP 요청 생성
+    public static VpVerification createRequest(
+            Long credentialId, // Credential ID
+            Long corporateId, // 법인 ID
+            String vpRequestId, // VP 요청 ID
+            String requestNonce, // 요청 nonce
+            String challenge, // 요청 challenge
+            String purpose, // 제출 목적
+            String requesterName, // 요청 기관명
+            String requiredClaimsJson, // 요구 Claim JSON
+            LocalDateTime expiresAt, // 만료 일시
+            Long verifierId, // Verifier ID
+            String financeInstitutionCode, // 금융기관 코드
+            KyvcEnums.VpRequestType requestTypeCode, // VP 요청 유형
+            KyvcEnums.Yn testYn, // 테스트 여부
+            KyvcEnums.Yn reAuthYn, // 재인증 여부
+            String permissionResultJson // 부가 결과 JSON
+    ) {
+        VpVerification vpVerification = new VpVerification();
+        vpVerification.credentialId = credentialId;
+        vpVerification.corporateId = corporateId;
+        vpVerification.vpRequestId = vpRequestId;
+        vpVerification.requestNonce = requestNonce;
+        vpVerification.challenge = challenge;
+        vpVerification.purpose = purpose;
+        vpVerification.requesterName = requesterName;
+        vpVerification.requiredClaimsJson = requiredClaimsJson;
+        vpVerification.expiresAt = expiresAt;
+        vpVerification.verifierId = verifierId;
+        vpVerification.financeInstitutionCode = financeInstitutionCode;
+        vpVerification.requestTypeCode = requestTypeCode;
+        vpVerification.testYn = testYn == null ? KyvcEnums.Yn.N : testYn;
+        vpVerification.reAuthYn = reAuthYn == null ? KyvcEnums.Yn.N : reAuthYn;
+        vpVerification.permissionResultJson = permissionResultJson;
+        vpVerification.vpVerificationStatus = KyvcEnums.VpVerificationStatus.REQUESTED;
+        vpVerification.replaySuspectedYn = KyvcEnums.Yn.N.name();
+        vpVerification.requestedAt = LocalDateTime.now();
+        return vpVerification;
+    }
+
     // 요청 만료 여부
     public boolean isExpired(
             LocalDateTime now // 기준 일시
@@ -128,7 +168,8 @@ public class VpVerification {
         return KyvcEnums.VpVerificationStatus.VALID == vpVerificationStatus
                 || KyvcEnums.VpVerificationStatus.INVALID == vpVerificationStatus
                 || KyvcEnums.VpVerificationStatus.REPLAY_SUSPECTED == vpVerificationStatus
-                || KyvcEnums.VpVerificationStatus.EXPIRED == vpVerificationStatus;
+                || KyvcEnums.VpVerificationStatus.EXPIRED == vpVerificationStatus
+                || KyvcEnums.VpVerificationStatus.FAILED == vpVerificationStatus;
     }
 
     // nonce 일치 여부
@@ -181,7 +222,7 @@ public class VpVerification {
             LocalDateTime verifiedAt // 검증 일시
     ) {
         applyVerificationResult(
-                KyvcEnums.VpVerificationStatus.INVALID,
+                KyvcEnums.VpVerificationStatus.FAILED,
                 resultSummary,
                 verifiedAt,
                 KyvcEnums.Yn.N
