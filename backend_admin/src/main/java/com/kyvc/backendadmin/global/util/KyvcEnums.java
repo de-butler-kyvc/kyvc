@@ -208,6 +208,7 @@ public final class KyvcEnums {
         AI_REVIEW_POLICY, // AI 심사 정책
         CREDENTIAL, // Credential
         VP_VERIFICATION, // VP 검증
+        VERIFIER, // Verifier 플랫폼
         ISSUER_POLICY, // Issuer 정책
         ADMIN_USER, // 관리자 계정
         ADMIN_ROLE, // 관리자 권한
