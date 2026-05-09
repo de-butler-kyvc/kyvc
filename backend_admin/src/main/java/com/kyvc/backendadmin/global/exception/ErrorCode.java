@@ -63,6 +63,7 @@ public enum ErrorCode {
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
     CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_NOT_FOUND", "Credential 정보를 찾을 수 없습니다."),
     INVALID_CREDENTIAL_ISSUE_STATUS(HttpStatus.CONFLICT, "INVALID_CREDENTIAL_ISSUE_STATUS", "현재 상태에서는 Credential 발급을 요청할 수 없습니다."),
+    VP_VERIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "VP_VERIFICATION_NOT_FOUND", "VP 검증 정보를 찾을 수 없습니다."),
     ISSUER_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "ISSUER_POLICY_NOT_FOUND", "Issuer 정책을 찾을 수 없습니다."),
     ISSUER_POLICY_DUPLICATED(HttpStatus.CONFLICT, "ISSUER_POLICY_DUPLICATED", "이미 존재하는 Issuer 정책입니다."),
     ISSUER_POLICY_CONFLICT(HttpStatus.CONFLICT, "ISSUER_POLICY_CONFLICT", "기존 Issuer 정책과 충돌합니다."),
