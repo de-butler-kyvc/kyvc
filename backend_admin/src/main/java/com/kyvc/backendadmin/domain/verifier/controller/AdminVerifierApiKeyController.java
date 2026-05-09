@@ -40,8 +40,12 @@ public class AdminVerifierApiKeyController {
 
     @Operation(summary = "Verifier API Key 회전", description = "기존 Key를 ROTATED 처리하고 신규 secret을 최초 1회만 응답한다.")
     @PostMapping("/{keyId}/rotate")
-    public CommonResponse<AdminVerifierDtos.ApiKeySecretResponse> rotate(@PathVariable Long verifierId, @PathVariable Long keyId) {
-        return CommonResponseFactory.success(apiKeyService.rotate(verifierId, keyId));
+    public CommonResponse<AdminVerifierDtos.ApiKeySecretResponse> rotate(
+            @PathVariable Long verifierId,
+            @PathVariable Long keyId,
+            @Valid @RequestBody AdminVerifierDtos.ApiKeyRotateRequest request
+    ) {
+        return CommonResponseFactory.success(apiKeyService.rotate(verifierId, keyId, request));
     }
 
     @Operation(summary = "Verifier API Key 폐기", description = "API Key를 REVOKED 상태로 변경한다.")
@@ -49,7 +53,7 @@ public class AdminVerifierApiKeyController {
     public CommonResponse<AdminVerifierDtos.ApiKeyResponse> revoke(
             @PathVariable Long verifierId,
             @PathVariable Long keyId,
-            @RequestBody(required = false) AdminVerifierDtos.ApiKeyRevokeRequest request
+            @Valid @RequestBody AdminVerifierDtos.ApiKeyRevokeRequest request
     ) {
         return CommonResponseFactory.success(apiKeyService.revoke(verifierId, keyId, request));
     }

@@ -1,5 +1,6 @@
 package com.kyvc.backendadmin.domain.credential.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -13,7 +14,8 @@ public record CredentialIssueResponse(
         Long credentialId,
 
         /** Core 요청 ID */
-        @Schema(description = "Core 요청 ID", example = "VC_ISSUE-1-550e8400-e29b-41d4-a716-446655440000")
+        @Schema(hidden = true)
+        @JsonIgnore
         String coreRequestId,
 
         /** Credential 유형 */

@@ -154,15 +154,31 @@ public final class AdminVerifierDtos {
             String name,
             /** 만료 시각 */
             @Schema(description = "만료 시각", example = "2026-12-31T23:59:59")
-            LocalDateTime expiresAt
+            LocalDateTime expiresAt,
+            /** MFA 세션 토큰 */
+            @NotBlank(message = "mfaToken은 필수입니다.")
+            @Schema(description = "MFA 세션 토큰", example = "mfa_session_token")
+            String mfaToken
     ) {
     }
 
     @Schema(description = "API Key 폐기 요청")
+    public record ApiKeyRotateRequest(
+            /** MFA 세션 토큰 */
+            @NotBlank(message = "mfaToken은 필수입니다.")
+            @Schema(description = "MFA 세션 토큰", example = "mfa_session_token")
+            String mfaToken
+    ) {
+    }
+
     public record ApiKeyRevokeRequest(
             /** 폐기 사유 */
             @Schema(description = "폐기 사유", example = "키 노출 의심")
-            String reason
+            String reason,
+            /** MFA 세션 토큰 */
+            @NotBlank(message = "mfaToken은 필수입니다.")
+            @Schema(description = "MFA 세션 토큰", example = "mfa_session_token")
+            String mfaToken
     ) {
     }
 

@@ -26,6 +26,7 @@ public class AdminAuditLogQueryService {
 
     private final AuditLogRepository auditLogRepository;
     private final AuditLogQueryRepository auditLogQueryRepository;
+    private static final String SENSITIVE_KEYS = "coreRequestId|core_request_id|coreTrace|core_trace|rawPayload|raw_payload|vpJwt|vp_jwt|vcJson|vc_json|apiSecret|api_secret|password_hash|password|token_hash|token|api_key_hash|credential_salt_hash|credential_salt|authorization|cookie|jwt|secret|privateKey|private_key";
 
     /**
      * 감사로그 목록을 검색 조건으로 조회합니다.
@@ -85,7 +86,7 @@ public class AdminAuditLogQueryService {
                 auditLog.getActionType(),
                 auditLog.getTargetType().name(),
                 auditLog.getTargetId(),
-                auditLog.getRequestSummary(),
+                maskSensitive(auditLog.getRequestSummary()),
                 maskSensitive(auditLog.getBeforeValueJson()),
                 maskSensitive(auditLog.getAfterValueJson()),
                 extractTraceId(auditLog.getRequestSummary()),
@@ -99,8 +100,8 @@ public class AdminAuditLogQueryService {
             return null;
         }
         return value
-                .replaceAll("(?i)(password_hash|token_hash|api_key_hash|credential_salt_hash|credential_salt|secret|vp_jwt_hash|vp_jwt)\"?\\s*[:=]\\s*\"?[^\"]+", "$1=***")
-                .replaceAll("(?i)(password_hash|token_hash|api_key_hash|credential_salt_hash|credential_salt|secret|vp_jwt_hash|vp_jwt)=[^|,}\\s]+", "$1=***");
+                .replaceAll("(?i)(" + SENSITIVE_KEYS + ")\"?\\s*[:=]\\s*\"?[^|,}\\s\"]+", "$1=***")
+                .replaceAll("(?i)(" + SENSITIVE_KEYS + ")=[^|,}\\s]+", "$1=***");
     }
 
     private String extractTraceId(String summary) {

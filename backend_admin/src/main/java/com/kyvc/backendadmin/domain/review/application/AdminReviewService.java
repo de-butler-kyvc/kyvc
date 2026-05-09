@@ -3,6 +3,7 @@ package com.kyvc.backendadmin.domain.review.application;
 import com.kyvc.backendadmin.domain.admin.domain.AuditLog;
 import com.kyvc.backendadmin.domain.auth.domain.AuthToken;
 import com.kyvc.backendadmin.domain.auth.repository.AuthTokenRepository;
+import com.kyvc.backendadmin.domain.kyc.application.AdminKycAccessChecker;
 import com.kyvc.backendadmin.domain.kyc.domain.KycApplication;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backendadmin.domain.review.domain.KycReviewHistory;
@@ -41,6 +42,7 @@ public class AdminReviewService {
     private final AuthTokenRepository authTokenRepository;
     private final CommonCodeValidator commonCodeValidator;
     private final KycStatusTransitionPolicy kycStatusTransitionPolicy;
+    private final AdminKycAccessChecker adminKycAccessChecker;
 
     /**
      * KYC 수동심사 승인 액션을 처리합니다.
@@ -57,6 +59,7 @@ public class AdminReviewService {
     public AdminReviewActionResponse approve(Long kycId, AdminReviewApproveRequest request) {
         // 권한 확인: 수동심사 처리는 백엔드 관리자 또는 시스템 관리자만 수행할 수 있다.
         validateReviewPermission();
+        adminKycAccessChecker.validateActionAccess(kycId, "KYC_MANUAL_APPROVE");
         Long adminId = SecurityUtil.getCurrentAdminId();
         // MFA_SESSION 토큰 검증: 승인 액션은 MFA 검증을 통과한 1회성 세션 토큰이 필요하다.
         AuthToken mfaToken = validateMfaSessionToken(request.mfaToken(), adminId);
@@ -97,6 +100,7 @@ public class AdminReviewService {
     public AdminReviewActionResponse reject(Long kycId, AdminReviewRejectRequest request) {
         // 권한 확인: 수동심사 처리는 백엔드 관리자 또는 시스템 관리자만 수행할 수 있다.
         validateReviewPermission();
+        adminKycAccessChecker.validateActionAccess(kycId, "KYC_MANUAL_REJECT");
         Long adminId = SecurityUtil.getCurrentAdminId();
         // MFA_SESSION 토큰 검증: 반려 액션은 MFA 검증을 통과한 1회성 세션 토큰이 필요하다.
         AuthToken mfaToken = validateMfaSessionToken(request.mfaToken(), adminId);
@@ -138,6 +142,7 @@ public class AdminReviewService {
     public AdminReviewActionResponse requestSupplement(Long kycId, AdminSupplementRequest request) {
         // 권한 확인: 수동심사 처리는 백엔드 관리자 또는 시스템 관리자만 수행할 수 있다.
         validateReviewPermission();
+        adminKycAccessChecker.validateActionAccess(kycId, "KYC_SUPPLEMENT_REQUEST");
         Long adminId = SecurityUtil.getCurrentAdminId();
         commonCodeValidator.validateEnabledCode(SUPPLEMENT_REASON_CODE_GROUP, request.supplementReasonCode());
         request.documentTypes().forEach(documentType ->

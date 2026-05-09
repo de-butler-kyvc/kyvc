@@ -1,5 +1,6 @@
 package com.kyvc.backendadmin.domain.dashboard.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -178,7 +179,8 @@ public record AdminDashboardResponse(
             long failed,
 
             /** Core callback 수신 수 */
-            @Schema(description = "Core callback 수신 수", example = "2")
+            @Schema(hidden = true)
+            @JsonIgnore
             long callbackReceived,
 
             /** Core 재시도 중 수 */

@@ -21,6 +21,7 @@ public class AuditLogWriter {
 
     private static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
     private static final String USER_AGENT_HEADER = "User-Agent";
+    private static final String SENSITIVE_KEYS = "coreRequestId|core_request_id|coreTrace|core_trace|rawPayload|raw_payload|vpJwt|vp_jwt|vcJson|vc_json|apiSecret|api_secret|password|token|authorization|cookie|jwt|secret|privateKey|private_key";
 
     private final AuditLogRepository auditLogRepository;
     private final ObjectProvider<HttpServletRequest> requestProvider;
@@ -74,15 +75,29 @@ public class AuditLogWriter {
             String beforeValue,
             String afterValue
     ) {
-        StringBuilder summary = new StringBuilder(StringUtils.hasText(requestSummary) ? requestSummary : "");
+        StringBuilder summary = new StringBuilder(StringUtils.hasText(requestSummary) ? maskSensitive(requestSummary) : "");
+        append(summary, "result", resolveResult(afterValue));
         // requestId 저장: 별도 컬럼이 없어 request_summary에 추적 ID를 함께 남긴다.
         append(summary, "requestId", requestId);
         // beforeValue 저장: 별도 컬럼이 없어 request_summary에 변경 전 값을 함께 남긴다.
-        append(summary, "beforeValue", beforeValue);
+        append(summary, "beforeValue", maskSensitive(beforeValue));
         // afterValue 저장: 별도 컬럼이 없어 request_summary에 변경 후 값을 함께 남긴다.
-        append(summary, "afterValue", afterValue);
-        append(summary, "userAgent", userAgent);
+        append(summary, "afterValue", maskSensitive(afterValue));
+        append(summary, "userAgent", maskSensitive(userAgent));
         return summary.toString();
+    }
+
+    private String maskSensitive(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        return value
+                .replaceAll("(?i)(" + SENSITIVE_KEYS + ")\"?\\s*[:=]\\s*\"?[^|,}\\s\"]+", "$1=***")
+                .replaceAll("(?i)(" + SENSITIVE_KEYS + ")=[^|,}\\s]+", "$1=***");
+    }
+
+    private String resolveResult(String afterValue) {
+        return "FAILURE".equalsIgnoreCase(afterValue) ? "FAILURE" : "SUCCESS";
     }
 
     private void append(StringBuilder summary, String key, String value) {

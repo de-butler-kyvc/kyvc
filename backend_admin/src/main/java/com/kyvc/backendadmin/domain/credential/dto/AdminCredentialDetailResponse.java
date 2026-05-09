@@ -1,5 +1,6 @@
 package com.kyvc.backendadmin.domain.credential.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -104,7 +105,8 @@ public record AdminCredentialDetailResponse(
         String aiReviewStatusCode,
 
         /** 최신 Core 요청 ID */
-        @Schema(description = "최신 Core 요청 ID")
+        @Schema(hidden = true)
+        @JsonIgnore
         String coreRequestId,
 
         /** 최신 Core 요청 상태 코드 */

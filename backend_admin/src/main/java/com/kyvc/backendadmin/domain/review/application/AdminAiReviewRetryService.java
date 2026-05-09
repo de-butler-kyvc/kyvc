@@ -4,6 +4,7 @@ import com.kyvc.backendadmin.domain.audit.application.AuditLogWriter;
 import com.kyvc.backendadmin.domain.core.application.CoreRequestService;
 import com.kyvc.backendadmin.domain.document.domain.KycDocument;
 import com.kyvc.backendadmin.domain.document.repository.KycDocumentRepository;
+import com.kyvc.backendadmin.domain.kyc.application.AdminKycAccessChecker;
 import com.kyvc.backendadmin.domain.kyc.domain.KycApplication;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backendadmin.domain.review.domain.KycReviewHistory;
@@ -42,6 +43,7 @@ public class AdminAiReviewRetryService {
     private final AdminReviewRepository adminReviewRepository;
     private final AuditLogWriter auditLogWriter;
     private final KycDocumentRepository kycDocumentRepository;
+    private final AdminKycAccessChecker adminKycAccessChecker;
 
     /**
      * KYC 신청 건에 대해 AI 재심사 요청을 생성합니다.
@@ -52,6 +54,7 @@ public class AdminAiReviewRetryService {
      */
     @Transactional
     public AiReviewRetryResponse retry(Long kycId, AiReviewRetryRequest request) {
+        adminKycAccessChecker.validateActionAccess(kycId, AUDIT_ACTION_AI_REVIEW_RETRY_REQUESTED);
         KycApplication application = findKycApplication(kycId);
         validateReason(request);
         validateRetryableStatus(application.getKycStatusCode());

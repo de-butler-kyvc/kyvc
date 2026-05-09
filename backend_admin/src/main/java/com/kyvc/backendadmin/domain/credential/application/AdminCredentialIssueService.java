@@ -7,6 +7,7 @@ import com.kyvc.backendadmin.domain.core.application.CoreRequestService;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialIssueRequest;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialIssueResponse;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository;
+import com.kyvc.backendadmin.domain.kyc.application.AdminKycAccessChecker;
 import com.kyvc.backendadmin.domain.kyc.domain.KycApplication;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backendadmin.domain.review.domain.KycReviewHistory;
@@ -39,6 +40,7 @@ public class AdminCredentialIssueService {
     private final AuthTokenRepository authTokenRepository;
     private final AdminReviewRepository adminReviewRepository;
     private final AuditLogWriter auditLogWriter;
+    private final AdminKycAccessChecker adminKycAccessChecker;
 
     /**
      * 승인된 KYC 신청 건에 대해 VC 발급 요청을 생성합니다.
@@ -49,6 +51,7 @@ public class AdminCredentialIssueService {
      */
     @Transactional
     public AdminCredentialIssueResponse issue(Long kycId, AdminCredentialIssueRequest request) {
+        adminKycAccessChecker.validateActionAccess(kycId, ACTION_VC_ISSUE_REQUESTED);
         KycApplication application = kycApplicationRepository.findById(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
         validateApproved(application);
