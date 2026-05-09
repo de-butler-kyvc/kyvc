@@ -1,5 +1,6 @@
 package com.kyvc.backendadmin.domain.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -13,9 +14,11 @@ import java.util.List;
  */
 @Schema(description = "관리자 로그인 및 토큰 재발급 응답")
 public record AdminLoginResponse(
-        @Schema(description = "Access Token 원문")
+        @Schema(hidden = true)
+        @JsonIgnore
         String accessToken, // Access Token 원문
-        @Schema(description = "Refresh Token 원문")
+        @Schema(hidden = true)
+        @JsonIgnore
         String refreshToken, // Refresh Token 원문
         @Schema(description = "Access Token 만료까지 남은 초", example = "1800")
         long expiresIn, // Access Token 만료까지 남은 초

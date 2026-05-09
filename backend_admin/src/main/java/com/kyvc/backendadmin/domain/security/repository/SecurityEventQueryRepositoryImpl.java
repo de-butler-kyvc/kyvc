@@ -18,6 +18,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityEventQueryRepositoryImpl implements SecurityEventQueryRepository {
     private static final String SECURITY_ACTIONS = "('LOGIN_FAILED','MFA_FAILED','PERMISSION_DENIED','ADMIN_ROLE_CHANGED','API_KEY_REVOKED','VERIFIER_SUSPENDED','SENSITIVE_DATA_ACCESSED','VERIFIER_API_KEY_REVOKED','VERIFIER_SUSPENDED')";
+    private static final String SENSITIVE_KEYS = "coreRequestId|core_request_id|coreTrace|core_trace|rawPayload|raw_payload|vpJwt|vp_jwt|vcJson|vc_json|apiSecret|api_secret|password_hash|password|token_hash|token|api_key_hash|credential_salt_hash|credential_salt|authorization|cookie|jwt|secret|privateKey|private_key";
     private final ObjectProvider<EntityManager> entityManagerProvider;
 
     @Override
@@ -49,7 +50,11 @@ public class SecurityEventQueryRepositoryImpl implements SecurityEventQueryRepos
         String summary = str(row[5]);
         return new AdminSecurityDtos.EventResponse(l(row[0]), str(row[1]), l(row[2]), str(row[3]), l(row[4]), mask(summary), str(row[6]), trace(summary), dt(row[7]));
     }
-    private String mask(String value) { return value == null ? null : value.replaceAll("(?i)(password_hash|token_hash|api_key_hash|credential_salt|secret|vp_jwt)[^|,}\\s]*", "$1=***"); }
+    private String mask(String value) {
+        return value == null ? null : value
+                .replaceAll("(?i)(" + SENSITIVE_KEYS + ")\"?\\s*[:=]\\s*\"?[^|,}\\s\"]+", "$1=***")
+                .replaceAll("(?i)(" + SENSITIVE_KEYS + ")=[^|,}\\s]+", "$1=***");
+    }
     private String trace(String summary) {
         if (summary == null) return null;
         for (String part : summary.split("\\|")) {

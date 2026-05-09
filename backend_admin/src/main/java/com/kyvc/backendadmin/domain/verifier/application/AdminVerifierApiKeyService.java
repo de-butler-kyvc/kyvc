@@ -30,6 +30,7 @@ public class AdminVerifierApiKeyService {
     private final VerifierRepository verifierRepository;
     private final VerifierQueryRepository verifierQueryRepository;
     private final AdminVerifierQueryService queryService;
+    private final AdminVerifierSecuritySupport securitySupport;
     private final AuditLogWriter auditLogWriter;
 
     /**
@@ -54,6 +55,8 @@ public class AdminVerifierApiKeyService {
     @Transactional
     public AdminVerifierDtos.ApiKeySecretResponse create(Long verifierId, AdminVerifierDtos.ApiKeyCreateRequest request) {
         queryService.findVerifier(verifierId);
+        Long adminId = SecurityUtil.getCurrentAdminId();
+        securitySupport.validateAndUseMfa(request.mfaToken(), adminId);
         Secret secret = generateSecret();
         Long keyId = verifierRepository.createApiKey(verifierId, request.name(), secret.prefix(), TokenHashUtil.sha256(secret.raw()), request.expiresAt());
         audit("VERIFIER_API_KEY_CREATED", verifierId, "API Key 발급. keyId=%d".formatted(keyId));
@@ -68,7 +71,9 @@ public class AdminVerifierApiKeyService {
      * @return 신규 API Key 발급 응답
      */
     @Transactional
-    public AdminVerifierDtos.ApiKeySecretResponse rotate(Long verifierId, Long keyId) {
+    public AdminVerifierDtos.ApiKeySecretResponse rotate(Long verifierId, Long keyId, AdminVerifierDtos.ApiKeyRotateRequest request) {
+        Long adminId = SecurityUtil.getCurrentAdminId();
+        securitySupport.validateAndUseMfa(request.mfaToken(), adminId);
         VerifierRepository.ApiKeyRow oldKey = verifierRepository.findApiKey(verifierId, keyId)
                 .orElseThrow(() -> new ApiException(ErrorCode.VERIFIER_API_KEY_NOT_FOUND));
         verifierRepository.updateApiKeyStatus(keyId, "ROTATED", LocalDateTime.now());
@@ -88,6 +93,8 @@ public class AdminVerifierApiKeyService {
      */
     @Transactional
     public AdminVerifierDtos.ApiKeyResponse revoke(Long verifierId, Long keyId, AdminVerifierDtos.ApiKeyRevokeRequest request) {
+        Long adminId = SecurityUtil.getCurrentAdminId();
+        securitySupport.validateAndUseMfa(request.mfaToken(), adminId);
         verifierRepository.findApiKey(verifierId, keyId)
                 .orElseThrow(() -> new ApiException(ErrorCode.VERIFIER_API_KEY_NOT_FOUND));
         verifierRepository.updateApiKeyStatus(keyId, "REVOKED", LocalDateTime.now());
@@ -108,7 +115,7 @@ public class AdminVerifierApiKeyService {
 
     private void audit(String action, Long verifierId, String summary) {
         auditLogWriter.write(KyvcEnums.ActorType.ADMIN, SecurityUtil.getCurrentAdminId(), action,
-                KyvcEnums.AuditTargetType.VERIFIER, verifierId, summary, null, null);
+                KyvcEnums.AuditTargetType.VERIFIER, verifierId, summary, null, "SUCCESS");
     }
 
     private record Secret(String prefix, String raw) {
