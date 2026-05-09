@@ -35,6 +35,12 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "user_name", length = 100)
+    private String userName;
+
+    @Column(name = "phone", length = 30)
+    private String phone;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type_code", nullable = false, length = 50)
     private KyvcEnums.UserType userTypeCode;
@@ -42,6 +48,21 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "user_status_code", nullable = false, length = 50)
     private KyvcEnums.UserStatus userStatusCode;
+
+    @Column(name = "notification_enabled_yn", length = 1)
+    private String notificationEnabledYn;
+
+    @Column(name = "mfa_enabled_yn", length = 1)
+    private String mfaEnabledYn;
+
+    @Column(name = "mfa_type_code", length = 30)
+    private String mfaTypeCode;
+
+    @Column(name = "last_password_changed_at")
+    private LocalDateTime lastPasswordChangedAt;
+
+    @Column(name = "onboarding_corporate_name")
+    private String onboardingCorporateName;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

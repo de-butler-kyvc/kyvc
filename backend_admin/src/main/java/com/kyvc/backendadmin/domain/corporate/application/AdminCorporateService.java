@@ -2,11 +2,15 @@ package com.kyvc.backendadmin.domain.corporate.application;
 
 import com.kyvc.backendadmin.domain.admin.domain.AuditLog;
 import com.kyvc.backendadmin.domain.auth.repository.AuthTokenRepository;
+import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateAgentResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateDetailResponse;
+import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateDocumentResponse;
+import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateRepresentativeResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserDetailResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserListResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserSearchRequest;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserStatusUpdateRequest;
+import com.kyvc.backendadmin.domain.corporate.repository.AdminCorporateAdditionalInfoQueryRepository;
 import com.kyvc.backendadmin.domain.corporate.repository.CorporateQueryRepository;
 import com.kyvc.backendadmin.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backendadmin.domain.user.domain.User;
@@ -33,6 +37,7 @@ public class AdminCorporateService {
 
     private final CorporateRepository corporateRepository;
     private final CorporateQueryRepository corporateQueryRepository;
+    private final AdminCorporateAdditionalInfoQueryRepository additionalInfoQueryRepository;
     private final AuthTokenRepository authTokenRepository;
 
     /**
@@ -141,6 +146,42 @@ public class AdminCorporateService {
                 .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
     }
 
+    /**
+     * 법인 대표자 목록을 조회합니다.
+     *
+     * @param corporateId 법인 ID
+     * @return 법인 대표자 목록
+     */
+    @Transactional(readOnly = true)
+    public List<AdminCorporateRepresentativeResponse> getCorporateRepresentatives(Long corporateId) {
+        validateCorporateExists(corporateId);
+        return additionalInfoQueryRepository.findRepresentativesByCorporateId(corporateId);
+    }
+
+    /**
+     * 법인 대리인 목록을 조회합니다.
+     *
+     * @param corporateId 법인 ID
+     * @return 법인 대리인 목록
+     */
+    @Transactional(readOnly = true)
+    public List<AdminCorporateAgentResponse> getCorporateAgents(Long corporateId) {
+        validateCorporateExists(corporateId);
+        return additionalInfoQueryRepository.findAgentsByCorporateId(corporateId);
+    }
+
+    /**
+     * 법인문서 목록을 조회합니다.
+     *
+     * @param corporateId 법인 ID
+     * @return 법인문서 목록
+     */
+    @Transactional(readOnly = true)
+    public List<AdminCorporateDocumentResponse> getCorporateDocuments(Long corporateId) {
+        validateCorporateExists(corporateId);
+        return additionalInfoQueryRepository.findDocumentsByCorporateId(corporateId);
+    }
+
     private void validateSearchEnums(AdminCorporateUserSearchRequest request) {
         if (StringUtils.hasText(request.status())) {
             parseUserStatus(request.status());
@@ -154,6 +195,12 @@ public class AdminCorporateService {
         if (KyvcEnums.UserType.CORPORATE_USER != user.getUserTypeCode()) {
             throw new ApiException(ErrorCode.USER_NOT_FOUND);
         }
+    }
+
+    private void validateCorporateExists(Long corporateId) {
+        // 법인 부가정보 조회 전, 잘못된 corporateId 요청을 명확히 구분하기 위해 법인 존재 여부를 먼저 확인한다.
+        corporateRepository.findCorporateById(corporateId)
+                .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
     }
 
     private KyvcEnums.UserStatus parseUserStatus(String status) {

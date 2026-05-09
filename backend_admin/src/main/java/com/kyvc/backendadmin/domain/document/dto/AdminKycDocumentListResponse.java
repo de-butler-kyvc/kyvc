@@ -38,6 +38,12 @@ public record AdminKycDocumentListResponse(
             Long fileSize,
             @Schema(description = "업로드 상태", example = "UPLOADED")
             String uploadStatus,
+            @Schema(description = "업로드 주체 유형 코드", example = "USER")
+            String uploadedByTypeCode,
+            @Schema(description = "업로드 사용자 ID", example = "1")
+            Long uploadedByUserId,
+            @Schema(description = "업로드 사용자 이름", example = "홍길동")
+            String uploadedByUserName,
             @Schema(description = "업로드 시각")
             LocalDateTime uploadedAt
     ) {

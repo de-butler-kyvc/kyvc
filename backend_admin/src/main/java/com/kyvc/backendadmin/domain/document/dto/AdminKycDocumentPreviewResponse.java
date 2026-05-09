@@ -24,6 +24,12 @@ public record AdminKycDocumentPreviewResponse(
         String mimeType,
         @Schema(description = "파일 크기(byte)", example = "123456")
         Long fileSize,
+        @Schema(description = "업로드 주체 유형 코드", example = "USER")
+        String uploadedByTypeCode,
+        @Schema(description = "업로드 사용자 ID", example = "1")
+        Long uploadedByUserId,
+        @Schema(description = "업로드 사용자 이름", example = "홍길동")
+        String uploadedByUserName,
         @Schema(description = "미리보기 URL. 원본 파일 경로가 아닌 만료 시간이 있는 임시 접근 URL입니다.")
         String previewUrl,
         @Schema(description = "미리보기 URL 만료 시각")

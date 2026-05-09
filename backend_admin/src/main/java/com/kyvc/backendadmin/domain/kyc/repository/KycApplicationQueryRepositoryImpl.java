@@ -12,7 +12,9 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -58,6 +60,12 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                        c.business_registration_no,
                        kyc.applicant_user_id,
                        u.email,
+                       kyc.application_channel_code,
+                       kyc.finance_institution_code,
+                       kyc.finance_branch_code,
+                       kyc.finance_staff_user_id,
+                       kyc.finance_customer_no,
+                       kyc.visited_at,
                        kyc.kyc_status_code,
                        kyc.ai_review_status_code,
                        kyc.ai_review_result_code,
@@ -104,9 +112,19 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
         Query query = entityManager().createNativeQuery("""
                 select kyc.kyc_id,
                        kyc.kyc_status_code,
+                       kyc.application_channel_code,
+                       kyc.finance_institution_code,
+                       kyc.finance_branch_code,
+                       kyc.finance_staff_user_id,
+                       kyc.finance_customer_no,
+                       kyc.visited_at,
                        kyc.corporate_type_code,
                        c.corporate_id,
                        c.corporate_name,
+                       c.corporate_phone,
+                       c.corporate_type_code,
+                       c.established_date,
+                       c.website,
                        c.business_registration_no,
                        c.corporate_registration_no,
                        c.representative_name,
@@ -190,6 +208,12 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                        corporate.corporate_name,
                        corporate.business_registration_no,
                        corporate.representative_name,
+                       kyc.application_channel_code,
+                       kyc.finance_institution_code,
+                       kyc.finance_branch_code,
+                       kyc.finance_staff_user_id,
+                       kyc.finance_customer_no,
+                       kyc.visited_at,
                        kyc.kyc_status_code,
                        kyc.ai_review_status_code,
                        kyc.ai_review_result_code,
@@ -277,12 +301,18 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toString(row[6]),
                 toString(row[7]),
                 toString(row[8]),
-                toBigDecimal(row[9]),
+                toLong(row[9]),
                 toString(row[10]),
-                toString(row[11]),
-                toLocalDateTime(row[12]),
-                toLocalDateTime(row[13]),
-                toLocalDateTime(row[14])
+                toLocalDateTime(row[11]),
+                toString(row[12]),
+                toString(row[13]),
+                toString(row[14]),
+                toBigDecimal(row[15]),
+                toString(row[16]),
+                toString(row[17]),
+                toLocalDateTime(row[18]),
+                toLocalDateTime(row[19]),
+                toLocalDateTime(row[20])
         );
     }
 
@@ -291,23 +321,33 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toLong(row[0]),
                 toString(row[1]),
                 toString(row[2]),
-                toLong(row[3]),
+                toString(row[3]),
                 toString(row[4]),
-                toString(row[5]),
+                toLong(row[5]),
                 toString(row[6]),
-                toString(row[7]),
+                toLocalDateTime(row[7]),
                 toString(row[8]),
-                toString(row[9]),
+                toLong(row[9]),
                 toString(row[10]),
                 toString(row[11]),
                 toString(row[12]),
-                toString(row[13]),
+                toLocalDate(row[13]),
                 toString(row[14]),
                 toString(row[15]),
                 toString(row[16]),
-                toLong(row[17]),
+                toString(row[17]),
                 toString(row[18]),
-                toLocalDateTime(row[19])
+                toString(row[19]),
+                toString(row[20]),
+                toString(row[21]),
+                toString(row[22]),
+                toString(row[23]),
+                toString(row[24]),
+                toString(row[25]),
+                toString(row[26]),
+                toLong(row[27]),
+                toString(row[28]),
+                toLocalDateTime(row[29])
         );
     }
 
@@ -325,12 +365,18 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toLong(row[8]),
                 toString(row[9]),
                 toLocalDateTime(row[10]),
-                toLocalDateTime(row[11]),
+                toString(row[11]),
                 toString(row[12]),
                 toString(row[13]),
-                toString(row[14]),
+                toLong(row[14]),
                 toString(row[15]),
-                toLocalDateTime(row[16])
+                toLocalDateTime(row[16]),
+                toLocalDateTime(row[17]),
+                toString(row[18]),
+                toString(row[19]),
+                toString(row[20]),
+                toString(row[21]),
+                toLocalDateTime(row[22])
         );
     }
 
@@ -355,6 +401,13 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
             return timestamp.toLocalDateTime();
         }
         return (LocalDateTime) value;
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof Date date) {
+            return date.toLocalDate();
+        }
+        return (LocalDate) value;
     }
 
     private EntityManager entityManager() {

@@ -30,6 +30,30 @@ public record AdminKycApplicationDetailResponse(
         @Schema(description = "대표자명", example = "홍길동")
         String representativeName,
 
+        /** 신청 채널 코드 */
+        @Schema(description = "신청 채널 코드", example = "WEB")
+        String applicationChannelCode,
+
+        /** 금융기관 코드 */
+        @Schema(description = "금융기관 코드", example = "BANK001")
+        String financeInstitutionCode,
+
+        /** 금융기관 지점 코드 */
+        @Schema(description = "금융기관 지점 코드", example = "BR001")
+        String financeBranchCode,
+
+        /** 금융기관 담당자 사용자 ID */
+        @Schema(description = "금융기관 담당자 사용자 ID", example = "1")
+        Long financeStaffUserId,
+
+        /** 금융기관 고객 번호 */
+        @Schema(description = "금융기관 고객 번호", example = "CUST-001")
+        String financeCustomerNo,
+
+        /** 방문 일시 */
+        @Schema(description = "방문 일시")
+        LocalDateTime visitedAt,
+
         /** KYC 신청 상태 */
         @Schema(description = "KYC 신청 상태", example = "SUBMITTED")
         String status,

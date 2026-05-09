@@ -2,6 +2,7 @@ package com.kyvc.backendadmin.domain.corporate.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -22,6 +23,14 @@ public record AdminCorporateDetailResponse(
         String userStatus,
         @Schema(description = "법인명", example = "케이와이브이씨")
         String corporateName,
+        @Schema(description = "법인 대표 연락처", example = "02-1234-5678")
+        String corporatePhone,
+        @Schema(description = "법인 유형 코드", example = "SME")
+        String corporateTypeCode,
+        @Schema(description = "설립일", example = "2020-01-01")
+        LocalDate establishedDate,
+        @Schema(description = "웹사이트", example = "https://kyvc.example")
+        String website,
         @Schema(description = "사업자등록번호", example = "123-45-67890")
         String businessRegistrationNo,
         @Schema(description = "법인등록번호", example = "110111-1234567")

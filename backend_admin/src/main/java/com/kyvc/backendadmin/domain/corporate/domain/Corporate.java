@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -40,13 +41,16 @@ public class Corporate {
     @Column(name = "corporate_name", nullable = false)
     private String corporateName;
 
+    @Column(name = "corporate_phone", length = 50)
+    private String corporatePhone;
+
     @Column(name = "business_registration_no", nullable = false, length = 50)
     private String businessRegistrationNo;
 
     @Column(name = "corporate_registration_no", length = 50)
     private String corporateRegistrationNo;
 
-    @Column(name = "representative_name", nullable = false, length = 100)
+    @Column(name = "representative_name", length = 100)
     private String representativeName;
 
     @Column(name = "representative_phone", length = 50)
@@ -72,6 +76,15 @@ public class Corporate {
 
     @Column(name = "business_type", length = 100)
     private String businessType;
+
+    @Column(name = "established_date")
+    private LocalDate establishedDate;
+
+    @Column(name = "corporate_type_code", length = 50)
+    private String corporateTypeCode;
+
+    @Column(name = "website", length = 500)
+    private String website;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "corporate_status_code", nullable = false, length = 50)

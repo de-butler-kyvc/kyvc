@@ -23,6 +23,10 @@ public record AdminAuditLogResponse(
         Long targetId,
         @Schema(description = "요청 요약")
         String requestSummary,
+        @Schema(description = "변경 전 값 JSON")
+        String beforeValueJson,
+        @Schema(description = "변경 후 값 JSON")
+        String afterValueJson,
         @Schema(description = "요청 IP")
         String ipAddress,
         @Schema(description = "생성 일시")

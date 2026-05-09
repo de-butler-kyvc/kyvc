@@ -32,8 +32,13 @@ public class KycDocumentQueryRepositoryImpl implements KycDocumentQueryRepositor
                        document.mime_type,
                        document.file_size,
                        document.upload_status_code,
+                       document.uploaded_by_type_code,
+                       document.uploaded_by_user_id,
+                       coalesce(uploader.user_name, uploader.email) as uploaded_by_user_name,
                        document.uploaded_at
                 from kyc_documents document
+                left join users uploader
+                       on uploader.user_id = document.uploaded_by_user_id
                 left join common_code_groups code_group
                        on code_group.code_group = 'DOCUMENT_TYPE'
                 left join common_codes common_code
@@ -75,8 +80,29 @@ public class KycDocumentQueryRepositoryImpl implements KycDocumentQueryRepositor
                 toString(row[4]),
                 toLong(row[5]),
                 toString(row[6]),
-                toLocalDateTime(row[7])
+                toString(row[7]),
+                toLong(row[8]),
+                toString(row[9]),
+                toLocalDateTime(row[10])
         );
+    }
+
+    @Override
+    public String findUploadedByUserName(Long uploadedByUserId) {
+        if (uploadedByUserId == null) {
+            return null;
+        }
+        Query query = entityManager().createNativeQuery("""
+                select coalesce(uploader.user_name, uploader.email)
+                from users uploader
+                where uploader.user_id = :uploadedByUserId
+                """);
+        query.setParameter("uploadedByUserId", uploadedByUserId);
+        List<?> rows = query.getResultList();
+        return rows.stream()
+                .findFirst()
+                .map(Object::toString)
+                .orElse(null);
     }
 
     private Long toLong(Object value) {

@@ -30,4 +30,12 @@ public interface KycDocumentQueryRepository {
      * @return 문서 유형명 또는 null
      */
     String findDocumentTypeName(String documentTypeCode);
+
+    /**
+     * 업로드 사용자 ID로 사용자 이름 또는 이메일을 조회합니다.
+     *
+     * @param uploadedByUserId 업로드 사용자 ID
+     * @return 업로드 사용자 표시명 또는 null
+     */
+    String findUploadedByUserName(Long uploadedByUserId);
 }

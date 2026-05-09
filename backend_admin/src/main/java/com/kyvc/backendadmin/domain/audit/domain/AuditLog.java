@@ -50,6 +50,12 @@ public class AuditLog {
     @Column(name = "request_summary", columnDefinition = "TEXT")
     private String requestSummary;
 
+    @Column(name = "before_value_json", columnDefinition = "TEXT")
+    private String beforeValueJson;
+
+    @Column(name = "after_value_json", columnDefinition = "TEXT")
+    private String afterValueJson;
+
     @Column(name = "ip_address", length = 100)
     private String ipAddress;
 

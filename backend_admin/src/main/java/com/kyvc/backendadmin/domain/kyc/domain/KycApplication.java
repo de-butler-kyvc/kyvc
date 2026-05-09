@@ -43,6 +43,21 @@ public class KycApplication {
     @Column(name = "corporate_type_code", nullable = false, length = 50)
     private String corporateTypeCode;
 
+    @Column(name = "application_channel_code", length = 30)
+    private String applicationChannelCode;
+
+    @Column(name = "finance_institution_code", length = 50)
+    private String financeInstitutionCode;
+
+    @Column(name = "finance_branch_code", length = 50)
+    private String financeBranchCode;
+
+    @Column(name = "finance_staff_user_id")
+    private Long financeStaffUserId;
+
+    @Column(name = "finance_customer_no", length = 100)
+    private String financeCustomerNo;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status_code", nullable = false, length = 50)
     private KyvcEnums.KycStatus kycStatusCode;
@@ -73,6 +88,9 @@ public class KycApplication {
 
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
+
+    @Column(name = "visited_at")
+    private LocalDateTime visitedAt;
 
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;

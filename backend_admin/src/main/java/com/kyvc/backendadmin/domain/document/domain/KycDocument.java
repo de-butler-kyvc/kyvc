@@ -57,6 +57,12 @@ public class KycDocument {
     @Column(name = "upload_status_code", nullable = false, length = 50)
     private KyvcEnums.DocumentUploadStatus uploadStatusCode;
 
+    @Column(name = "uploaded_by_type_code", length = 30)
+    private String uploadedByTypeCode;
+
+    @Column(name = "uploaded_by_user_id")
+    private Long uploadedByUserId;
+
     @Column(name = "uploaded_at", nullable = false)
     private LocalDateTime uploadedAt;
 }
