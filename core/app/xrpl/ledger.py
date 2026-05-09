@@ -7,6 +7,7 @@ from xrpl.wallet import Wallet
 
 from app.credentials.canonical import canonical_json, multihash_sha2_256
 from app.credentials.hexutil import bytes_to_hex, utf8_to_hex
+from app.resilience.outbound import TransientOutboundError, execute_outbound, outbound_timeout
 from app.xrpl.client import submit_tx
 
 RIPPLE_EPOCH_OFFSET = 946684800
@@ -92,9 +93,17 @@ def raw_rpc(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
         request_payload = {"method": payload["command"], "params": [payload]}
     else:
         request_payload = payload
-    response = httpx.post(_client_url(client), json=request_payload, timeout=30)
-    response.raise_for_status()
-    data = response.json()
+    def call() -> dict[str, Any]:
+        response = httpx.post(_client_url(client), json=request_payload, timeout=outbound_timeout("xrpl"))
+        response.raise_for_status()
+        data = response.json()
+        result = data.get("result", data) if isinstance(data, dict) else {}
+        error = result.get("error") if isinstance(result, dict) else None
+        if error in {"tooBusy", "slowDown", "internal", "noNetwork"}:
+            raise TransientOutboundError("xrpl", str(payload.get("command") or "raw_rpc"), str(error))
+        return data
+
+    data = execute_outbound("xrpl", str(payload.get("command") or "raw_rpc"), call)
     if "result" in data:
         return data["result"]
     return data
@@ -141,4 +150,3 @@ def is_credential_active(entry: dict | None, now: datetime) -> bool:
     if expiration is not None and int(expiration) <= datetime_to_ripple_epoch(now):
         return False
     return True
-

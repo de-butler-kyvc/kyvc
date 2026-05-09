@@ -8,6 +8,7 @@ from typing import Protocol
 import httpx
 
 from app.ai_assessment.schemas import DocumentMetadata
+from app.resilience.outbound import execute_outbound
 
 
 class OcrTextProvider(Protocol):
@@ -40,17 +41,22 @@ class AzureDocumentIntelligenceOcrTextProvider:
     def extract_text(self, document: DocumentMetadata) -> str:
         path = _document_path(document)
         content_type = document.mimeType or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        response = httpx.post(
-            f"{self.endpoint}/documentintelligence/documentModels/{self.model_id}:analyze",
-            params={"api-version": self.api_version},
-            headers={
-                "Ocp-Apim-Subscription-Key": self.key,
-                "Content-Type": content_type,
-            },
-            content=path.read_bytes(),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+
+        def analyze() -> httpx.Response:
+            response = httpx.post(
+                f"{self.endpoint}/documentintelligence/documentModels/{self.model_id}:analyze",
+                params={"api-version": self.api_version},
+                headers={
+                    "Ocp-Apim-Subscription-Key": self.key,
+                    "Content-Type": content_type,
+                },
+                content=path.read_bytes(),
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response
+
+        response = execute_outbound("ocr", "azure_document_intelligence_analyze", analyze)
         operation_location = response.headers.get("operation-location") or response.headers.get("Operation-Location")
         if operation_location:
             result = self._poll(operation_location)
@@ -62,12 +68,17 @@ class AzureDocumentIntelligenceOcrTextProvider:
         deadline = time.monotonic() + self.timeout
         last_payload = {}
         while time.monotonic() < deadline:
-            response = httpx.get(
-                operation_location,
-                headers={"Ocp-Apim-Subscription-Key": self.key},
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
+
+            def poll() -> httpx.Response:
+                response = httpx.get(
+                    operation_location,
+                    headers={"Ocp-Apim-Subscription-Key": self.key},
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                return response
+
+            response = execute_outbound("ocr", "azure_document_intelligence_poll", poll)
             payload = response.json()
             last_payload = payload
             status = str(payload.get("status") or "").lower()
@@ -105,21 +116,26 @@ class NaverClovaOcrTextProvider:
         }
         if self.template_id:
             image["templateIds"] = [self.template_id]
-        response = httpx.post(
-            self.endpoint,
-            headers={
-                "X-OCR-SECRET": self.secret,
-                "Content-Type": "application/json",
-            },
-            json={
-                "version": "V2",
-                "requestId": str(uuid.uuid4()),
-                "timestamp": int(time.time() * 1000),
-                "images": [image],
-            },
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+
+        def call_clova() -> httpx.Response:
+            response = httpx.post(
+                self.endpoint,
+                headers={
+                    "X-OCR-SECRET": self.secret,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "version": "V2",
+                    "requestId": str(uuid.uuid4()),
+                    "timestamp": int(time.time() * 1000),
+                    "images": [image],
+                },
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response
+
+        response = execute_outbound("ocr", "naver_clova_ocr", call_clova)
         return _clova_text(response.json())
 
 

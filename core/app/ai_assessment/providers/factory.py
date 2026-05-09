@@ -6,6 +6,7 @@ from app.ai_assessment.providers.ocr import (
 )
 from app.ai_assessment.providers.openai import OpenAiDocumentExtractionProvider
 from app.core.config import Settings
+from app.resilience.outbound import outbound_timeout
 
 
 def build_document_extraction_provider(settings: Settings) -> DocumentExtractionProvider | None:
@@ -20,6 +21,7 @@ def build_document_extraction_provider(settings: Settings) -> DocumentExtraction
             model=settings.openai_model or settings.llm_model or "gpt-5.5",
             base_url=settings.openai_base_url,
             ocr_provider=build_ocr_text_provider(settings),
+            timeout=outbound_timeout("llm", settings),
         )
     raise ValueError(f"Unsupported LLM_PROVIDER for document extraction: {settings.llm_provider}")
 
@@ -39,6 +41,7 @@ def build_ocr_text_provider(settings: Settings) -> OcrTextProvider | None:
             key=settings.azure_document_intelligence_key,
             model_id=settings.azure_document_intelligence_model_id,
             api_version=settings.azure_document_intelligence_api_version,
+            timeout=outbound_timeout("ocr", settings),
         )
     if provider in {"naver_clova_ocr", "naver_clova"}:
         if not settings.naver_clova_ocr_endpoint or not settings.naver_clova_ocr_secret:
@@ -49,5 +52,6 @@ def build_ocr_text_provider(settings: Settings) -> OcrTextProvider | None:
             endpoint=settings.naver_clova_ocr_endpoint,
             secret=settings.naver_clova_ocr_secret,
             template_id=settings.naver_clova_ocr_template_id,
+            timeout=outbound_timeout("ocr", settings),
         )
     raise ValueError(f"Unsupported OCR_PROVIDER for document extraction: {settings.ocr_provider}")
