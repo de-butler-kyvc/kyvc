@@ -31,7 +31,8 @@ public class KycApplication {
             KyvcEnums.KycStatus.SUBMITTED,
             KyvcEnums.KycStatus.AI_REVIEWING,
             KyvcEnums.KycStatus.NEED_SUPPLEMENT,
-            KyvcEnums.KycStatus.MANUAL_REVIEW
+            KyvcEnums.KycStatus.MANUAL_REVIEW,
+            KyvcEnums.KycStatus.APPROVED
     ); // 진행 중 KYC 상태 목록
 
     @Id
@@ -47,6 +48,25 @@ public class KycApplication {
 
     @Column(name = "corporate_type_code", nullable = false, length = 50)
     private String corporateTypeCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "application_channel_code", length = 30)
+    private KyvcEnums.ApplicationChannel applicationChannelCode;
+
+    @Column(name = "finance_institution_code", length = 50)
+    private String financeInstitutionCode;
+
+    @Column(name = "finance_branch_code", length = 50)
+    private String financeBranchCode;
+
+    @Column(name = "finance_staff_user_id")
+    private Long financeStaffUserId;
+
+    @Column(name = "finance_customer_no", length = 100)
+    private String financeCustomerNo;
+
+    @Column(name = "visited_at")
+    private LocalDateTime visitedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status_code", nullable = false, length = 50)
@@ -115,6 +135,7 @@ public class KycApplication {
         kycApplication.corporateId = corporateId;
         kycApplication.applicantUserId = applicantUserId;
         kycApplication.corporateTypeCode = corporateTypeCode;
+        kycApplication.applicationChannelCode = KyvcEnums.ApplicationChannel.ONLINE;
         kycApplication.kycStatus = KyvcEnums.KycStatus.DRAFT;
         return kycApplication;
     }

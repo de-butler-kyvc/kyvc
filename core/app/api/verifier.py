@@ -4,7 +4,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from pydantic import ValidationError
 
+from app.ai_assessment.providers.factory import build_document_extraction_provider
 from app.credentials.resolver import (
     CachingDidResolver,
     CompositeDidResolver,
@@ -62,10 +65,7 @@ def _status_lookup(request: Request, status_mode: str, rpc_url: str | None, allo
 
     settings = request.app.state.settings
     selected_rpc_url = rpc_url or settings.xrpl_json_rpc_url
-    try:
-        enforce_mainnet_policy(selected_rpc_url, settings.allow_mainnet, allow_mainnet)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    enforce_mainnet_policy(selected_rpc_url, settings.allow_mainnet, allow_mainnet)
     client = make_client(selected_rpc_url)
 
     def lookup(issuer_account: str, holder_account: str, credential_type: str) -> dict[str, Any] | None:
@@ -84,10 +84,7 @@ def _xrpl_client_for_verifier(
         return None
     settings = request.app.state.settings
     selected_rpc_url = rpc_url or settings.xrpl_json_rpc_url
-    try:
-        enforce_mainnet_policy(selected_rpc_url, settings.allow_mainnet, allow_mainnet)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    enforce_mainnet_policy(selected_rpc_url, settings.allow_mainnet, allow_mainnet)
     return make_client(selected_rpc_url)
 
 
@@ -149,7 +146,47 @@ def _service(
         verification_logger=logger,
         challenge_lookup=repository.get_verification_challenge,
         challenge_marker=repository.mark_verification_challenge_used,
+        document_extraction_provider=_document_extraction_provider(request),
     )
+
+
+def _document_extraction_provider(request: Request):
+    settings = request.app.state.settings
+    if getattr(settings, "llm_provider", "none").lower() in {"none", "structured_payload", "mock"}:
+        return None
+    return build_document_extraction_provider(settings)
+
+
+def _validation_detail(exc: ValidationError) -> list[dict[str, Any]]:
+    return jsonable_encoder(exc.errors())
+
+
+async def _json_body(request: Request) -> dict[str, Any]:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="request body must be valid JSON") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="request body must be a JSON object")
+    return body
+
+
+def _verify_presentation_request_from_json(body: dict[str, Any]) -> VerifyPresentationRequest:
+    try:
+        return VerifyPresentationRequest.model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
+
+
+def _verify_presentation_request_from_multipart(raw_presentation: str) -> VerifyPresentationRequest:
+    try:
+        presentation = json.loads(raw_presentation)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="multipart presentation field must be valid JSON") from exc
+    try:
+        return VerifyPresentationRequest.model_validate({"presentation": presentation})
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
 
 
 @router.post("/credentials/verify", response_model=VerificationResponse)
@@ -224,10 +261,7 @@ async def verify_presentation(request: Request) -> VerificationResponse:
         raw_presentation = form.get("presentation")
         if not isinstance(raw_presentation, str):
             raise HTTPException(status_code=400, detail="multipart presentation field is required")
-        try:
-            payload = VerifyPresentationRequest(presentation=json.loads(raw_presentation))
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="multipart presentation field must be JSON") from exc
+        payload = _verify_presentation_request_from_multipart(raw_presentation)
         for key, value in form.multi_items():
             if key == "presentation":
                 continue
@@ -238,7 +272,7 @@ async def verify_presentation(request: Request) -> VerificationResponse:
                 attachments[key] = (file_bytes, getattr(value, "content_type", None))
                 attachments[str(filename)] = (file_bytes, getattr(value, "content_type", None))
     else:
-        payload = VerifyPresentationRequest(**(await request.json()))
+        payload = _verify_presentation_request_from_json(await _json_body(request))
     service = _service(
         request,
         payload.did_documents,

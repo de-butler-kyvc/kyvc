@@ -78,6 +78,34 @@ public class VpVerification {
     @Column(name = "core_request_id", length = 255)
     private String coreRequestId;
 
+    @Column(name = "verifier_id")
+    private Long verifierId;
+
+    @Column(name = "finance_institution_code", length = 50)
+    private String financeInstitutionCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "request_type_code", length = 30)
+    private KyvcEnums.VpRequestType requestTypeCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "test_yn", length = 1)
+    private KyvcEnums.Yn testYn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "re_auth_yn", length = 1)
+    private KyvcEnums.Yn reAuthYn;
+
+    @Column(name = "permission_result_json", columnDefinition = "TEXT")
+    private String permissionResultJson;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "callback_status_code", length = 30)
+    private KyvcEnums.CallbackDeliveryStatus callbackStatusCode;
+
+    @Column(name = "callback_sent_at")
+    private LocalDateTime callbackSentAt;
+
     // 요청 만료 여부
     public boolean isExpired(
             LocalDateTime now // 기준 일시

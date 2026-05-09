@@ -117,6 +117,9 @@ class OcrLayoutDeterministicExtractor:
         result = PowerOfAttorneyExtraction()
         result.delegatorName = self._person_value(layout, ["위임자", "위임인", "Delegator", "Principal"])
         result.delegateName = self._person_value(layout, ["수임자", "대리인", "Delegate", "Agent"])
+        result.delegateAddress = self._line_value(layout, ["수임자 주소", "대리인 주소", "Delegate address", "Agent address"])
+        result.delegateContact = self._digits_value(layout, ["수임자 연락처", "대리인 연락처", "휴대전화", "전화번호", "Delegate contact", "Agent contact"])
+        result.delegateRrn = self._digits_value(layout, ["수임자 주민등록번호", "대리인 주민등록번호", "주민등록번호", "Delegate RRN", "Agent RRN"])
         result.targetCorporateName = self._company_value(layout, ["대상 법인", "법인명", "상호", "Company"])
         result.authorityText = self._line_value(layout, ["위임범위", "권한", "Authority"])
         result.canApplyKyc = self._contains(layout, ["KYC 신청", "고객확인", "KYC application"])
@@ -317,7 +320,9 @@ class OcrLayoutDeterministicExtractor:
                 pattern = rf"{re.escape(label)}\s*[:：]?\s*(.+)"
                 match = re.search(pattern, line.text, flags=re.IGNORECASE)
                 if match:
-                    value = match.group(1).strip()
+                    value = match.group(1).strip().lstrip(":：").strip()
+                    if not value:
+                        continue
                     return ExtractedValue(raw=value, normalized=value, confidence=line.confidence, evidenceRefs=[line.evidence_id])
         return ExtractedValue()
 

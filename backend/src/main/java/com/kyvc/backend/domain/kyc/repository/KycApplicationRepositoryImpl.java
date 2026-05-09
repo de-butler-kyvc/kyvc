@@ -18,7 +18,8 @@ public class KycApplicationRepositoryImpl implements KycApplicationRepository {
             KyvcEnums.KycStatus.SUBMITTED,
             KyvcEnums.KycStatus.AI_REVIEWING,
             KyvcEnums.KycStatus.NEED_SUPPLEMENT,
-            KyvcEnums.KycStatus.MANUAL_REVIEW
+            KyvcEnums.KycStatus.MANUAL_REVIEW,
+            KyvcEnums.KycStatus.APPROVED
     ); // 진행 중 KYC 상태 목록
 
     private final KycApplicationJpaRepository kycApplicationJpaRepository;
@@ -39,12 +40,34 @@ public class KycApplicationRepositoryImpl implements KycApplicationRepository {
         return kycApplicationJpaRepository.findByApplicantUserIdOrderByCreatedAtDesc(userId);
     }
 
+    // 신청 사용자 ID 기준 현재 KYC 목록 조회
+    @Override
+    public List<KycApplication> findCurrentByApplicantUserId(
+            Long userId // 사용자 ID
+    ) {
+        return kycApplicationJpaRepository.findByApplicantUserIdAndKycStatusInOrderByUpdatedAtDesc(
+                userId,
+                IN_PROGRESS_STATUSES
+        );
+    }
+
     // 신청 사용자 ID 기준 최신 KYC 조회
     @Override
     public Optional<KycApplication> findLatestByApplicantUserId(
             Long userId // 사용자 ID
     ) {
         return kycApplicationJpaRepository.findFirstByApplicantUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    // 신청 사용자 ID 기준 최신 현재 KYC 조회
+    @Override
+    public Optional<KycApplication> findLatestCurrentByApplicantUserId(
+            Long userId // 사용자 ID
+    ) {
+        return kycApplicationJpaRepository.findFirstByApplicantUserIdAndKycStatusInOrderByUpdatedAtDesc(
+                userId,
+                IN_PROGRESS_STATUSES
+        );
     }
 
     // 신청 사용자 ID 기준 진행 중 KYC 존재 여부

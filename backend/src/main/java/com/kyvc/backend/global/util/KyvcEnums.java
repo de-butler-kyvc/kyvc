@@ -29,6 +29,15 @@ public final class KyvcEnums {
         SUSPENDED // 정지
     }
 
+    // 대리인 권한 상태
+    public enum AgentAuthorityStatus {
+        ACTIVE, // 활성
+        INACTIVE, // 비활성
+        EXPIRED, // 만료
+        SUSPENDED, // 정지
+        REVOKED // 폐기
+    }
+
     // KYC 상태
     public enum KycStatus {
         DRAFT, // 임시 저장
@@ -105,6 +114,23 @@ public final class KyvcEnums {
         FAILED // 발급 실패
     }
 
+    // Credential 요청 유형
+    public enum CredentialRequestType {
+        ISSUE, // 발급
+        REISSUE, // 재발급
+        REVOKE, // 폐기
+        STATUS_CHECK // 상태 확인
+    }
+
+    // Credential 요청 상태
+    public enum CredentialRequestStatus {
+        REQUESTED, // 요청
+        PROCESSING, // 처리 중
+        COMPLETED, // 완료
+        FAILED, // 실패
+        CANCELLED // 취소
+    }
+
     // KYC 완료 후 가이드 액션
     public enum KycCompletionAction {
         SUBMIT_KYC, // KYC 제출
@@ -132,6 +158,59 @@ public final class KyvcEnums {
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
         EXPIRED // 만료
+    }
+
+    // VP 요청 유형
+    public enum VpRequestType {
+        VP_VERIFY, // VP 검증
+        RE_AUTH, // 재인증
+        TEST_VERIFY, // 테스트 검증
+        FINANCE_VERIFY, // 금융 검증
+        CORPORATE_PERMISSION_CHECK // 법인 권한 확인
+    }
+
+    // Verifier 상태
+    public enum VerifierStatus {
+        PENDING, // 대기
+        APPROVED, // 승인
+        ACTIVE, // 활성
+        SUSPENDED, // 정지
+        REJECTED // 반려
+    }
+
+    // Verifier API Key 상태
+    public enum VerifierApiKeyStatus {
+        ACTIVE, // 활성
+        REVOKED, // 폐기
+        EXPIRED, // 만료
+        ROTATED // 교체
+    }
+
+    // Verifier Callback 상태
+    public enum VerifierCallbackStatus {
+        ACTIVE, // 활성
+        INACTIVE, // 비활성
+        DISABLED // 비활성화
+    }
+
+    // Callback 전송 상태
+    public enum CallbackDeliveryStatus {
+        PENDING, // 대기
+        SUCCESS, // 성공
+        SENT, // 발송
+        FAILED // 실패
+    }
+
+    // Verifier 행위 유형
+    public enum VerifierActionType {
+        VP_REQUEST, // VP 요청
+        VP_VERIFY, // VP 검증
+        API_KEY_ISSUE, // API Key 발급
+        API_CALL, // API 호출
+        POLICY_SYNC, // 정책 동기화
+        RE_AUTH, // 재인증
+        TEST_VERIFY, // 테스트 검증
+        USAGE_EXPORT // 사용량 내보내기
     }
 
     // Credential 유형
@@ -206,7 +285,17 @@ public final class KyvcEnums {
         USER, // 사용자
         ADMIN, // 관리자
         SYSTEM, // 시스템
-        CORE // Core
+        CORE, // Core
+        VERIFIER, // Verifier
+        FINANCE // 금융사
+    }
+
+    // 업로드 행위자 유형
+    public enum UploadActorType {
+        USER, // 사용자
+        FINANCE, // 금융사
+        ADMIN, // 관리자
+        SYSTEM // 시스템
     }
 
     // 감사 대상 유형
@@ -248,6 +337,42 @@ public final class KyvcEnums {
         VP_PRESENTED, // VP 제출
         VP_VERIFIED, // VP 검증
         VP_VERIFICATION_COMPLETED // VP 검증 완료
+    }
+
+    // 알림 채널
+    public enum NotificationChannel {
+        IN_APP, // 앱 내 알림
+        WEB, // 웹
+        APP_PUSH, // 앱 푸시
+        EMAIL, // 이메일
+        SMS // SMS
+    }
+
+    // 알림 발송 상태
+    public enum NotificationSendStatus {
+        READY, // 준비
+        PENDING, // 대기
+        SENT, // 발송
+        FAILED, // 실패
+        CANCELLED // 취소
+    }
+
+    // 신청 채널
+    public enum ApplicationChannel {
+        ONLINE, // 온라인
+        FINANCE_VISIT, // 금융사 방문
+        WEB, // 웹
+        MOBILE, // 모바일
+        FINANCE_BRANCH // 금융사 영업점
+    }
+
+    // 문서 삭제 요청 상태
+    public enum DocumentDeleteRequestStatus {
+        REQUESTED, // 요청
+        APPROVED, // 승인
+        REJECTED, // 반려
+        COMPLETED, // 완료
+        CANCELLED // 취소
     }
 
     // 동의 유형

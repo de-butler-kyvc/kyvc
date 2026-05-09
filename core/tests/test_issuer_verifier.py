@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import httpx
 from fastapi.testclient import TestClient
 
+from app.ai_assessment.enums import DocumentType
 from app.credentials.resolver import (
     CachingDidResolver,
     CompositeDidResolver,
@@ -19,6 +20,7 @@ from app.credentials.resolver import did_resolution_result
 from app.credentials.crypto import decode_compact_jws, generate_private_key, private_key_to_jwk
 from app.credentials.crypto import b64url_decode, b64url_encode
 from app.credentials.crypto import private_key_to_pem
+from app.credentials.delegate_identity import delegate_identity_digest
 from app.credentials.did import did_from_account, holder_diddoc
 from app.credentials.hexutil import utf8_to_hex
 from app.credentials.vc import (
@@ -265,6 +267,87 @@ def _legal_entity_claims(registry_bytes: bytes = b"registry-pdf"):
             },
         ],
     }
+
+
+def _poa_text(*, rrn: str = "900101-1234567", delegate_name: str = "Lee Delegate") -> bytes:
+    return "\n".join(
+        [
+            "위임장",
+            "위임자: Kim Holder",
+            f"수임자: {delegate_name}",
+            "대리인 주소: Seoul Gangnam-gu Teheran-ro 1",
+            "대리인 연락처: 010-1234-5678",
+            f"대리인 주민등록번호: {rrn}",
+            "대상 법인: KYvC Labs",
+            "위임범위: KYC application, document submission, VC receipt",
+            "유효기간 시작: 2026-01-01",
+            "유효기간 종료: 2999-12-31",
+            "서명 및 날인 완료",
+        ]
+    ).encode("utf-8")
+
+
+def _legal_entity_claims_with_delegate(poa_bytes: bytes | None = None):
+    poa_bytes = poa_bytes or _poa_text()
+    claims = _legal_entity_claims()
+    claims["delegate"] = {
+        "name": "Lee Delegate",
+        "address": "Seoul Gangnam-gu Teheran-ro 1",
+        "contact": "010-1234-5678",
+        "identityDigest": delegate_identity_digest(
+            name="Lee Delegate",
+            rrn="900101-1234567",
+            address="Seoul Gangnam-gu Teheran-ro 1",
+            contact="010-1234-5678",
+        ),
+        "identityDigestAlgorithm": "sha-256",
+        "identityDigestVersion": "delegate-identity-v1",
+    }
+    claims["delegation"] = {
+        "kycApplication": True,
+        "documentSubmission": True,
+        "vcReceipt": True,
+        "validFrom": "2026-01-01",
+        "validUntil": "2999-12-31",
+        "targetCorporateName": "KYvC Labs",
+    }
+    claims["documentEvidence"].append(
+        {
+            "documentId": "urn:kyvc:doc:poa",
+            "documentType": "KR_POWER_OF_ATTORNEY",
+            "digestSRI": _digest_sri(poa_bytes),
+            "mediaType": "text/plain",
+            "byteSize": len(poa_bytes),
+            "evidenceFor": ["delegate", "delegation"],
+        }
+    )
+    return claims
+
+
+class DelegateExtractionProvider:
+    provider_name = "delegate-test-llm-primary"
+
+    def __init__(self) -> None:
+        self.called = False
+
+    def extract(self, document):
+        self.called = True
+        assert document.storagePath
+        return document.model_copy(
+            update={
+                "predictedDocumentType": DocumentType.POWER_OF_ATTORNEY,
+                "extracted": {
+                    "delegateName": {"raw": "Lee Delegate", "normalized": "Lee Delegate", "confidence": 0.99},
+                    "delegateAddress": {
+                        "raw": "Seoul Gangnam-gu Teheran-ro 1",
+                        "normalized": "Seoul Gangnam-gu Teheran-ro 1",
+                        "confidence": 0.99,
+                    },
+                    "delegateContact": {"raw": "010-1234-5678", "normalized": "010-1234-5678", "confidence": 0.99},
+                    "delegateRrn": {"raw": "900101-1234567", "normalized": "900101-1234567", "confidence": 0.99},
+                },
+            }
+        )
 
 
 def _sdjwt_fixture(tmp_path):
@@ -548,6 +631,251 @@ def test_sdjwt_attachment_must_match_disclosed_document_hash(tmp_path):
     )
     assert not bad_result.ok
     assert "attached original digest does not match disclosed documentEvidence" in bad_result.errors
+
+
+def test_sdjwt_poa_attachment_verifies_delegate_identity_digest(tmp_path):
+    poa_bytes = _poa_text()
+    repository = _repo(tmp_path)
+    issuer_key = generate_private_key()
+    holder_key = generate_private_key()
+    issuer = IssuerService(
+        "rIssuer",
+        issuer_key,
+        credential_repository=repository,
+        status_repository=repository,
+        did_document_repository=repository,
+    )
+    issuer.register_did_document()
+    holder_did = did_from_account("rHolder")
+    repository.save_did_document(holder_did, holder_diddoc(holder_did, "holder-key-1", private_key_to_jwk(holder_key)))
+    credential, _, paths = issuer.issue_kyc_sd_jwt(
+        holder_account="rHolder",
+        holder_did=holder_did,
+        claims=_legal_entity_claims_with_delegate(poa_bytes),
+        valid_from=datetime.now(tz=UTC) - timedelta(minutes=1),
+        valid_until=datetime.now(tz=UTC) + timedelta(days=1),
+        mark_status_accepted=True,
+    )
+    _save_challenge(repository, challenge="nonce-1", domain="https://verifier.example")
+    parsed = parse_sd_jwt(credential)
+    presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+    kb = create_kb_jwt(
+        private_key=holder_key,
+        verification_method=f"{holder_did}#holder-key-1",
+        aud="https://verifier.example",
+        nonce="nonce-1",
+        presented_sd_jwt_without_kb=presented_without_kb,
+    )
+    presentation = {
+        "aud": "https://verifier.example",
+        "nonce": "nonce-1",
+        "sdJwtKb": f"{presented_without_kb}~{kb}",
+        "attachmentManifest": [
+            {
+                "requirementId": "delegate-authority-evidence",
+                "documentId": "urn:kyvc:doc:poa",
+                "attachmentRef": "poa-1",
+                "documentType": "KR_POWER_OF_ATTORNEY",
+                "digestSRI": _digest_sri(poa_bytes),
+                "mediaType": "text/plain",
+                "byteSize": len(poa_bytes),
+            }
+        ],
+    }
+    verifier = VerifierService(repository, status_lookup=repository.get_credential_entry)
+
+    result = verifier.verify_sd_jwt_presentation(
+        presentation,
+        attachments={"poa-1": (poa_bytes, "text/plain")},
+    )
+
+    assert result.ok
+    assert "delegate.identityDigest" in paths
+    assert result.details["delegateIdentityMatches"] == [{"documentId": "urn:kyvc:doc:poa", "matched": True}]
+
+
+def test_sdjwt_poa_attachment_uses_llm_primary_delegate_extraction(tmp_path):
+    poa_bytes = b"%PDF-1.7 binary power of attorney"
+    provider = DelegateExtractionProvider()
+    repository = _repo(tmp_path)
+    issuer_key = generate_private_key()
+    holder_key = generate_private_key()
+    issuer = IssuerService(
+        "rIssuer",
+        issuer_key,
+        credential_repository=repository,
+        status_repository=repository,
+        did_document_repository=repository,
+    )
+    issuer.register_did_document()
+    holder_did = did_from_account("rHolder")
+    repository.save_did_document(holder_did, holder_diddoc(holder_did, "holder-key-1", private_key_to_jwk(holder_key)))
+    credential, _, _ = issuer.issue_kyc_sd_jwt(
+        holder_account="rHolder",
+        holder_did=holder_did,
+        claims=_legal_entity_claims_with_delegate(poa_bytes),
+        valid_from=datetime.now(tz=UTC) - timedelta(minutes=1),
+        valid_until=datetime.now(tz=UTC) + timedelta(days=1),
+        mark_status_accepted=True,
+    )
+    _save_challenge(repository, challenge="nonce-1", domain="https://verifier.example")
+    parsed = parse_sd_jwt(credential)
+    presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+    kb = create_kb_jwt(
+        private_key=holder_key,
+        verification_method=f"{holder_did}#holder-key-1",
+        aud="https://verifier.example",
+        nonce="nonce-1",
+        presented_sd_jwt_without_kb=presented_without_kb,
+    )
+    verifier = VerifierService(
+        repository,
+        status_lookup=repository.get_credential_entry,
+        document_extraction_provider=provider,
+    )
+
+    result = verifier.verify_sd_jwt_presentation(
+        {
+            "aud": "https://verifier.example",
+            "nonce": "nonce-1",
+            "sdJwtKb": f"{presented_without_kb}~{kb}",
+            "attachmentManifest": [
+                {
+                    "requirementId": "delegate-authority-evidence",
+                    "documentId": "urn:kyvc:doc:poa",
+                    "attachmentRef": "poa-1",
+                    "documentType": "KR_POWER_OF_ATTORNEY",
+                    "digestSRI": _digest_sri(poa_bytes),
+                    "mediaType": "application/pdf",
+                    "byteSize": len(poa_bytes),
+                }
+            ],
+        },
+        attachments={"poa-1": (poa_bytes, "application/pdf")},
+    )
+
+    assert result.ok
+    assert provider.called is True
+    assert result.details["delegateIdentityMatches"] == [{"documentId": "urn:kyvc:doc:poa", "matched": True}]
+
+
+def test_sdjwt_poa_attachment_rejects_delegate_identity_mismatch_even_when_original_hash_matches(tmp_path):
+    poa_bytes = _poa_text(delegate_name="Different Delegate")
+    repository = _repo(tmp_path)
+    issuer_key = generate_private_key()
+    holder_key = generate_private_key()
+    issuer = IssuerService(
+        "rIssuer",
+        issuer_key,
+        credential_repository=repository,
+        status_repository=repository,
+        did_document_repository=repository,
+    )
+    issuer.register_did_document()
+    holder_did = did_from_account("rHolder")
+    repository.save_did_document(holder_did, holder_diddoc(holder_did, "holder-key-1", private_key_to_jwk(holder_key)))
+    credential, _, _ = issuer.issue_kyc_sd_jwt(
+        holder_account="rHolder",
+        holder_did=holder_did,
+        claims=_legal_entity_claims_with_delegate(poa_bytes),
+        valid_from=datetime.now(tz=UTC) - timedelta(minutes=1),
+        valid_until=datetime.now(tz=UTC) + timedelta(days=1),
+        mark_status_accepted=True,
+    )
+    _save_challenge(repository, challenge="nonce-1", domain="https://verifier.example")
+    parsed = parse_sd_jwt(credential)
+    presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+    kb = create_kb_jwt(
+        private_key=holder_key,
+        verification_method=f"{holder_did}#holder-key-1",
+        aud="https://verifier.example",
+        nonce="nonce-1",
+        presented_sd_jwt_without_kb=presented_without_kb,
+    )
+    verifier = VerifierService(repository, status_lookup=repository.get_credential_entry)
+
+    result = verifier.verify_sd_jwt_presentation(
+        {
+            "aud": "https://verifier.example",
+            "nonce": "nonce-1",
+            "sdJwtKb": f"{presented_without_kb}~{kb}",
+            "attachmentManifest": [
+                {
+                    "requirementId": "delegate-authority-evidence",
+                    "documentId": "urn:kyvc:doc:poa",
+                    "attachmentRef": "poa-1",
+                    "documentType": "KR_POWER_OF_ATTORNEY",
+                    "digestSRI": _digest_sri(poa_bytes),
+                    "mediaType": "text/plain",
+                    "byteSize": len(poa_bytes),
+                }
+            ],
+        },
+        attachments={"poa-1": (poa_bytes, "text/plain")},
+    )
+
+    assert not result.ok
+    assert result.details["originalDocumentHashMatches"] == [{"documentId": "urn:kyvc:doc:poa", "matched": True}]
+    assert "delegate identity digest does not match power of attorney attachment" in result.errors
+
+
+def test_sdjwt_poa_attachment_reports_delegate_identity_extraction_failure(tmp_path):
+    poa_bytes = _poa_text(rrn="")
+    repository = _repo(tmp_path)
+    issuer_key = generate_private_key()
+    holder_key = generate_private_key()
+    issuer = IssuerService(
+        "rIssuer",
+        issuer_key,
+        credential_repository=repository,
+        status_repository=repository,
+        did_document_repository=repository,
+    )
+    issuer.register_did_document()
+    holder_did = did_from_account("rHolder")
+    repository.save_did_document(holder_did, holder_diddoc(holder_did, "holder-key-1", private_key_to_jwk(holder_key)))
+    credential, _, _ = issuer.issue_kyc_sd_jwt(
+        holder_account="rHolder",
+        holder_did=holder_did,
+        claims=_legal_entity_claims_with_delegate(poa_bytes),
+        valid_from=datetime.now(tz=UTC) - timedelta(minutes=1),
+        valid_until=datetime.now(tz=UTC) + timedelta(days=1),
+        mark_status_accepted=True,
+    )
+    _save_challenge(repository, challenge="nonce-1", domain="https://verifier.example")
+    parsed = parse_sd_jwt(credential)
+    presented_without_kb = f"{parsed.issuer_jwt}~{'~'.join(parsed.disclosures)}"
+    kb = create_kb_jwt(
+        private_key=holder_key,
+        verification_method=f"{holder_did}#holder-key-1",
+        aud="https://verifier.example",
+        nonce="nonce-1",
+        presented_sd_jwt_without_kb=presented_without_kb,
+    )
+    verifier = VerifierService(repository, status_lookup=repository.get_credential_entry)
+
+    result = verifier.verify_sd_jwt_presentation(
+        {
+            "aud": "https://verifier.example",
+            "nonce": "nonce-1",
+            "sdJwtKb": f"{presented_without_kb}~{kb}",
+            "attachmentManifest": [
+                {
+                    "requirementId": "delegate-authority-evidence",
+                    "documentId": "urn:kyvc:doc:poa",
+                    "attachmentRef": "poa-1",
+                    "documentType": "KR_POWER_OF_ATTORNEY",
+                    "digestSRI": _digest_sri(poa_bytes),
+                    "mediaType": "text/plain",
+                    "byteSize": len(poa_bytes),
+                }
+            ],
+        },
+        attachments={"poa-1": (poa_bytes, "text/plain")},
+    )
+
+    assert not result.ok
+    assert "delegate identity fields could not be extracted from power of attorney attachment" in result.errors
 
 
 def test_sdjwt_original_policy_required_needs_attachment(tmp_path):
@@ -1409,3 +1737,68 @@ def test_api_issue_xrpl_rejects_issuer_diddoc_ledger_mismatch(tmp_path, monkeypa
     assert issue_response.status_code == 400
     assert "issuer DID Document hash mismatch with XRPL DIDSet" in issue_response.json()["detail"]
     assert repository.get_did_document("did:xrpl:1:rIssuer") is None
+
+
+def test_api_verify_presentation_rejects_malformed_json_body(tmp_path):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/verifier/presentations/verify",
+        content="{not-json",
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "request body must be valid JSON"
+
+
+def test_api_verify_presentation_rejects_payload_validation_error(tmp_path):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/verifier/presentations/verify",
+        json={"status_mode": "local"},
+    )
+
+    assert response.status_code == 422
+    assert any(error["loc"] == ["presentation"] for error in response.json()["detail"])
+
+
+def test_api_verify_presentation_rejects_malformed_multipart_presentation(tmp_path):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/verifier/presentations/verify",
+        files={"presentation": (None, "{not-json", "application/json")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "multipart presentation field must be valid JSON"
+
+
+def test_api_register_did_maps_xrpl_submit_runtime_error_to_400(tmp_path, monkeypatch):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+    issuer_key = generate_private_key()
+
+    monkeypatch.setattr("app.api.issuer.make_client", lambda rpc_url: object())
+    monkeypatch.setattr("app.api.issuer.wallet_from_seed", lambda seed: SimpleNamespace(address="rIssuer"))
+
+    def fail_submit(*args, **kwargs):
+        raise RuntimeError("DIDSet failed with result=tecNO_PERMISSION")
+
+    monkeypatch.setattr("app.api.issuer.submit_did_set", fail_submit)
+
+    response = client.post(
+        "/issuer/did/register",
+        json={
+            "issuer_seed": "dummy-seed",
+            "issuer_private_key_pem": private_key_to_pem(issuer_key),
+        },
+    )
+
+    assert response.status_code == 400
+    assert "DIDSet failed" in response.json()["detail"]

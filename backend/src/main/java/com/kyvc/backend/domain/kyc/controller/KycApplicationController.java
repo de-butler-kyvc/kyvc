@@ -30,6 +30,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * KYC 신청 API Controller
  */
@@ -72,6 +74,56 @@ public class KycApplicationController {
                 .body(CommonResponseFactory.success(
                         kycApplicationService.startKyc(getAuthenticatedUserId(userDetails), request)
                 ));
+    }
+
+    /**
+     * 현재 KYC 신청 목록 조회
+     *
+     * @param userDetails 인증 사용자 정보
+     * @return 현재 KYC 신청 목록 응답
+     */
+    @Operation(
+            summary = "현재 KYC 신청 목록 조회",
+            description = "로그인 사용자 기준 현재 진행 중인 KYC 신청 목록을 조회합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "현재 KYC 신청 목록 반환",
+            content = @Content(schema = @Schema(implementation = KycApplicationResponse.class))
+    )
+    @GetMapping
+    public ResponseEntity<CommonResponse<List<KycApplicationResponse>>> getCurrentKycApplications(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal CustomUserDetails userDetails // 인증 사용자 정보
+    ) {
+        return ResponseEntity.ok(CommonResponseFactory.success(
+                kycApplicationService.getCurrentKycApplications(getAuthenticatedUserId(userDetails))
+        ));
+    }
+
+    /**
+     * 현재 KYC 신청 단건 조회
+     *
+     * @param userDetails 인증 사용자 정보
+     * @return 현재 KYC 신청 응답
+     */
+    @Operation(
+            summary = "현재 KYC 신청 단건 조회",
+            description = "로그인 사용자 기준 최신 현재 KYC 신청을 조회합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "현재 KYC 신청 반환",
+            content = @Content(schema = @Schema(implementation = KycApplicationResponse.class))
+    )
+    @GetMapping("/current")
+    public ResponseEntity<CommonResponse<KycApplicationResponse>> getCurrentKycApplication(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal CustomUserDetails userDetails // 인증 사용자 정보
+    ) {
+        return ResponseEntity.ok(CommonResponseFactory.success(
+                kycApplicationService.getCurrentKycApplication(getAuthenticatedUserId(userDetails))
+        ));
     }
 
     /**

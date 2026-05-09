@@ -47,6 +47,12 @@ public class AuditLog {
     @Column(name = "ip_address", length = 100)
     private String ipAddress; // 요청 IP 주소
 
+    @Column(name = "before_value_json", columnDefinition = "TEXT")
+    private String beforeValueJson; // 변경 전 값 JSON
+
+    @Column(name = "after_value_json", columnDefinition = "TEXT")
+    private String afterValueJson; // 변경 후 값 JSON
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt; // 생성 일시

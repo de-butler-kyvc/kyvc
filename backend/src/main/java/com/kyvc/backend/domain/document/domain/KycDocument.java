@@ -49,6 +49,13 @@ public class KycDocument {
     private String documentHash;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "uploaded_by_type_code", length = 30)
+    private KyvcEnums.UploadActorType uploadedByTypeCode;
+
+    @Column(name = "uploaded_by_user_id")
+    private Long uploadedByUserId;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "upload_status_code", nullable = false, length = 50)
     private KyvcEnums.DocumentUploadStatus uploadStatus;
 
@@ -63,7 +70,9 @@ public class KycDocument {
             String filePath, // 저장 경로
             String mimeType, // MIME 타입
             Long fileSize, // 파일 크기
-            String documentHash // 문서 해시
+            String documentHash, // 문서 해시
+            KyvcEnums.UploadActorType uploadedByTypeCode, // 업로드 주체 유형
+            Long uploadedByUserId // 업로드 사용자 ID
     ) {
         KycDocument document = new KycDocument();
         document.kycId = kycId;
@@ -73,6 +82,8 @@ public class KycDocument {
         document.mimeType = mimeType;
         document.fileSize = fileSize;
         document.documentHash = documentHash;
+        document.uploadedByTypeCode = uploadedByTypeCode;
+        document.uploadedByUserId = uploadedByUserId;
         document.uploadStatus = KyvcEnums.DocumentUploadStatus.UPLOADED;
         document.uploadedAt = LocalDateTime.now();
         return document;

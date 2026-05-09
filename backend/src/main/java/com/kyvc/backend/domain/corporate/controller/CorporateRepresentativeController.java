@@ -17,13 +17,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -50,14 +51,14 @@ public class CorporateRepresentativeController {
      */
     @Operation(
             summary = "대표자 정보 등록 또는 저장",
-            description = "로그인 사용자가 소유한 법인의 대표자 정보를 저장합니다. 입력값은 법인 ID, 대표자명, 연락처, 이메일입니다."
+            description = "로그인 사용자가 소유한 법인의 대표자 정보를 저장합니다. 입력값은 법인 ID, 대표자명, 생년월일, 국적 코드, 연락처, 이메일, 신분증 사본 파일입니다."
     )
     @ApiResponse(
             responseCode = "200",
-            description = "대표자 ID, 법인 ID, 대표자명, 연락처, 이메일 반환",
+            description = "대표자 ID, 법인 ID, 대표자명, 생년월일, 국적 코드, 연락처, 이메일 반환",
             content = @Content(schema = @Schema(implementation = RepresentativeResponse.class))
     )
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CommonResponse<RepresentativeResponse>> saveRepresentative(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
@@ -68,7 +69,7 @@ public class CorporateRepresentativeController {
                     required = true,
                     content = @Content(schema = @Schema(implementation = RepresentativeRequest.class))
             )
-            @Valid @RequestBody RepresentativeRequest request // 대표자 정보 저장 요청
+            @Valid @ModelAttribute RepresentativeRequest request // 대표자 정보 저장 요청
     ) {
         return ResponseEntity.ok(
                 CommonResponseFactory.success(
@@ -118,14 +119,14 @@ public class CorporateRepresentativeController {
      */
     @Operation(
             summary = "대표자 정보 수정",
-            description = "로그인 사용자가 소유한 법인의 대표자 정보를 수정합니다. 현재 대표자 ID는 법인 ID와 동일한 값으로 처리합니다."
+            description = "로그인 사용자가 소유한 법인의 대표자 정보를 수정합니다. 신분증 사본 파일이 포함되면 새 파일로 교체합니다."
     )
     @ApiResponse(
             responseCode = "200",
-            description = "수정된 대표자 ID, 법인 ID, 대표자명, 연락처, 이메일 반환",
+            description = "수정된 대표자 ID, 법인 ID, 대표자명, 생년월일, 국적 코드, 연락처, 이메일 반환",
             content = @Content(schema = @Schema(implementation = RepresentativeResponse.class))
     )
-    @PutMapping("/{representativeId}")
+    @PutMapping(value = "/{representativeId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CommonResponse<RepresentativeResponse>> updateRepresentative(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
@@ -138,7 +139,7 @@ public class CorporateRepresentativeController {
                     required = true,
                     content = @Content(schema = @Schema(implementation = RepresentativeRequest.class))
             )
-            @Valid @RequestBody RepresentativeRequest request // 대표자 정보 수정 요청
+            @Valid @ModelAttribute RepresentativeRequest request // 대표자 정보 수정 요청
     ) {
         return ResponseEntity.ok(
                 CommonResponseFactory.success(

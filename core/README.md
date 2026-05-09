@@ -32,7 +32,7 @@ The issuer-signed JWT uses `typ: "dc+sd-jwt"` and contains always-disclosed
 claims: `iss`, `sub`, `vct`, `jti`, `iat`, `exp`, `cnf`, and
 `credentialStatus`. KYvC also keeps `kyc.jurisdiction` and
 `kyc.assuranceLevel` available for coarse policy routing. Legal entity,
-representative, beneficial owner, establishment purpose, and document evidence
+representative, beneficial owner, delegate, delegation, establishment purpose, and document evidence
 claims are selectively disclosed through salted disclosures. Undisclosed claims
 are never reconstructed or used by verifier policy.
 
@@ -69,6 +69,19 @@ multipart attachments alongside the presentation metadata. Each attachment must
 match a disclosed issuer-signed `documentEvidence[]` item by `documentId`,
 `documentType`, and `digestSRI`; hashes supplied only in presentation metadata
 are not trusted.
+
+For delegate applications, `documentEvidence[].digestSRI` remains only the
+original document byte hash. Delegate person comparison uses a separate
+`delegate.identityDigest` claim computed as `sha256-<base64url>` over canonical
+JSON with fixed keys `address`, `contact`, `name`, and `rrn`. Name is compacted
+and uppercased, address whitespace is collapsed and uppercased, contact and RRN
+use digits only, and missing optional address/contact values are included as
+empty strings. The raw RRN is never emitted in SD-JWT claims or assessment
+responses.
+When a verifier receives an attached power of attorney, it first uses the
+configured `LLM_PROVIDER`/OCR extraction provider when available and falls back
+to deterministic text/layout extraction. If delegate name or RRN cannot be
+extracted, verification fails with a delegate identity extraction error.
 
 ## Signature Format
 
@@ -351,6 +364,22 @@ For legal-entity-shaped KYC claims, omit `format` or set `"format":
     "legalEntity": {"type": "STOCK_COMPANY", "name": "KYvC Labs"},
     "representative": {"name": "Kim Holder", "birthDate": "1980-01-01", "nationality": "KR"},
     "beneficialOwners": [{"name": "Owner One", "birthDate": "1979-02-03", "nationality": "KR"}],
+    "delegate": {
+      "name": "Lee Delegate",
+      "address": "Seoul Gangnam-gu Teheran-ro 1",
+      "contact": "010-1234-5678",
+      "identityDigest": "sha256-...",
+      "identityDigestAlgorithm": "sha-256",
+      "identityDigestVersion": "delegate-identity-v1"
+    },
+    "delegation": {
+      "kycApplication": true,
+      "documentSubmission": true,
+      "vcReceipt": true,
+      "validFrom": "2026-01-01",
+      "validUntil": "2999-12-31",
+      "targetCorporateName": "KYvC Labs"
+    },
     "documentEvidence": [
       {
         "documentId": "urn:kyvc:doc:registry:001",
@@ -580,6 +609,7 @@ For SD-JWT+KB JSON verification:
     "requiredDisclosures": [
       "legalEntity.type",
       "representative.name",
+      "delegate.identityDigest",
       "beneficialOwners[].name"
     ],
     "documentRules": [

@@ -1,8 +1,24 @@
+import base64
+import hashlib
+import json
+import mimetypes
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from app.ai_assessment.enums import DocumentType
+from app.ai_assessment.extractors.ocr_layout import OcrLayoutDeterministicExtractor
+from app.ai_assessment.extractors.structured_payload import StructuredPayloadExtractor
+from app.ai_assessment.providers import DocumentExtractionProvider
+from app.ai_assessment.schemas import DocumentMetadata, PowerOfAttorneyExtraction
+from app.credentials.delegate_identity import (
+    DELEGATE_IDENTITY_DIGEST_ALGORITHM,
+    DELEGATE_IDENTITY_DIGEST_VERSION,
+    delegate_identity_digest,
+)
 from app.credentials.did import account_from_did
 from app.credentials.resolver import DidResolver, find_verification_method
 from app.credentials.crypto import decode_compact_jws
@@ -64,6 +80,15 @@ def did_resolution_details(resolution: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in details.items() if value is not None}
 
 
+def _extracted_value(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
+    if isinstance(value, dict):
+        normalized = value.get("normalized")
+        return normalized if normalized not in (None, "") else value.get("raw")
+    return value
+
+
 class VerifierService:
     def __init__(
         self,
@@ -74,6 +99,7 @@ class VerifierService:
         verification_logger: VerificationLogger | None = None,
         challenge_lookup: ChallengeLookup | None = None,
         challenge_marker: ChallengeMarker | None = None,
+        document_extraction_provider: DocumentExtractionProvider | None = None,
     ):
         self.resolver = resolver
         self.status_lookup = status_lookup
@@ -81,6 +107,8 @@ class VerifierService:
         self.verification_logger = verification_logger
         self.challenge_lookup = challenge_lookup
         self.challenge_marker = challenge_marker
+        self.document_extraction_provider = document_extraction_provider
+        self.structured_extractor = StructuredPayloadExtractor()
         if self.challenge_lookup is None and hasattr(resolver, "get_verification_challenge"):
             self.challenge_lookup = getattr(resolver, "get_verification_challenge")
         if self.challenge_marker is None and hasattr(resolver, "mark_verification_challenge_used"):
@@ -293,6 +321,7 @@ class VerifierService:
             "statusVerified": False,
             "policyVerified": False,
             "originalDocumentHashMatches": [],
+            "delegateIdentityMatches": [],
         }
         holder_did: str | None = None
         nonce: str | None = None
@@ -383,6 +412,13 @@ class VerifierService:
             )
             errors.extend(attachment_errors)
             details["originalDocumentHashMatches"] = hash_matches
+            delegate_errors, delegate_matches = self._verify_delegate_identity(
+                credential_result.details.get("disclosedPayload") or issuer_payload,
+                presentation_data.get("attachmentManifest") or [],
+                attachments or {},
+            )
+            errors.extend(delegate_errors)
+            details["delegateIdentityMatches"] = delegate_matches
 
             errors.extend(credential_result.errors)
             details["holderBindingVerified"] = not errors
@@ -408,9 +444,6 @@ class VerifierService:
         attachments: dict[str, tuple[bytes, str | None]],
         policy: SdJwtVerificationPolicy,
     ) -> tuple[list[str], list[dict[str, Any]]]:
-        import base64
-        import hashlib
-
         errors: list[str] = []
         matches: list[dict[str, Any]] = []
         evidence_items = disclosed_payload.get("documentEvidence")
@@ -467,6 +500,121 @@ class VerifierService:
                     errors.append("attached original mediaType does not match manifest")
                 matches.append({"documentId": item.get("documentId"), "matched": matched})
         return errors, matches
+
+    def _verify_delegate_identity(
+        self,
+        disclosed_payload: dict[str, Any],
+        manifest: list[dict[str, Any]],
+        attachments: dict[str, tuple[bytes, str | None]],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        errors: list[str] = []
+        matches: list[dict[str, Any]] = []
+        delegate = disclosed_payload.get("delegate")
+        if not isinstance(delegate, dict) or not delegate.get("identityDigest"):
+            return errors, matches
+        expected_digest = delegate.get("identityDigest")
+        if delegate.get("identityDigestAlgorithm") != DELEGATE_IDENTITY_DIGEST_ALGORITHM:
+            errors.append("delegate identity digest algorithm is not supported")
+            return errors, matches
+        if delegate.get("identityDigestVersion") != DELEGATE_IDENTITY_DIGEST_VERSION:
+            errors.append("delegate identity digest version is not supported")
+            return errors, matches
+
+        for item in manifest:
+            if not isinstance(item, dict) or item.get("documentType") != "KR_POWER_OF_ATTORNEY":
+                continue
+            attachment_ref = item.get("attachmentRef")
+            if not isinstance(attachment_ref, str) or attachment_ref not in attachments:
+                continue
+            file_bytes, _ = attachments[attachment_ref]
+            extracted = self._extract_delegate_from_power_of_attorney(
+                file_bytes,
+                document_id=str(item.get("documentId") or "power-of-attorney"),
+                media_type=item.get("mediaType") if isinstance(item.get("mediaType"), str) else None,
+            )
+            if extracted is None:
+                errors.append("delegate identity fields could not be extracted from power of attorney attachment")
+                matches.append({"documentId": item.get("documentId"), "matched": False})
+                continue
+            actual_digest = delegate_identity_digest(
+                name=_extracted_value(extracted.delegateName),
+                rrn=_extracted_value(extracted.delegateRrn),
+                address=_extracted_value(extracted.delegateAddress),
+                contact=_extracted_value(extracted.delegateContact),
+            )
+            matched = actual_digest == expected_digest
+            if not matched:
+                errors.append("delegate identity digest does not match power of attorney attachment")
+            matches.append({"documentId": item.get("documentId"), "matched": matched})
+        return errors, matches
+
+    def _extract_delegate_from_power_of_attorney(
+        self,
+        file_bytes: bytes,
+        *,
+        document_id: str = "power-of-attorney",
+        media_type: str | None = None,
+    ) -> PowerOfAttorneyExtraction | None:
+        llm_extracted = self._extract_delegate_with_provider(file_bytes, document_id=document_id, media_type=media_type)
+        if llm_extracted is not None:
+            return llm_extracted
+        source = self._attachment_source(file_bytes)
+        extracted = OcrLayoutDeterministicExtractor().extract(DocumentType.POWER_OF_ATTORNEY, source)
+        if not isinstance(extracted, PowerOfAttorneyExtraction):
+            return None
+        required = [
+            _extracted_value(extracted.delegateName),
+            _extracted_value(extracted.delegateRrn),
+        ]
+        if any(value in (None, "") for value in required):
+            return None
+        return extracted
+
+    def _extract_delegate_with_provider(
+        self,
+        file_bytes: bytes,
+        *,
+        document_id: str,
+        media_type: str | None,
+    ) -> PowerOfAttorneyExtraction | None:
+        if self.document_extraction_provider is None:
+            return None
+        suffix = mimetypes.guess_extension(media_type or "") or ".bin"
+        with tempfile.NamedTemporaryFile(prefix="kyvc-poa-", suffix=suffix) as handle:
+            handle.write(file_bytes)
+            handle.flush()
+            document = DocumentMetadata(
+                documentId=document_id,
+                kycApplicationId="verifier-delegate-identity",
+                originalFileName=f"{document_id}{suffix}",
+                mimeType=media_type or mimetypes.guess_type(f"document{suffix}")[0] or "application/octet-stream",
+                sizeBytes=len(file_bytes),
+                sha256=hashlib.sha256(file_bytes).hexdigest(),
+                declaredDocumentType=DocumentType.POWER_OF_ATTORNEY,
+                predictedDocumentType=DocumentType.POWER_OF_ATTORNEY,
+                storagePath=str(Path(handle.name)),
+            )
+            try:
+                extracted_document = self.document_extraction_provider.extract(document)
+                extracted = self.structured_extractor.extract(extracted_document)
+            except Exception:
+                return None
+        if not isinstance(extracted, PowerOfAttorneyExtraction):
+            return None
+        required = [
+            _extracted_value(extracted.delegateName),
+            _extracted_value(extracted.delegateRrn),
+        ]
+        if any(value in (None, "") for value in required):
+            return None
+        return extracted
+
+    def _attachment_source(self, file_bytes: bytes) -> Any:
+        text = file_bytes.decode("utf-8", errors="ignore")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
 
     def verify_vp(
         self,

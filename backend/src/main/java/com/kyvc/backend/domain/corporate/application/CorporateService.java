@@ -1,5 +1,6 @@
 package com.kyvc.backend.domain.corporate.application;
 
+import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.dto.CorporateBasicInfoRequest;
 import com.kyvc.backend.domain.corporate.dto.CorporateCreateRequest;
@@ -19,7 +20,10 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class CorporateService {
 
+    private static final String CORPORATE_TYPE_GROUP = "CORPORATE_TYPE"; // 법인 유형 공통코드 그룹
+
     private final CorporateRepository corporateRepository;
+    private final CommonCodeProvider commonCodeProvider;
 
     // 법인 기본정보 최초 등록
     public CorporateResponse createCorporate(
@@ -37,16 +41,22 @@ public class CorporateService {
             throw new ApiException(ErrorCode.DUPLICATE_RESOURCE);
         }
 
+        String corporateTypeCode = normalizeOptional(request.corporateTypeCode()); // 법인 유형 코드
+        validateCorporateTypeCode(corporateTypeCode);
         Corporate corporate = Corporate.create(
                 userId,
                 normalizeRequired(request.corporateName()),
                 businessRegistrationNo,
                 normalizeOptional(request.corporateRegistrationNo()),
-                normalizeRequired(request.representativeName()),
-                normalizeOptional(request.representativePhone()),
-                normalizeOptional(request.representativeEmail()),
+                corporateTypeCode,
+                request.establishedDate(),
+                normalizeOptional(request.corporatePhone()),
+                null,
+                null,
+                null,
                 normalizeOptional(request.address()),
-                normalizeOptional(request.businessType()),
+                normalizeOptional(request.website()),
+                null,
                 KyvcEnums.CorporateStatus.ACTIVE
         );
         return toResponse(corporateRepository.save(corporate));
@@ -79,15 +89,21 @@ public class CorporateService {
             throw new ApiException(ErrorCode.DUPLICATE_RESOURCE);
         }
 
+        String corporateTypeCode = normalizeOptional(request.corporateTypeCode()); // 법인 유형 코드
+        validateCorporateTypeCode(corporateTypeCode);
         corporate.updateBasicInfo(
                 normalizeRequired(request.corporateName()),
                 businessRegistrationNo,
                 normalizeOptional(request.corporateRegistrationNo()),
-                normalizeRequired(request.representativeName()),
-                normalizeOptional(request.representativePhone()),
-                normalizeOptional(request.representativeEmail()),
+                corporateTypeCode,
+                request.establishedDate(),
+                normalizeOptional(request.corporatePhone()),
+                corporate.getRepresentativeName(),
+                corporate.getRepresentativePhone(),
+                corporate.getRepresentativeEmail(),
                 normalizeOptional(request.address()),
-                normalizeOptional(request.businessType())
+                normalizeOptional(request.website()),
+                corporate.getBusinessType()
         );
         return toResponse(corporateRepository.save(corporate));
     }
@@ -98,8 +114,7 @@ public class CorporateService {
     ) {
         if (request == null
                 || !StringUtils.hasText(request.corporateName())
-                || !StringUtils.hasText(request.businessRegistrationNo())
-                || !StringUtils.hasText(request.representativeName())) {
+                || !StringUtils.hasText(request.businessRegistrationNo())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
@@ -110,8 +125,7 @@ public class CorporateService {
     ) {
         if (request == null
                 || !StringUtils.hasText(request.corporateName())
-                || !StringUtils.hasText(request.businessRegistrationNo())
-                || !StringUtils.hasText(request.representativeName())) {
+                || !StringUtils.hasText(request.businessRegistrationNo())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
@@ -139,10 +153,14 @@ public class CorporateService {
                 corporate.getCorporateName(),
                 corporate.getBusinessRegistrationNo(),
                 corporate.getCorporateRegistrationNo(),
+                corporate.getCorporateTypeCode(),
+                corporate.getEstablishedDate(),
+                corporate.getCorporatePhone(),
                 corporate.getRepresentativeName(),
                 corporate.getRepresentativePhone(),
                 corporate.getRepresentativeEmail(),
                 corporate.getAddress(),
+                corporate.getWebsite(),
                 corporate.getBusinessType(),
                 corporate.getCorporateStatusCode().name(),
                 corporate.getCreatedAt(),
@@ -182,6 +200,15 @@ public class CorporateService {
     ) {
         if (corporateId == null || corporateId <= 0) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    // 법인 유형 코드 검증
+    private void validateCorporateTypeCode(
+            String corporateTypeCode // 법인 유형 코드
+    ) {
+        if (StringUtils.hasText(corporateTypeCode)) {
+            commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
         }
     }
 }
