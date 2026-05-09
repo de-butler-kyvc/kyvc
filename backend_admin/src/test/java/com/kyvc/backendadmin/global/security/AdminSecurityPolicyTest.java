@@ -26,7 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(
@@ -117,6 +119,17 @@ class AdminSecurityPolicyTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(UNKNOWN_BACKEND_URI).with(systemAdmin()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void corsPreflightAllowsFrontendAdminOriginAndAuthorizationHeader() throws Exception {
+        mockMvc.perform(options("/api/admin/backend/kyc/applications")
+                        .header("Origin", "http://localhost:3001")
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "Authorization,X-Request-Id"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3001"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 
     private RequestPostProcessor backendAdmin() {

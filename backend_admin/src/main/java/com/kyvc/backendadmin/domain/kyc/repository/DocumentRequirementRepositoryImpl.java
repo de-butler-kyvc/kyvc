@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 /**
  * {@link DocumentRequirementRepository}의 EntityManager 기반 구현체입니다.
  *
@@ -25,6 +27,11 @@ public class DocumentRequirementRepositoryImpl implements DocumentRequirementRep
     }
 
     @Override
+    public Optional<DocumentRequirement> findById(Long requirementId) {
+        return Optional.ofNullable(entityManager().find(DocumentRequirement.class, requirementId));
+    }
+
+    @Override
     public boolean existsByCorporateTypeAndDocumentType(String corporateType, String documentType) {
         Long count = entityManager()
                 .createQuery("""
@@ -35,6 +42,27 @@ public class DocumentRequirementRepositoryImpl implements DocumentRequirementRep
                         """, Long.class)
                 .setParameter("corporateType", corporateType)
                 .setParameter("documentType", documentType)
+                .getSingleResult();
+        return count > 0;
+    }
+
+    @Override
+    public boolean existsByCorporateTypeAndDocumentTypeExceptId(
+            String corporateType,
+            String documentType,
+            Long excludedRequirementId
+    ) {
+        Long count = entityManager()
+                .createQuery("""
+                        select count(requirement)
+                        from DocumentRequirement requirement
+                        where requirement.corporateTypeCode = :corporateType
+                          and requirement.documentTypeCode = :documentType
+                          and requirement.requirementId <> :excludedRequirementId
+                        """, Long.class)
+                .setParameter("corporateType", corporateType)
+                .setParameter("documentType", documentType)
+                .setParameter("excludedRequirementId", excludedRequirementId)
                 .getSingleResult();
         return count > 0;
     }

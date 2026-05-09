@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.document.repository;
 
 import com.kyvc.backendadmin.domain.document.domain.KycDocument;
+import com.kyvc.backendadmin.global.util.KyvcEnums;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -22,6 +23,18 @@ public class KycDocumentRepositoryImpl implements KycDocumentRepository {
     @Override
     public Optional<KycDocument> findById(Long documentId) {
         return Optional.ofNullable(entityManager().find(KycDocument.class, documentId));
+    }
+
+    @Override
+    public int updateUploadStatus(Long documentId, KyvcEnums.DocumentUploadStatus status) {
+        return entityManager().createNativeQuery("""
+                        update kyc_documents
+                        set upload_status_code = :status
+                        where document_id = :documentId
+                        """)
+                .setParameter("status", status.name())
+                .setParameter("documentId", documentId)
+                .executeUpdate();
     }
 
     private EntityManager entityManager() {

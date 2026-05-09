@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.credential.controller;
 
 import com.kyvc.backendadmin.domain.credential.application.AdminCredentialIssueService;
+import com.kyvc.backendadmin.domain.credential.application.AdminCredentialLifecycleService;
 import com.kyvc.backendadmin.domain.credential.application.AdminCredentialQueryService;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialDetailResponse;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialIssueRequest;
@@ -9,6 +10,9 @@ import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialListResponse;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialRequestHistoryResponse;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialSearchRequest;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialStatusHistoryResponse;
+import com.kyvc.backendadmin.domain.credential.dto.CredentialActionResponse;
+import com.kyvc.backendadmin.domain.credential.dto.CredentialReissueRequest;
+import com.kyvc.backendadmin.domain.credential.dto.CredentialRevokeRequest;
 import com.kyvc.backendadmin.global.response.CommonResponse;
 import com.kyvc.backendadmin.global.response.CommonResponseFactory;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,6 +47,7 @@ public class AdminCredentialController {
 
     private final AdminCredentialIssueService adminCredentialIssueService;
     private final AdminCredentialQueryService adminCredentialQueryService;
+    private final AdminCredentialLifecycleService adminCredentialLifecycleService;
 
     /**
      * 승인된 KYC 신청 건에 대해 VC 발급을 요청합니다.
@@ -192,5 +197,67 @@ public class AdminCredentialController {
             @PathVariable Long credentialId
     ) {
         return CommonResponseFactory.success(adminCredentialQueryService.getStatusHistories(credentialId));
+    }
+
+    /**
+     * VC 재발급을 Backend API로 요청합니다.
+     *
+     * @param credentialId Credential ID
+     * @param request VC 재발급 요청 정보
+     * @return VC 재발급 요청 결과
+     */
+    @Operation(
+            summary = "VC 재발급 요청",
+            description = "관리자가 선택한 VC에 대해 Backend API로 재발급을 요청한다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "VC 재발급 요청 성공"),
+            @ApiResponse(responseCode = "401", description = "MFA 토큰이 유효하지 않은 경우"),
+            @ApiResponse(responseCode = "404", description = "Credential을 찾을 수 없는 경우"),
+            @ApiResponse(responseCode = "409", description = "재발급할 수 없는 Credential 상태인 경우")
+    })
+    @PostMapping("/credentials/{credentialId}/reissue")
+    public CommonResponse<CredentialActionResponse> reissue(
+            @Parameter(description = "Credential ID", required = true, example = "1")
+            @PathVariable Long credentialId,
+            @RequestBody(
+                    description = "VC 재발급 요청 정보",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = CredentialReissueRequest.class))
+            )
+            @Valid @org.springframework.web.bind.annotation.RequestBody CredentialReissueRequest request
+    ) {
+        return CommonResponseFactory.success(adminCredentialLifecycleService.reissue(credentialId, request));
+    }
+
+    /**
+     * VC 폐기를 Backend API로 요청합니다.
+     *
+     * @param credentialId Credential ID
+     * @param request VC 폐기 요청 정보
+     * @return VC 폐기 요청 결과
+     */
+    @Operation(
+            summary = "VC 폐기 요청",
+            description = "관리자가 선택한 VC에 대해 Backend API로 폐기를 요청한다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "VC 폐기 요청 성공"),
+            @ApiResponse(responseCode = "401", description = "MFA 토큰이 유효하지 않은 경우"),
+            @ApiResponse(responseCode = "404", description = "Credential을 찾을 수 없는 경우"),
+            @ApiResponse(responseCode = "409", description = "폐기할 수 없는 Credential 상태인 경우")
+    })
+    @PostMapping("/credentials/{credentialId}/revoke")
+    public CommonResponse<CredentialActionResponse> revoke(
+            @Parameter(description = "Credential ID", required = true, example = "1")
+            @PathVariable Long credentialId,
+            @RequestBody(
+                    description = "VC 폐기 요청 정보",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = CredentialRevokeRequest.class))
+            )
+            @Valid @org.springframework.web.bind.annotation.RequestBody CredentialRevokeRequest request
+    ) {
+        return CommonResponseFactory.success(adminCredentialLifecycleService.revoke(credentialId, request));
     }
 }
