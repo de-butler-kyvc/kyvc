@@ -10,3 +10,7 @@ spring:
 logging:
   level:
     com.kyvc.backendadmin: DEBUG
+
+kyvc:
+  backend:
+    base-url: ${KYVC_BACKEND_BASE_URL:http://kyvc-backend-dev:8082}

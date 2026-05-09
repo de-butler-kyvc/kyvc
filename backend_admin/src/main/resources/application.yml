@@ -72,6 +72,13 @@ kyvc:
     allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000}
     allowed-origin-patterns: ${KYVC_CORS_ALLOWED_ORIGIN_PATTERNS:}
     allow-credentials: ${KYVC_CORS_ALLOW_CREDENTIALS:true}
+  backend:
+    base-url: ${KYVC_BACKEND_BASE_URL:http://localhost:8080}
+    internal-api-key: ${KYVC_BACKEND_INTERNAL_API_KEY:}
+    reissue-path: ${KYVC_BACKEND_CREDENTIAL_REISSUE_PATH:/api/internal/dev/credentials/{credentialId}/reissue}
+    revoke-path: ${KYVC_BACKEND_CREDENTIAL_REVOKE_PATH:/api/internal/dev/credentials/{credentialId}/revoke}
+    connect-timeout-millis: ${KYVC_BACKEND_CONNECT_TIMEOUT_MILLIS:3000}
+    read-timeout-millis: ${KYVC_BACKEND_READ_TIMEOUT_MILLIS:10000}
   auth:
     mfa:
       expiration-minutes: ${KYVC_MFA_EXPIRATION_MINUTES:5}

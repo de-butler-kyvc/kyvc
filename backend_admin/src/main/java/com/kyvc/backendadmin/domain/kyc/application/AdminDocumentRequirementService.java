@@ -6,6 +6,7 @@ import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementCreateReques
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementListResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementSearchRequest;
+import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementUpdateRequest;
 import com.kyvc.backendadmin.domain.kyc.repository.DocumentRequirementQueryRepository;
 import com.kyvc.backendadmin.domain.kyc.repository.DocumentRequirementRepository;
 import com.kyvc.backendadmin.global.commoncode.application.CommonCodeValidator;
@@ -117,6 +118,75 @@ public class AdminDocumentRequirementService {
         return toResponse(documentRequirement);
     }
 
+    /**
+     * 필수서류 정책을 수정합니다.
+     *
+     * <p>요청에 포함된 법인 유형과 문서 유형은 공통코드로 검증하고, 최종 법인 유형과 문서 유형 조합이
+     * 다른 정책과 중복되면 DOCUMENT_REQUIREMENT_DUPLICATED 예외를 발생시킵니다.</p>
+     *
+     * @param requirementId 필수서류 정책 ID
+     * @param request 필수서류 정책 수정 요청 정보
+     * @return 수정된 필수서류 정책 응답
+     */
+    @Transactional
+    public AdminDocumentRequirementResponse update(
+            Long requirementId,
+            AdminDocumentRequirementUpdateRequest request
+    ) {
+        if (request == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        DocumentRequirement requirement = documentRequirementRepository.findById(requirementId)
+                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_REQUIREMENT_NOT_FOUND));
+
+        String corporateTypeCode = resolveValue(request.corporateTypeCode(), requirement.getCorporateTypeCode());
+        String documentTypeCode = resolveValue(request.documentTypeCode(), requirement.getDocumentTypeCode());
+        String requiredYn = resolveValue(request.requiredYn(), requirement.getRequiredYn());
+        String enabledYn = resolveValue(request.enabledYn(), requirement.getEnabledYn());
+        Integer sortOrder = request.sortOrder() == null ? requirement.getSortOrder() : request.sortOrder();
+        String guideMessage = request.description() == null ? requirement.getGuideMessage() : request.description();
+
+        if (StringUtils.hasText(request.corporateTypeCode())) {
+            commonCodeValidator.validateEnabledCode(CORPORATE_TYPE_CODE_GROUP, request.corporateTypeCode());
+        }
+        if (StringUtils.hasText(request.documentTypeCode())) {
+            commonCodeValidator.validateEnabledCode(DOCUMENT_TYPE_CODE_GROUP, request.documentTypeCode());
+        }
+        validateYn(requiredYn, "requiredYn");
+        validateYn(enabledYn, "enabledYn");
+
+        if (documentRequirementRepository.existsByCorporateTypeAndDocumentTypeExceptId(
+                corporateTypeCode,
+                documentTypeCode,
+                requirementId
+        )) {
+            throw new ApiException(ErrorCode.DOCUMENT_REQUIREMENT_DUPLICATED);
+        }
+
+        Long adminId = SecurityUtil.getCurrentAdminId();
+        String beforeSummary = summarize(requirement);
+        requirement.update(
+                corporateTypeCode,
+                documentTypeCode,
+                requiredYn,
+                enabledYn,
+                sortOrder,
+                guideMessage,
+                adminId
+        );
+
+        documentRequirementRepository.saveAuditLog(AuditLog.documentRequirement(
+                adminId,
+                requirement.getRequirementId(),
+                "DOCUMENT_REQUIREMENT_UPDATE",
+                "필수서류 정책을 수정했습니다. before=%s, after=%s"
+                        .formatted(beforeSummary, summarize(requirement))
+        ));
+
+        return toResponse(requirement);
+    }
+
     private void validateSearchRequest(AdminDocumentRequirementSearchRequest request) {
         if (StringUtils.hasText(request.corporateType())) {
             commonCodeValidator.validateEnabledCode(CORPORATE_TYPE_CODE_GROUP, request.corporateType());
@@ -136,6 +206,21 @@ public class AdminDocumentRequirementService {
         if (!"Y".equals(value) && !"N".equals(value)) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, fieldName + "은 Y 또는 N이어야 합니다.");
         }
+    }
+
+    private String resolveValue(String requestedValue, String currentValue) {
+        return StringUtils.hasText(requestedValue) ? requestedValue : currentValue;
+    }
+
+    private String summarize(DocumentRequirement requirement) {
+        return "corporateType=%s, documentType=%s, requiredYn=%s, enabledYn=%s, sortOrder=%d"
+                .formatted(
+                        requirement.getCorporateTypeCode(),
+                        requirement.getDocumentTypeCode(),
+                        requirement.getRequiredYn(),
+                        requirement.getEnabledYn(),
+                        requirement.getSortOrder()
+                );
     }
 
     private AdminDocumentRequirementListResponse.Item toListItem(DocumentRequirement requirement) {

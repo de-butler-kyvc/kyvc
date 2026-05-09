@@ -16,3 +16,7 @@ logging:
   level:
     root: INFO
     com.kyvc.backendadmin: INFO
+
+kyvc:
+  backend:
+    base-url: ${KYVC_BACKEND_BASE_URL:http://kyvc-backend-prod:8080}

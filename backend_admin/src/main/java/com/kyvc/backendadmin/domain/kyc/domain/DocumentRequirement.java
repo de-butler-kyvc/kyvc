@@ -95,4 +95,33 @@ public class DocumentRequirement {
         requirement.updatedByAdminId = adminId;
         return requirement;
     }
+
+    /**
+     * 필수서류 정책 정보를 수정합니다.
+     *
+     * @param corporateTypeCode 법인 유형 공통코드
+     * @param documentTypeCode 문서 유형 공통코드
+     * @param requiredYn 필수 여부
+     * @param enabledYn 사용 여부
+     * @param sortOrder 정렬 순서
+     * @param guideMessage 안내 문구
+     * @param adminId 수정 관리자 ID
+     */
+    public void update(
+            String corporateTypeCode,
+            String documentTypeCode,
+            String requiredYn,
+            String enabledYn,
+            Integer sortOrder,
+            String guideMessage,
+            Long adminId
+    ) {
+        this.corporateTypeCode = corporateTypeCode;
+        this.documentTypeCode = documentTypeCode;
+        this.requiredYn = requiredYn;
+        this.enabledYn = enabledYn;
+        this.sortOrder = sortOrder;
+        this.guideMessage = guideMessage;
+        this.updatedByAdminId = adminId;
+    }
 }

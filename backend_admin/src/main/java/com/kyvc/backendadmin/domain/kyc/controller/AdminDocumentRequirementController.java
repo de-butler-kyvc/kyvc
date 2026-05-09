@@ -5,6 +5,7 @@ import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementCreateReques
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementListResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementResponse;
 import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementSearchRequest;
+import com.kyvc.backendadmin.domain.kyc.dto.AdminDocumentRequirementUpdateRequest;
 import com.kyvc.backendadmin.global.response.CommonResponse;
 import com.kyvc.backendadmin.global.response.CommonResponseFactory;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -96,5 +99,34 @@ public class AdminDocumentRequirementController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(CommonResponseFactory.success(adminDocumentRequirementService.create(request)));
+    }
+
+    /**
+     * 필수서류 정책을 수정합니다.
+     *
+     * @param requirementId 필수서류 정책 ID
+     * @param request 필수서류 정책 수정 요청 정보
+     * @return 수정된 필수서류 정책 정보
+     */
+    @Operation(
+            summary = "필수서류 정책 수정",
+            description = "관리자가 법인 유형과 문서 유형 기준의 필수서류 정책을 수정한다."
+    )
+    @ApiResponse(responseCode = "200", description = "필수서류 정책 수정 성공")
+    @ApiResponse(responseCode = "400", description = "요청값 또는 공통코드가 올바르지 않은 경우")
+    @ApiResponse(responseCode = "404", description = "필수서류 정책을 찾을 수 없는 경우")
+    @ApiResponse(responseCode = "409", description = "동일한 법인 유형과 문서 유형 정책이 이미 존재하는 경우")
+    @PatchMapping("/{requirementId}")
+    public CommonResponse<AdminDocumentRequirementResponse> update(
+            @Parameter(description = "필수서류 정책 ID", required = true, example = "1")
+            @PathVariable Long requirementId,
+            @RequestBody(
+                    description = "필수서류 정책 수정 요청 정보",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = AdminDocumentRequirementUpdateRequest.class))
+            )
+            @Valid @org.springframework.web.bind.annotation.RequestBody AdminDocumentRequirementUpdateRequest request
+    ) {
+        return CommonResponseFactory.success(adminDocumentRequirementService.update(requirementId, request));
     }
 }
