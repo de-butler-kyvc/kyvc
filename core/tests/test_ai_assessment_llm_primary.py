@@ -259,7 +259,10 @@ def _ocr_fallback_documents():
 
 def test_llm_primary_assessment_api_accepts_documents_and_returns_assessment(tmp_path, monkeypatch):
     provider = FakeLlmPrimaryProvider()
-    monkeypatch.setattr("app.ai_assessment.llm_primary.build_document_extraction_provider", lambda settings: provider)
+    monkeypatch.setattr(
+        "app.ai_assessment.llm_primary.build_document_extraction_provider",
+        lambda settings, repository=None: provider,
+    )
     app = create_app(
         settings=Settings(app_storage_path=str(tmp_path), llm_provider="openai"),
         repository=object(),

@@ -154,7 +154,7 @@ def _document_extraction_provider(request: Request):
     settings = request.app.state.settings
     if getattr(settings, "llm_provider", "none").lower() in {"none", "structured_payload", "mock"}:
         return None
-    return build_document_extraction_provider(settings)
+    return build_document_extraction_provider(settings, request.app.state.repository)
 
 
 def _validation_detail(exc: ValidationError) -> list[dict[str, Any]]:

@@ -6,11 +6,16 @@ from app.ai_assessment.providers.ocr import (
 )
 from app.ai_assessment.providers.openai import OpenAiDocumentExtractionProvider
 from app.core.config import Settings
+from app.provider_selection.service import effective_provider
 from app.resilience.outbound import outbound_timeout
 
 
-def build_document_extraction_provider(settings: Settings) -> DocumentExtractionProvider | None:
-    provider = settings.llm_provider.lower()
+def build_document_extraction_provider(
+    settings: Settings,
+    repository=None,
+) -> DocumentExtractionProvider | None:
+    provider, _profile = effective_provider(settings, repository, "llm")
+    provider = provider.lower()
     if provider in {"none", "structured_payload", "mock"}:
         return None
     if provider == "openai":
@@ -20,14 +25,17 @@ def build_document_extraction_provider(settings: Settings) -> DocumentExtraction
             api_key=settings.openai_api_key,
             model=settings.openai_model or settings.llm_model or "gpt-5.5",
             base_url=settings.openai_base_url,
-            ocr_provider=build_ocr_text_provider(settings),
+            ocr_provider=build_ocr_text_provider(settings, repository),
             timeout=outbound_timeout("llm", settings),
         )
-    raise ValueError(f"Unsupported LLM_PROVIDER for document extraction: {settings.llm_provider}")
+    if provider == "azure_openai":
+        raise ValueError("LLM_PROVIDER=azure_openai is selectable but not implemented by the current core provider.")
+    raise ValueError(f"Unsupported LLM_PROVIDER for document extraction: {provider}")
 
 
-def build_ocr_text_provider(settings: Settings) -> OcrTextProvider | None:
-    provider = settings.ocr_provider.lower()
+def build_ocr_text_provider(settings: Settings, repository=None) -> OcrTextProvider | None:
+    provider, _profile = effective_provider(settings, repository, "ocr")
+    provider = provider.lower()
     if provider in {"none", "structured_payload", "mock"}:
         return None
     if provider == "azure_document_intelligence":
@@ -54,4 +62,4 @@ def build_ocr_text_provider(settings: Settings) -> OcrTextProvider | None:
             template_id=settings.naver_clova_ocr_template_id,
             timeout=outbound_timeout("ocr", settings),
         )
-    raise ValueError(f"Unsupported OCR_PROVIDER for document extraction: {settings.ocr_provider}")
+    raise ValueError(f"Unsupported OCR_PROVIDER for document extraction: {provider}")

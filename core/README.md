@@ -301,6 +301,56 @@ OUTBOUND_CIRCUIT_FAILURE_THRESHOLD=5
 OUTBOUND_CIRCUIT_RECOVERY_TIMEOUT_SECONDS=30
 ```
 
+## OCR/LLM Provider Selection
+
+Core stores active OCR/LLM provider selections in its MySQL database so all Core
+instances can read the same runtime choice. Core Admin is expected to call
+Core's internal provider-selection API instead of writing configuration directly.
+
+Core resolves providers in this order:
+
+1. Active runtime selection from `provider_selections`
+2. Environment defaults such as `OCR_PROVIDER` and `LLM_PROVIDER`
+
+Selectable providers are allowlisted in code. Admins can select only provider
+and profile identifiers; secrets, API keys, and raw endpoint URLs remain in env
+or secret storage. Selection activation validates that the chosen provider is
+configured enough to run.
+
+Internal endpoints:
+
+- `GET /internal/provider-selections/options`
+- `GET /internal/provider-selections`
+- `PUT /internal/provider-selections/{ocr|llm}`
+- `GET /internal/provider-selections/history`
+
+Core Admin integration guidance:
+
+- Treat Core as the source of truth; do not create a separate Core Admin
+  provider-selection table.
+- Fetch `GET /internal/provider-selections/options` to render selectable
+  providers and profiles. Show `configured=false` options as unavailable.
+- Fetch `GET /internal/provider-selections` to display the current effective
+  selection, including env fallback when no runtime override exists.
+- On activation, call `PUT /internal/provider-selections/{ocr|llm}` with only:
+
+```json
+{
+  "provider": "openai",
+  "profile": "balanced",
+  "changed_by": "operator-id"
+}
+```
+
+- Pass the operator identity as `changed_by` when available. Until full auth is
+  present, Core Admin may use a simple operator id or service label.
+- Surface Core's `400` validation detail to the operator. Core rejects
+  unsupported providers/profiles and selections whose required env secrets are
+  missing.
+- Use `GET /internal/provider-selections/history` for a simple audit view.
+- Never send API keys, tokens, endpoint URLs, or model override strings through
+  these APIs.
+
 Holder behavior is not exposed as a core API. The production holder will be a
 mobile app. This repository keeps a configured-network holder test runner under
 `holder-test/` so the core issuer/verifier flow can still be exercised end to
