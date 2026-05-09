@@ -6,6 +6,7 @@ import httpx
 from app.credentials.canonical import canonical_json, multihash_sha2_256
 from app.credentials.did import account_from_did
 from app.credentials.hexutil import bytes_to_hex, hex_to_utf8
+from app.resilience.outbound import OutboundDependencyError, execute_outbound, outbound_timeout
 
 
 class DidResolver(Protocol):
@@ -194,9 +195,17 @@ class XrplDidResolver:
     def resolve(self, did: str) -> dict[str, Any]:
         account, uri, data_hash = xrpl_did_entry_metadata(self.client, did)
         try:
-            response = httpx.get(uri, timeout=30)
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
+            def fetch() -> httpx.Response:
+                response = httpx.get(uri, timeout=outbound_timeout("did_resolver"))
+                response.raise_for_status()
+                return response
+
+            response = execute_outbound(
+                "did_resolver",
+                "fetch_did_document",
+                fetch,
+            )
+        except (httpx.HTTPError, OutboundDependencyError) as exc:
             raise ValueError(f"DID Document fetch failed for {did}: uri={uri}: {exc}") from exc
         did_document = response.json()
 

@@ -273,6 +273,34 @@ readiness. XRPL probing uses the configured JSON-RPC URL, respects the existing
 mainnet policy, and performs a read-only `server_info` request. Secrets such as
 issuer seeds and private keys are never returned.
 
+## Outbound Dependency Resilience
+
+Outbound calls to XRPL, DID document URLs, OCR providers, and LLM providers use a
+shared in-process resilience policy. The policy centralizes timeouts, retries
+transient failures with exponential backoff and jitter, and opens a per-category
+circuit after repeated transient failures. Open circuits fail fast until the
+recovery timeout elapses, then allow a half-open probe.
+
+Network timeouts, connection failures, 5xx responses, and rate-limit responses
+from OCR/LLM providers are retried. Mainnet policy violations, XRPL
+amendment-disabled failures, DID missing-document cases, and obvious 4xx
+caller/configuration failures are not retried.
+
+Key environment variables:
+
+```env
+OUTBOUND_DEFAULT_TIMEOUT_SECONDS=30
+OUTBOUND_XRPL_TIMEOUT_SECONDS=30
+OUTBOUND_DID_RESOLVER_TIMEOUT_SECONDS=30
+OUTBOUND_OCR_TIMEOUT_SECONDS=120
+OUTBOUND_LLM_TIMEOUT_SECONDS=120
+OUTBOUND_RETRY_MAX_ATTEMPTS=3
+OUTBOUND_RETRY_BASE_DELAY_SECONDS=0.2
+OUTBOUND_RETRY_MAX_DELAY_SECONDS=2
+OUTBOUND_CIRCUIT_FAILURE_THRESHOLD=5
+OUTBOUND_CIRCUIT_RECOVERY_TIMEOUT_SECONDS=30
+```
+
 Holder behavior is not exposed as a core API. The production holder will be a
 mobile app. This repository keeps a configured-network holder test runner under
 `holder-test/` so the core issuer/verifier flow can still be exercised end to

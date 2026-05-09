@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from xrpl.models.requests import ServerInfo
 
 from app.core.config import Settings
+from app.resilience.outbound import TransientOutboundError, execute_outbound, outbound_policy
 from app.xrpl.client import enforce_mainnet_policy, make_client
 
 StatusValue = Literal["UP", "DEGRADED", "DOWN"]
@@ -78,13 +79,26 @@ def _xrpl_status(settings: Settings) -> ComponentStatus:
     except RuntimeError as exc:
         return ComponentStatus(status="DOWN", configured=True, detail=str(exc))
     try:
-        response = make_client(rpc_url).request(ServerInfo())
+        def server_info():
+            response = make_client(rpc_url).request(ServerInfo())
+            result = _response_result(response)
+            error = result.get("error")
+            if error in {"tooBusy", "slowDown", "internal", "noNetwork"}:
+                raise TransientOutboundError("xrpl", "server_info", str(error))
+            return response
+
+        response = execute_outbound(
+            "xrpl",
+            "server_info",
+            server_info,
+            policy=outbound_policy(settings, "xrpl"),
+        )
         result = _response_result(response)
     except Exception as exc:
         return ComponentStatus(
             status="DOWN",
             configured=True,
-            detail=f"XRPL server_info request failed: {type(exc).__name__}",
+            detail=f"XRPL server_info request failed: {exc}",
         )
     if _response_is_successful(result):
         return ComponentStatus(status="UP", configured=True, detail="XRPL server_info request succeeded")
