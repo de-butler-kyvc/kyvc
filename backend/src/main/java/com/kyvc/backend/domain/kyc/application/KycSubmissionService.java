@@ -17,6 +17,7 @@ import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvid
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.dto.KycDocumentResponse;
 import com.kyvc.backend.domain.document.dto.RequiredDocumentResponse;
+import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.dto.KycApplicationSummaryResponse;
@@ -32,8 +33,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -65,6 +69,7 @@ public class KycSubmissionService {
     private final CorporateAgentRepository corporateAgentRepository;
     private final KycDocumentRepository kycDocumentRepository;
     private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
+    private final DocumentStorage documentStorage;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
     private final ObjectMapper objectMapper;
@@ -114,14 +119,19 @@ public class KycSubmissionService {
             coreRequestId = coreRequest.getCoreRequestId();
             kycApplication.submit(submittedAt);
 
+            List<KycDocument> reviewDocuments = kycDocumentRepository.findByKycId(
+                    kycApplication.getKycId()
+            ); // Core 심사 대상 문서 목록
             CoreAiReviewRequest coreAiReviewRequest = buildAiReviewRequest(
                     coreRequestId,
                     summary,
+                    reviewDocuments,
                     submittedAt
             ); // Core AI 심사 API 요청 데이터
 
             String requestPayloadJson = toJson(coreAiReviewRequest);
             coreRequestService.updateRequestPayloadJson(coreRequestId, requestPayloadJson);
+            coreRequestService.markRunning(coreRequestId);
 
             logEventLogger.info(
                     "core.call.started",
@@ -158,7 +168,7 @@ public class KycSubmissionService {
                     null,
                     resolveNextActionCode(savedApplication),
                     savedApplication.getSubmittedAt(),
-                    true,
+                    false,
                     AI_REVIEW_COMPLETED_MESSAGE
             );
         } catch (ApiException exception) {
@@ -178,7 +188,7 @@ public class KycSubmissionService {
                         null,
                         resolveNextActionCode(savedApplication),
                         savedApplication.getSubmittedAt(),
-                        true,
+                        false,
                         AI_REVIEW_FAILED_MESSAGE
                 );
             }
@@ -409,6 +419,7 @@ public class KycSubmissionService {
     private CoreAiReviewRequest buildAiReviewRequest(
             String coreRequestId, // Core 요청 ID
             KycApplicationSummaryResponse summary, // KYC 제출 전 요약
+            List<KycDocument> documents, // Core 심사 대상 문서 목록
             LocalDateTime requestedAt // 요청 일시
     ) {
         return new CoreAiReviewRequest(
@@ -416,30 +427,49 @@ public class KycSubmissionService {
                 summary.kycId(),
                 summary.corporateId(),
                 summary.businessRegistrationNo(),
+                summary.corporateRegistrationNo(),
                 summary.corporateName(),
                 summary.representativeName(),
-                buildAiReviewDocuments(summary.documents()),
+                summary.representativePhone(),
+                summary.representativeEmail(),
+                summary.agentName(),
+                summary.corporateTypeCode(),
+                buildAiReviewDocuments(documents),
                 requestedAt
         );
     }
 
     // Core AI 심사 문서 목록 생성
     private List<CoreAiReviewRequest.CoreAiReviewDocumentRequest> buildAiReviewDocuments(
-            List<KycDocumentResponse> documents // 제출 문서 목록
+            List<KycDocument> documents // 제출 문서 목록
     ) {
         if (documents == null) {
             return List.of();
         }
         return documents.stream()
-                .filter(document -> KyvcEnums.DocumentUploadStatus.UPLOADED.name().equals(document.uploadStatus()))
+                .filter(document -> KyvcEnums.DocumentUploadStatus.UPLOADED == document.getUploadStatus())
                 .map(document -> new CoreAiReviewRequest.CoreAiReviewDocumentRequest(
-                        document.documentId(),
-                        document.documentTypeCode(),
-                        document.documentHash(),
-                        document.mimeType(),
-                        document.fileSize()
+                        document.getDocumentId(),
+                        document.getDocumentTypeCode(),
+                        document.getDocumentHash(),
+                        document.getFileName(),
+                        document.getMimeType(),
+                        document.getFilePath(),
+                        loadDocumentContentBase64(document),
+                        document.getFileSize()
                 ))
                 .toList();
+    }
+
+    // Core 전송용 문서 원문 Base64 생성
+    private String loadDocumentContentBase64(
+            KycDocument document // Core 심사 대상 문서
+    ) {
+        try (InputStream inputStream = documentStorage.load(document.getFilePath()).resource().getInputStream()) {
+            return Base64.getEncoder().encodeToString(inputStream.readAllBytes());
+        } catch (IOException exception) {
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_NOT_FOUND, exception);
+        }
     }
 
     // JSON 직렬화
@@ -461,13 +491,16 @@ public class KycSubmissionService {
     ) {
         KyvcEnums.AiReviewStatus aiReviewStatus = resolveAiReviewStatus(coreAiReviewResponse);
         String detailJson = toJson(coreAiReviewResponse); // AI 심사 메타데이터 JSON
+        BigDecimal confidenceScore = coreAiReviewResponse.confidenceScore() == null
+                ? DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE
+                : coreAiReviewResponse.confidenceScore(); // AI 신뢰도 점수
         if (KyvcEnums.AiReviewStatus.FAILED == aiReviewStatus) {
             kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
             return;
         }
         if (KyvcEnums.AiReviewStatus.SUCCESS == aiReviewStatus) {
             kycApplication.completeAiReviewAsManualReview(
-                    DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE,
+                    confidenceScore,
                     coreAiReviewResponse.message(),
                     detailJson,
                     AI_REVIEW_MANUAL_REASON
@@ -475,7 +508,7 @@ public class KycSubmissionService {
             return;
         }
         kycApplication.completeAiReviewAsLowConfidenceManualReview(
-                DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE,
+                confidenceScore,
                 coreAiReviewResponse.message(),
                 detailJson,
                 AI_REVIEW_MANUAL_REASON

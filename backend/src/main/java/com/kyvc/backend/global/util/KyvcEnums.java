@@ -157,7 +157,8 @@ public final class KyvcEnums {
         VALID, // 유효
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
-        EXPIRED // 만료
+        EXPIRED, // 만료
+        FAILED // 실패
     }
 
     // VP 요청 유형
@@ -443,6 +444,8 @@ public final class KyvcEnums {
     public enum CoreRequestType {
         AI_REVIEW, // AI 심사
         VC_ISSUE, // VC 발급
+        VC_REISSUE, // VC 재발급
+        VC_REVOKE, // VC 폐기
         VC_STATUS_CHECK, // VC 상태 조회
         VP_VERIFY, // VP 검증
         XRPL_TX // XRPL 트랜잭션

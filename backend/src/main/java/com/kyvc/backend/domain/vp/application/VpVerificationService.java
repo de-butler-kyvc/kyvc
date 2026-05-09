@@ -89,7 +89,6 @@ public class VpVerificationService {
     ) {
         AuthContext authContext = resolveAuthContext(userDetails);
         VpVerification vpVerification = getOwnedVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
-        validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         return toVpRequestResponse(vpVerification);
     }
 
@@ -139,9 +138,20 @@ public class VpVerificationService {
         vpVerification.markPresented(credential.getCredentialId(), vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
         CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, credential, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestDto));
+        coreRequestService.markRunning(coreRequest.getCoreRequestId());
 
         try {
+            logEventLogger.info(
+                    "core.call.started",
+                    "Core VP verification call started",
+                    createBaseLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId())
+            );
             CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerification(coreRequestDto, request.vpJwt());
+            logEventLogger.info(
+                    "core.call.completed",
+                    "Core VP verification call completed",
+                    createBaseLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId())
+            );
             applyCoreVerificationResult(vpVerification, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
             VpVerification saved = vpVerificationRepository.save(vpVerification);
@@ -196,6 +206,8 @@ public class VpVerificationService {
                 vpVerification.getChallenge(),
                 vpVerification.getRequestNonce(),
                 vpVerification.getExpiresAt(),
+                vpVerification.isExpired(LocalDateTime.now()),
+                !vpVerification.isRequested(),
                 enumName(vpVerification.getVpVerificationStatus()),
                 toNullableVerificationResultResponse(vpVerification, null),
                 vpVerification.getVerifiedAt()

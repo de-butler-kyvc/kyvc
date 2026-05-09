@@ -184,7 +184,7 @@ class VpVerificationServiceTest {
     }
 
     @Test
-    void getVpRequest_throwsWhenRequestExpired() {
+    void getVpRequest_returnsExpiredFlagWhenRequestExpired() {
         VpVerification vpVerification = createRequestedVpVerification(
                 21L,
                 10L,
@@ -195,12 +195,11 @@ class VpVerificationServiceTest {
         );
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
-        ApiException exception = assertThrows(
-                ApiException.class,
-                () -> service.getVpRequest(userDetails(), "vp-req-001")
-        );
+        VpRequestResponse response = service.getVpRequest(userDetails(), "vp-req-001");
 
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_EXPIRED);
+        assertThat(response.requestId()).isEqualTo("vp-req-001");
+        assertThat(response.expired()).isTrue();
+        assertThat(response.submitted()).isFalse();
     }
 
     @Test

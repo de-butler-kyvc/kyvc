@@ -32,6 +32,10 @@ public class InternalApiKeyFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request // 요청 정보
     ) {
         String requestPath = request.getRequestURI(); // 요청 경로
+        if ("GET".equalsIgnoreCase(request.getMethod())
+                && "/api/internal/core/health".equals(requestPath)) {
+            return true;
+        }
         return !isInternalPath(requestPath);
     }
 

@@ -13,6 +13,7 @@ import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
 import com.kyvc.backend.global.util.KyvcEnums;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 // Core 미구현 API Mock 응답 팩토리
@@ -26,6 +27,9 @@ public class CoreMockResponseFactory {
         return new CoreAiReviewResponse(
                 request.coreRequestId(),
                 KyvcEnums.AiReviewStatus.LOW_CONFIDENCE.name(),
+                "MANUAL_REVIEW_REQUIRED",
+                "mock-" + request.coreRequestId(),
+                BigDecimal.ZERO,
                 "Core AI API가 없어 개발용 Mock AI 심사 요청을 처리했습니다.",
                 LocalDateTime.now()
         );

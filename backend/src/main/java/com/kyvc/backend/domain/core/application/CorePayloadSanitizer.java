@@ -41,6 +41,7 @@ public class CorePayloadSanitizer {
             "agentphone",
             "agentemail",
             "agentauthorityscope",
+            "contentbase64",
             "holderdid",
             "holderaccount",
             "holderxrpladdress",

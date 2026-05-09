@@ -18,7 +18,6 @@ public class CoreAdapterConfig {
     ) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory(); // HTTP 요청 팩토리
         requestFactory.setConnectTimeout(coreProperties.getConnectTimeoutMillis());
-        requestFactory.setConnectTimeout(coreProperties.getConnectTimeoutMillis());
         requestFactory.setReadTimeout(coreProperties.getReadTimeoutMillis());
 
         RestClient.Builder builder = RestClient.builder()

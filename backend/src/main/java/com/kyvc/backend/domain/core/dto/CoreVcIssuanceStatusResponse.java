@@ -18,7 +18,7 @@ public record CoreVcIssuanceStatusResponse(
         String coreRequestId, // Core 요청 ID
         @Schema(description = "처리 상태", example = "ISSUING")
         String status, // 처리 상태
-        @Schema(description = "처리 메시지", example = "VC issuance is in progress in stub core.")
+        @Schema(description = "처리 메시지", example = "VC issuance status is stored in backend DB.")
         String message, // 처리 메시지
         @Schema(description = "조회 시각", example = "2026-05-06T10:11:00")
         LocalDateTime checkedAt // 조회 시각

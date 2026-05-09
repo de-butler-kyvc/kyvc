@@ -11,11 +11,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 @Schema(description = "Core 헬스 체크 응답")
 public record CoreHealthResponse(
-        @Schema(description = "Core 연동 모드", example = "STUB")
+        @Schema(description = "Core 연동 모드", example = "HTTP")
         String coreMode, // Core 연동 모드
         @Schema(description = "Core 가용 여부", example = "true")
         boolean available, // Core 가용 여부
-        @Schema(description = "Core 상태 메시지", example = "Core is not implemented. StubCoreAdapter is active.")
+        @Schema(description = "Core 상태 메시지", example = "kyvc-core:ok (dev)")
         String message // Core 상태 메시지
 ) {
 }
