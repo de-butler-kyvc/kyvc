@@ -1,8 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
-  "https://dev-api-kyvc.khuoo.synology.me";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 const TOKEN_KEY = "kyvc.accessToken";
 const REFRESH_KEY = "kyvc.refreshToken";
 
@@ -76,7 +75,7 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzIiwiZW1haWwiOiJ0ZXN0QGFiYy5jb20iLCJ1c2VyVHlwZSI6IkNPUlBPUkFURV9VU0VSIiwicm9sZXMiOlsiUk9MRV9DT1JQT1JBVEVfVVNFUiJdLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJpc3MiOiJreXZjLWJhY2tlbmQtZGV2IiwiaWF0IjoxNzc4MzEwODA5LCJleHAiOjE3NzgzMTI2MDksImp0aSI6IjE5Yjk3NjUyLWNjMDMtNGQwZC04NGU3LTNjMWE4YTkzNDlmNyJ9.paaLSpZCAcwijztuxRwaFpriebM3cJeyYNFHASrveD4';
+  const token = session.token;
   if (token) {
     config.headers.set("Authorization", `Bearer ${token}`);
   }
