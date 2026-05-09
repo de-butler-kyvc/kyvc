@@ -222,7 +222,7 @@ public class VpVerification {
             LocalDateTime verifiedAt // 검증 일시
     ) {
         applyVerificationResult(
-                KyvcEnums.VpVerificationStatus.FAILED,
+                KyvcEnums.VpVerificationStatus.INVALID,
                 resultSummary,
                 verifiedAt,
                 KyvcEnums.Yn.N
@@ -248,7 +248,7 @@ public class VpVerification {
             LocalDateTime verifiedAt // 검증 일시
     ) {
         applyVerificationResult(
-                KyvcEnums.VpVerificationStatus.INVALID,
+                KyvcEnums.VpVerificationStatus.FAILED,
                 resultSummary,
                 verifiedAt,
                 KyvcEnums.Yn.N
