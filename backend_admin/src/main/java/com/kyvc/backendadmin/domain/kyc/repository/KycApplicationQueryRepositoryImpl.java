@@ -107,6 +107,7 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                        kyc.corporate_type_code,
                        c.corporate_id,
                        c.corporate_name,
+                       c.corporate_phone,
                        c.business_registration_no,
                        c.corporate_registration_no,
                        c.representative_name,
@@ -187,12 +188,20 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 )
                 select kyc.kyc_id,
                        kyc.corporate_id,
+                       kyc.applicant_user_id,
+                       kyc.corporate_type_code,
                        corporate.corporate_name,
                        corporate.business_registration_no,
                        corporate.representative_name,
                        kyc.kyc_status_code,
                        kyc.ai_review_status_code,
                        kyc.ai_review_result_code,
+                       kyc.ai_confidence_score,
+                       kyc.ai_review_summary,
+                       kyc.ai_review_reason_code,
+                       kyc.reject_reason_code,
+                       kyc.manual_review_reason,
+                       kyc.reject_reason,
                        coalesce(document_summary.document_count, 0) as document_count,
                        latest_credential.credential_status_code,
                        kyc.submitted_at,
@@ -305,9 +314,10 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toString(row[14]),
                 toString(row[15]),
                 toString(row[16]),
-                toLong(row[17]),
-                toString(row[18]),
-                toLocalDateTime(row[19])
+                toString(row[17]),
+                toLong(row[18]),
+                toString(row[19]),
+                toLocalDateTime(row[20])
         );
     }
 
@@ -316,21 +326,29 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
         return new AdminKycApplicationDetailResponse(
                 toLong(row[0]),
                 toLong(row[1]),
-                toString(row[2]),
+                toLong(row[2]),
                 toString(row[3]),
                 toString(row[4]),
                 toString(row[5]),
                 toString(row[6]),
                 toString(row[7]),
-                toLong(row[8]),
+                toString(row[8]),
                 toString(row[9]),
-                toLocalDateTime(row[10]),
-                toLocalDateTime(row[11]),
+                toBigDecimal(row[10]),
+                toString(row[11]),
                 toString(row[12]),
                 toString(row[13]),
                 toString(row[14]),
                 toString(row[15]),
-                toLocalDateTime(row[16])
+                toLong(row[16]),
+                toString(row[17]),
+                toLocalDateTime(row[18]),
+                toLocalDateTime(row[19]),
+                toString(row[20]),
+                toString(row[21]),
+                toString(row[22]),
+                toString(row[23]),
+                toLocalDateTime(row[24])
         );
     }
 

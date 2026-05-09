@@ -13,6 +13,7 @@ public record AdminAuditLogSearchRequest(
         String actionType,
         String targetType,
         Long targetId,
+        String keyword,
         LocalDateTime from,
         LocalDateTime to
 ) {
@@ -28,6 +29,7 @@ public record AdminAuditLogSearchRequest(
             String actionType,
             String targetType,
             Long targetId,
+            String keyword,
             LocalDateTime from,
             LocalDateTime to
     ) {
@@ -41,6 +43,7 @@ public record AdminAuditLogSearchRequest(
                 actionType,
                 targetType,
                 targetId,
+                keyword,
                 from,
                 to
         );

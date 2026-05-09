@@ -29,29 +29,29 @@ public record AiReviewAgentAuthorityResponse(
             @Schema(description = "대리인명", example = "김대리")
             String agentName,
 
-            /** 위임장 존재 여부 */
-            @Schema(description = "위임장 존재 여부", example = "true")
-            Boolean hasPowerOfAttorney,
-
-            /** 서명 존재 여부 */
-            @Schema(description = "서명 존재 여부", example = "true")
-            Boolean hasSignature,
-
-            /** 직인 존재 여부 */
-            @Schema(description = "직인 존재 여부", example = "true")
-            Boolean hasSeal,
-
             /** 권한 범위 */
             @Schema(description = "권한 범위", example = "KYC 신청 및 보완 서류 제출")
             String authorityScope,
 
-            /** 유효 권한 여부 */
-            @Schema(description = "유효 권한 여부", example = "true")
-            Boolean validAuthority,
+            /** 서명 검증 여부 */
+            @Schema(description = "서명 검증 여부", example = "Y")
+            String signatureVerifiedYn,
 
-            /** 판단 신뢰도 */
-            @Schema(description = "판단 신뢰도", example = "90.00")
-            BigDecimal confidence
+            /** 직인 검증 여부 */
+            @Schema(description = "직인 검증 여부", example = "Y")
+            String sealVerifiedYn,
+
+            /** 권한 유효 여부 */
+            @Schema(description = "권한 유효 여부", example = "Y")
+            String authorityValidYn,
+
+            /** 신뢰도 점수 */
+            @Schema(description = "신뢰도 점수", example = "90.00")
+            BigDecimal confidenceScore,
+
+            /** 판단 사유 */
+            @Schema(description = "판단 사유", example = "위임장에 신청 권한과 서명이 확인되었습니다.")
+            String judgementReason
     ) {
     }
 }

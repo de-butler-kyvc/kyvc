@@ -32,6 +32,29 @@ public class User {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
+    @Column(name = "user_name", length = 100)
+    private String userName;
+
+    @Column(name = "phone", length = 50)
+    private String phone;
+
+    @Column(name = "onboarding_corporate_name")
+    private String onboardingCorporateName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "notification_enabled_yn", length = 1)
+    private KyvcEnums.Yn notificationEnabledYn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mfa_enabled_yn", length = 1)
+    private KyvcEnums.Yn mfaEnabledYn;
+
+    @Column(name = "mfa_type_code", length = 30)
+    private String mfaTypeCode;
+
+    @Column(name = "last_password_changed_at")
+    private LocalDateTime lastPasswordChangedAt;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
@@ -59,6 +82,9 @@ public class User {
         User user = new User();
         user.email = email;
         user.passwordHash = passwordHash;
+        user.notificationEnabledYn = KyvcEnums.Yn.Y;
+        user.mfaEnabledYn = KyvcEnums.Yn.N;
+        user.lastPasswordChangedAt = LocalDateTime.now();
         user.userTypeCode = KyvcEnums.UserType.CORPORATE_USER;
         user.userStatusCode = KyvcEnums.UserStatus.ACTIVE;
         return user;

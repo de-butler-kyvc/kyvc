@@ -53,9 +53,13 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 %s
                 select u.user_id,
                        u.email,
+                       u.user_name,
+                       u.phone,
+                       u.onboarding_corporate_name,
                        u.user_status_code,
                        c.corporate_id,
                        c.corporate_name,
+                       c.corporate_phone,
                        c.corporate_status_code,
                        lk.kyc_id,
                        lk.kyc_status_code,
@@ -97,12 +101,16 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 %s
                 select u.user_id,
                        u.email,
+                       u.user_name,
+                       u.phone,
+                       u.onboarding_corporate_name,
                        u.user_type_code,
                        u.user_status_code,
                        u.created_at,
                        u.updated_at,
                        c.corporate_id,
                        c.corporate_name,
+                       c.corporate_phone,
                        c.business_registration_no,
                        c.representative_name,
                        c.corporate_status_code,
@@ -133,8 +141,12 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 select c.corporate_id,
                        c.user_id,
                        u.email,
+                       u.user_name,
+                       u.phone,
+                       u.onboarding_corporate_name,
                        u.user_status_code,
                        c.corporate_name,
+                       c.corporate_phone,
                        c.business_registration_no,
                        c.corporate_registration_no,
                        c.representative_name,
@@ -176,6 +188,7 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
             where.append("""
                      and (
                          lower(u.email) like :keyword
+                         or lower(u.user_name) like :keyword
                          or lower(c.corporate_name) like :keyword
                          or lower(c.business_registration_no) like :keyword
                      )
@@ -203,24 +216,29 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 toLong(row[0]),
                 toString(row[1]),
                 toString(row[2]),
-                toLong(row[3]),
+                toString(row[3]),
                 toString(row[4]),
                 toString(row[5]),
                 toLong(row[6]),
                 toString(row[7]),
-                toLocalDateTime(row[8])
+                toString(row[8]),
+                toString(row[9]),
+                toLong(row[10]),
+                toString(row[11]),
+                toLocalDateTime(row[12])
         );
     }
 
     private AdminCorporateUserDetailResponse toUserDetail(Object[] row) {
-        AdminCorporateUserDetailResponse.CorporateInfo corporate = row[6] == null
+        AdminCorporateUserDetailResponse.CorporateInfo corporate = row[9] == null
                 ? null
                 : new AdminCorporateUserDetailResponse.CorporateInfo(
-                toLong(row[6]),
-                toString(row[7]),
-                toString(row[8]),
-                toString(row[9]),
-                toString(row[10])
+                toLong(row[9]),
+                toString(row[10]),
+                toString(row[11]),
+                toString(row[12]),
+                toString(row[13]),
+                toString(row[14])
         );
         return new AdminCorporateUserDetailResponse(
                 new AdminCorporateUserDetailResponse.UserInfo(
@@ -228,11 +246,14 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                         toString(row[1]),
                         toString(row[2]),
                         toString(row[3]),
-                        toLocalDateTime(row[4]),
-                        toLocalDateTime(row[5])
+                        toString(row[4]),
+                        toString(row[5]),
+                        toString(row[6]),
+                        toLocalDateTime(row[7]),
+                        toLocalDateTime(row[8])
                 ),
                 corporate,
-                toKycInfo(row, 11)
+                toKycInfo(row, 15)
         );
     }
 
@@ -255,9 +276,13 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 toString(row[14]),
                 toString(row[15]),
                 toString(row[16]),
-                toKycInfo(row, 17),
-                toLocalDateTime(row[23]),
-                toLocalDateTime(row[24])
+                toString(row[17]),
+                toString(row[18]),
+                toString(row[19]),
+                toString(row[20]),
+                toKycInfo(row, 21),
+                toLocalDateTime(row[27]),
+                toLocalDateTime(row[28])
         );
     }
 

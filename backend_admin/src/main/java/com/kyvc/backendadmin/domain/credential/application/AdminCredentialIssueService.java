@@ -4,8 +4,8 @@ import com.kyvc.backendadmin.domain.audit.application.AuditLogWriter;
 import com.kyvc.backendadmin.domain.auth.domain.AuthToken;
 import com.kyvc.backendadmin.domain.auth.repository.AuthTokenRepository;
 import com.kyvc.backendadmin.domain.core.application.CoreRequestService;
-import com.kyvc.backendadmin.domain.credential.dto.CredentialIssueRequest;
-import com.kyvc.backendadmin.domain.credential.dto.CredentialIssueResponse;
+import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialIssueRequest;
+import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialIssueResponse;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository;
 import com.kyvc.backendadmin.domain.kyc.domain.KycApplication;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationRepository;
@@ -19,6 +19,7 @@ import com.kyvc.backendadmin.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -29,6 +30,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AdminCredentialIssueService {
+
+    private static final String ACTION_VC_ISSUE_REQUESTED = "VC_ISSUE_REQUESTED";
 
     private final KycApplicationRepository kycApplicationRepository;
     private final CredentialRepository credentialRepository;
@@ -45,15 +48,17 @@ public class AdminCredentialIssueService {
      * @return VC 발급 요청 결과
      */
     @Transactional
-    public CredentialIssueResponse issue(Long kycId, CredentialIssueRequest request) {
+    public AdminCredentialIssueResponse issue(Long kycId, AdminCredentialIssueRequest request) {
         KycApplication application = kycApplicationRepository.findById(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
         validateApproved(application);
-        KyvcEnums.CredentialType credentialType = parseCredentialType(request.credentialType());
         validateDuplicateCredential(kycId);
-        AuthToken mfaToken = validateMfaToken(request.mfaToken());
 
-        // credentials row 생성: 실제 VC 발급 전까지 ISSUING 상태로 발급 대기 row를 만든다.
+        Long adminId = SecurityUtil.getCurrentAdminId();
+        AuthToken mfaToken = validateMfaToken(request.mfaToken(), adminId);
+        KyvcEnums.CredentialType credentialType = KyvcEnums.CredentialType.KYC_CREDENTIAL;
+        String comment = StringUtils.hasText(request.comment()) ? request.comment() : "KYC 승인 완료에 따른 VC 발급";
+
         Long credentialId = credentialRepository.createIssuing(
                 application.getCorporateId(),
                 kycId,
@@ -63,25 +68,42 @@ public class AdminCredentialIssueService {
                 KyvcEnums.CredentialStatus.ISSUING
         );
 
-        // core_requests row 생성: 실제 VC 발급은 Core에서 처리하므로 Credential 대상 VC_ISSUE 요청만 생성한다.
         String coreRequestId = coreRequestService.createVcIssueRequest(credentialId, kycId, credentialType);
 
-        Long adminId = SecurityUtil.getCurrentAdminId();
-        // kyc_review_histories 기록: VC 발급 요청 이벤트를 KYC 심사 이력에 남긴다.
+        // Credential 발급 요청과 상태 전이를 별도 테이블에 남겨 Core 처리 전후 추적이 가능하게 한다.
+        credentialRepository.saveCredentialRequest(
+                credentialId,
+                KyvcEnums.CoreRequestType.VC_ISSUE.name(),
+                "REQUESTED",
+                KyvcEnums.ActorType.ADMIN.name(),
+                adminId,
+                null,
+                comment,
+                coreRequestId
+        );
+        credentialRepository.saveStatusHistory(
+                credentialId,
+                null,
+                KyvcEnums.CredentialStatus.ISSUING.name(),
+                KyvcEnums.ActorType.ADMIN.name(),
+                adminId,
+                null,
+                comment
+        );
+
         adminReviewRepository.saveReviewHistory(KycReviewHistory.create(
                 kycId,
                 adminId,
                 KyvcEnums.ReviewActionType.ISSUE_VC,
                 application.getKycStatusCode(),
-                KyvcEnums.KycStatus.VC_ISSUED,
+                application.getKycStatusCode(),
                 "VC 발급 요청 생성. credentialId=%d, coreRequestId=%s".formatted(credentialId, coreRequestId)
         ));
 
-        // audit_logs 기록: 관리자에 의한 VC 발급 요청과 Core 요청 ID를 감사 로그에 남긴다.
         auditLogWriter.write(
                 KyvcEnums.ActorType.ADMIN,
                 adminId,
-                "VC_ISSUE_REQUESTED",
+                ACTION_VC_ISSUE_REQUESTED,
                 KyvcEnums.AuditTargetType.CREDENTIAL,
                 credentialId,
                 "VC 발급 요청 생성. kycId=%d, coreRequestId=%s".formatted(kycId, coreRequestId),
@@ -89,32 +111,32 @@ public class AdminCredentialIssueService {
                 KyvcEnums.CredentialStatus.ISSUING.name()
         );
 
+        // MFA 세션 토큰은 중요 작업 1회 승인 용도이므로 성공적으로 요청을 생성한 뒤 사용 완료 처리한다.
         mfaToken.markUsed(LocalDateTime.now());
-        return new CredentialIssueResponse(
+        return new AdminCredentialIssueResponse(
                 credentialId,
-                coreRequestId,
-                credentialType.name(),
-                KyvcEnums.CredentialStatus.ISSUING.name()
+                KyvcEnums.CredentialStatus.ISSUING.name(),
+                true,
+                coreRequestId
         );
     }
 
     private void validateApproved(KycApplication application) {
-        // KYC APPROVED 상태 검증: 승인된 KYC 신청 건만 VC 발급을 요청할 수 있다.
+        // VC 발급은 최종 승인된 KYC 신청 건에서만 허용한다.
         if (KyvcEnums.KycStatus.APPROVED != application.getKycStatusCode()) {
             throw new ApiException(ErrorCode.INVALID_CREDENTIAL_ISSUE_STATUS);
         }
     }
 
     private void validateDuplicateCredential(Long kycId) {
-        // 중복 VC 발급 요청 방지: 이미 발급 중이거나 유효한 Credential이 있으면 새 요청을 막는다.
+        // 이미 발급 중이거나 유효한 Credential이 있으면 중복 VC 발급 요청을 차단한다.
         if (credentialRepository.existsIssuingOrValidByKycId(kycId)) {
             throw new ApiException(ErrorCode.INVALID_CREDENTIAL_ISSUE_STATUS, "이미 발급 중이거나 유효한 VC가 있습니다.");
         }
     }
 
-    private AuthToken validateMfaToken(String rawMfaToken) {
-        // MFA 토큰 검증: 현재 관리자 소유의 ACTIVE MFA_SESSION 토큰만 중요한 VC 발급 요청에 사용할 수 있다.
-        Long adminId = SecurityUtil.getCurrentAdminId();
+    private AuthToken validateMfaToken(String rawMfaToken, Long adminId) {
+        // MFA 토큰 원문은 저장/로그 출력하지 않고 해시로만 조회한다.
         AuthToken authToken = authTokenRepository
                 .findByTokenHashAndTokenType(TokenHashUtil.sha256(rawMfaToken), KyvcEnums.TokenType.MFA_SESSION)
                 .orElseThrow(() -> new ApiException(ErrorCode.MFA_TOKEN_INVALID));
@@ -125,16 +147,5 @@ public class AdminCredentialIssueService {
             throw new ApiException(ErrorCode.MFA_TOKEN_INVALID);
         }
         return authToken;
-    }
-
-    private KyvcEnums.CredentialType parseCredentialType(String credentialType) {
-        if (credentialType == null || credentialType.isBlank()) {
-            return KyvcEnums.CredentialType.KYC_CREDENTIAL;
-        }
-        try {
-            return KyvcEnums.CredentialType.valueOf(credentialType);
-        } catch (RuntimeException exception) {
-            throw new ApiException(ErrorCode.INVALID_CODE_VALUE, "credentialType이 유효하지 않습니다.");
-        }
     }
 }

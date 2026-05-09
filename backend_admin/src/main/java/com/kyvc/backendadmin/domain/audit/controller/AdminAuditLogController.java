@@ -52,7 +52,7 @@ public class AdminAuditLogController {
             @Parameter(description = "페이지 크기", example = "20")
             @RequestParam(required = false) Integer size,
             @Parameter(description = "행위자 유형", example = "ADMIN")
-            @RequestParam(required = false) String actorType,
+            @RequestParam(required = false, name = "actorTypeCode") String actorType,
             @Parameter(description = "행위자 ID", example = "1")
             @RequestParam(required = false) Long actorId,
             @Parameter(description = "작업 유형", example = "COMMON_CODE_CREATE")
@@ -61,6 +61,8 @@ public class AdminAuditLogController {
             @RequestParam(required = false) String targetType,
             @Parameter(description = "대상 ID", example = "10")
             @RequestParam(required = false) Long targetId,
+            @Parameter(description = "요청 요약 검색어", example = "Verifier")
+            @RequestParam(required = false) String keyword,
             @Parameter(description = "조회 시작 일시", example = "2026-05-01T00:00:00")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             @RequestParam(required = false) LocalDateTime from,
@@ -76,6 +78,7 @@ public class AdminAuditLogController {
                 actionType,
                 targetType,
                 targetId,
+                keyword,
                 from,
                 to
         )));

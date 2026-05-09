@@ -18,10 +18,18 @@ public record AdminCorporateDetailResponse(
         Long userId,
         @Schema(description = "사용자 이메일", example = "corp@kyvc.local")
         String userEmail,
+        @Schema(description = "사용자 이름", example = "홍길동")
+        String userName,
+        @Schema(description = "사용자 연락처", example = "010-1234-5678")
+        String phone,
+        @Schema(description = "온보딩 법인명", example = "케이와이브이씨")
+        String onboardingCorporateName,
         @Schema(description = "사용자 상태", example = "ACTIVE")
         String userStatus,
         @Schema(description = "법인명", example = "케이와이브이씨")
         String corporateName,
+        @Schema(description = "법인 연락처", example = "02-1234-5678")
+        String corporatePhone,
         @Schema(description = "사업자등록번호", example = "123-45-67890")
         String businessRegistrationNo,
         @Schema(description = "법인등록번호", example = "110111-1234567")

@@ -32,6 +32,8 @@ public class KycDocumentQueryRepositoryImpl implements KycDocumentQueryRepositor
                        document.mime_type,
                        document.file_size,
                        document.upload_status_code,
+                       document.uploaded_by_type_code,
+                       document.uploaded_by_user_id,
                        document.uploaded_at
                 from kyc_documents document
                 left join common_code_groups code_group
@@ -75,7 +77,9 @@ public class KycDocumentQueryRepositoryImpl implements KycDocumentQueryRepositor
                 toString(row[4]),
                 toLong(row[5]),
                 toString(row[6]),
-                toLocalDateTime(row[7])
+                toString(row[7]),
+                toLong(row[8]),
+                toLocalDateTime(row[9])
         );
     }
 

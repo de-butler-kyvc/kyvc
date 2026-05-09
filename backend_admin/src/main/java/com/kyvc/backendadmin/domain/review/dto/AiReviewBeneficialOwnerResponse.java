@@ -32,19 +32,23 @@ public record AiReviewBeneficialOwnerResponse(
 
             /** 지분율 */
             @Schema(description = "지분율", example = "35.50")
-            BigDecimal shareRatio,
+            BigDecimal ownershipRatio,
+
+            /** 지배 유형 코드 */
+            @Schema(description = "지배 유형 코드", example = "SHAREHOLDER")
+            String controlTypeCode,
 
             /** 실제소유자 여부 */
-            @Schema(description = "실제소유자 여부", example = "true")
-            Boolean isBeneficialOwner,
+            @Schema(description = "실제소유자 여부", example = "Y")
+            String beneficialOwnerYn,
 
-            /** 판단 근거 */
-            @Schema(description = "판단 근거", example = "25% 이상 지분 보유")
-            String basis,
+            /** 신뢰도 점수 */
+            @Schema(description = "신뢰도 점수", example = "91.20")
+            BigDecimal confidenceScore,
 
-            /** 판단 신뢰도 */
-            @Schema(description = "판단 신뢰도", example = "91.20")
-            BigDecimal confidence
+            /** 판단 사유 */
+            @Schema(description = "판단 사유", example = "25% 이상 지분을 보유했습니다.")
+            String judgementReason
     ) {
     }
 }

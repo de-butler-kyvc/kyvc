@@ -13,11 +13,11 @@ public record AiReviewRetryRequest(
 
         /** AI 재심사 요청 사유 */
         @NotBlank(message = "reason은 필수입니다.")
-        @Schema(description = "AI 재심사 요청 사유", example = "제출 문서 보완 후 재심사가 필요합니다.")
+        @Schema(description = "AI 재심사 요청 사유", example = "문서 불일치 재확인")
         String reason,
 
         /** 재심사 대상 문서 ID 목록 */
-        @Schema(description = "재심사 대상 문서 ID 목록", example = "[1, 2, 3]")
+        @Schema(description = "재심사 대상 문서 ID 목록", example = "[1, 2]")
         List<Long> documentIds
 ) {
 }

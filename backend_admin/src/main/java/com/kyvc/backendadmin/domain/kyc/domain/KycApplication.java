@@ -65,11 +65,41 @@ public class KycApplication {
     @Column(name = "ai_review_summary", columnDefinition = "TEXT")
     private String aiReviewSummary;
 
+    @Column(name = "ai_review_detail_json", columnDefinition = "TEXT")
+    private String aiReviewDetailJson;
+
     @Column(name = "manual_review_reason", columnDefinition = "TEXT")
     private String manualReviewReason;
 
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;
+
+    @Column(name = "applied_ai_policy_id")
+    private Long appliedAiPolicyId;
+
+    @Column(name = "ai_review_reason_code", length = 100)
+    private String aiReviewReasonCode;
+
+    @Column(name = "reject_reason_code", length = 100)
+    private String rejectReasonCode;
+
+    @Column(name = "application_channel_code", length = 30)
+    private String applicationChannelCode;
+
+    @Column(name = "finance_institution_code", length = 50)
+    private String financeInstitutionCode;
+
+    @Column(name = "finance_branch_code", length = 50)
+    private String financeBranchCode;
+
+    @Column(name = "finance_staff_user_id")
+    private Long financeStaffUserId;
+
+    @Column(name = "finance_customer_no", length = 100)
+    private String financeCustomerNo;
+
+    @Column(name = "visited_at")
+    private LocalDateTime visitedAt;
 
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;

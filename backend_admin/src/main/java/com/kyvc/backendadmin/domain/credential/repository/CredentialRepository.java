@@ -34,4 +34,50 @@ public interface CredentialRepository {
             String issuerDid,
             KyvcEnums.CredentialStatus status
     );
+
+    /**
+     * Credential 요청 이력을 저장합니다.
+     *
+     * @param credentialId Credential ID
+     * @param requestTypeCode 요청 유형 코드
+     * @param requestStatusCode 요청 상태 코드
+     * @param requestedByTypeCode 요청자 유형 코드
+     * @param requestedById 요청자 ID
+     * @param reasonCode 사유 코드
+     * @param reason 사유
+     * @param coreRequestId Core 요청 ID
+     * @return 생성된 요청 이력 ID
+     */
+    Long saveCredentialRequest(
+            Long credentialId,
+            String requestTypeCode,
+            String requestStatusCode,
+            String requestedByTypeCode,
+            Long requestedById,
+            String reasonCode,
+            String reason,
+            String coreRequestId
+    );
+
+    /**
+     * Credential 상태 변경 이력을 저장합니다.
+     *
+     * @param credentialId Credential ID
+     * @param beforeStatusCode 변경 전 상태 코드
+     * @param afterStatusCode 변경 후 상태 코드
+     * @param changedByTypeCode 변경자 유형 코드
+     * @param changedById 변경자 ID
+     * @param reasonCode 사유 코드
+     * @param reason 사유
+     * @return 생성된 상태 이력 ID
+     */
+    Long saveStatusHistory(
+            Long credentialId,
+            String beforeStatusCode,
+            String afterStatusCode,
+            String changedByTypeCode,
+            Long changedById,
+            String reasonCode,
+            String reason
+    );
 }

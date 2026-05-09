@@ -30,16 +30,37 @@ public class DashboardQueryRepositoryImpl implements DashboardQueryRepository {
         Map<String, Long> coreRequestStatusCounts = countByStatus("core_requests", "core_request_status_code");
         long totalKycCount = countAll("kyc_applications");
 
+        // 최근 KYC 10건 조회
+        Query recentKycQuery = entityManager().createNativeQuery("""
+                select k.kyc_id, c.corporate_name, k.kyc_status_code, k.submitted_at
+                from kyc_applications k
+                left join corporates c on k.corporate_id = c.corporate_id
+                order by coalesce(k.submitted_at, k.updated_at, k.created_at) desc
+                limit 10
+                """);
+        List<?> recentKycRows = recentKycQuery.getResultList();
+        List<AdminDashboardResponse.RecentKyc> recentKycs = recentKycRows.stream().map(row -> {
+            Object[] columns = (Object[]) row;
+            return new AdminDashboardResponse.RecentKyc(
+                    columns[0] == null ? null : ((Number) columns[0]).longValue(),
+                    columns[1] == null ? null : columns[1].toString(),
+                    columns[2] == null ? null : columns[2].toString(),
+                    columns[3] == null ? null : ((java.sql.Timestamp) columns[3]).toLocalDateTime()
+            );
+        }).toList();
+
         // count 결과를 DTO로 변환하는 부분: 화면에서 필요한 상태만 골라 응답 구조로 조립한다.
         return new AdminDashboardResponse(
                 new AdminDashboardResponse.KycSummary(
                         totalKycCount,
+                        count(kycStatusCounts, KyvcEnums.KycStatus.DRAFT.name()),
                         count(kycStatusCounts, KyvcEnums.KycStatus.SUBMITTED.name()),
                         count(kycStatusCounts, KyvcEnums.KycStatus.AI_REVIEWING.name()),
                         count(kycStatusCounts, KyvcEnums.KycStatus.MANUAL_REVIEW.name()),
                         count(kycStatusCounts, KyvcEnums.KycStatus.NEED_SUPPLEMENT.name()),
                         count(kycStatusCounts, KyvcEnums.KycStatus.APPROVED.name()),
-                        count(kycStatusCounts, KyvcEnums.KycStatus.REJECTED.name())
+                        count(kycStatusCounts, KyvcEnums.KycStatus.REJECTED.name()),
+                        count(kycStatusCounts, KyvcEnums.KycStatus.VC_ISSUED.name())
                 ),
                 new AdminDashboardResponse.AiReviewSummary(
                         count(aiReviewStatusCounts, KyvcEnums.AiReviewStatus.QUEUED.name()),
@@ -51,15 +72,20 @@ public class DashboardQueryRepositoryImpl implements DashboardQueryRepository {
                 new AdminDashboardResponse.VcSummary(
                         count(credentialStatusCounts, KyvcEnums.CredentialStatus.ISSUING.name()),
                         count(credentialStatusCounts, KyvcEnums.CredentialStatus.VALID.name()),
-                        count(credentialStatusCounts, "FAILED"),
-                        count(credentialStatusCounts, KyvcEnums.CredentialStatus.REVOKED.name())
+                        count(credentialStatusCounts, KyvcEnums.CredentialStatus.EXPIRED.name()),
+                        count(credentialStatusCounts, KyvcEnums.CredentialStatus.REVOKED.name()),
+                        count(credentialStatusCounts, KyvcEnums.CredentialStatus.SUSPENDED.name())
                 ),
                 new AdminDashboardResponse.CoreRequestSummary(
                         count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.QUEUED.name()),
+                        count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.REQUESTED.name()),
                         count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.PROCESSING.name()),
                         count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.SUCCESS.name()),
-                        count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.FAILED.name())
-                )
+                        count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.FAILED.name()),
+                        count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.CALLBACK_RECEIVED.name()),
+                        count(coreRequestStatusCounts, KyvcEnums.CoreRequestStatus.RETRYING.name())
+                ),
+                recentKycs
         );
     }
 
