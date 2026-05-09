@@ -1,10 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
-import { Logo } from "@/components/design/primitives";
+import { Checkbox, Logo } from "@/components/design/primitives";
 import { Icon } from "@/components/design/icons";
 import { ApiError, auth } from "@/lib/api";
 import {
@@ -15,16 +16,25 @@ import {
 
 type LoginForm = { email: string; password: string };
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const params = useSearchParams();
   const checkingSession = useGuestSessionGate();
+  const [error, setError] = useState<string | null>(null);
+  const [keepLogin, setKeepLogin] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting }
   } = useForm<LoginForm>({ defaultValues: { email: "", password: "" } });
+
+  useEffect(() => {
+    if (params.get("signup") === "ok") {
+      setNotice("회원가입이 완료되었습니다. 가입한 계정으로 로그인해 주세요.");
+    }
+  }, [params]);
 
   const onSubmit = handleSubmit(async ({ email, password }) => {
     setError(null);
@@ -53,15 +63,20 @@ export default function LoginPage() {
       </div>
 
       <div className="center-stage">
-        <div className="auth-card">
-          <h1 className="auth-title">KYvC 로그인</h1>
-          <p className="auth-subtitle">법인 사용자 / 금융사 / 모바일 Wallet 공용 로그인</p>
+        <form className="auth-card" onSubmit={onSubmit} noValidate>
+          <h1 className="auth-title">로그인</h1>
+          <p className="auth-subtitle">KYvC 서비스에 로그인하세요.</p>
 
-          <form onSubmit={onSubmit} className="col" noValidate>
+          {notice && (
+            <div className="info-box" style={{ marginBottom: 16 }}>
+              <div className="info-box-title">알림</div>
+              <div>{notice}</div>
+            </div>
+          )}
+
+          <div className="col" style={{ gap: 14 }}>
             <label className="field">
-              <span className="field-label">
-                이메일<span style={{ color: "var(--danger)" }}> *</span>
-              </span>
+              <span className="field-label">아이디</span>
               <div className="input-with-icon">
                 <span className="input-icon">
                   <Icon.Mail size={16} />
@@ -69,7 +84,8 @@ export default function LoginPage() {
                 <input
                   className={`input${errors.email ? " error" : ""}`}
                   type="email"
-                  placeholder="name@company.com"
+                  placeholder="user@company.co.kr"
+                  autoComplete="username"
                   {...register("email", {
                     required: "이메일을 입력해 주세요",
                     pattern: {
@@ -80,14 +96,14 @@ export default function LoginPage() {
                 />
               </div>
               {errors.email && (
-                <span className="field-error">{errors.email.message}</span>
+                <span className="field-error">
+                  <Icon.X size={12} /> {errors.email.message}
+                </span>
               )}
             </label>
 
             <label className="field">
-              <span className="field-label">
-                비밀번호<span style={{ color: "var(--danger)" }}> *</span>
-              </span>
+              <span className="field-label">비밀번호</span>
               <div className="input-with-icon">
                 <span className="input-icon">
                   <Icon.Lock size={16} />
@@ -96,13 +112,27 @@ export default function LoginPage() {
                   className={`input${errors.password ? " error" : ""}`}
                   type="password"
                   placeholder="••••••••"
-                  {...register("password", { required: "비밀번호를 입력해 주세요" })}
+                  autoComplete="current-password"
+                  {...register("password", {
+                    required: "비밀번호를 입력해 주세요"
+                  })}
                 />
               </div>
               {errors.password && (
-                <span className="field-error">{errors.password.message}</span>
+                <span className="field-error">
+                  <Icon.X size={12} /> {errors.password.message}
+                </span>
               )}
             </label>
+
+            <div className="row-between" style={{ marginTop: 4 }}>
+              <Checkbox checked={keepLogin} onChange={setKeepLogin}>
+                로그인 상태 유지
+              </Checkbox>
+              <Link className="link-button" href="/signup" prefetch={false}>
+                비밀번호 찾기
+              </Link>
+            </div>
 
             {error && (
               <div className="field-error" style={{ fontSize: 13 }}>
@@ -114,15 +144,39 @@ export default function LoginPage() {
               type="submit"
               className="btn btn-primary btn-block btn-lg"
               disabled={isSubmitting}
-              style={{ marginTop: 6 }}
             >
-              {isSubmitting ? "로그인 중..." : "로그인"}
+              {isSubmitting ? "확인 중..." : "로그인"}
             </button>
-          </form>
-        </div>
+
+            <div className="divider-text">또는</div>
+
+            <button
+              type="button"
+              className="btn btn-dark btn-block btn-lg"
+              onClick={() => setError("KYvC 법인증명서 로그인은 준비 중입니다.")}
+            >
+              <Icon.Shield size={16} /> KYvC 법인증명서 로그인
+            </button>
+
+            <div
+              className="text-center mt-8 text-muted"
+              style={{ fontSize: 13 }}
+            >
+              계정이 없으신가요? <Link href="/signup">회원가입</Link>
+            </div>
+          </div>
+        </form>
       </div>
 
       <div className="footer">© 2025 KYvC. All rights reserved.</div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<SessionGateSplash />}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

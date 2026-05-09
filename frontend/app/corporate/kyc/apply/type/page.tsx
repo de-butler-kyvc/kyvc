@@ -24,7 +24,28 @@ export default function KycApplyTypePage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setSelected(getStoredCorporateType());
+    let cancelled = false;
+    (async () => {
+      const storedType = getStoredCorporateType();
+      const existingKycId = getCurrentKycId();
+      if (existingKycId) {
+        try {
+          const detail = await kycApi.detail(existingKycId);
+          if (cancelled) return;
+          if (detail.corporateTypeCode) {
+            setSelected(detail.corporateTypeCode);
+            setStoredCorporateType(detail.corporateTypeCode);
+            return;
+          }
+        } catch {
+          // 신청을 찾지 못하면 저장된 유형으로 폴백
+        }
+      }
+      if (!cancelled) setSelected(storedType);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const onNext = async () => {
@@ -43,6 +64,7 @@ export default function KycApplyTypePage() {
         kycId = created.kycId;
         setCurrentKycId(kycId);
       } else {
+        // PUT /api/corporate/kyc/applications/{kycId}/corporate-type — changeCorporateType
         await kycApi.setCorporateType(kycId, selected);
       }
       router.push("/corporate/kyc/apply/docs");

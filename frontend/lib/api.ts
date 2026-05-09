@@ -131,8 +131,19 @@ export type LoginResponse = {
 export type SignupResponse = {
   userId: number;
   email: string;
+  userName?: string;
+  phone?: string;
+  corporateName?: string;
   userType?: string;
   userStatus?: string;
+};
+
+export type CorporateSignupBody = {
+  email: string;
+  password: string;
+  userName: string;
+  phone?: string;
+  corporateName: string;
 };
 
 /** GET /api/common/session — 백엔드 SessionResponse */
@@ -149,11 +160,32 @@ export type SessionResponse = {
   corporateRegistered?: boolean;
 };
 
+export type MfaChannel = "EMAIL";
+export type MfaPurpose =
+  | "LOGIN"
+  | "IMPORTANT_ACTION"
+  | "PASSWORD_RESET"
+  | "KYC_APPROVE"
+  | "KYC_REJECT"
+  | "VC_ISSUE"
+  | "POLICY_CHANGE";
+
+export type MfaChallengeResponse = {
+  challengeId: string;
+  expiresAt: string;
+  maskedTarget: string;
+};
+
+export type MfaVerifyResponse = {
+  verified: boolean;
+  mfaToken?: string;
+};
+
 export const auth = {
-  signup: (email: string, password: string) =>
+  signup: (body: CorporateSignupBody) =>
     api<SignupResponse>("/api/auth/signup/corporate", {
       method: "POST",
-      body: { email, password }
+      body
     }),
   login: (email: string, password: string) =>
     api<LoginResponse>("/api/auth/login", {
@@ -164,7 +196,17 @@ export const auth = {
     api<{ loggedOut: boolean }>("/api/auth/logout", {
       method: "POST"
     }),
-  session: () => api<SessionResponse>("/api/common/session")
+  session: () => api<SessionResponse>("/api/common/session"),
+  mfaChallenge: (channel: MfaChannel, purpose: MfaPurpose) =>
+    api<MfaChallengeResponse>("/api/auth/mfa/challenge", {
+      method: "POST",
+      body: { channel, purpose }
+    }),
+  mfaVerify: (challengeId: string, verificationCode: string) =>
+    api<MfaVerifyResponse>("/api/auth/mfa/verify", {
+      method: "POST",
+      body: { challengeId, verificationCode }
+    })
 };
 
 // ── Corporate ────────────────────────────────────────────────────────
