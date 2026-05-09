@@ -37,7 +37,7 @@ public class DevKycApprovalController {
      */
     @Operation(
             summary = "개발/E2E 테스트용 KYC 임시 승인",
-            description = "개발/E2E 테스트용 API입니다. 필요한 경우 CoreAdapter를 통해 VC 발급을 동기 요청하고, Core 응답 수신 후 업무 DB 상태를 저장합니다. Core callback은 사용하지 않습니다."
+            description = "개발/E2E 테스트용 API입니다. 필요한 경우 CoreAdapter를 통해 VC 발급을 동기 요청하고, Core 응답 수신 후 업무 DB 상태를 저장합니다."
     )
     @PostMapping("/applications/{kycId}/approve")
     public ResponseEntity<CommonResponse<DevKycApproveResponse>> approveForE2eTest(

@@ -214,7 +214,15 @@ public enum ErrorCode {
     // HTTP 409 - VC 발급 요청 불가
     CREDENTIAL_ISSUANCE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_ISSUANCE_NOT_ALLOWED", "현재 상태에서는 VC 발급을 요청할 수 없습니다."),
     // HTTP 409 - VC 발급 완료
-    CREDENTIAL_ISSUANCE_ALREADY_COMPLETED(HttpStatus.CONFLICT, "CREDENTIAL_ISSUANCE_ALREADY_COMPLETED", "이미 VC 발급이 완료되었습니다.");
+    CREDENTIAL_ISSUANCE_ALREADY_COMPLETED(HttpStatus.CONFLICT, "CREDENTIAL_ISSUANCE_ALREADY_COMPLETED", "이미 VC 발급이 완료되었습니다."),
+    // HTTP 409 - Credential 요청 중복
+    CREDENTIAL_REQUEST_DUPLICATED(HttpStatus.CONFLICT, "CREDENTIAL_REQUEST_DUPLICATED", "진행 중인 Credential 요청이 이미 존재합니다."),
+    // HTTP 409 - Credential 재발급 불가
+    CREDENTIAL_REISSUE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_REISSUE_NOT_ALLOWED", "현재 상태에서는 VC 재발급을 요청할 수 없습니다."),
+    // HTTP 409 - Credential 폐기 불가
+    CREDENTIAL_REVOKE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_REVOKE_NOT_ALLOWED", "현재 상태에서는 VC 폐기를 요청할 수 없습니다."),
+    // HTTP 404 - Credential 요청 이력 없음
+    CREDENTIAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_REQUEST_NOT_FOUND", "Credential 요청 이력을 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String code;

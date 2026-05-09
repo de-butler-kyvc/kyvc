@@ -89,7 +89,6 @@ public class VpVerificationService {
     ) {
         AuthContext authContext = resolveAuthContext(userDetails);
         VpVerification vpVerification = getOwnedVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
-        validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         return toVpRequestResponse(vpVerification);
     }
 
@@ -207,6 +206,8 @@ public class VpVerificationService {
                 vpVerification.getChallenge(),
                 vpVerification.getRequestNonce(),
                 vpVerification.getExpiresAt(),
+                vpVerification.isExpired(LocalDateTime.now()),
+                !vpVerification.isRequested(),
                 enumName(vpVerification.getVpVerificationStatus()),
                 toNullableVerificationResultResponse(vpVerification, null),
                 vpVerification.getVerifiedAt()

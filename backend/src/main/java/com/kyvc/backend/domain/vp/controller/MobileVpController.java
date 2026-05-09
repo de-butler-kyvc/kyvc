@@ -68,7 +68,7 @@ public class MobileVpController {
      */
     @Operation(
             summary = "모바일 VP 요청 조회",
-            description = "Core를 직접 호출하지 않고 backend DB에 저장된 상태와 결과를 조회합니다."
+            description = "모바일 앱이 VP 요청 정보를 조회합니다. Core를 직접 호출하지 않고 backend DB에 저장된 요청 정보만 반환합니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -113,10 +113,13 @@ public class MobileVpController {
      * @param request VP 제출 요청
      * @return VP 제출 응답
      */
-    @Operation(summary = "모바일 VP 제출")
+    @Operation(
+            summary = "모바일 VP 제출",
+            description = "모바일 앱이 VP를 제출하면 backend가 Core에 VP 검증을 동기 요청합니다. Core 응답 수신 후 VP 검증 결과를 저장하고 반환합니다."
+    )
     @ApiResponse(
             responseCode = "200",
-            description = "CoreAdapter를 통해 Core에 동기 요청하고, Core 응답 수신 후 업무 DB 상태를 저장합니다. Core callback은 사용하지 않습니다.",
+            description = "VP 검증 결과 반환",
             content = @Content(schema = @Schema(implementation = VpPresentationResponse.class))
     )
     @PostMapping("/vp/presentations")
@@ -137,7 +140,7 @@ public class MobileVpController {
      */
     @Operation(
             summary = "모바일 VP 제출 이력 상세 조회",
-            description = "Core를 직접 호출하지 않고 backend DB에 저장된 상태와 결과를 조회합니다."
+            description = "모바일 VP 제출 상세 결과를 조회합니다. Core를 직접 호출하지 않고 저장된 VP 검증 결과만 반환합니다."
     )
     @ApiResponse(
             responseCode = "200",

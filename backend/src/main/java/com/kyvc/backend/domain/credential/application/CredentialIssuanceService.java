@@ -10,7 +10,11 @@ import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
 import com.kyvc.backend.domain.credential.domain.Credential;
+import com.kyvc.backend.domain.credential.domain.CredentialRequest;
+import com.kyvc.backend.domain.credential.domain.CredentialStatusHistory;
+import com.kyvc.backend.domain.credential.repository.CredentialRequestRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.credential.repository.CredentialStatusHistoryRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.global.exception.ApiException;
@@ -34,6 +38,8 @@ public class CredentialIssuanceService {
     private static final String PENDING_EXTERNAL_ID_PREFIX = "pending-kyc-";
 
     private final CredentialRepository credentialRepository;
+    private final CredentialRequestRepository credentialRequestRepository;
+    private final CredentialStatusHistoryRepository credentialStatusHistoryRepository;
     private final KycApplicationRepository kycApplicationRepository;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
@@ -54,6 +60,22 @@ public class CredentialIssuanceService {
     public Credential issueKycCredentialIfRequired(
             KycApplication kycApplication // KYC 신청
     ) {
+        return issueKycCredentialIfRequired(kycApplication, KyvcEnums.ActorType.SYSTEM, null);
+    }
+
+    // 사용자 요청 기반 VC 발급 요청
+    public Credential issueKycCredentialForUser(
+            KycApplication kycApplication, // KYC 신청
+            Long userId // 사용자 ID
+    ) {
+        return issueKycCredentialIfRequired(kycApplication, KyvcEnums.ActorType.USER, userId);
+    }
+
+    private Credential issueKycCredentialIfRequired(
+            KycApplication kycApplication, // KYC 신청
+            KyvcEnums.ActorType actorType, // 요청자 유형
+            Long actorId // 요청자 ID
+    ) {
         if (kycApplication == null || kycApplication.getKycId() == null) {
             throw new ApiException(ErrorCode.KYC_NOT_FOUND);
         }
@@ -66,13 +88,20 @@ public class CredentialIssuanceService {
                     if (credential.isIssued() || credential.isIssuing()) {
                         return credential;
                     }
-                    return requestVcIssuance(kycApplication, credential);
+                    return requestVcIssuance(kycApplication, credential, actorType, actorId);
                 })
-                .orElseGet(() -> requestVcIssuance(kycApplication, createIssuingCredential(kycApplication)));
+                .orElseGet(() -> requestVcIssuance(
+                        kycApplication,
+                        createIssuingCredential(kycApplication, actorType, actorId),
+                        actorType,
+                        actorId
+                ));
     }
 
     private Credential createIssuingCredential(
-            KycApplication kycApplication // KYC 신청
+            KycApplication kycApplication, // KYC 신청
+            KyvcEnums.ActorType actorType, // 요청자 유형
+            Long actorId // 요청자 ID
     ) {
         IssuanceSeed seed = resolveIssuanceSeed(null);
         Credential credential = Credential.createIssuing(
@@ -87,14 +116,36 @@ public class CredentialIssuanceService {
                 seed.holderDid(),
                 seed.holderAccount()
         );
-        return credentialRepository.save(credential);
+        Credential saved = credentialRepository.save(credential);
+        saveStatusHistory(
+                saved.getCredentialId(),
+                null,
+                saved.getCredentialStatus(),
+                actorType,
+                actorId,
+                KyvcEnums.CredentialRequestType.ISSUE.name(),
+                "VC 발급 요청 생성"
+        );
+        return saved;
     }
 
     private Credential requestVcIssuance(
             KycApplication kycApplication, // KYC 신청
-            Credential credential // 발급 대상 Credential
+            Credential credential, // 발급 대상 Credential
+            KyvcEnums.ActorType actorType, // 요청자 유형
+            Long actorId // 요청자 ID
     ) {
+        CredentialRequest credentialRequest = credentialRequestRepository.save(CredentialRequest.create(
+                credential.getCredentialId(),
+                KyvcEnums.CredentialRequestType.ISSUE,
+                actorType,
+                actorId,
+                null,
+                "VC 발급 요청"
+        ));
         CoreRequest coreRequest = coreRequestService.createVcIssuanceRequest(credential.getCredentialId(), null);
+        credentialRequest.markProcessing(coreRequest.getCoreRequestId());
+        credentialRequestRepository.save(credentialRequest);
         CoreVcIssuanceRequest request = buildVcIssuanceRequest(kycApplication, credential, coreRequest.getCoreRequestId());
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(request));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
@@ -120,6 +171,7 @@ public class CredentialIssuanceService {
                     )
             );
             KyvcEnums.CredentialStatus credentialStatus = resolveCredentialStatus(response.status());
+            KyvcEnums.CredentialStatus beforeStatus = credential.getCredentialStatus();
             credential.applyIssuanceMetadata(
                     response.credentialExternalId(),
                     response.issuerDid(),
@@ -133,12 +185,24 @@ public class CredentialIssuanceService {
 
             if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
                 coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(response));
+                credentialRequest.markCompleted(null);
                 kycApplication.markVcIssued(response.issuedAt() == null ? LocalDateTime.now() : response.issuedAt());
                 kycApplicationRepository.save(kycApplication);
             } else {
                 credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+                credentialRequest.markFailed(ErrorCode.CORE_API_CALL_FAILED.getCode());
                 coreRequestService.markFailed(coreRequest.getCoreRequestId(), response.message());
             }
+            saveStatusHistoryIfChanged(
+                    credential.getCredentialId(),
+                    beforeStatus,
+                    credential.getCredentialStatus(),
+                    actorType,
+                    actorId,
+                    KyvcEnums.CredentialRequestType.ISSUE.name(),
+                    "VC 발급 Core 응답 반영"
+            );
+            credentialRequestRepository.save(credentialRequest);
 
             logEventLogger.info(
                     "credential.issuance.completed",
@@ -152,7 +216,19 @@ public class CredentialIssuanceService {
             return credentialRepository.save(credential);
         } catch (ApiException exception) {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
+            credentialRequest.markFailed(exception.getErrorCode().getCode());
+            credentialRequestRepository.save(credentialRequest);
+            KyvcEnums.CredentialStatus beforeStatus = credential.getCredentialStatus();
             credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+            saveStatusHistoryIfChanged(
+                    credential.getCredentialId(),
+                    beforeStatus,
+                    credential.getCredentialStatus(),
+                    actorType,
+                    actorId,
+                    exception.getErrorCode().getCode(),
+                    "VC 발급 Core 호출 실패"
+            );
             logEventLogger.warn(
                     "credential.issuance.failed",
                     exception.getMessage(),
@@ -165,7 +241,19 @@ public class CredentialIssuanceService {
             return credentialRepository.save(credential);
         } catch (Exception exception) {
             coreRequestService.markFailed(coreRequest.getCoreRequestId(), "VC 발급 Core 요청 처리 중 오류가 발생했습니다.");
+            credentialRequest.markFailed(ErrorCode.CORE_API_CALL_FAILED.getCode());
+            credentialRequestRepository.save(credentialRequest);
+            KyvcEnums.CredentialStatus beforeStatus = credential.getCredentialStatus();
             credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+            saveStatusHistoryIfChanged(
+                    credential.getCredentialId(),
+                    beforeStatus,
+                    credential.getCredentialStatus(),
+                    actorType,
+                    actorId,
+                    ErrorCode.CORE_API_CALL_FAILED.getCode(),
+                    "VC 발급 Core 요청 처리 오류"
+            );
             logEventLogger.error(
                     "credential.issuance.failed",
                     "VC 발급 Core 요청 처리 중 오류가 발생했습니다.",
@@ -271,6 +359,41 @@ public class CredentialIssuanceService {
             return;
         }
         coreRequestService.markFailed(coreRequestId, exception.getMessage());
+    }
+
+    private void saveStatusHistoryIfChanged(
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialStatus beforeStatus, // 변경 전 상태
+            KyvcEnums.CredentialStatus afterStatus, // 변경 후 상태
+            KyvcEnums.ActorType actorType, // 변경자 유형
+            Long actorId, // 변경자 ID
+            String reasonCode, // 변경 사유 코드
+            String reason // 변경 사유
+    ) {
+        if (afterStatus == null || beforeStatus == afterStatus) {
+            return;
+        }
+        saveStatusHistory(credentialId, beforeStatus, afterStatus, actorType, actorId, reasonCode, reason);
+    }
+
+    private void saveStatusHistory(
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialStatus beforeStatus, // 변경 전 상태
+            KyvcEnums.CredentialStatus afterStatus, // 변경 후 상태
+            KyvcEnums.ActorType actorType, // 변경자 유형
+            Long actorId, // 변경자 ID
+            String reasonCode, // 변경 사유 코드
+            String reason // 변경 사유
+    ) {
+        credentialStatusHistoryRepository.save(CredentialStatusHistory.create(
+                credentialId,
+                beforeStatus,
+                afterStatus,
+                actorType,
+                actorId,
+                reasonCode,
+                reason
+        ));
     }
 
     private String toJson(

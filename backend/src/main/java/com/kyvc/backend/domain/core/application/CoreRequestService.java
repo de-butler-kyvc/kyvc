@@ -44,6 +44,32 @@ public class CoreRequestService {
         );
     }
 
+    // VC 재발급 요청 생성
+    public CoreRequest createVcReissueRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.VC_REISSUE,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                requestPayloadJson
+        );
+    }
+
+    // VC 폐기 요청 생성
+    public CoreRequest createVcRevocationRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.VC_REVOKE,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                requestPayloadJson
+        );
+    }
+
     // VP 검증 요청 생성
     public CoreRequest createVpVerificationRequest(
             Long vpVerificationId, // VP 검증 ID

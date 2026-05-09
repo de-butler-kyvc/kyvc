@@ -44,6 +44,18 @@ public interface CredentialJpaRepository extends JpaRepository<Credential, Long>
     );
 
     /**
+     * 법인 ID + Credential 상태 기준 목록 조회
+     *
+     * @param corporateId 법인 ID
+     * @param credentialStatus Credential 상태
+     * @return Credential 목록
+     */
+    List<Credential> findByCorporateIdAndCredentialStatusOrderByCreatedAtDesc(
+            Long corporateId, // 법인 ID
+            KyvcEnums.CredentialStatus credentialStatus // Credential 상태
+    );
+
+    /**
      * Credential ID 기준 Optional 조회
      *
      * @param credentialId Credential ID

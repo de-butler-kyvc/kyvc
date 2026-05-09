@@ -314,6 +314,14 @@ public class Credential {
         this.credentialStatus = credentialStatus;
     }
 
+    // Credential 폐기 처리
+    public void revoke(
+            LocalDateTime revokedAt // 폐기 일시
+    ) {
+        this.credentialStatus = KyvcEnums.CredentialStatus.REVOKED;
+        this.revokedAt = revokedAt == null ? LocalDateTime.now() : revokedAt;
+    }
+
     // XRPL 기록 메타데이터 반영
     public void applyXrplTransactionMetadata(
             String xrplTxHash // XRPL 트랜잭션 해시
