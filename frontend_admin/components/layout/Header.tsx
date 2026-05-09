@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { clearAuthSession } from "@/lib/auth-session";
 
 export default function Header() {
   const router = useRouter();
 
   const handleLogout = () => {
+    clearAuthSession();
     router.push("/login");
   };
 

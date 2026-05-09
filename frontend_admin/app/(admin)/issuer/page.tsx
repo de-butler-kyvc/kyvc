@@ -15,8 +15,6 @@ const statusBadge: Record<string, string> = {
   "심사중": "bg-orange-100 text-orange-600",
 };
 
-const defaultForm = { did: "", credential: "", type: "화이트리스트", scope: "", startDate: "", endDate: "" };
-
 export default function IssuerPage() {
   const [issuerList, setIssuerList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,19 +23,7 @@ export default function IssuerPage() {
   const [statusFilter, setStatusFilter] = useState("전체 상태");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [form, setForm] = useState(defaultForm);
   const ITEMS_PER_PAGE = 3;
-
-  const handleRegister = () => {
-    if (!form.did || !form.credential || !form.scope || !form.startDate || !form.endDate) {
-      alert("모든 항목을 입력해주세요.");
-      return;
-    }
-    alert(`신뢰정책이 등록되었습니다.\nDID: ${form.did}`);
-    setShowRegisterModal(false);
-    setForm(defaultForm);
-  };
 
   const fetchIssuerList = async () => {
     setLoading(true);
@@ -133,7 +119,10 @@ export default function IssuerPage() {
             <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-blue-600 cursor-pointer" />
             전체 선택
           </label>
-          <button onClick={() => setShowRegisterModal(true)} className="ml-auto bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">+ 신뢰정책 등록</button>
+          <div className="ml-auto flex gap-2">
+            <Link href="/issuer/new?type=whitelist" className="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-700">화이트리스트 등록</Link>
+            <Link href="/issuer/new?type=blacklist" className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700">블랙리스트 등록</Link>
+          </div>
         </div>
 
         {loading ? (
@@ -194,48 +183,6 @@ export default function IssuerPage() {
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
 
-      {showRegisterModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg border border-slate-200 w-full max-w-md p-6 space-y-4">
-            <h2 className="text-base font-semibold text-slate-800">신뢰정책 등록</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Issuer DID</label>
-                <input value={form.did} onChange={e => setForm(f => ({ ...f, did: e.target.value }))} placeholder="did:kyvc:issuer:xxx" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Credential Type</label>
-                <input value={form.credential} onChange={e => setForm(f => ({ ...f, credential: e.target.value }))} placeholder="KYC VC" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">정책 유형</label>
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none">
-                  <option>화이트리스트</option>
-                  <option>블랙리스트</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">적용 범위</label>
-                <input value={form.scope} onChange={e => setForm(f => ({ ...f, scope: e.target.value }))} placeholder="플랫폼 전체" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-              </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="text-xs text-slate-500 mb-1 block">시작일</label>
-                  <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-slate-500 mb-1 block">종료일</label>
-                  <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => { setShowRegisterModal(false); setForm(defaultForm); }} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
-              <button onClick={handleRegister} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">등록</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,6 +1,13 @@
 "use client";
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
+import {
+  getAllAdminRoles,
+  getAdminUserRoles,
+  assignAdminUserRole,
+  removeAdminUserRole,
+  type AdminRole,
+} from "@/lib/api/managers";
 
 const roleBadge: Record<string, string> = {
   심사자: "bg-blue-100 text-blue-600",
@@ -18,12 +25,11 @@ const statusBadge: Record<string, string> = {
 const mockManagerMap: Record<string, {
   id: string; name: string; role: string; status: string;
   email: string; phone: string; lastLogin: string; regDate: string; mfa: string;
-  permissions: string[];
   auditLog: { date: string; action: string; target: string }[];
 }> = {
-  admin_kim: { id: "admin_kim", name: "김심사", role: "심사자", status: "정상", email: "kim@kyvc.io", phone: "010-1111-2222", lastLogin: "2025.05.02 09:00", regDate: "2024.01.10", mfa: "설정됨", permissions: ["KYC 신청 조회", "KYC 심사 처리", "AI 결과 조회", "보완요청 생성"], auditLog: [{ date: "2025.05.02 09:05", action: "수동심사 승인", target: "KYC-2025-0042" }, { date: "2025.05.01 15:30", action: "보완요청 생성", target: "KYC-2025-0039" }] },
-  admin_park: { id: "admin_park", name: "박심사", role: "승인권자", status: "정상", email: "park@kyvc.io", phone: "010-3333-4444", lastLogin: "2025.05.02 09:10", regDate: "2023.11.20", mfa: "설정됨", permissions: ["KYC 신청 조회", "KYC 심사 처리", "최종 승인/반려", "정책 관리", "사용자 관리"], auditLog: [{ date: "2025.05.02 09:15", action: "정책 수정", target: "POL-001" }, { date: "2025.05.01 17:00", action: "최종 승인", target: "KYC-2025-0035" }] },
-  admin_ops: { id: "admin_ops", name: "이운영", role: "운영자", status: "정상", email: "ops@kyvc.io", phone: "010-5555-6666", lastLogin: "2025.05.01 17:00", regDate: "2024.03.01", mfa: "미설정", permissions: ["시스템 설정 조회", "SDK 관리", "감사로그 조회", "리포트 조회"], auditLog: [{ date: "2025.05.01 16:55", action: "SDK 키 갱신", target: "SDK-2025-001" }] },
+  admin_kim: { id: "admin_kim", name: "김심사", role: "심사자", status: "정상", email: "kim@kyvc.io", phone: "010-1111-2222", lastLogin: "2025.05.02 09:00", regDate: "2024.01.10", mfa: "설정됨", auditLog: [{ date: "2025.05.02 09:05", action: "수동심사 승인", target: "KYC-2025-0042" }, { date: "2025.05.01 15:30", action: "보완요청 생성", target: "KYC-2025-0039" }] },
+  admin_park: { id: "admin_park", name: "박심사", role: "승인권자", status: "정상", email: "park@kyvc.io", phone: "010-3333-4444", lastLogin: "2025.05.02 09:10", regDate: "2023.11.20", mfa: "설정됨", auditLog: [{ date: "2025.05.02 09:15", action: "정책 수정", target: "POL-001" }, { date: "2025.05.01 17:00", action: "최종 승인", target: "KYC-2025-0035" }] },
+  admin_ops: { id: "admin_ops", name: "이운영", role: "운영자", status: "정상", email: "ops@kyvc.io", phone: "010-5555-6666", lastLogin: "2025.05.01 17:00", regDate: "2024.03.01", mfa: "미설정", auditLog: [{ date: "2025.05.01 16:55", action: "SDK 키 갱신", target: "SDK-2025-001" }] },
 };
 
 export default function ManagerDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,8 +44,67 @@ export default function ManagerDetailPage({ params }: { params: Promise<{ id: st
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState("기본 정보");
 
+  // 권한 목록 탭 상태
+  const [assignedRoles, setAssignedRoles] = useState<AdminRole[]>([]);
+  const [allRoles, setAllRoles] = useState<AdminRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [roleActionLoading, setRoleActionLoading] = useState(false);
+
   const tabs = ["기본 정보", "권한 목록", "활동 이력"];
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+
+  useEffect(() => {
+    if (activeTab !== "권한 목록") return;
+
+    setRolesLoading(true);
+    setRolesError(null);
+
+    Promise.all([getAdminUserRoles(id), getAllAdminRoles()])
+      .then(([assigned, all]) => {
+        setAssignedRoles(assigned);
+        setAllRoles(all);
+      })
+      .catch((err) => {
+        setRolesError(err instanceof Error ? err.message : "권한 정보를 불러오지 못했습니다.");
+      })
+      .finally(() => setRolesLoading(false));
+  }, [activeTab, id]);
+
+  const handleAssignRole = async () => {
+    if (!selectedRoleId) return;
+    setRoleActionLoading(true);
+    setRolesError(null);
+    try {
+      await assignAdminUserRole(id, selectedRoleId);
+      const assigned = await getAdminUserRoles(id);
+      setAssignedRoles(assigned);
+      setSelectedRoleId("");
+    } catch (err) {
+      setRolesError(err instanceof Error ? err.message : "역할 추가에 실패했습니다.");
+    } finally {
+      setRoleActionLoading(false);
+    }
+  };
+
+  const handleRemoveRole = async (roleId: string | number) => {
+    setRoleActionLoading(true);
+    setRolesError(null);
+    try {
+      await removeAdminUserRole(id, roleId);
+      const assigned = await getAdminUserRoles(id);
+      setAssignedRoles(assigned);
+    } catch (err) {
+      setRolesError(err instanceof Error ? err.message : "역할 제거에 실패했습니다.");
+    } finally {
+      setRoleActionLoading(false);
+    }
+  };
+
+  const unassignedRoles = allRoles.filter(
+    (r) => !assignedRoles.some((ar) => String(ar.roleId) === String(r.roleId))
+  );
 
   return (
     <div className="space-y-6">
@@ -56,7 +121,7 @@ export default function ManagerDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex flex-col items-center text-center mb-4">
               <div className="w-12 h-12 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-lg font-bold mb-2">{raw.name[0]}</div>
               <p className="font-semibold text-slate-800 text-sm">{raw.name}</p>
-              <span className={`mt-1 px-2 py-0.5 rounded text-xs font-medium ${roleBadge[raw.role]}`}>{raw.role}</span>
+              <span className={`mt-1 px-2 py-0.5 rounded text-xs font-medium ${roleBadge[raw.role] ?? "bg-slate-100 text-slate-500"}`}>{raw.role}</span>
               <span className={`mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[status]}`}>{status}</span>
             </div>
             <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
@@ -97,17 +162,82 @@ export default function ManagerDetailPage({ params }: { params: Promise<{ id: st
                   </div>
                 </div>
               )}
+
               {activeTab === "권한 목록" && (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500 mb-3">현재 역할({raw.role})에 부여된 권한입니다.</p>
-                  {raw.permissions.map((perm) => (
-                    <div key={perm} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded border border-slate-100">
-                      <span className="w-4 h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
-                      <span className="text-sm text-slate-700">{perm}</span>
+                <div className="space-y-4">
+                  {rolesError && (
+                    <div className="bg-red-50 border border-red-200 rounded px-4 py-3 text-sm text-red-600">
+                      {rolesError}
                     </div>
-                  ))}
+                  )}
+
+                  {rolesLoading ? (
+                    <p className="text-sm text-slate-400 text-center py-6">불러오는 중...</p>
+                  ) : (
+                    <>
+                      {/* 할당된 역할 목록 */}
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500 font-medium">현재 할당된 역할</p>
+                        {assignedRoles.length === 0 ? (
+                          <p className="text-sm text-slate-400 py-4 text-center bg-slate-50 rounded-lg border border-slate-100">
+                            할당된 역할이 없습니다.
+                          </p>
+                        ) : (
+                          assignedRoles.map((r) => (
+                            <div
+                              key={r.roleId}
+                              className="flex items-center justify-between px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-100"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
+                                <span className="text-sm text-slate-700 font-medium">{r.roleName}</span>
+                                {r.description && (
+                                  <span className="text-xs text-slate-400">· {r.description}</span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRemoveRole(r.roleId)}
+                                disabled={roleActionLoading}
+                                className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors"
+                              >
+                                제거
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* 역할 추가 */}
+                      <div className="border-t border-slate-100 pt-4">
+                        <p className="text-xs text-slate-500 font-medium mb-2">역할 추가</p>
+                        <div className="flex gap-2">
+                          <select
+                            value={selectedRoleId}
+                            onChange={(e) => setSelectedRoleId(e.target.value)}
+                            className="flex-1 border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            disabled={roleActionLoading}
+                          >
+                            <option value="">역할 선택</option>
+                            {unassignedRoles.map((r) => (
+                              <option key={r.roleId} value={String(r.roleId)}>
+                                {r.roleName}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={handleAssignRole}
+                            disabled={roleActionLoading || !selectedRoleId}
+                            className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                          >
+                            {roleActionLoading ? "처리 중..." : "추가"}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
+
               {activeTab === "활동 이력" && (
                 <table className="w-full text-sm">
                   <thead>

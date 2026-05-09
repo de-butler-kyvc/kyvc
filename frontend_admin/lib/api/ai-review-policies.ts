@@ -1,30 +1,49 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
 const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
-const AUDIT_BASE = `${API_BASE}/api/admin/backend/audit-logs`;
+const POLICY_BASE = `${API_BASE}/api/admin/backend/ai-review-policies`;
 
 // ────────────────────────────────────────────────────────────
 // 타입 정의
 // ────────────────────────────────────────────────────────────
 
-export interface AuditLog {
-  auditId: string;
-  actorId?: string;
-  actorName?: string;
-  actionType?: string;
-  targetId?: string;
-  targetType?: string;
+export interface AiReviewPolicyRule {
+  ruleId?: string;
+  fieldName?: string;
+  condition?: string;
+  threshold?: number;
+  action?: string;
   description?: string;
-  ipAddress?: string;
-  result?: string;
-  createdAt?: string;
 }
 
-export interface AuditLogDetail extends AuditLog {
-  requestBody?: Record<string, unknown>;
-  responseBody?: Record<string, unknown>;
-  userAgent?: string;
-  sessionId?: string;
+export interface AiReviewPolicy {
+  aiPolicyId: string;
+  policyName: string;
+  description?: string;
+  modelVersion?: string;
+  autoApprovalThreshold?: number;
+  autoRejectionThreshold?: number;
+  manualReviewThreshold?: number;
+  corporationType?: string;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AiReviewPolicyDetail extends AiReviewPolicy {
+  rules?: AiReviewPolicyRule[];
+  appliedCount?: number;
+}
+
+export interface UpdateAiReviewPolicyBody {
+  policyName?: string;
+  description?: string;
+  modelVersion?: string;
+  autoApprovalThreshold?: number;
+  autoRejectionThreshold?: number;
+  manualReviewThreshold?: number;
+  corporationType?: string;
+  rules?: AiReviewPolicyRule[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -74,63 +93,60 @@ async function errorMessageFromResponse(response: Response): Promise<string> {
   }
 }
 
-function fmtDt(iso?: string) {
-  if (!iso) return "-";
-  return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
-}
-
 // ────────────────────────────────────────────────────────────
-// 감사로그 API
+// AI 심사 정책 API
 // ────────────────────────────────────────────────────────────
 
-/** GET /api/admin/backend/audit-logs */
-export async function getAuditLogs(filters?: {
-  search?: string;
-  action?: string;
-  actorId?: string;
-  from?: string;
-  to?: string;
-}): Promise<{
-  id: string;
-  date: string;
-  actor: string;
-  action: string;
-  target: string;
-  content: string;
-  ip: string;
-  result: string;
-}[]> {
+/** GET /api/admin/backend/ai-review-policies */
+export async function getAiReviewPolicies(filters?: {
+  enabled?: boolean;
+  corporationType?: string;
+}): Promise<AiReviewPolicy[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.action && filters.action !== "전체 액션 유형") params.set("actionType", filters.action);
-  if (filters?.actorId) params.set("actorId", filters.actorId);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
-  const url = params.toString() ? `${AUDIT_BASE}?${params}` : AUDIT_BASE;
-
+  if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
+  if (filters?.corporationType) params.set("corporationType", filters.corporationType);
+  const url = params.toString() ? `${POLICY_BASE}?${params}` : POLICY_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-
-  const json = (await response.json()) as CommonResponse<AuditLog[] | PageLike<AuditLog>>;
-  return unwrapListData(json.data).map((log) => ({
-    id: log.auditId,
-    date: fmtDt(log.createdAt),
-    actor: log.actorName ?? log.actorId ?? "-",
-    action: log.actionType ?? "-",
-    target: log.targetId ? `${log.targetType ? `${log.targetType}-` : ""}${log.targetId}` : "-",
-    content: log.description ?? "-",
-    ip: log.ipAddress ?? "-",
-    result: log.result ?? "-",
-  }));
+  const json = (await response.json()) as CommonResponse<AiReviewPolicy[] | PageLike<AiReviewPolicy>>;
+  return unwrapListData(json.data);
 }
 
-/** GET /api/admin/backend/audit-logs/{auditId} */
-export async function getAuditLog(auditId: string): Promise<AuditLogDetail> {
-  const response = await fetch(`${AUDIT_BASE}/${auditId}`, {
+/** GET /api/admin/backend/ai-review-policies/{aiPolicyId} */
+export async function getAiReviewPolicy(aiPolicyId: string): Promise<AiReviewPolicyDetail> {
+  const response = await fetch(`${POLICY_BASE}/${aiPolicyId}`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<AuditLogDetail>;
+  const json = (await response.json()) as CommonResponse<AiReviewPolicyDetail>;
   return json.data;
+}
+
+/** PATCH /api/admin/backend/ai-review-policies/{aiPolicyId} */
+export async function updateAiReviewPolicy(
+  aiPolicyId: string,
+  body: UpdateAiReviewPolicyBody
+): Promise<AiReviewPolicyDetail> {
+  const response = await fetch(`${POLICY_BASE}/${aiPolicyId}`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<AiReviewPolicyDetail>;
+  return json.data;
+}
+
+/** PATCH /api/admin/backend/ai-review-policies/{aiPolicyId}/enabled */
+export async function setAiReviewPolicyEnabled(
+  aiPolicyId: string,
+  enabled: boolean
+): Promise<void> {
+  const response = await fetch(`${POLICY_BASE}/${aiPolicyId}/enabled`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ enabled }),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }

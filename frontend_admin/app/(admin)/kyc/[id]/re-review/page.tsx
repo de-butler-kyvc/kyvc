@@ -1,7 +1,20 @@
 "use client";
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getAiReview, retryAiReview, type AiReviewResult } from "@/lib/api/kyc";
+
+const JUDGMENT_KO: Record<string, string> = {
+  NORMAL: "정상", NEEDS_SUPPLEMENT: "보완필요", UNSATISFACTORY: "불충족",
+  NEEDS_MANUAL_REVIEW: "수동심사필요",
+};
+
+const judgmentBadge: Record<string, string> = {
+  정상: "bg-green-100 text-green-600",
+  보완필요: "bg-orange-100 text-orange-600",
+  불충족: "bg-red-100 text-red-600",
+  수동심사필요: "bg-red-100 text-red-600",
+};
 
 export default function ReReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -9,12 +22,34 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
   const [reason, setReason] = useState("");
   const [priority, setPriority] = useState("일반");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const [aiReview, setAiReview] = useState<AiReviewResult | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(true);
+
+  useEffect(() => {
+    getAiReview(id)
+      .then(setAiReview)
+      .catch(() => {/* 요약 로드 실패는 무시하고 폼은 표시 */})
+      .finally(() => setReviewLoading(false));
+  }, [id]);
+
+  const handleSubmit = async () => {
     if (!reason.trim()) return;
     setLoading(true);
-    setTimeout(() => { router.push(`/kyc/${id}`); }, 600);
+    setError(null);
+    try {
+      await retryAiReview(id, { reason, priority });
+      router.push(`/kyc/${id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "재심사 요청 중 오류가 발생했습니다.");
+      setLoading(false);
+    }
   };
+
+  const judgmentKo = aiReview
+    ? (JUDGMENT_KO[aiReview.overallJudgment] ?? aiReview.overallJudgment)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -31,45 +66,63 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
         {/* 좌측 요약 */}
         <div className="w-56 shrink-0 bg-white rounded-lg border border-slate-200 p-4 space-y-3 h-fit">
           <h2 className="text-xs font-semibold text-slate-500">재심사 요청</h2>
-          {[
-            { label: "신청번호", value: id },
-            { label: "법인명", value: "주식회사 케이원" },
-            { label: "최초 신청일", value: "2025.05.02" },
-          ].map((item) => (
-            <div key={item.label}>
-              <p className="text-xs text-slate-400">{item.label}</p>
-              <p className="text-slate-700 text-xs font-medium mt-0.5">{item.value}</p>
-            </div>
-          ))}
           <div>
-            <p className="text-xs text-slate-400">현재 상태</p>
-            <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full font-medium">수동심사필요</span>
+            <p className="text-xs text-slate-400">신청번호</p>
+            <p className="text-slate-700 text-xs font-medium mt-0.5">{id}</p>
           </div>
-          <div>
-            <p className="text-xs text-slate-400">AI 판단</p>
-            <span className="bg-orange-100 text-orange-600 text-xs px-2 py-0.5 rounded-full font-medium">보완필요 (72.4%)</span>
-          </div>
+          {aiReview && judgmentKo && (
+            <>
+              <div>
+                <p className="text-xs text-slate-400">AI 판단</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${judgmentBadge[judgmentKo] ?? "bg-slate-100 text-slate-500"}`}>
+                  {judgmentKo} ({aiReview.confidenceScore}%)
+                </span>
+              </div>
+              {aiReview.modelVersion && (
+                <div>
+                  <p className="text-xs text-slate-400">처리 모델</p>
+                  <p className="text-slate-700 text-xs mt-0.5">{aiReview.modelVersion}</p>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* 우측 폼 */}
         <div className="flex-1 bg-white rounded-lg border border-slate-200 p-6 space-y-5">
-          {/* 기존 심사 이력 요약 */}
+          {/* 기존 심사 결과 요약 */}
           <div>
             <h2 className="text-sm font-semibold text-slate-700 mb-3">기존 심사 결과 요약</h2>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-slate-400">AI 판단</p>
-                <span className="bg-orange-100 text-orange-600 text-xs px-2 py-0.5 rounded-full font-medium">보완필요</span>
+            {reviewLoading ? (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-400">
+                불러오는 중...
               </div>
-              <div>
-                <p className="text-xs text-slate-400">신뢰도</p>
-                <p className="font-bold text-slate-700">72.4%</p>
+            ) : aiReview ? (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-400">AI 판단</p>
+                  {judgmentKo && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${judgmentBadge[judgmentKo] ?? "bg-slate-100 text-slate-500"}`}>
+                      {judgmentKo}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">신뢰도</p>
+                  <p className="font-bold text-slate-700">{aiReview.confidenceScore}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">주요 사유</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {aiReview.summaryReason ?? "-"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-slate-400">주요 사유</p>
-                <p className="text-xs text-slate-600">대표자명 불일치</p>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-400">
+                AI 심사 결과를 불러오지 못했습니다.
               </div>
-            </div>
+            )}
           </div>
 
           {/* 재심사 우선순위 */}
@@ -94,7 +147,9 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
 
           {/* 재심사 요청 사유 */}
           <div>
-            <h2 className="text-sm font-semibold text-slate-700 mb-3">재심사 요청 사유 <span className="text-red-500">*</span></h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-3">
+              재심사 요청 사유 <span className="text-red-500">*</span>
+            </h2>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -104,11 +159,19 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
             />
           </div>
 
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+
           {/* 버튼 */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
             <p className="text-xs text-slate-400">요청자: 김심사 (admin@kyvc.kr)</p>
             <div className="flex gap-2">
-              <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">취소</Link>
+              <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
+                취소
+              </Link>
               <button
                 onClick={handleSubmit}
                 disabled={loading || !reason.trim()}

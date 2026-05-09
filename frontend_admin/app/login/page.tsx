@@ -2,52 +2,55 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { persistAuthToken, persistRefreshToken } from "@/lib/auth-session";
+import { login } from "@/lib/api/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [id, setId] = useState("");
+
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [keepLogin, setKeepLogin] = useState(false);
-  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [ssoLoading, setSsoLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id || !pw || pw.length < 4) { setError(true); return; }
-    setError(false);
+    if (!email.trim() || !pw) { setError("이메일 또는 비밀번호를 입력해주세요."); return; }
+    setError(null);
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // 더미 토큰 설정 (실제로는 백엔드에서 받아와야 함)
-      document.cookie = "auth_token=dummy_token; path=/; max-age=86400"; // 24시간
+    try {
+      const result = await login({ email: email.trim(), password: pw });
+      const maxAgeSec = keepLogin ? 30 * 24 * 3600 : 86400;
+      persistAuthToken(result.accessToken, { maxAgeSec });
+      persistRefreshToken(result.refreshToken);
       router.push("/dashboard");
-    }, 700);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
 
-        {/* 타이틀 */}
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-blue-600 text-white font-bold text-lg mb-3">K</div>
-          <h1 className="text-xl font-bold text-slate-800">KYvC 백엔드 어드민</h1>
+          <img src="/kyvc-wordmark-light%201.png" alt="KYVC" className="h-10 mx-auto mb-3" />
           <p className="text-sm text-slate-400 mt-1">관리자 전용 · 직원 로그인</p>
         </div>
 
-        {/* 카드 */}
         <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
           <form onSubmit={handleLogin} className="space-y-4">
-
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-600">직원 ID</label>
+              <label className="text-sm font-medium text-slate-600">이메일</label>
               <input
-                type="text"
-                value={id}
-                onChange={(e) => { setId(e.target.value); setError(false); }}
-                placeholder="admin@kyvc.io"
-                autoComplete="username"
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                placeholder="admin@kyvc.com"
+                autoComplete="email"
                 className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${error ? "border-red-300" : "border-slate-200"}`}
               />
             </div>
@@ -57,14 +60,14 @@ export default function LoginPage() {
               <input
                 type="password"
                 value={pw}
-                onChange={(e) => { setPw(e.target.value); setError(false); }}
+                onChange={(e) => { setPw(e.target.value); setError(null); }}
                 placeholder="••••••••"
                 autoComplete="current-password"
                 className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${error ? "border-red-300" : "border-slate-200"}`}
               />
               {error && (
                 <p className="text-xs text-red-500 flex items-center gap-1">
-                  <span>✕</span> 아이디 또는 비밀번호를 확인해주세요.
+                  <span>✕</span> {error}
                 </p>
               )}
             </div>
@@ -100,19 +103,11 @@ export default function LoginPage() {
 
             <button
               type="button"
-              disabled={ssoLoading}
-              onClick={() => {
-                setSsoLoading(true);
-                setTimeout(() => {
-                  document.cookie = "auth_token=sso_token; path=/; max-age=86400";
-                  router.push("/dashboard");
-                }, 900);
-              }}
               className="w-full border border-slate-200 text-slate-600 py-2.5 rounded text-sm hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              disabled
             >
-              {ssoLoading ? "SSO 인증 중..." : "🏢 SSO 로그인 (내부 인증 시스템)"}
+              🏢 SSO 로그인 (내부 인증 시스템)
             </button>
-
           </form>
         </div>
 

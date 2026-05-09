@@ -1,6 +1,7 @@
 "use client";
 import { use, useState } from "react";
 import Link from "next/link";
+import { approveKycManualReview, rejectKycManualReview } from "@/lib/api/kyc";
 
 const decisionColors: Record<string, string> = {
   승인: "bg-green-100 text-green-700",
@@ -15,14 +16,24 @@ export default function ManualReviewPage({ params }: { params: Promise<{ id: str
   const [decision, setDecision] = useState("승인");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!reason.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError(null);
+    try {
+      if (decision === "승인") {
+        await approveKycManualReview(id, { reviewComment: reason });
+      } else if (decision === "반려") {
+        await rejectKycManualReview(id, { rejectReason: reason });
+      }
       setSuccess(true);
-    }, 600);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "처리 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -139,6 +150,12 @@ export default function ManualReviewPage({ params }: { params: Promise<{ id: str
                 placeholder="수동 판단 근거를 입력해주세요."
               />
             </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
+                {error}
+              </div>
+            )}
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <p className="text-xs text-slate-400">처리자: 김심사 (admin@kyvc.kr)</p>

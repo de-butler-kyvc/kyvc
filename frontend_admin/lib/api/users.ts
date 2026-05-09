@@ -1,33 +1,199 @@
 import type { UserItem } from "@/types/kyc";
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
+const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const USERS_URL = `${API_BASE}/api/admin/backend/users`;
+
+type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };
+
+function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  const o = data as PageLike<T>;
+  if (Array.isArray(o.content)) return o.content;
+  if (Array.isArray(o.items)) return o.items;
+  if (Array.isArray(o.list)) return o.list;
+  return [];
+}
+
+interface CommonResponse<T> {
+  success: boolean;
+  code: string;
+  message: string;
+  data: T;
+}
+
+// API 응답 타입
+export interface BackendUserItem {
+  userId: string;
+  name: string;
+  role?: string;
+  status: string;
+  lastLoginAt?: string;
+  createdAt?: string;
+}
+
+export interface BackendUserDetail {
+  userId: string;
+  name: string;
+  email?: string;
+  phoneNumber?: string;
+  role?: string;
+  status: string;
+  lastLoginAt?: string;
+  createdAt?: string;
+  mfaEnabled?: boolean;
+  corporation?: {
+    corporationName?: string;
+    businessRegistrationNumber?: string;
+    corporateRegistrationNumber?: string;
+    corporationType?: string;
+    representativeName?: string;
+    address?: string;
+  };
+  kycApplications?: Array<{
+    applicationId: string;
+    applicationDate?: string;
+    status: string;
+    aiScore?: number | string;
+  }>;
+  verifiableCredentials?: Array<{
+    vcId: string;
+    vcType?: string;
+    issuedAt?: string;
+    expiresAt?: string;
+    status: string;
+  }>;
+  agents?: Array<{
+    agentName: string;
+    agentRole?: string;
+    authorizedScope?: string;
+    delegationExpiresAt?: string;
+  }>;
+}
+
+const STATUS_KO_TO_API: Record<string, string> = {
+  정상: "ACTIVE",
+  잠금: "LOCKED",
+  비활성: "INACTIVE",
+};
+
+const STATUS_API_TO_KO: Record<string, UserItem["status"]> = {
+  ACTIVE: "정상",
+  LOCKED: "잠금",
+  INACTIVE: "비활성",
+  정상: "정상",
+  잠금: "잠금",
+  비활성: "비활성",
+};
+
+function formatDate(iso?: string): string {
+  if (!iso) return "-";
+  return iso.slice(0, 10).replaceAll("-", ".");
+}
+
+function formatDateTime(iso?: string): string {
+  if (!iso) return "-";
+  return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
+}
+
+function getAuthHeaders() {
+  const token = getAccessTokenForApi();
+  if (isPlaceholderAccessToken(token)) {
+    throw new Error("유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function errorMessageFromResponse(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    if (!text.trim()) return `API Error: ${response.status} ${response.statusText}`;
+    const parsed = JSON.parse(text) as { message?: string; error?: string };
+    if (parsed.message) return parsed.message;
+    if (typeof parsed.error === "string") return parsed.error;
+    return text;
+  } catch {
+    return `API Error: ${response.status} ${response.statusText}`;
+  }
+}
+
+/** GET /api/admin/backend/users — 법인 사용자 목록 조회 */
 export async function getUserList(filters?: {
   search?: string;
   role?: string;
   status?: string;
 }): Promise<UserItem[]> {
-  let data = [
-    { id: "corp_kim001", name: "김법인", role: "법인 사용자", status: "정상", lastLogin: "2025.05.02 09:14", regDate: "2024.03.15" },
-    { id: "corp_lee002", name: "이대리", role: "법인 사용자", status: "정상", lastLogin: "2025.05.01 16:30", regDate: "2024.03.15" },
-    { id: "corp_park003", name: "박담당", role: "법인 사용자", status: "잠금", lastLogin: "2025.04.20 11:00", regDate: "2024.07.01" },
-    { id: "corp_choi004", name: "최연구", role: "법인 사용자", status: "비활성", lastLogin: "-", regDate: "2025.01.10" },
-  ];
-
-  // 프론트에서 필터링 (실제 API에서는 백엔드에서 처리)
-  if (filters?.search) {
-    const search = filters.search.toLowerCase();
-    data = data.filter(item =>
-      item.id.toLowerCase().includes(search) ||
-      item.name.toLowerCase().includes(search)
-    );
-  }
-
-  if (filters?.role && filters.role !== "전체 역할") {
-    data = data.filter(item => item.role === filters.role);
-  }
-
+  const params = new URLSearchParams();
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
   if (filters?.status && filters.status !== "전체 상태") {
-    data = data.filter(item => item.status === filters.status);
+    params.set("status", STATUS_KO_TO_API[filters.status] ?? filters.status);
   }
 
-  return data;
+  const url = params.toString() ? `${USERS_URL}?${params}` : USERS_URL;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+
+  const json = (await response.json()) as CommonResponse<
+    BackendUserItem[] | PageLike<BackendUserItem>
+  >;
+
+  return unwrapListData(json.data).map((row) => ({
+    id: row.userId,
+    name: row.name,
+    role: row.role ?? "법인 사용자",
+    status: STATUS_API_TO_KO[row.status] ?? "정상",
+    lastLogin: formatDateTime(row.lastLoginAt),
+    regDate: formatDate(row.createdAt),
+  }));
 }
+
+/** GET /api/admin/backend/users/{userId} — 법인 사용자 상세 조회 */
+export async function getUserDetail(userId: string): Promise<BackendUserDetail> {
+  const response = await fetch(`${USERS_URL}/${userId}`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+
+  const json = (await response.json()) as CommonResponse<BackendUserDetail>;
+  return json.data;
+}
+
+/** PATCH /api/admin/backend/users/{userId} — 법인 사용자 정보 수정 */
+export async function updateUser(
+  userId: string,
+  data: { name?: string; email?: string; phoneNumber?: string }
+): Promise<void> {
+  const response = await fetch(`${USERS_URL}/${userId}`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** PATCH /api/admin/backend/users/{userId}/status — 법인 사용자 상태 변경 */
+export async function updateUserStatus(
+  userId: string,
+  statusKo: "정상" | "잠금" | "비활성"
+): Promise<void> {
+  const response = await fetch(`${USERS_URL}/${userId}/status`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ status: STATUS_KO_TO_API[statusKo] }),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+export { formatDate, formatDateTime };

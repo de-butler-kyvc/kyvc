@@ -23,7 +23,7 @@ export default function ResetPage() {
       <div className="w-full max-w-sm space-y-6">
 
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-blue-600 text-white font-bold text-lg mb-3">K</div>
+          <img src="/kyvc-wordmark-light%201.png" alt="KYVC" className="h-10 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-slate-800">비밀번호 재설정</h1>
           <p className="text-sm text-slate-400 mt-1">가입 시 등록한 이메일로 재설정 링크를 보내드립니다.</p>
         </div>

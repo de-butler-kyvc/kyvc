@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
+import { createIssuerWhitelist, createIssuerBlacklist } from "@/lib/api/issuer";
 
 function IssuerNewForm() {
   const router = useRouter();
@@ -12,33 +13,78 @@ function IssuerNewForm() {
 
   const [form, setForm] = useState({
     did: "",
+    issuerName: "",
     type: isBlacklist ? "블랙리스트" : "화이트리스트",
     credential: "",
     scope: "플랫폼 전체",
     startDate: "",
     endDate: "",
+    reasonCode: "",
+    reason: "",
   });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, boolean> = {};
     if (!form.did.trim()) newErrors.did = true;
-    if (!form.credential.trim()) newErrors.credential = true;
-    if (!form.startDate) newErrors.startDate = true;
-    if (!form.endDate) newErrors.endDate = true;
+    if (!form.issuerName.trim()) newErrors.issuerName = true;
+    if (isBlacklist) {
+      if (!form.reasonCode.trim()) newErrors.reasonCode = true;
+      if (!form.reason.trim()) newErrors.reason = true;
+    } else {
+      if (!form.credential.trim()) newErrors.credential = true;
+      if (!form.startDate) newErrors.startDate = true;
+      if (!form.endDate) newErrors.endDate = true;
+    }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      router.push(isBlacklist ? "/issuer/blacklist" : "/issuer/whitelist");
-    }, 600);
+    try {
+      // 실제로는 MFA 챌린지/검증 후 토큰 얻어야 함
+      const mfaToken = "mock_mfa_token"; // 임시 mock 토큰
+
+      if (isBlacklist) {
+        await createIssuerBlacklist({
+          issuerDid: form.did,
+          issuerName: form.issuerName,
+          reasonCode: form.reasonCode,
+          reason: form.reason,
+          mfaToken,
+        });
+      } else {
+        await createIssuerWhitelist({
+          issuerDid: form.did,
+          issuerName: form.issuerName,
+          credentialTypes: [form.credential],
+          reason: "등록 사유",
+          mfaToken,
+        });
+      }
+
+      alert(`Issuer ${isBlacklist ? "블랙리스트" : "화이트리스트"} 등록 성공!`);
+      router.push("/issuer");
+    } catch (error) {
+      console.error("등록 실패:", error);
+      const message = (error as Error).message;
+      if (
+        message.includes("인증 토큰이 유효하지 않습니다") ||
+        message.includes("유효한 인증 토큰이 없습니다")
+      ) {
+        alert("등록 실패: 인증이 만료되었습니다. 다시 로그인 후 시도해주세요.");
+        router.push("/login");
+        return;
+      }
+      alert("등록 실패: " + message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const backHref = isBlacklist ? "/issuer/blacklist" : "/issuer/whitelist";
+  const backHref = "/issuer";
   const title = isBlacklist ? "블랙리스트 등록" : "화이트리스트 등록";
 
   return (
@@ -70,23 +116,28 @@ function IssuerNewForm() {
             </div>
           </div>
 
+          {/* Issuer Name */}
+          <div className="flex items-start px-6 py-4 gap-6">
+            <label className="w-40 shrink-0 text-sm font-medium text-slate-600 pt-1.5">
+              Issuer 이름
+            </label>
+            <div className="flex-1">
+              <input
+                type="text"
+                value={form.issuerName}
+                onChange={e => { setForm(f => ({ ...f, issuerName: e.target.value })); setErrors(v => ({ ...v, issuerName: false })); }}
+                placeholder="KYvC Platform Issuer"
+                className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${errors.issuerName ? "border-red-400 bg-red-50" : "border-slate-200"}`}
+              />
+              {errors.issuerName && <p className="text-xs text-red-500 mt-1">Issuer 이름을 입력해주세요.</p>}
+            </div>
+          </div>
+
           {/* 정책 유형 */}
           <div className="flex items-center px-6 py-4 gap-6">
             <label className="w-40 shrink-0 text-sm font-medium text-slate-600">정책 유형</label>
             <div className="flex gap-3">
-              {["화이트리스트", "블랙리스트"].map(t => (
-                <label key={t} className="flex items-center gap-2 cursor-pointer text-sm text-slate-600">
-                  <input
-                    type="radio"
-                    name="type"
-                    value={t}
-                    checked={form.type === t}
-                    onChange={() => setForm(f => ({ ...f, type: t }))}
-                    className="accent-blue-600"
-                  />
-                  <span className={t === "블랙리스트" ? "text-red-600 font-medium" : "text-green-600 font-medium"}>{t}</span>
-                </label>
-              ))}
+              <span className={isBlacklist ? "text-red-600 font-medium" : "text-green-600 font-medium"}>{isBlacklist ? "블랙리스트" : "화이트리스트"}</span>
             </div>
           </div>
 
@@ -121,6 +172,43 @@ function IssuerNewForm() {
               <option>비즈파트너 포털</option>
             </select>
           </div>
+
+          {/* 블랙리스트 전용 필드 */}
+          {isBlacklist && (
+            <>
+              {/* Reason Code */}
+              <div className="flex items-start px-6 py-4 gap-6">
+                <label className="w-40 shrink-0 text-sm font-medium text-slate-600 pt-1.5">차단 사유 코드</label>
+                <div className="flex-1">
+                  <select
+                    value={form.reasonCode}
+                    onChange={e => { setForm(f => ({ ...f, reasonCode: e.target.value })); setErrors(v => ({ ...v, reasonCode: false })); }}
+                    className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${errors.reasonCode ? "border-red-400 bg-red-50" : "border-slate-200"}`}
+                  >
+                    <option value="">선택하세요</option>
+                    <option value="FRAUD_SUSPECTED">사기 의심</option>
+                    <option value="INVALID_CERT">유효하지 않은 인증서</option>
+                  </select>
+                  {errors.reasonCode && <p className="text-xs text-red-500 mt-1">차단 사유 코드를 선택해주세요.</p>}
+                </div>
+              </div>
+
+              {/* Reason */}
+              <div className="flex items-start px-6 py-4 gap-6">
+                <label className="w-40 shrink-0 text-sm font-medium text-slate-600 pt-1.5">차단 상세 사유</label>
+                <div className="flex-1">
+                  <textarea
+                    value={form.reason}
+                    onChange={e => { setForm(f => ({ ...f, reason: e.target.value })); setErrors(v => ({ ...v, reason: false })); }}
+                    placeholder="차단 상세 사유를 입력하세요"
+                    className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${errors.reason ? "border-red-400 bg-red-50" : "border-slate-200"}`}
+                    rows={3}
+                  />
+                  {errors.reason && <p className="text-xs text-red-500 mt-1">차단 상세 사유를 입력해주세요.</p>}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* 적용 기간 */}
           <div className="flex items-start px-6 py-4 gap-6">

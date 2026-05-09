@@ -60,3 +60,21 @@ export interface DashboardStats {
   vcIssued: number;
   vpCount: number;
 }
+
+export interface SupplementDocument {
+  documentType: string;
+  fileName: string;
+  submittedAt: string;
+  hashVerified: boolean;
+  status: string;
+}
+
+export interface SupplementRequest {
+  supplementId: number | string;
+  requestContent?: string;
+  requestedAt: string;
+  deadline: string;
+  status: string;
+  additionalNote?: string;
+  submittedDocuments?: SupplementDocument[];
+}

@@ -1,30 +1,30 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
 const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
-const AUDIT_BASE = `${API_BASE}/api/admin/backend/audit-logs`;
+const CONFIG_BASE = `${API_BASE}/api/admin/backend/issuer-configs`;
 
 // ────────────────────────────────────────────────────────────
 // 타입 정의
 // ────────────────────────────────────────────────────────────
 
-export interface AuditLog {
-  auditId: string;
-  actorId?: string;
-  actorName?: string;
-  actionType?: string;
-  targetId?: string;
-  targetType?: string;
-  description?: string;
-  ipAddress?: string;
-  result?: string;
+export interface IssuerConfig {
+  issuerConfigId: string;
+  configName?: string;
+  issuerDid?: string;
+  credentialType?: string;
+  schemaId?: string;
+  validityPeriodDays?: number;
+  signingAlgorithm?: string;
+  revocationEnabled?: boolean;
+  enabled?: boolean;
   createdAt?: string;
+  updatedAt?: string;
 }
 
-export interface AuditLogDetail extends AuditLog {
-  requestBody?: Record<string, unknown>;
-  responseBody?: Record<string, unknown>;
-  userAgent?: string;
-  sessionId?: string;
+export interface IssuerConfigDetail extends IssuerConfig {
+  credentialSchema?: Record<string, unknown>;
+  contextUrls?: string[];
+  proofType?: string;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -74,63 +74,30 @@ async function errorMessageFromResponse(response: Response): Promise<string> {
   }
 }
 
-function fmtDt(iso?: string) {
-  if (!iso) return "-";
-  return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
-}
-
 // ────────────────────────────────────────────────────────────
-// 감사로그 API
+// Issuer 발급 설정 API
 // ────────────────────────────────────────────────────────────
 
-/** GET /api/admin/backend/audit-logs */
-export async function getAuditLogs(filters?: {
-  search?: string;
-  action?: string;
-  actorId?: string;
-  from?: string;
-  to?: string;
-}): Promise<{
-  id: string;
-  date: string;
-  actor: string;
-  action: string;
-  target: string;
-  content: string;
-  ip: string;
-  result: string;
-}[]> {
+/** GET /api/admin/backend/issuer-configs */
+export async function getIssuerConfigs(filters?: {
+  enabled?: boolean;
+}): Promise<IssuerConfig[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.action && filters.action !== "전체 액션 유형") params.set("actionType", filters.action);
-  if (filters?.actorId) params.set("actorId", filters.actorId);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
-  const url = params.toString() ? `${AUDIT_BASE}?${params}` : AUDIT_BASE;
-
+  if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
+  const url = params.toString() ? `${CONFIG_BASE}?${params}` : CONFIG_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-
-  const json = (await response.json()) as CommonResponse<AuditLog[] | PageLike<AuditLog>>;
-  return unwrapListData(json.data).map((log) => ({
-    id: log.auditId,
-    date: fmtDt(log.createdAt),
-    actor: log.actorName ?? log.actorId ?? "-",
-    action: log.actionType ?? "-",
-    target: log.targetId ? `${log.targetType ? `${log.targetType}-` : ""}${log.targetId}` : "-",
-    content: log.description ?? "-",
-    ip: log.ipAddress ?? "-",
-    result: log.result ?? "-",
-  }));
+  const json = (await response.json()) as CommonResponse<IssuerConfig[] | PageLike<IssuerConfig>>;
+  return unwrapListData(json.data);
 }
 
-/** GET /api/admin/backend/audit-logs/{auditId} */
-export async function getAuditLog(auditId: string): Promise<AuditLogDetail> {
-  const response = await fetch(`${AUDIT_BASE}/${auditId}`, {
+/** GET /api/admin/backend/issuer-configs/{issuerConfigId} */
+export async function getIssuerConfig(issuerConfigId: string): Promise<IssuerConfigDetail> {
+  const response = await fetch(`${CONFIG_BASE}/${issuerConfigId}`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<AuditLogDetail>;
+  const json = (await response.json()) as CommonResponse<IssuerConfigDetail>;
   return json.data;
 }
