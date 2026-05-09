@@ -2,6 +2,8 @@ import axios, { type AxiosInstance } from "axios";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+const TOKEN_KEY = "kyvc.accessToken";
+const REFRESH_KEY = "kyvc.refreshToken";
 
 type Envelope<T> = {
   success: boolean;
@@ -19,6 +21,27 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+export const session = {
+  get token() {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(TOKEN_KEY);
+  },
+  set(accessToken: string, refreshToken?: string) {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(TOKEN_KEY, accessToken);
+    if (refreshToken) window.localStorage.setItem(REFRESH_KEY, refreshToken);
+  },
+  clear() {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem(REFRESH_KEY);
+  },
+  get refreshToken() {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(REFRESH_KEY);
+  }
+};
 
 type RequestInput = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -53,8 +76,7 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token =
-    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzIiwiZW1haWwiOiJ0ZXN0QGFiYy5jb20iLCJ1c2VyVHlwZSI6IkNPUlBPUkFURV9VU0VSIiwicm9sZXMiOlsiUk9MRV9DT1JQT1JBVEVfVVNFUiJdLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJpc3MiOiJreXZjLWJhY2tlbmQtZGV2IiwiaWF0IjoxNzc4MzExOTkyLCJleHAiOjE3NzgzMTM3OTIsImp0aSI6ImE5ZTJjMmRiLTEwMTktNGVhOC05YTYyLTE4OGU1MzY3ZGM4ZCJ9.p2hOqy5VkVxI7GtO9h4PRlcHm3oqtc3NfAQY1vFQgD0";
+  const token = session.token;
   if (token) {
     config.headers.set("Authorization", `Bearer ${token}`);
   }

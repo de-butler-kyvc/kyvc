@@ -1,263 +1,293 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 
+import { Icon } from "@/components/design/icons";
 import { PageShell } from "@/components/page-shell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
   type Supplement,
+  type SupplementDocument,
   kyc as kycApi
 } from "@/lib/api";
+import { formatFileSize } from "@/lib/kyc-flow";
 
-const DEFAULT_DOC_OPTIONS = [
-  { code: "CORPORATE_REGISTRATION", label: "등기사항전부증명서" },
-  { code: "BUSINESS_REGISTRATION", label: "사업자등록증" },
-  { code: "SHAREHOLDER_LIST", label: "주주명부" },
-  { code: "ARTICLES_OF_INCORPORATION", label: "정관" },
-  { code: "POWER_OF_ATTORNEY", label: "위임장" },
-  { code: "OTHER", label: "기타" }
-];
+const MAX_BYTES = 20 * 1024 * 1024;
+const ACCEPT = ".pdf,.jpg,.jpeg,.png";
 
-export default function CorporateKycDocumentsPage() {
+export default function CorporateKycSupplementUploadPage() {
   return (
     <Suspense>
-      <Supplements />
+      <SupplementUpload />
     </Suspense>
   );
 }
 
-function Supplements() {
+type Slot = {
+  documentTypeCode: string;
+  label: string;
+  uploaded?: SupplementDocument;
+};
+
+function SupplementUpload() {
+  const router = useRouter();
   const params = useSearchParams();
   const kycId = Number(params.get("id"));
   const supplementId = Number(params.get("supplementId"));
   const valid =
     Number.isFinite(kycId) && kycId > 0 && Number.isFinite(supplementId) && supplementId > 0;
 
-  const [detail, setDetail] = useState<Supplement | null>(null);
-  const [documentTypeCode, setDocumentTypeCode] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
-  const [comment, setComment] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [supplement, setSupplement] = useState<Supplement | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [comment, setComment] = useState("");
+
+  const refresh = async () => {
+    if (!valid) return;
+    const s = await kycApi.supplementDetail(kycId, supplementId);
+    setSupplement(s);
+  };
 
   useEffect(() => {
     if (!valid) return;
-    let cancelled = false;
-    kycApi
-      .supplementDetail(kycId, supplementId)
-      .then((res) => {
-        if (cancelled) return;
-        setDetail(res);
-        const first = res.requestedDocumentTypeCodes?.[0];
-        if (first) setDocumentTypeCode(first);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.");
-      });
-    return () => {
-      cancelled = true;
-    };
+    setError(null);
+    refresh().catch((err: unknown) =>
+      setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
+    );
   }, [kycId, supplementId, valid]);
 
-  const reload = async () => {
-    if (!valid) return;
-    const res = await kycApi.supplementDetail(kycId, supplementId);
-    setDetail(res);
-  };
+  if (!valid) {
+    return (
+      <PageShell title="보완 서류 재업로드" description="유효한 ID가 필요합니다." module="UWEB-017">
+        <Card>
+          <CardContent className="text-sm text-muted-foreground">
+            올바른 신청 ID(id)와 보완 요청 ID(supplementId)가 필요합니다.
+          </CardContent>
+        </Card>
+      </PageShell>
+    );
+  }
 
-  const onUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valid || !file || !documentTypeCode) return;
-    setUploading(true);
+  const requestedCodes = supplement?.requestedDocumentTypeCodes ?? [];
+  const uploadedDocs = supplement?.uploadedDocuments ?? [];
+  const slots: Slot[] = (
+    requestedCodes.length > 0 ? requestedCodes : uploadedDocs.map((d) => d.documentTypeCode ?? "OTHER")
+  ).map((code) => ({
+    documentTypeCode: code,
+    label: documentTypeLabel(code),
+    uploaded: uploadedDocs.find((d) => d.documentTypeCode === code)
+  }));
+
+  const allUploaded = slots.length > 0 && slots.every((s) => s.uploaded);
+
+  const upload = async (slot: Slot, file: File) => {
+    if (file.size > MAX_BYTES) {
+      setError("파일은 20MB 이하만 업로드할 수 있습니다.");
+      return;
+    }
+    setBusy(slot.documentTypeCode);
     setError(null);
-    setInfo(null);
     try {
-      await kycApi.uploadSupplement(kycId, supplementId, file, documentTypeCode);
-      setFile(null);
-      setInfo("문서를 업로드했습니다.");
-      await reload();
+      await kycApi.uploadSupplement(kycId, supplementId, file, slot.documentTypeCode);
+      await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "업로드에 실패했습니다.");
     } finally {
-      setUploading(false);
+      setBusy(null);
     }
   };
 
   const onSubmit = async () => {
-    if (!valid) return;
+    if (!allUploaded) return;
     setSubmitting(true);
     setError(null);
     try {
       await kycApi.submitSupplement(kycId, supplementId, comment || undefined);
-      setInfo("보완 제출이 접수되었습니다.");
-      await reload();
+      router.push(`/corporate/kyc/detail?id=${kycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
-    } finally {
       setSubmitting(false);
     }
   };
 
-  const docOptions = (detail?.requestedDocumentTypeCodes?.length
-    ? detail.requestedDocumentTypeCodes.map((code) => ({
-        code,
-        label:
-          DEFAULT_DOC_OPTIONS.find((o) => o.code === code)?.label ?? code
-      }))
-    : DEFAULT_DOC_OPTIONS);
-
-  const completed =
-    detail?.supplementStatus === "COMPLETED" ||
-    detail?.supplementStatus === "SUBMITTED";
-
   return (
     <PageShell
-      title={`서류 보완 — ${valid ? `KYC-${kycId}` : "(미지정)"}`}
-      description="심사역의 보완 요청에 따라 서류를 추가 제출합니다."
+      title="보완 서류 재업로드"
+      description="요청된 항목별로 새로운 파일을 업로드한 뒤 제출하세요."
       module="UWEB-017 · M-04"
     >
-      {!valid ? (
+      {error ? (
         <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            올바른 신청 ID(id)와 보완 요청 ID(supplementId)가 필요합니다.
-          </CardContent>
+          <CardContent className="text-sm text-destructive">{error}</CardContent>
         </Card>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {detail?.title ?? `보완요청 ${supplementId}`}
-                {detail?.supplementStatus ? (
-                  <Badge variant="outline">{detail.supplementStatus}</Badge>
-                ) : null}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 text-sm">
-              {detail?.message ? <p>{detail.message}</p> : null}
-              {detail?.requestReason ? (
-                <p className="text-muted-foreground">사유: {detail.requestReason}</p>
-              ) : null}
-              {detail?.dueAt ? (
-                <p className="text-xs text-muted-foreground">
-                  마감: {new Date(detail.dueAt).toLocaleString("ko-KR")}
-                </p>
-              ) : null}
+      ) : null}
 
-              {detail?.uploadedDocuments?.length ? (
-                <div>
-                  <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                    제출된 보완 문서
-                  </div>
-                  <ul className="grid gap-1.5">
-                    {detail.uploadedDocuments.map((d) => (
-                      <li
-                        key={d.supplementDocumentId}
-                        className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                      >
-                        <span>
-                          <span className="font-medium">
-                            {docOptions.find((o) => o.code === d.documentTypeCode)?.label ??
-                              d.documentTypeCode}
-                          </span>
-                          <span className="ml-2 font-mono text-xs text-muted-foreground">
-                            {d.fileName}
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+      <div className="form-card">
+        {slots.length === 0 ? (
+          <p className="text-sm text-muted-foreground">요청된 항목이 없습니다.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {slots.map((slot) => (
+              <SlotRow
+                key={slot.documentTypeCode}
+                slot={slot}
+                busy={busy === slot.documentTypeCode}
+                onPick={(file) => upload(slot, file)}
+              />
+            ))}
+          </div>
+        )}
 
-          {!completed ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>보완 서류 업로드</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={onUpload} className="grid gap-3">
-                  <div className="grid gap-2">
-                    <Label>서류 유형</Label>
-                    <select
-                      className="h-9 rounded-md border bg-background px-2 text-sm"
-                      value={documentTypeCode}
-                      onChange={(e) => setDocumentTypeCode(e.target.value)}
-                    >
-                      <option value="">선택</option>
-                      {docOptions.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="supplement-file">파일 선택</Label>
-                    <Input
-                      id="supplement-file"
-                      type="file"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    />
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      disabled={!file || !documentTypeCode || uploading}
-                    >
-                      {uploading ? "업로드 중..." : "업로드"}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          ) : null}
+        <div style={{ marginTop: 20 }}>
+          <label
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--text-secondary)",
+              display: "block",
+              marginBottom: 6
+            }}
+          >
+            제출 메모 (선택)
+          </label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="심사역에게 전달할 코멘트를 입력하세요."
+            rows={3}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              background: "var(--surface)",
+              color: "var(--text-primary)",
+              fontSize: 13.5,
+              fontFamily: "inherit",
+              resize: "vertical"
+            }}
+          />
+        </div>
+      </div>
 
-          {!completed ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>보완 제출</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <Label htmlFor="supplement-comment">코멘트 (선택)</Label>
-                <textarea
-                  id="supplement-comment"
-                  className="min-h-20 rounded-md border bg-background p-2 text-sm"
-                  rows={3}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="심사역에게 전달할 메모를 작성하세요."
-                />
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    onClick={onSubmit}
-                    disabled={
-                      submitting || !(detail?.uploadedDocuments?.length ?? 0)
-                    }
-                  >
-                    {submitting ? "제출 중..." : "보완 제출"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {info ? <p className="text-sm text-muted-foreground">{info}</p> : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        </>
-      )}
+      <div className="form-actions right">
+        <Button
+          variant="ghost"
+          onClick={() =>
+            router.push(
+              `/corporate/kyc/detail/supplement?id=${kycId}&supplementId=${supplementId}`
+            )
+          }
+        >
+          이전
+        </Button>
+        <Button size="lg" disabled={!allUploaded || submitting} onClick={onSubmit}>
+          {submitting ? "제출 중..." : "보완 서류 제출"}
+        </Button>
+      </div>
     </PageShell>
   );
+}
+
+function SlotRow({
+  slot,
+  busy,
+  onPick
+}: {
+  slot: Slot;
+  busy: boolean;
+  onPick: (file: File) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--text-secondary)",
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 6
+        }}
+      >
+        {slot.label}
+        <span style={{ color: "var(--danger)" }}>*</span>
+      </div>
+      {slot.uploaded ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "10px 14px",
+            background: "var(--accent-soft)",
+            border: "1px solid var(--accent)",
+            borderRadius: "var(--radius-md)"
+          }}
+        >
+          <Icon.File size={18} style={{ color: "var(--accent)" }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              {slot.uploaded.fileName ?? `${slot.label}.pdf`}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {formatFileSize(slot.uploaded.fileSize)}
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            교체
+          </Button>
+        </div>
+      ) : (
+        <div
+          className="upload-tile"
+          style={{ minHeight: 100 }}
+          onClick={() => !busy && inputRef.current?.click()}
+        >
+          <Icon.Upload size={22} className="upload-tile-icon" />
+          <div className="upload-tile-text">{busy ? "업로드 중..." : "클릭하거나 드래그"}</div>
+          <div className="upload-tile-meta">PDF, JPG, PNG · 20MB</div>
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onPick(file);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+function documentTypeLabel(code?: string) {
+  if (!code) return "-";
+  const map: Record<string, string> = {
+    BUSINESS_REGISTRATION: "사업자등록증",
+    CORPORATE_REGISTRATION: "등기사항전부증명서",
+    SHAREHOLDER_LIST: "주주명부",
+    ARTICLES_OF_INCORPORATION: "정관",
+    POWER_OF_ATTORNEY: "위임장",
+    REPRESENTATIVE_ID: "대표자 신분증",
+    AGENT_ID: "대리인 신분증",
+    OTHER: "기타"
+  };
+  return map[code] ?? code;
 }
