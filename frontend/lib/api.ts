@@ -2,8 +2,6 @@ import axios, { type AxiosInstance } from "axios";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
-const TOKEN_KEY = "kyvc.accessToken";
-const REFRESH_KEY = "kyvc.refreshToken";
 
 type Envelope<T> = {
   success: boolean;
@@ -21,27 +19,6 @@ export class ApiError extends Error {
     super(message);
   }
 }
-
-export const session = {
-  get token() {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(TOKEN_KEY);
-  },
-  set(accessToken: string, refreshToken?: string) {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(TOKEN_KEY, accessToken);
-    if (refreshToken) window.localStorage.setItem(REFRESH_KEY, refreshToken);
-  },
-  clear() {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(TOKEN_KEY);
-    window.localStorage.removeItem(REFRESH_KEY);
-  },
-  get refreshToken() {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(REFRESH_KEY);
-  },
-};
 
 type RequestInput = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -74,14 +51,10 @@ function isEnvelope<T>(data: unknown): data is Envelope<T> {
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   validateStatus: () => true,
-  // withCredentials: true
+  withCredentials: true
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = session.token;
-  if (token) {
-    config.headers.set("Authorization", `Bearer ${token}`);
-  }
   if (config.data instanceof FormData) {
     config.headers.delete("Content-Type");
   }
