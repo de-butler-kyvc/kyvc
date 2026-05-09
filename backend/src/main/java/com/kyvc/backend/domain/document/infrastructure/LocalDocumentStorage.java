@@ -2,6 +2,8 @@ package com.kyvc.backend.domain.document.infrastructure;
 
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
+import org.springframework.core.io.PathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,6 +52,24 @@ public class LocalDocumentStorage implements DocumentStorage {
         return storeToDirectory(resolveCorporateTargetDirectory(corporateId, documentTypeCode), file);
     }
 
+    // 저장 문서 파일 조회
+    @Override
+    public StoredContent load(
+            String storedFilePath // 저장 파일 경로
+    ) {
+        Path storedPath = resolveStoredFilePath(storedFilePath);
+        if (!Files.isRegularFile(storedPath) || !Files.isReadable(storedPath)) {
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_NOT_FOUND);
+        }
+
+        try {
+            Resource resource = new PathResource(storedPath);
+            return new StoredContent(resource, Files.size(storedPath));
+        } catch (IOException exception) {
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_NOT_FOUND, exception);
+        }
+    }
+
     // 지정 디렉터리에 파일 저장
     private StoredFile storeToDirectory(
             Path targetDirectory, // 저장 디렉터리
@@ -76,7 +96,7 @@ public class LocalDocumentStorage implements DocumentStorage {
 
             return new StoredFile(
                     originalFileName,
-                    targetPath.toString(),
+                    properties.getRootPath().relativize(targetPath).toString(),
                     resolveContentType(file),
                     file.getSize(),
                     HexFormat.of().formatHex(messageDigest.digest())
@@ -115,6 +135,94 @@ public class LocalDocumentStorage implements DocumentStorage {
             throw new ApiException(ErrorCode.DOCUMENT_STORAGE_PATH_INVALID);
         }
         return targetDirectory;
+    }
+
+    // 저장 파일 경로 검증
+    private Path resolveStoredFilePath(
+            String storedFilePath // 저장 파일 경로
+    ) {
+        if (storedFilePath == null || storedFilePath.isBlank()) {
+            throw new ApiException(ErrorCode.DOCUMENT_STORAGE_PATH_INVALID);
+        }
+
+        try {
+            String rootRelativePath = extractStorageRootRelativePath(storedFilePath);
+            if (rootRelativePath != null) {
+                return resolveRelativeStoredFilePath(Path.of(rootRelativePath));
+            }
+
+            Path storedPath = Path.of(storedFilePath).normalize();
+            if (!storedPath.isAbsolute()) {
+                return resolveRelativeStoredFilePath(storedPath);
+            }
+
+            Path normalizedStoredPath = storedPath.toAbsolutePath().normalize();
+            if (normalizedStoredPath.startsWith(properties.getRootPath())) {
+                return normalizedStoredPath;
+            }
+
+            return resolveLegacyAbsoluteStoredFilePath(storedFilePath);
+        } catch (InvalidPathException exception) {
+            throw new ApiException(ErrorCode.DOCUMENT_STORAGE_PATH_INVALID, exception);
+        }
+    }
+
+    // 저장 루트 기준 경로 추출
+    private String extractStorageRootRelativePath(
+            String storedFilePath // 저장 파일 경로
+    ) {
+        String normalizedPath = storedFilePath.replace('\\', '/'); // 비교용 경로
+        String rootName = properties.getRootPath().getFileName().toString(); // 저장 루트명
+        String rootPrefix = rootName + "/";
+        if (normalizedPath.startsWith(rootPrefix)) {
+            return normalizedPath.substring(rootPrefix.length());
+        }
+
+        String marker = "/" + rootName + "/";
+        int markerIndex = normalizedPath.indexOf(marker);
+        if (markerIndex < 0) {
+            return null;
+        }
+        return normalizedPath.substring(markerIndex + marker.length());
+    }
+
+    // 상대 저장 파일 경로 검증
+    private Path resolveRelativeStoredFilePath(
+            Path storedPath // 상대 저장 파일 경로
+    ) {
+        Path normalizedStoredPath = stripStorageRootName(storedPath);
+        Path resolvedPath = properties.getRootPath().resolve(normalizedStoredPath).normalize();
+        if (!resolvedPath.startsWith(properties.getRootPath())) {
+            throw new ApiException(ErrorCode.DOCUMENT_STORAGE_PATH_INVALID);
+        }
+        return resolvedPath;
+    }
+
+    // 과거 절대 저장 파일 경로 보정
+    private Path resolveLegacyAbsoluteStoredFilePath(
+            String storedFilePath // 과거 절대 저장 파일 경로
+    ) {
+        String normalizedPath = storedFilePath.replace('\\', '/'); // 비교용 경로
+        String rootName = properties.getRootPath().getFileName().toString(); // 저장 루트명
+        String marker = "/" + rootName + "/";
+        int markerIndex = normalizedPath.indexOf(marker);
+        if (markerIndex < 0) {
+            throw new ApiException(ErrorCode.DOCUMENT_STORAGE_PATH_INVALID);
+        }
+
+        String relativePath = normalizedPath.substring(markerIndex + marker.length());
+        return resolveRelativeStoredFilePath(Path.of(relativePath));
+    }
+
+    // 저장 루트명 제거
+    private Path stripStorageRootName(
+            Path storedPath // 저장 파일 경로
+    ) {
+        if (storedPath.getNameCount() > 1
+                && properties.getRootPath().getFileName().equals(storedPath.getName(0))) {
+            return storedPath.subpath(1, storedPath.getNameCount());
+        }
+        return storedPath;
     }
 
     // 파일 검증

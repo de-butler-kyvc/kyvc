@@ -102,11 +102,6 @@ public class CoreRequest {
         this.responsePayloadJson = responsePayloadJson;
     }
 
-    // Callback 수신 상태 반영
-    public void markCallbackReceived() {
-        this.coreRequestStatus = KyvcEnums.CoreRequestStatus.CALLBACK_RECEIVED;
-    }
-
     // 성공 상태 반영
     public void markSuccess(
             String responsePayloadJson // 성공 Payload JSON

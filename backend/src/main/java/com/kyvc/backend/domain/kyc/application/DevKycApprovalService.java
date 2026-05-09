@@ -1,7 +1,5 @@
 package com.kyvc.backend.domain.kyc.application;
 
-import com.kyvc.backend.domain.core.application.CoreRequestService;
-import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.credential.application.CredentialIssuanceService;
 import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
@@ -35,7 +33,6 @@ public class DevKycApprovalService {
     private final KycApplicationRepository kycApplicationRepository;
     private final CredentialRepository credentialRepository;
     private final CredentialIssuanceService credentialIssuanceService;
-    private final CoreRequestService coreRequestService;
     private final LogEventLogger logEventLogger;
 
     // 개발/E2E 테스트용 KYC 임시 승인 처리
@@ -90,7 +87,6 @@ public class DevKycApprovalService {
                 credentialIssued,
                 credential == null ? null : credential.getCredentialId(),
                 credential == null || credential.getCredentialStatus() == null ? null : credential.getCredentialStatus().name(),
-                resolveLatestCoreRequestId(credential),
                 message
         );
     }
@@ -99,17 +95,6 @@ public class DevKycApprovalService {
             Long kycId // KYC 신청 ID
     ) {
         return credentialRepository.findLatestByKycId(kycId).orElse(null);
-    }
-
-    private String resolveLatestCoreRequestId(
-            Credential credential // Credential
-    ) {
-        if (credential == null || credential.getCredentialId() == null) {
-            return null;
-        }
-        return coreRequestService.findLatestVcIssuanceRequest(credential.getCredentialId())
-                .map(CoreRequest::getCoreRequestId)
-                .orElse(null);
     }
 
     private void logDevApproval(

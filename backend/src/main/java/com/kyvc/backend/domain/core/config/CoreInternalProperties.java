@@ -14,5 +14,4 @@ public class CoreInternalProperties {
 
     private String mode = "STUB"; // Core 연동 모드
     private String internalApiKey; // 내부 API Key
-    private String callbackBaseUrl; // Callback 기준 URL
 }

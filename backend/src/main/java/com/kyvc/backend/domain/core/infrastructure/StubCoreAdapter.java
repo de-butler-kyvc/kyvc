@@ -73,14 +73,14 @@ public class StubCoreAdapter implements CoreAdapter {
     ) {
         return new CoreVcIssuanceResponse(
                 request.coreRequestId(),
-                KyvcEnums.CredentialStatus.ISSUING.name(),
-                "VC issuance request accepted by mock core.",
+                KyvcEnums.CredentialStatus.VALID.name(),
+                "VC issuance completed by mock core.",
                 LocalDateTime.now(),
                 "mock-" + request.coreRequestId(),
                 request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
-                null,
-                null,
-                null,
+                "mock-vc-hash-" + request.coreRequestId(),
+                "mock-tx-" + request.coreRequestId(),
+                "mock-status-" + request.coreRequestId(),
                 LocalDateTime.now(),
                 request.validUntil()
         );

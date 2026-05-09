@@ -21,7 +21,6 @@ public class CoreProperties {
     private boolean failureFallbackEnabled = false; // 장애 fallback 허용 여부
     private String apiKey; // Core API Key
     private String internalApiKey; // 내부 API Key 호환 필드
-    private String callbackBaseUrl; // Callback 기준 URL
 
     // 정규화 모드 조회
     public String normalizedMode() {

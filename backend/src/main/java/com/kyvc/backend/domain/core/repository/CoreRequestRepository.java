@@ -54,13 +54,4 @@ public interface CoreRequestRepository {
             KyvcEnums.CoreRequestType requestType // Core 요청 유형
     );
 
-    /**
-     * Callback 완료 여부 조회
-     *
-     * @param coreRequestId Core 요청 ID
-     * @return 완료 여부
-     */
-    boolean existsCompletedCallback(
-            String coreRequestId // Core 요청 ID
-    );
 }

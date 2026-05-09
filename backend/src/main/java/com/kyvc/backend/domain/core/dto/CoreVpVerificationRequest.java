@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
  * @param purpose 검증 목적
  * @param aud 검증 aud
  * @param requiredClaimsJson 요청 claim 조건 JSON
- * @param callbackUrl Callback URL
  * @param requestedAt 요청 시각
  */
 @Schema(description = "Core VP 검증 요청")
@@ -39,8 +38,6 @@ public record CoreVpVerificationRequest(
         String aud, // 검증 aud
         @Schema(description = "요청 claim 조건 JSON")
         String requiredClaimsJson, // 요청 claim 조건 JSON
-        @Schema(description = "Callback URL", example = "http://localhost:8080/api/internal/core/callbacks/vp-verification")
-        String callbackUrl, // Callback URL
         @Schema(description = "요청 시각", example = "2026-05-06T10:20:00")
         LocalDateTime requestedAt // 요청 시각
 ) {

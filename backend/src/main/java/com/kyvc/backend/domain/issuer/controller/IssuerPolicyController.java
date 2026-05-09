@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/internal/issuer-policies")
 @RequiredArgsConstructor
-@Tag(name = "Core 연동 / Callback", description = "Core 내부 헬스체크, Issuer 정책, AI/VC/XRPL/VP callback 및 개발용 E2E API")
+@Tag(name = "Issuer 정책", description = "Issuer 정책 조회 API")
 public class IssuerPolicyController {
 
     private final IssuerPolicyService issuerPolicyService;

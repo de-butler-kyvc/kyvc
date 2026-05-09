@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 public record CoreVpVerificationResponse(
         @Schema(description = "Core 요청 ID", example = "36ad38f0-d3bd-41a1-8c4e-079dcaec3075")
         String coreRequestId, // Core 요청 ID
-        @Schema(description = "처리 상태", example = "REQUESTED")
+        @Schema(description = "처리 상태", example = "VALID")
         String status, // 처리 상태
         @Schema(description = "처리 메시지", example = "VP verification request accepted by core.")
         String message, // 처리 메시지

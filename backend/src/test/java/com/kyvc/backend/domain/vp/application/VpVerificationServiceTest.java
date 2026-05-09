@@ -2,7 +2,6 @@ package com.kyvc.backend.domain.vp.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
-import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
@@ -82,16 +81,12 @@ class VpVerificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        CoreProperties coreProperties = new CoreProperties();
-        coreProperties.setCallbackBaseUrl("https://backend.test");
-
         service = new VpVerificationService(
                 vpVerificationRepository,
                 credentialRepository,
                 corporateRepository,
                 coreRequestService,
                 coreAdapter,
-                coreProperties,
                 new ObjectMapper().findAndRegisterModules(),
                 logEventLogger
         );
@@ -233,7 +228,7 @@ class VpVerificationServiceTest {
     }
 
     @Test
-    void submitPresentation_savesHashOnlyAndMarksPresented() {
+    void submitPresentation_savesHashOnlyAndReturnsVerificationResult() {
         String vpJwt = "vp.jwt.value";
         VpVerification vpVerification = createRequestedVpVerification(
                 21L,
@@ -266,13 +261,13 @@ class VpVerificationServiceTest {
                     CoreVpVerificationRequest request = invocation.getArgument(0);
                     return new CoreVpVerificationResponse(
                             request.coreRequestId(),
-                            KyvcEnums.CoreRequestStatus.REQUESTED.name(),
-                            "accepted",
+                            KyvcEnums.VpVerificationStatus.VALID.name(),
+                            "valid",
                             LocalDateTime.now(),
+                            true,
+                            true,
                             false,
-                            null,
-                            null,
-                            null
+                            "VP 검증 성공"
                     );
                 });
         when(vpVerificationRepository.save(any(VpVerification.class)))
@@ -285,7 +280,7 @@ class VpVerificationServiceTest {
 
         verify(coreRequestService).createVpVerificationRequest(21L, null);
         verify(coreRequestService).updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), requestPayloadCaptor.capture());
-        verify(coreRequestService).markRequested(eq(coreRequest.getCoreRequestId()), responsePayloadCaptor.capture());
+        verify(coreRequestService).markSuccess(eq(coreRequest.getCoreRequestId()), responsePayloadCaptor.capture());
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
 
         String requestPayload = requestPayloadCaptor.getValue();
@@ -295,11 +290,13 @@ class VpVerificationServiceTest {
         assertThat(requestPayload).doesNotContain(vpJwt);
         assertThat(responsePayload).doesNotContain(vpJwt);
         assertThat(savedVpVerification.getVpJwtHash()).isEqualTo(TokenHashUtil.sha256(vpJwt));
-        assertThat(savedVpVerification.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.PRESENTED);
+        assertThat(savedVpVerification.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID);
         assertThat(savedVpVerification.getCoreRequestId()).isEqualTo(coreRequest.getCoreRequestId());
         assertThat(response.presentationId()).isEqualTo(21L);
         assertThat(response.credentialId()).isEqualTo(100L);
-        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.PRESENTED.name());
+        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
+        assertThat(response.result().signatureValid()).isTrue();
+        assertThat(response.result().replayDetected()).isFalse();
     }
 
     @Test
@@ -428,6 +425,7 @@ class VpVerificationServiceTest {
         assertThat(response.presentationId()).isEqualTo(21L);
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.PRESENTED.name());
         assertThat(response.replaySuspected()).isFalse();
+        assertThat(response.result()).isNull();
     }
 
     private CustomUserDetails userDetails() {

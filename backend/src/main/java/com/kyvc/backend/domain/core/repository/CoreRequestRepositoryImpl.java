@@ -55,13 +55,4 @@ public class CoreRequestRepositoryImpl implements CoreRequestRepository {
         );
     }
 
-    // Callback 완료 여부 조회
-    @Override
-    public boolean existsCompletedCallback(
-            String coreRequestId // Core 요청 ID
-    ) {
-        return findById(coreRequestId)
-                .map(CoreRequest::isCompleted)
-                .orElse(false);
-    }
 }

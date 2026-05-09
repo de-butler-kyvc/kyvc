@@ -25,7 +25,7 @@ public class CoreMockResponseFactory {
     ) {
         return new CoreAiReviewResponse(
                 request.coreRequestId(),
-                KyvcEnums.AiReviewStatus.SUCCESS.name(),
+                KyvcEnums.AiReviewStatus.LOW_CONFIDENCE.name(),
                 "Core AI API가 없어 개발용 Mock AI 심사 요청을 처리했습니다.",
                 LocalDateTime.now()
         );
@@ -37,7 +37,7 @@ public class CoreMockResponseFactory {
     ) {
         return new CoreAiReviewStatusResponse(
                 coreRequestId,
-                KyvcEnums.AiReviewStatus.SUCCESS.name(),
+                KyvcEnums.AiReviewStatus.LOW_CONFIDENCE.name(),
                 "Core AI API가 없어 개발용 Mock AI 심사 상태를 반환했습니다.",
                 LocalDateTime.now()
         );
@@ -49,7 +49,7 @@ public class CoreMockResponseFactory {
     ) {
         return new CoreAiReviewStatusResponse(
                 coreRequestId,
-                KyvcEnums.AiReviewStatus.SUCCESS.name(),
+                KyvcEnums.AiReviewStatus.LOW_CONFIDENCE.name(),
                 "decision=MANUAL_REVIEW, overallScore=86, confidence=0.86",
                 LocalDateTime.now()
         );
@@ -87,7 +87,7 @@ public class CoreMockResponseFactory {
     ) {
         return new CoreVcIssuanceResponse(
                 request.coreRequestId(),
-                KyvcEnums.CredentialStatus.ISSUING.name(),
+                KyvcEnums.CredentialStatus.FAILED.name(),
                 "Core 장애 fallback VC 발급 응답: " + reason,
                 LocalDateTime.now(),
                 "fallback-" + request.coreRequestId(),
@@ -107,13 +107,13 @@ public class CoreMockResponseFactory {
     ) {
         return new CoreVpVerificationResponse(
                 request.coreRequestId(),
-                KyvcEnums.VpVerificationStatus.PRESENTED.name(),
+                KyvcEnums.VpVerificationStatus.INVALID.name(),
                 "Core 장애 fallback VP 검증 응답: " + reason,
                 LocalDateTime.now(),
+                true,
                 false,
-                null,
                 false,
-                "VP 검증 결과 미확정"
+                "VP 검증 실패"
         );
     }
 }

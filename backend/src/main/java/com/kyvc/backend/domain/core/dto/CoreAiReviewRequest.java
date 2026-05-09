@@ -15,7 +15,6 @@ import java.util.List;
  * @param corporateName 법인명
  * @param representativeName 대표자명
  * @param documents 심사 문서 목록
- * @param callbackUrl Callback URL
  * @param requestedAt 요청 시각
  */
 @Schema(description = "Core AI 심사 요청")
@@ -34,8 +33,6 @@ public record CoreAiReviewRequest(
         String representativeName, // 대표자명
         @Schema(description = "심사 문서 목록")
         List<CoreAiReviewDocumentRequest> documents, // 심사 문서 목록
-        @Schema(description = "Callback URL", example = "http://localhost:8080/api/internal/core/callbacks/ai-review")
-        String callbackUrl, // Callback URL
         @Schema(description = "요청 시각", example = "2026-05-06T10:00:00")
         LocalDateTime requestedAt // 요청 시각
 ) {

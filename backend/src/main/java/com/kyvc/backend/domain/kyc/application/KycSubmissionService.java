@@ -3,7 +3,6 @@ package com.kyvc.backend.domain.kyc.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
-import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
@@ -33,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -53,7 +53,11 @@ public class KycSubmissionService {
     private static final String CORPORATE_TYPE_REQUIRED = "CORPORATE_TYPE_REQUIRED"; // 법인 유형 누락 코드
     private static final String DOCUMENT_STORE_OPTION_REQUIRED = "DOCUMENT_STORE_OPTION_REQUIRED"; // 원본 문서 저장 옵션 누락 코드
     private static final String DOCUMENT_REQUIRED = "DOCUMENT_REQUIRED"; // 필수서류 누락 코드
-    private static final String AI_REVIEW_REQUESTED_MESSAGE = "KYC 신청이 제출되었고 AI 심사가 요청되었습니다.";
+    private static final String AI_REVIEW_COMPLETED_MESSAGE = "KYC 신청이 제출되었고 수동 심사로 전환되었습니다.";
+    private static final String AI_REVIEW_FAILED_MESSAGE = "AI 심사 처리 실패로 수동 심사로 전환되었습니다.";
+    private static final String AI_REVIEW_MANUAL_REASON = "AI 심사 결과 수동 심사 필요";
+    private static final String AI_REVIEW_FAILED_MANUAL_REASON = "AI 심사 실패로 수동 심사 전환";
+    private static final BigDecimal DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE = BigDecimal.ZERO;
 
     private final KycApplicationRepository kycApplicationRepository;
     private final CorporateRepository corporateRepository;
@@ -63,7 +67,6 @@ public class KycSubmissionService {
     private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
-    private final CoreProperties coreProperties;
     private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
 
@@ -109,12 +112,12 @@ public class KycSubmissionService {
                     null
             );
             coreRequestId = coreRequest.getCoreRequestId();
+            kycApplication.submit(submittedAt);
 
             CoreAiReviewRequest coreAiReviewRequest = buildAiReviewRequest(
                     coreRequestId,
                     summary,
-                    submittedAt,
-                    buildAiReviewCallbackUrl(coreRequestId)
+                    submittedAt
             ); // Core AI 심사 API 요청 데이터
 
             String requestPayloadJson = toJson(coreAiReviewRequest);
@@ -126,7 +129,7 @@ public class KycSubmissionService {
                     createSubmitLogFields(kycApplication, coreRequestId)
             );
             CoreAiReviewResponse coreAiReviewResponse = coreAdapter.requestAiReview(coreAiReviewRequest);
-            coreRequestService.markRequested(coreRequestId, toJson(coreAiReviewResponse));
+            coreRequestService.markSuccess(coreRequestId, toJson(coreAiReviewResponse));
             logEventLogger.info(
                     "core.call.completed",
                     "Core AI review call completed",
@@ -134,12 +137,12 @@ public class KycSubmissionService {
             );
 
             logEventLogger.info(
-                    "kyc.submit.ai-review-requested",
-                    "KYC submit AI review requested",
+                    "kyc.submit.ai-review.completed",
+                    "KYC submit AI review completed",
                     createSubmitLogFields(kycApplication, coreRequestId)
             );
 
-            kycApplication.startAiReview(submittedAt);
+            applyAiReviewResult(kycApplication, coreAiReviewResponse);
             KycApplication savedApplication = kycApplicationRepository.save(kycApplication); // 저장된 KYC
 
             logEventLogger.info(
@@ -151,16 +154,32 @@ public class KycSubmissionService {
             return new KycSubmitResponse(
                     savedApplication.getKycId(),
                     savedApplication.getKycStatus().name(),
+                    enumName(savedApplication.getAiReviewStatus()),
+                    null,
+                    resolveNextActionCode(savedApplication),
                     savedApplication.getSubmittedAt(),
                     true,
-                    AI_REVIEW_REQUESTED_MESSAGE
+                    AI_REVIEW_COMPLETED_MESSAGE
             );
         } catch (ApiException exception) {
             if (coreRequestId != null) {
+                markCoreRequestFailure(coreRequestId, exception);
+                kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
+                KycApplication savedApplication = kycApplicationRepository.save(kycApplication);
                 logEventLogger.warn(
                         "core.call.failed",
                         exception.getMessage(),
                         createSubmitLogFields(kycApplication, coreRequestId)
+                );
+                return new KycSubmitResponse(
+                        savedApplication.getKycId(),
+                        savedApplication.getKycStatus().name(),
+                        enumName(savedApplication.getAiReviewStatus()),
+                        null,
+                        resolveNextActionCode(savedApplication),
+                        savedApplication.getSubmittedAt(),
+                        true,
+                        AI_REVIEW_FAILED_MESSAGE
                 );
             }
             logEventLogger.warn(
@@ -390,8 +409,7 @@ public class KycSubmissionService {
     private CoreAiReviewRequest buildAiReviewRequest(
             String coreRequestId, // Core 요청 ID
             KycApplicationSummaryResponse summary, // KYC 제출 전 요약
-            LocalDateTime requestedAt, // 요청 일시
-            String callbackUrl // Callback URL
+            LocalDateTime requestedAt // 요청 일시
     ) {
         return new CoreAiReviewRequest(
                 coreRequestId,
@@ -401,7 +419,6 @@ public class KycSubmissionService {
                 summary.corporateName(),
                 summary.representativeName(),
                 buildAiReviewDocuments(summary.documents()),
-                callbackUrl,
                 requestedAt
         );
     }
@@ -425,20 +442,6 @@ public class KycSubmissionService {
                 .toList();
     }
 
-    // Core AI 심사 Callback URL 생성
-    private String buildAiReviewCallbackUrl(
-            String coreRequestId // Core 요청 ID
-    ) {
-        String callbackBaseUrl = coreProperties.getCallbackBaseUrl(); // Callback 기준 URL
-        if (!StringUtils.hasText(callbackBaseUrl) || !StringUtils.hasText(coreRequestId)) {
-            return null;
-        }
-        String normalizedCallbackBaseUrl = callbackBaseUrl.endsWith("/")
-                ? callbackBaseUrl.substring(0, callbackBaseUrl.length() - 1)
-                : callbackBaseUrl;
-        return normalizedCallbackBaseUrl + "/api/internal/core/ai-reviews/" + coreRequestId + "/callback";
-    }
-
     // JSON 직렬화
     private String toJson(
             Object value // 직렬화 대상
@@ -449,6 +452,73 @@ public class KycSubmissionService {
             logEventLogger.error("core.call.failed", "Core payload serialization failed", exception);
             throw new ApiException(ErrorCode.INTERNAL_SERVER_ERROR, exception);
         }
+    }
+
+    // AI 심사 동기 결과 반영
+    private void applyAiReviewResult(
+            KycApplication kycApplication, // KYC 신청 정보
+            CoreAiReviewResponse coreAiReviewResponse // Core AI 심사 응답
+    ) {
+        KyvcEnums.AiReviewStatus aiReviewStatus = resolveAiReviewStatus(coreAiReviewResponse);
+        String detailJson = toJson(coreAiReviewResponse); // AI 심사 메타데이터 JSON
+        if (KyvcEnums.AiReviewStatus.FAILED == aiReviewStatus) {
+            kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
+            return;
+        }
+        if (KyvcEnums.AiReviewStatus.SUCCESS == aiReviewStatus) {
+            kycApplication.completeAiReviewAsManualReview(
+                    DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE,
+                    coreAiReviewResponse.message(),
+                    detailJson,
+                    AI_REVIEW_MANUAL_REASON
+            );
+            return;
+        }
+        kycApplication.completeAiReviewAsLowConfidenceManualReview(
+                DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE,
+                coreAiReviewResponse.message(),
+                detailJson,
+                AI_REVIEW_MANUAL_REASON
+        );
+    }
+
+    // AI 심사 상태 결정
+    private KyvcEnums.AiReviewStatus resolveAiReviewStatus(
+            CoreAiReviewResponse coreAiReviewResponse // Core AI 심사 응답
+    ) {
+        if (coreAiReviewResponse == null || !StringUtils.hasText(coreAiReviewResponse.status())) {
+            return KyvcEnums.AiReviewStatus.FAILED;
+        }
+        try {
+            return KyvcEnums.AiReviewStatus.valueOf(coreAiReviewResponse.status().trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return KyvcEnums.AiReviewStatus.FAILED;
+        }
+    }
+
+    // Core 요청 실패 상태 반영
+    private void markCoreRequestFailure(
+            String coreRequestId, // Core 요청 ID
+            ApiException exception // Core 호출 예외
+    ) {
+        if (ErrorCode.CORE_API_TIMEOUT == exception.getErrorCode()) {
+            coreRequestService.markTimeout(coreRequestId, exception.getMessage());
+            return;
+        }
+        coreRequestService.markFailed(coreRequestId, exception.getMessage());
+    }
+
+    // 다음 행동 코드 결정
+    private String resolveNextActionCode(
+            KycApplication kycApplication // KYC 신청 정보
+    ) {
+        if (KyvcEnums.KycStatus.APPROVED == kycApplication.getKycStatus()) {
+            return KyvcEnums.KycCompletionAction.ISSUE_CREDENTIAL.name();
+        }
+        if (KyvcEnums.KycStatus.NEED_SUPPLEMENT == kycApplication.getKycStatus()) {
+            return KyvcEnums.KycCompletionAction.CHECK_SUPPLEMENT.name();
+        }
+        return KyvcEnums.KycCompletionAction.WAIT_MANUAL_REVIEW.name();
     }
 
     // KYC 제출 로그 필드 생성

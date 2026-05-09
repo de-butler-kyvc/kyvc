@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 public record CoreAiReviewResponse(
         @Schema(description = "Core 요청 ID", example = "2a3a5630-602a-41cc-8f11-7ef5114c2e30")
         String coreRequestId, // Core 요청 ID
-        @Schema(description = "처리 상태", example = "QUEUED")
+        @Schema(description = "처리 상태", example = "LOW_CONFIDENCE")
         String status, // 처리 상태
         @Schema(description = "처리 메시지", example = "AI review request accepted by stub core.")
         String message, // 처리 메시지

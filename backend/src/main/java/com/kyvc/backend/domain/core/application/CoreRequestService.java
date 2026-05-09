@@ -90,17 +90,8 @@ public class CoreRequestService {
         return coreRequestRepository.save(coreRequest);
     }
 
-    // Callback 수신 상태 반영
-    public CoreRequest markCallbackReceived(
-            String coreRequestId // Core 요청 ID
-    ) {
-        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
-        coreRequest.markCallbackReceived();
-        return coreRequestRepository.save(coreRequest);
-    }
-
-    // 성공 상태 반영
-    public CoreRequest markCallbackSuccess(
+    // 응답 수신 성공 상태 반영
+    public CoreRequest markSuccess(
             String coreRequestId, // Core 요청 ID
             String responsePayloadJson // 성공 Payload JSON
     ) {
@@ -109,8 +100,8 @@ public class CoreRequestService {
         return coreRequestRepository.save(coreRequest);
     }
 
-    // 실패 상태 반영
-    public CoreRequest markCallbackFailed(
+    // 응답 수신 실패 상태 반영
+    public CoreRequest markFailed(
             String coreRequestId, // Core 요청 ID
             String errorMessage // 실패 메시지
     ) {
@@ -158,13 +149,6 @@ public class CoreRequestService {
                 credentialId,
                 KyvcEnums.CoreRequestType.XRPL_TX
         );
-    }
-
-    @Transactional(readOnly = true)
-    public boolean isAlreadyCompleted(
-            String coreRequestId // Core 요청 ID
-    ) {
-        return coreRequestRepository.existsCompletedCallback(coreRequestId);
     }
 
     // 공통 요청 생성

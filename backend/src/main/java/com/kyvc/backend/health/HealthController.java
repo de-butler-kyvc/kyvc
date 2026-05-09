@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/health")
-@Tag(name = "Core 연동 / Callback", description = "Core 내부 헬스체크, Issuer 정책, AI/VC/XRPL/VP callback 및 개발용 E2E API")
+@Tag(name = "Health", description = "백엔드 서비스 상태 확인 API")
 public class HealthController {
 
     @Operation(
