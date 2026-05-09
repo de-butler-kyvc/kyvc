@@ -9,24 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ApiError,
-  type CorporateProfile,
-  type KycDocument,
-  corporate as corpApi,
+  type KycApplicationSummaryResponse,
   kyc as kycApi
 } from "@/lib/api";
 import {
   DOCUMENT_LABELS,
+  clearCurrentKycId,
   corporateTypeLabel,
   formatFileSize,
-  getCurrentKycId,
-  getStoredCorporateType
+  getCurrentKycId
 } from "@/lib/kyc-flow";
 
 export default function KycApplyConfirmPage() {
   const router = useRouter();
   const [kycId, setKycId] = useState<number | null>(null);
-  const [corporate, setCorporate] = useState<CorporateProfile | null>(null);
-  const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [summary, setSummary] = useState<KycApplicationSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,11 +34,9 @@ export default function KycApplyConfirmPage() {
       return;
     }
     setKycId(id);
-    Promise.all([corpApi.me(), kycApi.documents(id)])
-      .then(([corp, docs]) => {
-        setCorporate(corp);
-        setDocuments(docs);
-      })
+    kycApi
+      .summary(id)
+      .then((res) => setSummary(res))
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
@@ -55,9 +50,11 @@ export default function KycApplyConfirmPage() {
       const res = await kycApi.submit(kycId);
       if (typeof window !== "undefined") {
         window.localStorage.setItem("kyvc.lastSubmittedKycId", String(res.kycId));
-        window.localStorage.setItem("kyvc.lastSubmittedAt", res.submittedAt);
-        window.localStorage.removeItem("kyvc.currentKycId");
+        if (res.submittedAt) {
+          window.localStorage.setItem("kyvc.lastSubmittedAt", res.submittedAt);
+        }
       }
+      clearCurrentKycId();
       router.push(`/corporate/kyc/apply/complete?id=${res.kycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
@@ -65,6 +62,10 @@ export default function KycApplyConfirmPage() {
       setBusy(false);
     }
   };
+
+  const documents = summary?.documents ?? [];
+  const submittable = summary?.submittable ?? false;
+  const missing = summary?.missingItems ?? [];
 
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col px-9 py-8">
@@ -88,50 +89,87 @@ export default function KycApplyConfirmPage() {
         <div className="form-card-header">
           <div className="form-card-title">법인 정보</div>
         </div>
-        <ConfirmRow label="법인명" value={corporate?.corporateName} />
-        <ConfirmRow label="사업자등록번호" value={corporate?.businessRegistrationNo} mono />
-        <ConfirmRow label="법인등록번호" value={corporate?.corporateRegistrationNo ?? undefined} mono />
-        <ConfirmRow label="대표자" value={corporate?.representativeName} />
-        <ConfirmRow label="법인 유형" value={corporateTypeLabel(getStoredCorporateType())} />
+        <ConfirmRow label="법인명" value={summary?.corporateName} />
+        <ConfirmRow
+          label="사업자등록번호"
+          value={summary?.businessRegistrationNo}
+          mono
+        />
+        <ConfirmRow
+          label="법인등록번호"
+          value={summary?.corporateRegistrationNo}
+          mono
+        />
+        <ConfirmRow label="대표자" value={summary?.representativeName} />
+        <ConfirmRow
+          label="법인 유형"
+          value={corporateTypeLabel(summary?.corporateTypeCode)}
+        />
+        {summary?.documentStoreOption ? (
+          <ConfirmRow
+            label="원본서류 보관"
+            value={summary.documentStoreOption === "STORE" ? "보관" : "심사 후 삭제"}
+          />
+        ) : null}
       </section>
 
       <section className="form-card">
         <div className="form-card-header">
           <div className="form-card-title">제출 서류</div>
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>파일명</th>
-              <th>서류 유형</th>
-              <th>크기</th>
-              <th>상태</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents.length === 0 ? (
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={4} className="text-center text-muted-foreground">
-                  업로드된 서류가 없습니다.
-                </td>
+                <th>파일명</th>
+                <th>서류 유형</th>
+                <th>크기</th>
+                <th>상태</th>
               </tr>
-            ) : (
-              documents.map((doc) => (
-                <tr key={doc.documentId}>
-                  <td className="mono">{doc.fileName ?? "-"}</td>
-                  <td>{DOCUMENT_LABELS[getDocumentType(doc)] ?? getDocumentType(doc)}</td>
-                  <td>{formatFileSize(doc.fileSize)}</td>
-                  <td>
-                    <Badge variant="success">
-                      <Icon.Check size={11} /> 완료
-                    </Badge>
+            </thead>
+            <tbody>
+              {documents.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center text-muted-foreground">
+                    업로드된 서류가 없습니다.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                documents.map((doc) => (
+                  <tr key={doc.documentId}>
+                    <td className="mono">{doc.fileName ?? "-"}</td>
+                    <td>
+                      {DOCUMENT_LABELS[doc.documentTypeCode ?? ""] ??
+                        doc.documentTypeCode ??
+                        "-"}
+                    </td>
+                    <td>{formatFileSize(doc.fileSize)}</td>
+                    <td>
+                      <Badge variant="success">
+                        <Icon.Check size={11} /> 완료
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
+
+      {missing.length > 0 ? (
+        <div className="alert alert-warning mt-4">
+          <Icon.Alert size={16} className="alert-icon" />
+          <div>
+            <div className="font-semibold">제출 전 확인이 필요합니다</div>
+            <ul className="m-0 mt-1 list-disc pl-5 text-[12px]">
+              {missing.map((m) => (
+                <li key={m.code}>{m.message}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <p className="mt-4 text-[12px] text-destructive">{error}</p> : null}
 
@@ -139,8 +177,8 @@ export default function KycApplyConfirmPage() {
         <Button type="button" variant="ghost" onClick={() => router.push("/corporate/kyc/apply/storage")}>
           이전
         </Button>
-        <Button type="button" size="lg" disabled={busy} onClick={onSubmit}>
-          {busy ? "제출 중..." : "KYC 신청 제출"}
+        <Button type="button" size="lg" disabled={busy || !submittable} onClick={onSubmit}>
+          {busy ? "제출 중..." : submittable ? "KYC 신청 제출" : "제출 불가"}
         </Button>
       </div>
     </div>
@@ -153,7 +191,7 @@ function ConfirmRow({
   mono = false
 }: {
   label: string;
-  value?: string;
+  value?: string | null;
   mono?: boolean;
 }) {
   return (
@@ -162,8 +200,4 @@ function ConfirmRow({
       <div className={`kv-val${mono ? " mono" : ""}`}>{value || "-"}</div>
     </div>
   );
-}
-
-function getDocumentType(doc: KycDocument) {
-  return doc.documentTypeCode ?? doc.documentType ?? "";
 }

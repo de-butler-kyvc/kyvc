@@ -2,11 +2,16 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import { Icon } from "@/components/design/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  ApiError,
+  type KycCompletionResponse,
+  kyc as kycApi
+} from "@/lib/api";
 
 export default function KycApplyCompletePage() {
   return (
@@ -19,11 +24,37 @@ export default function KycApplyCompletePage() {
 function KycComplete() {
   const router = useRouter();
   const params = useSearchParams();
-  const id =
-    params.get("id") ??
-    (typeof window !== "undefined" ? window.localStorage.getItem("kyvc.lastSubmittedKycId") : null);
+  const fallbackId =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("kyvc.lastSubmittedKycId")
+      : null;
+  const idStr = params.get("id") ?? fallbackId;
+  const kycId = idStr ? Number(idStr) : null;
+
+  const [data, setData] = useState<KycCompletionResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!kycId || !Number.isFinite(kycId)) return;
+    let cancelled = false;
+    kycApi
+      .completion(kycId)
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kycId]);
+
   const submittedAt =
-    typeof window !== "undefined" ? window.localStorage.getItem("kyvc.lastSubmittedAt") : null;
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("kyvc.lastSubmittedAt")
+      : null;
 
   return (
     <div className="mx-auto flex w-full max-w-[920px] flex-col px-9 py-8">
@@ -43,23 +74,47 @@ function KycComplete() {
             KYC 신청 완료
           </div>
           <div className="text-[13.5px] text-muted-foreground">
-            제출 서류 확인 후 AI 심사와 운영 검토가 진행됩니다.
+            {data?.message ?? "제출 서류 확인 후 AI 심사와 운영 검토가 진행됩니다."}
           </div>
         </div>
 
         <div className="border-t border-row-border pt-5">
-          <ConfirmRow label="신청번호" value={id ? `KYC-${id}` : "-"} mono />
-          <ConfirmRow label="상태" value={<Badge variant="default">심사 접수</Badge>} />
-          <ConfirmRow label="접수일시" value={formatSubmittedAt(submittedAt)} />
-          <ConfirmRow label="예상 소요" value="영업일 기준 1~3일" />
-          <ConfirmRow label="VC 상태" value={<Badge variant="outline">발급 대기</Badge>} />
+          <ConfirmRow label="신청번호" value={kycId ? `KYC-${kycId}` : "-"} mono />
+          <ConfirmRow
+            label="상태"
+            value={
+              <Badge variant="default">{data?.status ?? "심사 접수"}</Badge>
+            }
+          />
+          <ConfirmRow label="접수일시" value={formatDateTime(submittedAt)} />
+          <ConfirmRow
+            label="법인명"
+            value={data?.corporateName ?? "-"}
+          />
+          <ConfirmRow
+            label="VC 상태"
+            value={
+              <Badge variant={data?.credentialIssued ? "success" : "outline"}>
+                {data?.credentialIssued ? "발급 완료" : "발급 대기"}
+              </Badge>
+            }
+          />
         </div>
+
+        {error ? (
+          <p className="mt-4 text-[12px] text-destructive">{error}</p>
+        ) : null}
 
         <div className="form-actions right mt-5">
           <button type="button" className="link-button" onClick={() => router.push("/corporate")}>
             대시보드
           </button>
-          <Button type="button" onClick={() => router.push(id ? `/corporate/kyc/detail?id=${id}` : "/corporate/kyc")}>
+          <Button
+            type="button"
+            onClick={() =>
+              router.push(kycId ? `/corporate/kyc/detail?id=${kycId}` : "/corporate/kyc")
+            }
+          >
             진행 상태 보기
           </Button>
         </div>
@@ -85,7 +140,7 @@ function ConfirmRow({
   );
 }
 
-function formatSubmittedAt(value?: string | null) {
+function formatDateTime(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;

@@ -1,13 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Icon } from "@/components/design/icons";
 import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Button } from "@/components/ui/button";
-import { ApiError, corporate as corpApi, kyc as kycApi } from "@/lib/api";
-import { setCurrentKycId } from "@/lib/kyc-flow";
+import { useCorporateProfile } from "@/lib/session-context";
 
 const REQUIRED_DOCS = [
   "사업자등록증",
@@ -23,38 +22,14 @@ const UPLOAD_RULES = [
   "컬러 스캔 권장"
 ];
 
-type Identity = {
-  corporateId?: number;
-  corporateName: string;
-  businessNo: string;
-  corporateNo: string;
-  representativeName: string;
-};
-
 export default function KycApplyStartPage() {
   const router = useRouter();
-  const [identity, setIdentity] = useState<Identity | null>(null);
+  const { profile, loading } = useCorporateProfile();
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    corpApi
-      .me()
-      .then((res) => {
-        setIdentity({
-          corporateId: res.corporateId,
-          corporateName: res.corporateName ?? "",
-          businessNo: res.businessRegistrationNo ?? "",
-          corporateNo: res.corporateRegistrationNo ?? "",
-          representativeName: res.representativeName ?? ""
-        });
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
-  }, []);
-
-  const onStart = async () => {
-    if (!identity?.corporateId) {
+  const onStart = () => {
+    if (loading) return;
+    if (!profile?.corporateId) {
       setError("법인 기본정보를 먼저 등록하세요.");
       return;
     }
@@ -79,10 +54,18 @@ export default function KycApplyStartPage() {
         <div className="form-card-header">
           <div className="form-card-title">법인 식별정보</div>
         </div>
-        <ConfirmRow label="법인명" value={identity?.corporateName} />
-        <ConfirmRow label="사업자등록번호" value={identity?.businessNo} mono />
-        <ConfirmRow label="법인등록번호" value={identity?.corporateNo} mono />
-        <ConfirmRow label="대표자" value={identity?.representativeName} />
+        <ConfirmRow label="법인명" value={profile?.corporateName} />
+        <ConfirmRow
+          label="사업자등록번호"
+          value={profile?.businessRegistrationNo}
+          mono
+        />
+        <ConfirmRow
+          label="법인등록번호"
+          value={profile?.corporateRegistrationNo ?? undefined}
+          mono
+        />
+        <ConfirmRow label="대표자" value={profile?.representativeName} />
       </section>
 
       <div className="dash-grid-2 mt-4">

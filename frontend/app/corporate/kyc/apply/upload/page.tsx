@@ -6,22 +6,36 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/design/icons";
 import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Button } from "@/components/ui/button";
-import { ApiError, type KycDocument, kyc as kycApi } from "@/lib/api";
+import {
+  ApiError,
+  type KycDocument,
+  type RequiredDocument,
+  kyc as kycApi
+} from "@/lib/api";
 import {
   KYC_DOCUMENT_SLOTS,
-  type KycDocumentSlot,
   compactHash,
   formatFileSize,
   getCurrentKycId
 } from "@/lib/kyc-flow";
 
-const MAX_BYTES = 20 * 1024 * 1024;
 const ACCEPT = ".pdf,.jpg,.jpeg,.png";
+
+const FALLBACK_SLOTS: RequiredDocument[] = KYC_DOCUMENT_SLOTS.map((slot) => ({
+  documentTypeCode: slot.documentTypeCode,
+  documentTypeName: slot.label,
+  required: slot.required,
+  uploaded: false,
+  description: slot.hint,
+  allowedExtensions: ["pdf", "jpg", "jpeg", "png"],
+  maxFileSizeMb: 20
+}));
 
 export default function KycApplyUploadPage() {
   const router = useRouter();
   const [kycId, setKycId] = useState<number | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [slots, setSlots] = useState<RequiredDocument[]>(FALLBACK_SLOTS);
   const [error, setError] = useState<string | null>(null);
   const [busySlot, setBusySlot] = useState<string | null>(null);
 
@@ -32,9 +46,14 @@ export default function KycApplyUploadPage() {
       return;
     }
     setKycId(id);
-    kycApi
-      .documents(id)
-      .then((items) => setDocuments(items))
+    Promise.all([
+      kycApi.requiredDocumentsByKyc(id).catch(() => FALLBACK_SLOTS),
+      kycApi.documents(id)
+    ])
+      .then(([reqs, docs]) => {
+        setSlots(reqs.length ? reqs : FALLBACK_SLOTS);
+        setDocuments(docs);
+      })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
@@ -45,10 +64,11 @@ export default function KycApplyUploadPage() {
     setDocuments(items);
   };
 
-  const upload = async (slot: KycDocumentSlot, file: File) => {
+  const upload = async (slot: RequiredDocument, file: File) => {
     if (!kycId) return;
-    if (file.size > MAX_BYTES) {
-      setError("파일은 20MB 이하만 업로드할 수 있습니다.");
+    const maxBytes = (slot.maxFileSizeMb ?? 20) * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setError(`파일은 ${slot.maxFileSizeMb ?? 20}MB 이하만 업로드할 수 있습니다.`);
       return;
     }
     setError(null);
@@ -65,7 +85,7 @@ export default function KycApplyUploadPage() {
     }
   };
 
-  const remove = async (slot: KycDocumentSlot) => {
+  const remove = async (slot: RequiredDocument) => {
     if (!kycId) return;
     const existing = findDocument(documents, slot.documentTypeCode);
     if (!existing) return;
@@ -81,9 +101,9 @@ export default function KycApplyUploadPage() {
     }
   };
 
-  const requiredFilled = KYC_DOCUMENT_SLOTS.filter((slot) => slot.required).every((slot) =>
-    documents.some((doc) => getDocumentType(doc) === slot.documentTypeCode)
-  );
+  const requiredFilled = slots
+    .filter((slot) => slot.required)
+    .every((slot) => !!findDocument(documents, slot.documentTypeCode));
 
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col px-9 py-8">
@@ -99,7 +119,7 @@ export default function KycApplyUploadPage() {
       <StepIndicator current={4} />
 
       <div className="upload-grid">
-        {KYC_DOCUMENT_SLOTS.map((slot) => (
+        {slots.map((slot) => (
           <UploadSlot
             key={slot.documentTypeCode}
             slot={slot}
@@ -136,7 +156,7 @@ function UploadSlot({
   onPick,
   onRemove
 }: {
-  slot: KycDocumentSlot;
+  slot: RequiredDocument;
   doc?: KycDocument;
   busy: boolean;
   onPick: (file: File) => void;
@@ -145,6 +165,12 @@ function UploadSlot({
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const filled = !!doc;
+  const accept = slot.allowedExtensions?.length
+    ? slot.allowedExtensions.map((ext) => `.${ext}`).join(",")
+    : ACCEPT;
+  const sizeHint = slot.maxFileSizeMb
+    ? `최대 ${slot.maxFileSizeMb}MB`
+    : "최대 20MB";
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0 || busy) return;
@@ -167,16 +193,18 @@ function UploadSlot({
       }}
     >
       <span className="upload-tile-label">
-        {slot.label}
+        {slot.documentTypeName}
         {slot.required ? <span className="req-mark">*</span> : null}
       </span>
 
       {filled ? (
         <>
           <Icon.Check size={26} />
-          <div className="upload-tile-text">{doc.fileName ?? `${slot.label}.pdf`}</div>
+          <div className="upload-tile-text">
+            {doc.fileName ?? `${slot.documentTypeName}.pdf`}
+          </div>
           <div className="upload-tile-meta">
-            {formatFileSize(doc.fileSize)} · {compactHash(doc.documentHash ?? doc.fileHash)}
+            {formatFileSize(doc.fileSize)} · {compactHash(doc.documentHash)}
           </div>
           <div className="mt-2.5 flex gap-1.5">
             <Button
@@ -196,7 +224,7 @@ function UploadSlot({
               variant="ghost"
               size="sm"
               disabled={busy}
-              aria-label={`${slot.label} 삭제`}
+              aria-label={`${slot.documentTypeName} 삭제`}
               onClick={(event) => {
                 event.stopPropagation();
                 onRemove();
@@ -209,15 +237,19 @@ function UploadSlot({
       ) : (
         <>
           <Icon.Upload />
-          <div className="upload-tile-text">{busy ? "업로드 중..." : "클릭하거나 드래그"}</div>
-          <div className="upload-tile-meta">{slot.hint ?? "PDF, JPG, PNG · 최대 20MB"}</div>
+          <div className="upload-tile-text">
+            {busy ? "업로드 중..." : "클릭하거나 드래그"}
+          </div>
+          <div className="upload-tile-meta">
+            {slot.description ?? `PDF, JPG, PNG · ${sizeHint}`}
+          </div>
         </>
       )}
 
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPT}
+        accept={accept}
         className="hidden"
         onChange={(event) => {
           handleFiles(event.target.files);
@@ -228,10 +260,10 @@ function UploadSlot({
   );
 }
 
-function getDocumentType(doc: KycDocument) {
-  return doc.documentTypeCode ?? doc.documentType ?? "";
-}
-
 function findDocument(documents: KycDocument[], documentTypeCode: string) {
-  return documents.find((doc) => getDocumentType(doc) === documentTypeCode);
+  return documents.find(
+    (doc) =>
+      doc.documentTypeCode === documentTypeCode &&
+      (doc.uploadStatus?.toUpperCase() ?? "") !== "DELETED"
+  );
 }

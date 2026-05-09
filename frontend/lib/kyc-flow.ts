@@ -75,6 +75,11 @@ export function getStoredCorporateType() {
   return window.localStorage.getItem("kyvc.corporateType") ?? "CORPORATION";
 }
 
+export function setStoredCorporateType(corporateTypeCode: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem("kyvc.corporateType", corporateTypeCode);
+}
+
 export function getCurrentKycId() {
   if (typeof window === "undefined") return 0;
   return Number(window.localStorage.getItem("kyvc.currentKycId"));
@@ -83,6 +88,11 @@ export function getCurrentKycId() {
 export function setCurrentKycId(kycId: number) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem("kyvc.currentKycId", String(kycId));
+}
+
+export function clearCurrentKycId() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem("kyvc.currentKycId");
 }
 
 export function formatFileSize(bytes?: number | null) {

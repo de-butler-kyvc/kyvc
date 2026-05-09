@@ -17,8 +17,10 @@ import {
 
 export default function KycApplyReviewPage() {
   const router = useRouter();
+  const [kycId, setKycId] = useState<number | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<number | null>(null);
 
   useEffect(() => {
     const id = getCurrentKycId();
@@ -26,6 +28,7 @@ export default function KycApplyReviewPage() {
       router.push("/corporate/kyc/apply");
       return;
     }
+    setKycId(id);
     kycApi
       .documents(id)
       .then((items) => setDocuments(items))
@@ -33,6 +36,22 @@ export default function KycApplyReviewPage() {
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
   }, [router]);
+
+  const onPreview = async (documentId: number) => {
+    if (!kycId) return;
+    setPreviewingId(documentId);
+    setError(null);
+    try {
+      const { previewUrl } = await kycApi.documentPreview(kycId, documentId);
+      window.open(previewUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "미리보기 URL 발급에 실패했습니다."
+      );
+    } finally {
+      setPreviewingId(null);
+    }
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-[1180px] flex-col px-9 py-8">
@@ -52,56 +71,64 @@ export default function KycApplyReviewPage() {
             <Icon.Lock size={13} /> SHA-256 해시 검증완료
           </div>
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>파일명</th>
-              <th>서류 유형</th>
-              <th>크기</th>
-              <th>해시</th>
-              <th>상태</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {documents.length === 0 ? (
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={6} className="text-center text-muted-foreground">
-                  업로드된 서류가 없습니다.
-                </td>
+                <th>파일명</th>
+                <th>서류 유형</th>
+                <th>크기</th>
+                <th>해시</th>
+                <th>상태</th>
+                <th />
               </tr>
-            ) : (
-              documents.map((doc) => (
-                <tr key={doc.documentId}>
-                  <td>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Icon.File size={14} /> {doc.fileName ?? "-"}
-                    </span>
-                  </td>
-                  <td>{DOCUMENT_LABELS[getDocumentType(doc)] ?? getDocumentType(doc)}</td>
-                  <td className="mono">{formatFileSize(doc.fileSize)}</td>
-                  <td className="mono text-subtle-foreground">
-                    {compactHash(doc.documentHash ?? doc.fileHash)}
-                  </td>
-                  <td>
-                    <Badge variant="success">
-                      <Icon.Check size={11} /> 완료
-                    </Badge>
-                  </td>
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="link inline-flex items-center gap-1"
-                      onClick={() => router.push("/corporate/kyc/apply/upload")}
-                    >
-                      <Icon.Eye size={14} /> 미리보기
-                    </button>
+            </thead>
+            <tbody>
+              {documents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center text-muted-foreground">
+                    업로드된 서류가 없습니다.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                documents.map((doc) => (
+                  <tr key={doc.documentId}>
+                    <td>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Icon.File size={14} /> {doc.fileName ?? "-"}
+                      </span>
+                    </td>
+                    <td>
+                      {DOCUMENT_LABELS[doc.documentTypeCode ?? ""] ??
+                        doc.documentTypeCode ??
+                        "-"}
+                    </td>
+                    <td className="mono">{formatFileSize(doc.fileSize)}</td>
+                    <td className="mono text-subtle-foreground">
+                      {compactHash(doc.documentHash)}
+                    </td>
+                    <td>
+                      <Badge variant="success">
+                        <Icon.Check size={11} /> 완료
+                      </Badge>
+                    </td>
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        className="link inline-flex items-center gap-1"
+                        disabled={previewingId === doc.documentId}
+                        onClick={() => onPreview(doc.documentId)}
+                      >
+                        <Icon.Eye size={14} />
+                        {previewingId === doc.documentId ? "여는 중..." : "미리보기"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {error ? <p className="mt-4 text-[12px] text-destructive">{error}</p> : null}
@@ -116,8 +143,4 @@ export default function KycApplyReviewPage() {
       </div>
     </div>
   );
-}
-
-function getDocumentType(doc: KycDocument) {
-  return doc.documentTypeCode ?? doc.documentType ?? "";
 }
