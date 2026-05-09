@@ -7,4 +7,8 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 @router.get("/status", response_model=InternalStatusResponse)
 def internal_status(request: Request) -> InternalStatusResponse:
-    return build_internal_status(request.app.state.settings, request.app.state.repository)
+    return build_internal_status(
+        request.app.state.settings,
+        request.app.state.repository,
+        getattr(request.app.state, "issuer_bootstrap", None),
+    )

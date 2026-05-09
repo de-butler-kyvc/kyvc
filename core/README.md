@@ -255,6 +255,9 @@ XRPL_ISSUER_SEED=
 ISSUER_PRIVATE_KEY_PEM_PATH=./.local-secrets/issuer-key.pem
 XRPL_FAUCET_HOST=
 DID_DOC_BASE_URL=http://127.0.0.1:8090
+AUTO_CREATE_ISSUER_WALLET_ON_BOOT=
+AUTO_REGISTER_ISSUER_DID=
+AUTO_FUND_ISSUER_ON_BOOT=
 VERIFIER_CHALLENGE_TTL_SECONDS=300
 ALLOW_MAINNET=0
 ```
@@ -272,6 +275,31 @@ The response includes overall status plus database, XRPL, and issuer component
 readiness. XRPL probing uses the configured JSON-RPC URL, respects the existing
 mainnet policy, and performs a read-only `server_info` request. Secrets such as
 issuer seeds and private keys are never returned.
+
+On startup Core also runs a one-time issuer wallet/DID bootstrap. The result is
+reflected in the issuer component detail and in `diagnostics.issuerBootstrap`.
+If `XRPL_ISSUER_SEED` is configured, that issuer account is used. If it is not
+configured, Core may create a funded issuer wallet depending on
+`AUTO_CREATE_ISSUER_WALLET_ON_BOOT`. An auto-created wallet seed is kept only in
+process memory for the boot flow; Core does not write `.env` or persist the seed.
+Operators who need the same issuer across restarts must store that seed in safe
+secret storage and configure `XRPL_ISSUER_SEED`.
+
+Unset bootstrap flags use environment defaults:
+
+- `dev`, `development`, `local`, `staging`, `stage`: auto-create, auto-register,
+  and auto-funding default to on.
+- `prod`, `production`: auto-create, auto-register, and auto-funding default to
+  off.
+
+Explicit `true`/`false` env values take precedence over those defaults. DID
+auto-registration runs only when the issuer DID is missing. If the XRPL DID
+entry exists but its `Data` hash does not match the currently generated issuer
+DID Document, Core never auto-registers and never auto-funds; the issuer status
+is `DEGRADED` and requires manual operator review. Auto-funding is attempted
+only for missing DID registration when DIDSet fails due to insufficient XRP, and
+then DIDSet is retried once. Auto-create and auto-funding are intended primarily
+for test networks.
 
 ## Outbound Dependency Resilience
 
