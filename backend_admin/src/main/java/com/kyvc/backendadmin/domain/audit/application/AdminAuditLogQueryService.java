@@ -81,13 +81,39 @@ public class AdminAuditLogQueryService {
                 auditLog.getAuditLogId(),
                 auditLog.getActorType().name(),
                 auditLog.getActorId(),
+                null,
                 auditLog.getActionType(),
                 auditLog.getTargetType().name(),
                 auditLog.getTargetId(),
                 auditLog.getRequestSummary(),
+                maskSensitive(auditLog.getBeforeValueJson()),
+                maskSensitive(auditLog.getAfterValueJson()),
+                extractTraceId(auditLog.getRequestSummary()),
                 auditLog.getIpAddress(),
                 auditLog.getCreatedAt()
         );
+    }
+
+    private String maskSensitive(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value
+                .replaceAll("(?i)(password_hash|token_hash|api_key_hash|credential_salt_hash|credential_salt|secret|vp_jwt_hash|vp_jwt)\"?\\s*[:=]\\s*\"?[^\"]+", "$1=***")
+                .replaceAll("(?i)(password_hash|token_hash|api_key_hash|credential_salt_hash|credential_salt|secret|vp_jwt_hash|vp_jwt)=[^|,}\\s]+", "$1=***");
+    }
+
+    private String extractTraceId(String summary) {
+        if (summary == null) {
+            return null;
+        }
+        for (String part : summary.split("\\|")) {
+            String trimmed = part.trim();
+            if (trimmed.startsWith("requestId=")) {
+                return trimmed.substring("requestId=".length());
+            }
+        }
+        return null;
     }
 
     private int totalPages(long totalElements, int size) {

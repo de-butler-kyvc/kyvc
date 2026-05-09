@@ -209,6 +209,8 @@ public final class KyvcEnums {
         CREDENTIAL, // Credential
         VP_VERIFICATION, // VP 검증
         VERIFIER, // Verifier 플랫폼
+        NOTIFICATION_TEMPLATE, // 알림 템플릿
+        REPORT, // 운영 리포트
         ISSUER_POLICY, // Issuer 정책
         ADMIN_USER, // 관리자 계정
         ADMIN_ROLE, // 관리자 권한

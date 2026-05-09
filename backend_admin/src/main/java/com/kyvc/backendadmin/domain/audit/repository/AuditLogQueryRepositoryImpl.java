@@ -73,6 +73,10 @@ public class AuditLogQueryRepositoryImpl implements AuditLogQueryRepository {
             where.append(" and auditLog.targetId = :targetId");
             parameters.put("targetId", request.targetId());
         }
+        if (StringUtils.hasText(request.keyword())) {
+            where.append(" and lower(coalesce(auditLog.requestSummary, '')) like :keyword");
+            parameters.put("keyword", "%" + request.keyword().toLowerCase() + "%");
+        }
         if (request.from() != null) {
             where.append(" and auditLog.createdAt >= :from");
             parameters.put("from", request.from());
@@ -87,7 +91,7 @@ public class AuditLogQueryRepositoryImpl implements AuditLogQueryRepository {
     private KyvcEnums.ActorType parseActorType(String actorType) {
         try {
             return KyvcEnums.ActorType.valueOf(actorType);
-        } catch (RuntimeException exception) {
+        } catch (IllegalArgumentException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "유효하지 않은 actorType입니다.");
         }
     }
@@ -95,7 +99,7 @@ public class AuditLogQueryRepositoryImpl implements AuditLogQueryRepository {
     private KyvcEnums.AuditTargetType parseTargetType(String targetType) {
         try {
             return KyvcEnums.AuditTargetType.valueOf(targetType);
-        } catch (RuntimeException exception) {
+        } catch (IllegalArgumentException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "유효하지 않은 targetType입니다.");
         }
     }
