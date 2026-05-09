@@ -33,6 +33,10 @@ export default function KycApplyStartPage() {
       setError("법인 기본정보를 먼저 등록하세요.");
       return;
     }
+    if (!profile?.representativeName) {
+      setError("대표자 정보를 먼저 등록하세요.");
+      return;
+    }
     setError(null);
     router.push("/corporate/kyc/apply/type");
   };
@@ -89,7 +93,7 @@ export default function KycApplyStartPage() {
         <Button type="button" variant="ghost" onClick={() => router.push("/corporate")}>
           취소
         </Button>
-        <Button type="button" onClick={onStart}>
+        <Button type="button" onClick={onStart} >
           신청 시작
         </Button>
       </div>

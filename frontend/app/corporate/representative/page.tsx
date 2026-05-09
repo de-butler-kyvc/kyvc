@@ -18,6 +18,8 @@ import {
 type FileMeta = {
   name: string;
   size: string;
+  file?: File;
+  uploaded?: boolean;
 };
 
 type RepresentativeFormValues = {
@@ -104,7 +106,7 @@ export default function CorporateRepresentativePage() {
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    onChange({ name: file.name, size: formatSize(file.size) });
+    onChange({ name: file.name, size: formatSize(file.size), file });
     event.target.value = "";
   };
 
@@ -121,8 +123,10 @@ export default function CorporateRepresentativePage() {
       await corpApi.updateRepresentative(corp.corporateId, {
         name: data.name,
         birthDate: data.birthDate,
+        nationalityCode: data.nationality,
         phone: data.phone,
-        email: data.email
+        email: data.email,
+        identityFile: data.idDoc?.file
       });
       setMessage("저장되었습니다.");
       return true;
@@ -237,6 +241,7 @@ export default function CorporateRepresentativePage() {
                         </div>
                         <div className="text-[12px] text-muted-foreground">
                           {field.value.size}
+                          {field.value.uploaded ? " · 등록됨" : ""}
                         </div>
                       </div>
                       <label className="btn btn-ghost btn-sm">
@@ -315,10 +320,16 @@ function representativeDefaultsFromApi(
   }
 
   const item = responses[0];
+  const hasIdentityDocument = item.identityDocumentId != null;
   return {
     ...DEFAULT_FORM,
     name: item.name ?? "",
+    birthDate: item.birthDate ?? "",
+    nationality: item.nationalityCode ?? "KR",
     phone: item.phoneNumber ?? "",
-    email: item.email ?? ""
+    email: item.email ?? "",
+    idDoc: hasIdentityDocument
+      ? { name: "등록된 신분증 사본", size: "서버 보관", uploaded: true }
+      : null
   };
 }
