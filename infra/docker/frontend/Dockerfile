@@ -4,13 +4,30 @@ ARG KYVC_ENV=dev
 
 COPY frontend ./frontend
 
-RUN if [ -f frontend/package.json ]; then \
-      cd frontend && \
-      if [ -f package-lock.json ]; then npm ci; else npm install; fi && \
-      NEXT_PUBLIC_KYVC_ENV=$KYVC_ENV npm run build; \
-      if [ -d out ]; then cp -a out /workspace/frontend-build; \
-      elif [ -d dist ]; then cp -a dist /workspace/frontend-build; \
-      else echo "frontend build output not found" && exit 1; fi; \
+RUN set -e; \
+    if [ -f frontend/package.json ]; then \
+      cd frontend; \
+      if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+      echo "Building frontend with KYVC_ENV=${KYVC_ENV:-dev}"; \
+      NEXT_PUBLIC_KYVC_ENV="${KYVC_ENV:-dev}" npm run build; \
+      if [ -d out ]; then \
+        echo "frontend build output found: out"; \
+        cp -a out /workspace/frontend-build; \
+      elif [ -d dist ]; then \
+        echo "frontend build output found: dist"; \
+        cp -a dist /workspace/frontend-build; \
+      else \
+        echo "frontend build output not found"; \
+        echo "current directory:"; \
+        pwd; \
+        echo "files:"; \
+        ls -al; \
+        echo "package scripts:"; \
+        cat package.json; \
+        echo "next config files:"; \
+        ls -al next.config.* 2>/dev/null || true; \
+        exit 1; \
+      fi; \
     else \
       mkdir -p /workspace/frontend-build && \
       echo '<!doctype html><html><head><meta charset="utf-8"><title>KYvC Frontend</title></head><body><h1>KYvC Frontend</h1><p>Frontend placeholder is running.</p></body></html>' > /workspace/frontend-build/index.html; \
@@ -22,13 +39,30 @@ ARG KYVC_ENV=dev
 
 COPY frontend_admin ./frontend_admin
 
-RUN if [ -f frontend_admin/package.json ]; then \
-      cd frontend_admin && \
-      if [ -f package-lock.json ]; then npm ci; else npm install; fi && \
-      NEXT_PUBLIC_KYVC_ENV=$KYVC_ENV npm run build; \
-      if [ -d out ]; then cp -a out /workspace/frontend-admin-build; \
-      elif [ -d dist ]; then cp -a dist /workspace/frontend-admin-build; \
-      else echo "frontend_admin build output not found" && exit 1; fi; \
+RUN set -e; \
+    if [ -f frontend_admin/package.json ]; then \
+      cd frontend_admin; \
+      if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+      echo "Building frontend_admin with KYVC_ENV=${KYVC_ENV:-dev}"; \
+      NEXT_PUBLIC_KYVC_ENV="${KYVC_ENV:-dev}" npm run build; \
+      if [ -d out ]; then \
+        echo "frontend_admin build output found: out"; \
+        cp -a out /workspace/frontend-admin-build; \
+      elif [ -d dist ]; then \
+        echo "frontend_admin build output found: dist"; \
+        cp -a dist /workspace/frontend-admin-build; \
+      else \
+        echo "frontend_admin build output not found"; \
+        echo "current directory:"; \
+        pwd; \
+        echo "files:"; \
+        ls -al; \
+        echo "package scripts:"; \
+        cat package.json; \
+        echo "next config files:"; \
+        ls -al next.config.* 2>/dev/null || true; \
+        exit 1; \
+      fi; \
     else \
       mkdir -p /workspace/frontend-admin-build && \
       echo '<!doctype html><html><head><meta charset="utf-8"><title>KYvC Admin</title></head><body><h1>KYvC Admin</h1><p>Backend Admin Frontend placeholder is running.</p></body></html>' > /workspace/frontend-admin-build/index.html; \
@@ -40,12 +74,29 @@ ARG KYVC_ENV=dev
 
 COPY frontend_core_admin ./frontend_core_admin
 
-RUN cd frontend_core_admin && \
-    if [ -f package-lock.json ]; then npm ci; else npm install; fi && \
-    NEXT_PUBLIC_KYVC_ENV=$KYVC_ENV npm run build && \
-    if [ -d out ]; then cp -a out /workspace/frontend-core-admin-build; \
-    elif [ -d dist ]; then cp -a dist /workspace/frontend-core-admin-build; \
-    else echo "frontend_core_admin build output not found" && exit 1; fi
+RUN set -e; \
+    cd frontend_core_admin; \
+    if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+    echo "Building frontend_core_admin with KYVC_ENV=${KYVC_ENV:-dev}"; \
+    NEXT_PUBLIC_KYVC_ENV="${KYVC_ENV:-dev}" npm run build; \
+    if [ -d out ]; then \
+      echo "frontend_core_admin build output found: out"; \
+      cp -a out /workspace/frontend-core-admin-build; \
+    elif [ -d dist ]; then \
+      echo "frontend_core_admin build output found: dist"; \
+      cp -a dist /workspace/frontend-core-admin-build; \
+    else \
+      echo "frontend_core_admin build output not found"; \
+      echo "current directory:"; \
+      pwd; \
+      echo "files:"; \
+      ls -al; \
+      echo "package scripts:"; \
+      cat package.json; \
+      echo "next config files:"; \
+      ls -al next.config.* 2>/dev/null || true; \
+      exit 1; \
+    fi
 
 FROM nginx:1.27-alpine
 
