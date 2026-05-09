@@ -12,8 +12,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
 import java.sql.Timestamp;
-import java.sql.Date;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -57,14 +55,11 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                        u.email,
                        u.user_name,
                        u.phone,
-                       u.notification_enabled_yn,
-                       u.mfa_enabled_yn,
-                       u.mfa_type_code,
-                       u.last_password_changed_at,
                        u.onboarding_corporate_name,
                        u.user_status_code,
                        c.corporate_id,
                        c.corporate_name,
+                       c.corporate_phone,
                        c.corporate_status_code,
                        lk.kyc_id,
                        lk.kyc_status_code,
@@ -108,10 +103,6 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                        u.email,
                        u.user_name,
                        u.phone,
-                       u.notification_enabled_yn,
-                       u.mfa_enabled_yn,
-                       u.mfa_type_code,
-                       u.last_password_changed_at,
                        u.onboarding_corporate_name,
                        u.user_type_code,
                        u.user_status_code,
@@ -119,6 +110,7 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                        u.updated_at,
                        c.corporate_id,
                        c.corporate_name,
+                       c.corporate_phone,
                        c.business_registration_no,
                        c.representative_name,
                        c.corporate_status_code,
@@ -149,12 +141,12 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 select c.corporate_id,
                        c.user_id,
                        u.email,
+                       u.user_name,
+                       u.phone,
+                       u.onboarding_corporate_name,
                        u.user_status_code,
                        c.corporate_name,
                        c.corporate_phone,
-                       c.corporate_type_code,
-                       c.established_date,
-                       c.website,
                        c.business_registration_no,
                        c.corporate_registration_no,
                        c.representative_name,
@@ -196,6 +188,7 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
             where.append("""
                      and (
                          lower(u.email) like :keyword
+                         or lower(u.user_name) like :keyword
                          or lower(c.corporate_name) like :keyword
                          or lower(c.business_registration_no) like :keyword
                      )
@@ -226,28 +219,26 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 toString(row[3]),
                 toString(row[4]),
                 toString(row[5]),
-                toString(row[6]),
-                toLocalDateTime(row[7]),
+                toLong(row[6]),
+                toString(row[7]),
                 toString(row[8]),
                 toString(row[9]),
                 toLong(row[10]),
                 toString(row[11]),
-                toString(row[12]),
-                toLong(row[13]),
-                toString(row[14]),
-                toLocalDateTime(row[15])
+                toLocalDateTime(row[12])
         );
     }
 
     private AdminCorporateUserDetailResponse toUserDetail(Object[] row) {
-        AdminCorporateUserDetailResponse.CorporateInfo corporate = row[13] == null
+        AdminCorporateUserDetailResponse.CorporateInfo corporate = row[9] == null
                 ? null
                 : new AdminCorporateUserDetailResponse.CorporateInfo(
-                toLong(row[13]),
-                toString(row[14]),
-                toString(row[15]),
-                toString(row[16]),
-                toString(row[17])
+                toLong(row[9]),
+                toString(row[10]),
+                toString(row[11]),
+                toString(row[12]),
+                toString(row[13]),
+                toString(row[14])
         );
         return new AdminCorporateUserDetailResponse(
                 new AdminCorporateUserDetailResponse.UserInfo(
@@ -259,14 +250,10 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                         toString(row[5]),
                         toString(row[6]),
                         toLocalDateTime(row[7]),
-                        toString(row[8]),
-                        toString(row[9]),
-                        toString(row[10]),
-                        toLocalDateTime(row[11]),
-                        toLocalDateTime(row[12])
+                        toLocalDateTime(row[8])
                 ),
                 corporate,
-                toKycInfo(row, 18)
+                toKycInfo(row, 15)
         );
     }
 
@@ -279,7 +266,7 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
                 toString(row[4]),
                 toString(row[5]),
                 toString(row[6]),
-                toLocalDate(row[7]),
+                toString(row[7]),
                 toString(row[8]),
                 toString(row[9]),
                 toString(row[10]),
@@ -330,13 +317,6 @@ public class CorporateQueryRepositoryImpl implements CorporateQueryRepository {
             return timestamp.toLocalDateTime();
         }
         return (LocalDateTime) value;
-    }
-
-    private LocalDate toLocalDate(Object value) {
-        if (value instanceof Date date) {
-            return date.toLocalDate();
-        }
-        return (LocalDate) value;
     }
 
     private EntityManager entityManager() {

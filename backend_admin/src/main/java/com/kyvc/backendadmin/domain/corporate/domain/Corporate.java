@@ -50,6 +50,12 @@ public class Corporate {
     @Column(name = "corporate_registration_no", length = 50)
     private String corporateRegistrationNo;
 
+    @Column(name = "corporate_type_code", length = 50)
+    private String corporateTypeCode;
+
+    @Column(name = "established_date")
+    private LocalDate establishedDate;
+
     @Column(name = "representative_name", length = 100)
     private String representativeName;
 
@@ -74,17 +80,11 @@ public class Corporate {
     @Column(name = "address", length = 500)
     private String address;
 
-    @Column(name = "business_type", length = 100)
-    private String businessType;
-
-    @Column(name = "established_date")
-    private LocalDate establishedDate;
-
-    @Column(name = "corporate_type_code", length = 50)
-    private String corporateTypeCode;
-
     @Column(name = "website", length = 500)
     private String website;
+
+    @Column(name = "business_type", length = 100)
+    private String businessType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "corporate_status_code", nullable = false, length = 50)

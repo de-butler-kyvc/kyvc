@@ -3,8 +3,6 @@ package com.kyvc.backendadmin.domain.credential.controller;
 import com.kyvc.backendadmin.domain.credential.application.AdminCredentialIssueService;
 import com.kyvc.backendadmin.domain.credential.application.AdminCredentialQueryService;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialDetailResponse;
-import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialRequestResponse;
-import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialStatusHistoryResponse;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialSummaryResponse;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialIssueRequest;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialIssueResponse;
@@ -22,6 +20,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,7 +28,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
-import java.util.List;
 
 /**
  * Backend Admin VC 발급 관리 API를 담당합니다.
@@ -52,7 +50,7 @@ public class AdminCredentialController {
      */
     @Operation(
             summary = "VC 발급 요청",
-            description = "승인된 KYC 신청 건에 대해 VC 발급 요청을 생성합니다. 실제 VC 발급은 Core에서 처리하며, Backend Admin은 credentials와 core_requests row를 생성합니다."
+            description = "승인된 KYC 신청 건에 대해 VC 발급 요청을 생성한다. 실제 VC 발급은 Core에서 처리하며, Backend Admin은 credentials와 core_requests row를 생성한다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "VC 발급 요청 생성 성공"),
@@ -83,15 +81,17 @@ public class AdminCredentialController {
      * @param coreRequestStatus Core 요청 상태
      * @param corporateName 법인명
      * @param businessRegistrationNumber 사업자등록번호
-     * @param fromDate 조회 시작일
-     * @param toDate 조회 종료일
+     * @param fromDate 시작일
+     * @param toDate 종료일
      * @return VC 발급 상태 목록
      */
     @Operation(
             summary = "VC 발급 상태 목록 조회",
-            description = "관리자가 VC 발급 상태 목록을 페이지, 상태, 법인명, 사업자등록번호, 기간 조건으로 조회합니다."
+            description = "관리자가 VC 발급 상태 목록을 페이징, 상태, 법인명, 사업자등록번호, 기간 조건으로 조회한다."
     )
-    @ApiResponse(responseCode = "200", description = "VC 발급 상태 목록 조회 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "VC 발급 상태 목록 조회 성공")
+    })
     @GetMapping("/credentials")
     public CommonResponse<AdminCredentialSummaryResponse> search(
             @Parameter(description = "페이지 번호, 0부터 시작", example = "0")
@@ -138,7 +138,7 @@ public class AdminCredentialController {
      */
     @Operation(
             summary = "VC 발급 상세 조회",
-            description = "특정 VC 발급 건의 KYC 정보, 법인 정보, VC 발급 상태, Core 요청 상태, XRPL 트랜잭션 정보를 조회합니다."
+            description = "특정 VC 발급 건의 KYC 정보, 법인 정보, VC 발급 상태, Core 요청 상태, XRPL 트랜잭션 정보를 조회한다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "VC 발급 상세 조회 성공"),
@@ -150,49 +150,5 @@ public class AdminCredentialController {
             @PathVariable Long credentialId
     ) {
         return CommonResponseFactory.success(adminCredentialQueryService.getDetail(credentialId));
-    }
-
-    /**
-     * Credential 요청 이력을 조회합니다.
-     *
-     * @param credentialId Credential ID
-     * @return Credential 요청 이력 목록
-     */
-    @Operation(
-            summary = "Credential 요청 이력 조회",
-            description = "Credential ID 기준으로 발급, 폐기, 상태 확인 등의 요청 이력을 최신순으로 조회합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Credential 요청 이력 조회 성공"),
-            @ApiResponse(responseCode = "404", description = "Credential을 찾을 수 없음")
-    })
-    @GetMapping("/credentials/{credentialId}/requests")
-    public CommonResponse<List<AdminCredentialRequestResponse>> getCredentialRequests(
-            @Parameter(description = "Credential ID", required = true)
-            @PathVariable Long credentialId
-    ) {
-        return CommonResponseFactory.success(adminCredentialQueryService.getRequests(credentialId));
-    }
-
-    /**
-     * Credential 상태 변경 이력을 조회합니다.
-     *
-     * @param credentialId Credential ID
-     * @return Credential 상태 변경 이력 목록
-     */
-    @Operation(
-            summary = "Credential 상태 이력 조회",
-            description = "Credential ID 기준으로 상태 변경 이력을 최신순으로 조회합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Credential 상태 이력 조회 성공"),
-            @ApiResponse(responseCode = "404", description = "Credential을 찾을 수 없음")
-    })
-    @GetMapping("/credentials/{credentialId}/status-histories")
-    public CommonResponse<List<AdminCredentialStatusHistoryResponse>> getCredentialStatusHistories(
-            @Parameter(description = "Credential ID", required = true)
-            @PathVariable Long credentialId
-    ) {
-        return CommonResponseFactory.success(adminCredentialQueryService.getStatusHistories(credentialId));
     }
 }

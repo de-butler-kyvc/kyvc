@@ -61,6 +61,12 @@ public class AuditLog {
     @Column(name = "request_summary", length = 1000)
     private String description;
 
+    @Column(name = "before_value_json", columnDefinition = "TEXT")
+    private String beforeValueJson;
+
+    @Column(name = "after_value_json", columnDefinition = "TEXT")
+    private String afterValueJson;
+
     // 감사 로그 생성 시각
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

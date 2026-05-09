@@ -42,18 +42,6 @@ public record AdminKycApplicationListResponse(
             Long applicantUserId,
             @Schema(description = "신청 사용자 이메일", example = "corp@kyvc.local")
             String applicantEmail,
-            @Schema(description = "신청 채널 코드", example = "WEB")
-            String applicationChannelCode,
-            @Schema(description = "금융기관 코드", example = "BANK001")
-            String financeInstitutionCode,
-            @Schema(description = "금융기관 지점 코드", example = "BR001")
-            String financeBranchCode,
-            @Schema(description = "금융기관 담당자 사용자 ID", example = "1")
-            Long financeStaffUserId,
-            @Schema(description = "금융기관 고객 번호", example = "CUST-001")
-            String financeCustomerNo,
-            @Schema(description = "방문 일시")
-            LocalDateTime visitedAt,
             @Schema(description = "KYC 신청 상태", example = "SUBMITTED")
             String kycStatus,
             @Schema(description = "AI 심사 상태", example = "SUCCESS")

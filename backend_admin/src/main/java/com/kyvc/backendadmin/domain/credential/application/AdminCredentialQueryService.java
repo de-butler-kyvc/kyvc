@@ -1,8 +1,6 @@
 package com.kyvc.backendadmin.domain.credential.application;
 
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialDetailResponse;
-import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialRequestResponse;
-import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialStatusHistoryResponse;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialSummaryResponse;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialQueryRepository;
 import com.kyvc.backendadmin.global.exception.ApiException;
@@ -46,36 +44,5 @@ public class AdminCredentialQueryService {
     public AdminCredentialDetailResponse getDetail(Long credentialId) {
         return credentialQueryRepository.findDetailById(credentialId)
                 .orElseThrow(() -> new ApiException(ErrorCode.CREDENTIAL_NOT_FOUND));
-    }
-
-    /**
-     * Credential 요청 이력을 조회합니다.
-     *
-     * @param credentialId Credential ID
-     * @return Credential 요청 이력 목록
-     */
-    @Transactional(readOnly = true)
-    public List<AdminCredentialRequestResponse> getRequests(Long credentialId) {
-        validateCredentialExists(credentialId);
-        return credentialQueryRepository.findRequestsByCredentialId(credentialId);
-    }
-
-    /**
-     * Credential 상태 변경 이력을 조회합니다.
-     *
-     * @param credentialId Credential ID
-     * @return Credential 상태 변경 이력 목록
-     */
-    @Transactional(readOnly = true)
-    public List<AdminCredentialStatusHistoryResponse> getStatusHistories(Long credentialId) {
-        validateCredentialExists(credentialId);
-        return credentialQueryRepository.findStatusHistoriesByCredentialId(credentialId);
-    }
-
-    private void validateCredentialExists(Long credentialId) {
-        // 이력 데이터가 없어도 빈 배열을 반환해야 하므로, credentialId 자체의 존재 여부만 먼저 구분한다.
-        if (!credentialQueryRepository.existsById(credentialId)) {
-            throw new ApiException(ErrorCode.CREDENTIAL_NOT_FOUND);
-        }
     }
 }

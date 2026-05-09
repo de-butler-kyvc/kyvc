@@ -1,10 +1,7 @@
 package com.kyvc.backendadmin.domain.corporate.controller;
 
 import com.kyvc.backendadmin.domain.corporate.application.AdminCorporateService;
-import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateAgentResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateDetailResponse;
-import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateDocumentResponse;
-import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateRepresentativeResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserDetailResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserListResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserSearchRequest;
@@ -16,7 +13,6 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,8 +22,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 /**
  * 법인 사용자 및 법인 상세 관리 API를 담당합니다.
@@ -131,62 +125,5 @@ public class AdminCorporateController {
             @PathVariable Long corporateId
     ) {
         return CommonResponseFactory.success(adminCorporateService.getCorporateDetail(corporateId));
-    }
-
-    /**
-     * 법인 대표자 목록을 조회합니다.
-     *
-     * @param corporateId 법인 ID
-     * @return 법인 대표자 목록
-     */
-    @Operation(
-            summary = "법인 대표자 목록 조회",
-            description = "법인 ID 기준으로 등록된 대표자 정보를 조회합니다. 신분증 문서가 연결된 경우 문서명을 함께 반환합니다."
-    )
-    @ApiResponse(responseCode = "404", description = "법인을 찾을 수 없는 경우")
-    @GetMapping("/corporates/{corporateId}/representatives")
-    public CommonResponse<List<AdminCorporateRepresentativeResponse>> getCorporateRepresentatives(
-            @Parameter(description = "법인 ID", required = true, example = "10")
-            @PathVariable Long corporateId
-    ) {
-        return CommonResponseFactory.success(adminCorporateService.getCorporateRepresentatives(corporateId));
-    }
-
-    /**
-     * 법인 대리인 목록을 조회합니다.
-     *
-     * @param corporateId 법인 ID
-     * @return 법인 대리인 목록
-     */
-    @Operation(
-            summary = "법인 대리인 목록 조회",
-            description = "법인 ID 기준으로 등록된 대리인 정보를 조회합니다. 신분증과 위임장 문서가 연결된 경우 각각의 문서명을 함께 반환합니다."
-    )
-    @ApiResponse(responseCode = "404", description = "법인을 찾을 수 없는 경우")
-    @GetMapping("/corporates/{corporateId}/agents")
-    public CommonResponse<List<AdminCorporateAgentResponse>> getCorporateAgents(
-            @Parameter(description = "법인 ID", required = true, example = "10")
-            @PathVariable Long corporateId
-    ) {
-        return CommonResponseFactory.success(adminCorporateService.getCorporateAgents(corporateId));
-    }
-
-    /**
-     * 법인문서 목록을 조회합니다.
-     *
-     * @param corporateId 법인 ID
-     * @return 법인문서 목록
-     */
-    @Operation(
-            summary = "법인문서 목록 조회",
-            description = "법인 ID 기준으로 등록된 법인문서 메타데이터를 조회합니다. 문서 유형명과 업로드 사용자명을 함께 반환합니다."
-    )
-    @ApiResponse(responseCode = "404", description = "법인을 찾을 수 없는 경우")
-    @GetMapping("/corporates/{corporateId}/documents")
-    public CommonResponse<List<AdminCorporateDocumentResponse>> getCorporateDocuments(
-            @Parameter(description = "법인 ID", required = true, example = "10")
-            @PathVariable Long corporateId
-    ) {
-        return CommonResponseFactory.success(adminCorporateService.getCorporateDocuments(corporateId));
     }
 }

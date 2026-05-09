@@ -1,8 +1,6 @@
 package com.kyvc.backendadmin.domain.credential.repository;
 
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialDetailResponse;
-import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialRequestResponse;
-import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialStatusHistoryResponse;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialSummaryResponse;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
@@ -66,8 +64,8 @@ public class CredentialQueryRepositoryImpl implements CredentialQueryRepository 
         bindParameters(query, queryParts.parameters());
         query.setFirstResult(request.page() * request.size());
         query.setMaxResults(request.size());
-        return query.getResultList()
-                .stream()
+        List<?> rows = query.getResultList();
+        return rows.stream()
                 .map(row -> toSummaryItem((Object[]) row))
                 .toList();
     }
@@ -134,12 +132,7 @@ public class CredentialQueryRepositoryImpl implements CredentialQueryRepository 
                        credential.issued_at,
                        credential.expires_at,
                        credential.created_at,
-                       credential.updated_at,
-                       credential.offer_expires_at,
-                       credential.offer_used_yn,
-                       credential.holder_did,
-                       credential.holder_xrpl_address,
-                       credential.wallet_saved_at
+                       credential.updated_at
                 from credentials credential
                 join kyc_applications kyc on kyc.kyc_id = credential.kyc_id
                 join corporates corporate on corporate.corporate_id = credential.corporate_id
@@ -147,74 +140,10 @@ public class CredentialQueryRepositoryImpl implements CredentialQueryRepository 
                 where credential.credential_id = :credentialId
                 """);
         query.setParameter("credentialId", credentialId);
-        return query.getResultList()
-                .stream()
+        List<?> rows = query.getResultList();
+        return rows.stream()
                 .findFirst()
                 .map(row -> toDetail((Object[]) row));
-    }
-
-    @Override
-    public boolean existsById(Long credentialId) {
-        Query query = entityManager().createNativeQuery("""
-                select count(*)
-                from credentials credential
-                where credential.credential_id = :credentialId
-                """);
-        query.setParameter("credentialId", credentialId);
-        return ((Number) query.getSingleResult()).longValue() > 0;
-    }
-
-    @Override
-    public List<AdminCredentialRequestResponse> findRequestsByCredentialId(Long credentialId) {
-        Query query = entityManager().createNativeQuery("""
-                select credential_request.credential_request_id,
-                       credential_request.credential_id,
-                       credential_request.request_type_code,
-                       credential_request.request_status_code,
-                       credential_request.requested_by_type_code,
-                       credential_request.requested_by_id,
-                       credential_request.reason_code,
-                       credential_request.reason,
-                       credential_request.core_request_id,
-                       core_request.core_request_status_code,
-                       credential_request.requested_at,
-                       credential_request.completed_at
-                from credential_requests credential_request
-                left join core_requests core_request
-                       on core_request.core_request_id = credential_request.core_request_id
-                where credential_request.credential_id = :credentialId
-                order by credential_request.requested_at desc,
-                         credential_request.credential_request_id desc
-                """);
-        query.setParameter("credentialId", credentialId);
-        return query.getResultList()
-                .stream()
-                .map(row -> toCredentialRequest((Object[]) row))
-                .toList();
-    }
-
-    @Override
-    public List<AdminCredentialStatusHistoryResponse> findStatusHistoriesByCredentialId(Long credentialId) {
-        Query query = entityManager().createNativeQuery("""
-                select history.history_id,
-                       history.credential_id,
-                       history.before_status_code,
-                       history.after_status_code,
-                       history.changed_by_type_code,
-                       history.changed_by_id,
-                       history.reason_code,
-                       history.reason,
-                       history.changed_at
-                from credential_status_histories history
-                where history.credential_id = :credentialId
-                order by history.changed_at desc,
-                         history.history_id desc
-                """);
-        query.setParameter("credentialId", credentialId);
-        return query.getResultList()
-                .stream()
-                .map(row -> toCredentialStatusHistory((Object[]) row))
-                .toList();
     }
 
     private QueryParts buildQueryParts(AdminCredentialSummaryResponse.SearchRequest request) {
@@ -252,7 +181,7 @@ public class CredentialQueryRepositoryImpl implements CredentialQueryRepository 
     }
 
     private AdminCredentialSummaryResponse.Item toSummaryItem(Object[] row) {
-        // 민감정보 응답 제외: VC 원문, QR 토큰, holder DID, signing key 관련 값은 목록에서 조회하지 않는다.
+        // 민감정보 응답 제외: VC 원문, QR 토큰, holder DID, signing key 관련 값은 조회하지 않는다.
         return new AdminCredentialSummaryResponse.Item(
                 toLong(row[0]), toLong(row[1]), toLong(row[2]), toString(row[3]), toString(row[4]),
                 toString(row[5]), toString(row[6]), toString(row[7]), toString(row[8]),
@@ -261,28 +190,12 @@ public class CredentialQueryRepositoryImpl implements CredentialQueryRepository 
     }
 
     private AdminCredentialDetailResponse toDetail(Object[] row) {
-        // 민감정보 응답 제외: offer_token_hash, VC 원문, private key, signing key, qr_token은 상세 응답에 포함하지 않는다.
+        // 민감정보 응답 제외: VC 원본, private key, signing key, qr_token은 상세 응답에 포함하지 않는다.
         return new AdminCredentialDetailResponse(
                 toLong(row[0]), toLong(row[1]), toString(row[2]), toLong(row[3]), toString(row[4]),
                 toString(row[5]), toString(row[6]), toString(row[7]), toString(row[8]), toString(row[9]),
                 toString(row[10]), toString(row[11]), toLocalDateTime(row[12]), toLocalDateTime(row[13]),
-                toLocalDateTime(row[14]), toLocalDateTime(row[15]), toLocalDateTime(row[16]), toString(row[17]),
-                toString(row[18]), toString(row[19]), toLocalDateTime(row[20])
-        );
-    }
-
-    private AdminCredentialRequestResponse toCredentialRequest(Object[] row) {
-        return new AdminCredentialRequestResponse(
-                toLong(row[0]), toLong(row[1]), toString(row[2]), toString(row[3]), toString(row[4]),
-                toLong(row[5]), toString(row[6]), toString(row[7]), toString(row[8]), toString(row[9]),
-                toLocalDateTime(row[10]), toLocalDateTime(row[11])
-        );
-    }
-
-    private AdminCredentialStatusHistoryResponse toCredentialStatusHistory(Object[] row) {
-        return new AdminCredentialStatusHistoryResponse(
-                toLong(row[0]), toLong(row[1]), toString(row[2]), toString(row[3]), toString(row[4]),
-                toLong(row[5]), toString(row[6]), toString(row[7]), toLocalDateTime(row[8])
+                toLocalDateTime(row[14]), toLocalDateTime(row[15])
         );
     }
 

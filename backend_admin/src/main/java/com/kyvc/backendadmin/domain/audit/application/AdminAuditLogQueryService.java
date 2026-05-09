@@ -85,8 +85,6 @@ public class AdminAuditLogQueryService {
                 auditLog.getTargetType().name(),
                 auditLog.getTargetId(),
                 auditLog.getRequestSummary(),
-                auditLog.getBeforeValueJson(),
-                auditLog.getAfterValueJson(),
                 auditLog.getIpAddress(),
                 auditLog.getCreatedAt()
         );

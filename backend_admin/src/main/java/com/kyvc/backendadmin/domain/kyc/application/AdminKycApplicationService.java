@@ -113,7 +113,7 @@ public class AdminKycApplicationService {
     private KyvcEnums.KycStatus parseKycStatus(String status) {
         try {
             return KyvcEnums.KycStatus.valueOf(status);
-        } catch (RuntimeException exception) {
+        } catch (IllegalArgumentException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "유효하지 않은 KYC 신청 상태입니다.");
         }
     }
@@ -121,7 +121,7 @@ public class AdminKycApplicationService {
     private KyvcEnums.AiReviewStatus parseAiReviewStatus(String aiReviewStatus) {
         try {
             return KyvcEnums.AiReviewStatus.valueOf(aiReviewStatus);
-        } catch (RuntimeException exception) {
+        } catch (IllegalArgumentException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "유효하지 않은 AI 심사 상태입니다.");
         }
     }

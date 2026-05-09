@@ -32,14 +32,31 @@ public class User {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
-
     @Column(name = "user_name", length = 100)
     private String userName;
 
-    @Column(name = "phone", length = 30)
+    @Column(name = "phone", length = 50)
     private String phone;
+
+    @Column(name = "onboarding_corporate_name")
+    private String onboardingCorporateName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "notification_enabled_yn", length = 1)
+    private KyvcEnums.Yn notificationEnabledYn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mfa_enabled_yn", length = 1)
+    private KyvcEnums.Yn mfaEnabledYn;
+
+    @Column(name = "mfa_type_code", length = 30)
+    private String mfaTypeCode;
+
+    @Column(name = "last_password_changed_at")
+    private LocalDateTime lastPasswordChangedAt;
+
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type_code", nullable = false, length = 50)
@@ -48,21 +65,6 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "user_status_code", nullable = false, length = 50)
     private KyvcEnums.UserStatus userStatusCode;
-
-    @Column(name = "notification_enabled_yn", length = 1)
-    private String notificationEnabledYn;
-
-    @Column(name = "mfa_enabled_yn", length = 1)
-    private String mfaEnabledYn;
-
-    @Column(name = "mfa_type_code", length = 30)
-    private String mfaTypeCode;
-
-    @Column(name = "last_password_changed_at")
-    private LocalDateTime lastPasswordChangedAt;
-
-    @Column(name = "onboarding_corporate_name")
-    private String onboardingCorporateName;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -80,6 +82,9 @@ public class User {
         User user = new User();
         user.email = email;
         user.passwordHash = passwordHash;
+        user.notificationEnabledYn = KyvcEnums.Yn.Y;
+        user.mfaEnabledYn = KyvcEnums.Yn.N;
+        user.lastPasswordChangedAt = LocalDateTime.now();
         user.userTypeCode = KyvcEnums.UserType.CORPORATE_USER;
         user.userStatusCode = KyvcEnums.UserStatus.ACTIVE;
         return user;

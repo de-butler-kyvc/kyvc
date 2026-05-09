@@ -17,7 +17,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * Audit log entity mapped to audit_logs.
+ * audit_logs 테이블과 매핑되는 감사로그 엔티티입니다.
  */
 @Entity(name = "AuditLogForAudit")
 @Table(name = "audit_logs")
@@ -80,23 +80,6 @@ public class AuditLog {
         auditLog.targetId = targetId;
         auditLog.requestSummary = requestSummary;
         auditLog.ipAddress = ipAddress;
-        return auditLog;
-    }
-
-    public static AuditLog create(
-            KyvcEnums.ActorType actorType,
-            Long actorId,
-            String actionType,
-            KyvcEnums.AuditTargetType targetType,
-            Long targetId,
-            String requestSummary,
-            String beforeValueJson,
-            String afterValueJson,
-            String ipAddress
-    ) {
-        AuditLog auditLog = create(actorType, actorId, actionType, targetType, targetId, requestSummary, ipAddress);
-        auditLog.beforeValueJson = beforeValueJson;
-        auditLog.afterValueJson = afterValueJson;
         return auditLog;
     }
 }

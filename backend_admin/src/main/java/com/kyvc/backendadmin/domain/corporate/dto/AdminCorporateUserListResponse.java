@@ -37,15 +37,7 @@ public record AdminCorporateUserListResponse(
             String userName,
             @Schema(description = "사용자 연락처", example = "010-1234-5678")
             String phone,
-            @Schema(description = "알림 수신 여부", example = "Y")
-            String notificationEnabledYn,
-            @Schema(description = "MFA 사용 여부", example = "N")
-            String mfaEnabledYn,
-            @Schema(description = "MFA 유형 코드", example = "EMAIL")
-            String mfaTypeCode,
-            @Schema(description = "마지막 비밀번호 변경 일시")
-            LocalDateTime lastPasswordChangedAt,
-            @Schema(description = "온보딩 입력 법인명", example = "케이와이브이씨")
+            @Schema(description = "온보딩 법인명", example = "케이와이브이씨")
             String onboardingCorporateName,
             @Schema(description = "사용자 상태", example = "ACTIVE")
             String userStatus,
@@ -53,6 +45,8 @@ public record AdminCorporateUserListResponse(
             Long corporateId,
             @Schema(description = "법인명", example = "케이와이브이씨")
             String corporateName,
+            @Schema(description = "법인 연락처", example = "02-1234-5678")
+            String corporatePhone,
             @Schema(description = "법인 상태", example = "ACTIVE")
             String corporateStatus,
             @Schema(description = "최근 KYC ID", example = "100")

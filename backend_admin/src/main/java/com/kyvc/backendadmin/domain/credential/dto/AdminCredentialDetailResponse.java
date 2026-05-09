@@ -72,26 +72,6 @@ public record AdminCredentialDetailResponse(
 
         /** 수정 시각 */
         @Schema(description = "수정 시각")
-        LocalDateTime updatedAt,
-
-        /** Offer 만료 시각 */
-        @Schema(description = "Offer 만료 시각")
-        LocalDateTime offerExpiresAt,
-
-        /** Offer 사용 여부 */
-        @Schema(description = "Offer 사용 여부", example = "N")
-        String offerUsedYn,
-
-        /** Holder DID */
-        @Schema(description = "Holder DID")
-        String holderDid,
-
-        /** Holder XRPL 주소 */
-        @Schema(description = "Holder XRPL 주소")
-        String holderXrplAddress,
-
-        /** 지갑 저장 시각 */
-        @Schema(description = "지갑 저장 시각")
-        LocalDateTime walletSavedAt
+        LocalDateTime updatedAt
 ) {
 }

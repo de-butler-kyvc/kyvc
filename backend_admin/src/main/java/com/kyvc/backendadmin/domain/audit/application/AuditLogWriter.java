@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
- * Shared component for writing audit logs from domain services.
+ * 다른 도메인 서비스에서 감사로그를 남길 때 사용하는 공통 컴포넌트입니다.
  */
 @Component
 @RequiredArgsConstructor
@@ -26,17 +26,17 @@ public class AuditLogWriter {
     private final ObjectProvider<HttpServletRequest> requestProvider;
 
     /**
-     * Writes an audit log.
+     * 감사로그를 저장합니다.
      *
-     * @param actorType actor type
-     * @param actorId actor ID
-     * @param actionType action type
-     * @param targetType audit target type
-     * @param targetId audit target ID
-     * @param requestSummary request or change summary
-     * @param beforeValue value before the change
-     * @param afterValue value after the change
-     * @return saved audit log entity
+     * @param actorType 행위자 유형
+     * @param actorId 행위자 ID
+     * @param actionType 수행한 작업 유형
+     * @param targetType 감사 대상 유형
+     * @param targetId 감사 대상 ID
+     * @param requestSummary 요청 또는 변경 내용 요약
+     * @param beforeValue 변경 전 값
+     * @param afterValue 변경 후 값
+     * @return 저장된 감사로그 엔티티
      */
     @Transactional
     public AuditLog write(
@@ -59,11 +59,10 @@ public class AuditLogWriter {
                 actorType,
                 actorId,
                 actionType,
+                // target 정보 저장: 감사 대상 유형과 대상 ID를 별도 컬럼에 저장해 추적 가능하게 한다.
                 targetType,
                 targetId,
                 summary,
-                beforeValue,
-                afterValue,
                 ipAddress
         ));
     }
@@ -76,8 +75,11 @@ public class AuditLogWriter {
             String afterValue
     ) {
         StringBuilder summary = new StringBuilder(StringUtils.hasText(requestSummary) ? requestSummary : "");
+        // requestId 저장: 별도 컬럼이 없어 request_summary에 추적 ID를 함께 남긴다.
         append(summary, "requestId", requestId);
+        // beforeValue 저장: 별도 컬럼이 없어 request_summary에 변경 전 값을 함께 남긴다.
         append(summary, "beforeValue", beforeValue);
+        // afterValue 저장: 별도 컬럼이 없어 request_summary에 변경 후 값을 함께 남긴다.
         append(summary, "afterValue", afterValue);
         append(summary, "userAgent", userAgent);
         return summary.toString();
@@ -107,8 +109,10 @@ public class AuditLogWriter {
         }
         String forwardedFor = request.getHeader(FORWARDED_FOR_HEADER);
         if (StringUtils.hasText(forwardedFor)) {
+            // 요청 IP 저장: 프록시 환경에서는 X-Forwarded-For의 첫 번째 IP를 우선 저장한다.
             return forwardedFor.split(",")[0].trim();
         }
+        // 요청 IP 저장: 프록시 헤더가 없으면 servlet remoteAddr 값을 저장한다.
         return request.getRemoteAddr();
     }
 }

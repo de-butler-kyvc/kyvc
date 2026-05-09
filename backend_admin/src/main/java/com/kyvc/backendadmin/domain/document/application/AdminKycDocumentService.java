@@ -76,7 +76,6 @@ public class AdminKycDocumentService {
 
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(PREVIEW_EXPIRATION_MINUTES);
         String documentTypeName = kycDocumentQueryRepository.findDocumentTypeName(document.getDocumentTypeCode());
-        String uploadedByUserName = kycDocumentQueryRepository.findUploadedByUserName(document.getUploadedByUserId());
 
         // previewUrl 생성: 원본 filePath 대신 documentId와 만료 시각만 담은 임시 토큰 URL을 제공한다.
         String previewUrl = buildPreviewUrl(kycId, documentId, expiresAt);
@@ -89,9 +88,6 @@ public class AdminKycDocumentService {
                 document.getFileName(),
                 document.getMimeType(),
                 document.getFileSize(),
-                document.getUploadedByTypeCode(),
-                document.getUploadedByUserId(),
-                uploadedByUserName,
                 previewUrl,
                 expiresAt
         );
