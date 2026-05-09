@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { Icon } from "@/components/design/icons";
+import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { ApiError, corporate as corpApi, kyc as kycApi } from "@/lib/api";
+import { useCorporateProfile } from "@/lib/session-context";
 
 const REQUIRED_DOCS = [
   "사업자등록증",
@@ -21,151 +22,107 @@ const UPLOAD_RULES = [
   "컬러 스캔 권장"
 ];
 
-type Identity = {
-  corporateId?: number;
-  corporateName: string;
-  businessNo: string;
-  representativeName: string;
-};
-
 export default function KycApplyStartPage() {
   const router = useRouter();
-  const [identity, setIdentity] = useState<Identity | null>(null);
+  const { profile, loading } = useCorporateProfile();
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    corpApi
-      .me()
-      .then((res) => {
-        setIdentity({
-          corporateId: res.corporateId,
-          corporateName: res.corporateName ?? "",
-          businessNo: res.businessRegistrationNo ?? "",
-          representativeName: res.representativeName ?? ""
-        });
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
-  }, []);
-
-  const onStart = async () => {
-    if (!identity?.corporateId) {
+  const onStart = () => {
+    if (loading) return;
+    if (!profile?.corporateId) {
       setError("법인 기본정보를 먼저 등록하세요.");
       return;
     }
-    setBusy(true);
     setError(null);
-    try {
-      const corporateType =
-        (typeof window !== "undefined"
-          ? window.localStorage.getItem("kyvc.corporateType")
-          : null) ?? "";
-      const created = await kycApi.create({
-        corporateId: identity.corporateId,
-        applicationType: "ONLINE",
-        corporateType: corporateType || undefined
-      });
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("kyvc.currentKycId", String(created.kycId));
-      }
-      router.push("/corporate/kyc/apply/type");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "신청 생성 중 오류가 발생했습니다.");
-    } finally {
-      setBusy(false);
-    }
+    router.push("/corporate/kyc/apply/type");
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5 px-9 py-8">
-      <Card>
-        <CardContent className="flex flex-col gap-3 px-6 py-5">
-          <h2 className="text-[15px] font-bold text-foreground">KYC 신청 시작</h2>
-          <div className="flex flex-wrap items-center gap-3 rounded-md bg-secondary px-3.5 py-2.5 text-[12px]">
-            <span className="font-semibold text-muted-foreground">법인 식별정보</span>
-            <span className="font-bold text-foreground">
-              {identity?.corporateName || "-"}
-            </span>
-            <span className="text-subtle-foreground">{identity?.businessNo || "-"}</span>
-          </div>
-          <div className="rounded-md border border-accent-border bg-accent px-3.5 py-2.5 text-[12px] font-semibold text-accent-foreground">
-            KYC 신청을 시작하려면 아래 단계를 진행하세요.
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-[22px] font-bold tracking-[-0.4px] text-foreground">
-          KYC 신청 시작
-        </h1>
-        <p className="text-[13px] text-destructive">
-          신규 KYC 신청을 시작합니다. 아래 정보를 확인해주세요.
-        </p>
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
+      <div className="page-head">
+        <div>
+          <h1 className="page-head-title">KYC 신청 시작</h1>
+          <p className="page-head-desc">
+            신규 KYC 신청을 시작합니다. 법인 정보와 준비 서류를 확인해주세요.
+          </p>
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-4 px-7 py-6">
-          <h2 className="text-[15px] font-bold text-foreground">법인 식별정보</h2>
-          <div className="overflow-hidden rounded-lg border border-border">
-            <ConfirmRow label="법인명" value={identity?.corporateName} />
-            <ConfirmRow label="사업자등록번호" value={identity?.businessNo} />
-            <ConfirmRow label="대표자" value={identity?.representativeName} />
+      <StepIndicator current={1} />
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <div className="form-card-title">법인 식별정보</div>
+        </div>
+        <ConfirmRow label="법인명" value={profile?.corporateName} />
+        <ConfirmRow
+          label="사업자등록번호"
+          value={profile?.businessRegistrationNo}
+          mono
+        />
+        <ConfirmRow
+          label="법인등록번호"
+          value={profile?.corporateRegistrationNo ?? undefined}
+          mono
+        />
+        <ConfirmRow label="대표자" value={profile?.representativeName} />
+      </section>
+
+      <div className="dash-grid-2 mt-4">
+        <section className="form-card m-0">
+          <div className="form-card-header">
+            <div className="form-card-title">필요 서류</div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-col gap-4 px-7 py-6">
-          <h2 className="text-[15px] font-bold text-foreground">준비사항 안내</h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            <InfoBox title="필요 서류" items={REQUIRED_DOCS} />
-            <InfoBox title="업로드 규정" items={UPLOAD_RULES} />
+          <InfoList icon="file" items={REQUIRED_DOCS} />
+        </section>
+        <section className="form-card m-0">
+          <div className="form-card-header">
+            <div className="form-card-title">업로드 규정</div>
           </div>
-        </CardContent>
-      </Card>
+          <InfoList icon="check" items={UPLOAD_RULES} />
+        </section>
+      </div>
 
-      {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
+      {error ? <p className="mt-4 text-[12px] text-destructive">{error}</p> : null}
 
-      <div className="flex items-center gap-2">
-        <Button onClick={onStart} disabled={busy} className="rounded-[10px] px-5">
-          {busy ? "처리 중..." : "신청 시작 →"}
-        </Button>
-        <Button
-          variant="outline"
-          className="rounded-[10px] px-5"
-          onClick={() => router.push("/corporate")}
-        >
+      <div className="form-actions right">
+        <Button type="button" variant="ghost" onClick={() => router.push("/corporate")}>
           취소
         </Button>
+        <Button type="button" onClick={onStart}>
+          신청 시작
+        </Button>
       </div>
     </div>
   );
 }
 
-function ConfirmRow({ label, value }: { label: string; value?: string }) {
+function ConfirmRow({
+  label,
+  value,
+  mono = false
+}: {
+  label: string;
+  value?: string;
+  mono?: boolean;
+}) {
   return (
-    <div className="grid grid-cols-[160px_1fr] border-b border-row-border last:border-0">
-      <div className="bg-secondary px-4 py-3 text-[13px] text-muted-foreground">
-        {label}
-      </div>
-      <div className="px-4 py-3 text-[13px] font-medium text-foreground">
-        {value || "-"}
-      </div>
+    <div className="kv-row">
+      <div className="kv-key">{label}</div>
+      <div className={`kv-val${mono ? " mono" : ""}`}>{value || "-"}</div>
     </div>
   );
 }
 
-function InfoBox({ title, items }: { title: string; items: string[] }) {
+function InfoList({ icon, items }: { icon: "file" | "check"; items: string[] }) {
   return (
-    <div className="rounded-lg border border-border bg-secondary/50 p-4">
-      <h3 className="pb-2 text-[13px] font-bold text-foreground">{title}</h3>
-      <ul className="grid gap-1.5 text-[13px] text-muted-foreground">
-        {items.map((item) => (
-          <li key={item}>· {item}</li>
-        ))}
-      </ul>
-    </div>
+    <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+      {items.map((item) => (
+        <li key={item} className="flex items-center gap-2.5 text-[13.5px]">
+          {icon === "file" ? <Icon.File size={16} /> : <Icon.Check size={14} />}
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

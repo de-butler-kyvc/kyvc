@@ -6,13 +6,19 @@ import { useForm } from "react-hook-form";
 
 import { Logo } from "@/components/design/primitives";
 import { Icon } from "@/components/design/icons";
-import { ApiError, auth, session } from "@/lib/api";
+import { ApiError, auth } from "@/lib/api";
+import {
+  AUTHENTICATED_HOME,
+  SessionGateSplash,
+  useGuestSessionGate
+} from "@/lib/session-gate";
 
 type LoginForm = { email: string; password: string };
 
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const checkingSession = useGuestSessionGate();
 
   const {
     register,
@@ -23,13 +29,16 @@ export default function LoginPage() {
   const onSubmit = handleSubmit(async ({ email, password }) => {
     setError(null);
     try {
-      const res = await auth.login(email, password);
-      session.set(res.accessToken, res.refreshToken);
-      router.push("/corporate");
+      await auth.login(email, password);
+      router.replace(AUTHENTICATED_HOME);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "로그인에 실패했습니다.");
     }
   });
+
+  if (checkingSession) {
+    return <SessionGateSplash />;
+  }
 
   return (
     <div className="app-shell page-enter">

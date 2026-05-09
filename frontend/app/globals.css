@@ -143,6 +143,7 @@ body {
   line-height: 1.5;
   letter-spacing: -0.005em;
   transition: background 0.2s ease, color 0.2s ease;
+  min-width: 1024px;
 }
 
 button {
@@ -1426,6 +1427,22 @@ a:hover {
   letter-spacing: -0.01em;
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.table-scroll > .table {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 720px;
+}
+
 .table {
   width: 100%;
   border-collapse: separate;
@@ -1580,7 +1597,7 @@ a:hover {
   box-shadow: var(--shadow-sm);
 }
 
-.form-card+.form-card {
+.form-card+.form-card:not(.m-0) {
   margin-top: 16px;
 }
 
@@ -1819,16 +1836,25 @@ a:hover {
 }
 
 /* ─── Type radio cards (UWEB-007) ─────────── */
+.type-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .type-radio-card {
   display: flex;
   align-items: center;
   gap: 14px;
+  width: 100%;
   padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.15s ease;
+  text-align: left;
 }
 
 .type-radio-card:hover {
@@ -1843,17 +1869,58 @@ a:hover {
 
 .type-radio-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .type-radio-name {
+  display: block;
   font-size: 14px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .type-radio-docs {
+  display: block;
   font-size: 12.5px;
   color: var(--text-muted);
   margin-top: 3px;
+}
+
+.type-radio-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.type-radio-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.type-radio-dot.selected {
+  border-color: var(--accent);
+}
+
+.type-radio-dot.selected::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* ─── File upload tile ───────────────────── */
@@ -1935,6 +2002,22 @@ a:hover {
 .upload-tile.uploaded .upload-tile-text {
   color: var(--accent);
   font-weight: 600;
+}
+
+.file-pill {
+  min-height: 64px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-pill>svg {
+  color: var(--accent);
+  flex-shrink: 0;
 }
 
 /* ─── Storage option (UWEB-011) ───────────── */

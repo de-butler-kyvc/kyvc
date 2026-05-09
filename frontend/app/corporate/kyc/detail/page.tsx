@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -10,9 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   ApiError,
   type KycDocument,
-  type KycStatus,
+  type KycReviewSummaryResponse,
+  type KycStatusResponse,
+  type Supplement,
   kyc as kycApi
 } from "@/lib/api";
+import { DOCUMENT_LABELS } from "@/lib/kyc-flow";
+
+const PRE_SUBMIT_STATUSES = new Set(["DRAFT", "READY"]);
 
 export default function CorporateKycDetailPage() {
   return (
@@ -27,8 +33,10 @@ function KycDetail() {
   const kycId = Number(params.get("id"));
   const valid = Number.isFinite(kycId) && kycId > 0;
 
-  const [status, setStatus] = useState<KycStatus | null>(null);
+  const [status, setStatus] = useState<KycStatusResponse | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [aiReview, setAiReview] = useState<KycReviewSummaryResponse | null>(null);
+  const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -36,22 +44,38 @@ function KycDetail() {
   useEffect(() => {
     if (!valid) return;
     setError(null);
-    Promise.all([kycApi.status(kycId), kycApi.documents(kycId)])
-      .then(([s, d]) => {
+    let cancelled = false;
+    Promise.all([
+      kycApi.status(kycId),
+      kycApi.documents(kycId),
+      kycApi.aiReviewSummary(kycId).catch(() => null),
+      kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
+    ])
+      .then(([s, d, review, supp]) => {
+        if (cancelled) return;
         setStatus(s);
-        setDocuments(d.items ?? []);
+        setDocuments(d);
+        setAiReview(review);
+        setSupplements(supp.supplements ?? []);
       })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [kycId, valid, refreshKey]);
 
-  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => {
+  const onUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    documentTypeCode: string
+  ) => {
     const file = e.target.files?.[0];
     if (!file || !valid) return;
     setError(null);
     try {
-      await kycApi.uploadDocument(kycId, file, documentType);
+      await kycApi.uploadDocument(kycId, file, documentTypeCode);
       setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "업로드에 실패했습니다.");
@@ -77,7 +101,10 @@ function KycDetail() {
     setError(null);
     try {
       const res = await kycApi.submit(kycId);
-      setStatus((prev) => ({ ...(prev ?? {}), status: res.status }));
+      setStatus((prev) => ({
+        ...(prev ?? { kycId }),
+        kycStatus: res.kycStatus ?? prev?.kycStatus
+      }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
     } finally {
@@ -97,7 +124,10 @@ function KycDetail() {
     );
   }
 
-  const beforeSubmit = status?.status === "DRAFT" || status?.status === "READY";
+  const beforeSubmit = PRE_SUBMIT_STATUSES.has(status?.kycStatus ?? "");
+  const pendingSupplements = supplements.filter(
+    (s) => s.supplementStatus !== "COMPLETED" && s.supplementStatus !== "SUBMITTED"
+  );
 
   return (
     <PageShell
@@ -115,21 +145,49 @@ function KycDetail() {
         <CardHeader>
           <CardDescription>현재 상태</CardDescription>
           <CardTitle className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{status?.status ?? "..."}</Badge>
-            {status?.aiReviewStatus ? (
-              <Badge variant="outline">AI · {status.aiReviewStatus}</Badge>
+            <Badge variant="secondary">{status?.kycStatus ?? "..."}</Badge>
+            {aiReview?.aiReviewStatus ? (
+              <Badge variant="outline">AI · {aiReview.aiReviewStatus}</Badge>
             ) : null}
-            {status?.vcStatus ? (
-              <Badge variant="outline">VC · {status.vcStatus}</Badge>
+            {status?.corporateTypeCode ? (
+              <Badge variant="outline">유형 · {status.corporateTypeCode}</Badge>
             ) : null}
           </CardTitle>
         </CardHeader>
-        {status?.nextAction ? (
+        {aiReview?.summaryMessage ? (
           <CardContent className="text-sm text-muted-foreground">
-            {status.nextAction}
+            {aiReview.summaryMessage}
           </CardContent>
         ) : null}
       </Card>
+
+      {pendingSupplements.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>보완 요청 {pendingSupplements.length}건</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {pendingSupplements.map((s) => (
+              <div
+                key={s.supplementId}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+              >
+                <div className="flex flex-col">
+                  <span className="font-medium">{s.title ?? `보완요청 ${s.supplementId}`}</span>
+                  <span className="text-xs text-muted-foreground">{s.message ?? s.requestReason ?? ""}</span>
+                </div>
+                <Button asChild variant="ghost" size="sm">
+                  <Link
+                    href={`/corporate/kyc/detail/documents?id=${kycId}&supplementId=${s.supplementId}`}
+                  >
+                    보완 제출
+                  </Link>
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -145,19 +203,23 @@ function KycDetail() {
             <p className="text-sm text-muted-foreground">업로드된 서류가 없습니다.</p>
           ) : (
             <ul className="grid gap-2">
-              {documents.map((d) => (
+              {documents.filter(v => v.uploadStatus != 'DELETED').map((d) => (
                 <li
                   key={d.documentId}
                   className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                 >
                   <div className="flex flex-col">
-                    <span className="font-medium">{d.documentType}</span>
+                    <span className="font-medium">
+                      {DOCUMENT_LABELS[d.documentTypeCode ?? ""] ?? d.documentTypeCode ?? "-"}
+                    </span>
                     <span className="font-mono text-xs text-muted-foreground">
-                      {d.fileName ?? d.fileHash?.slice(0, 16)}
+                      {d.fileName ?? d.documentHash?.slice(0, 16) ?? "-"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {d.status ? <Badge variant="outline">{d.status}</Badge> : null}
+                    {d.uploadStatus ? (
+                      <Badge variant="outline">{d.uploadStatus}</Badge>
+                    ) : null}
                     {beforeSubmit ? (
                       <Button
                         variant="ghost"
@@ -172,9 +234,7 @@ function KycDetail() {
               ))}
             </ul>
           )}
-          {beforeSubmit ? (
-            <UploadField onPick={onUpload} />
-          ) : null}
+          {beforeSubmit ? <UploadField onPick={onUpload} /> : null}
         </CardContent>
       </Card>
     </PageShell>
@@ -184,9 +244,12 @@ function KycDetail() {
 function UploadField({
   onPick
 }: {
-  onPick: (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => void;
+  onPick: (
+    e: React.ChangeEvent<HTMLInputElement>,
+    documentTypeCode: string
+  ) => void;
 }) {
-  const [documentType, setDocumentType] = useState("CORP_REGISTRY");
+  const [documentType, setDocumentType] = useState("CORPORATE_REGISTRATION");
   return (
     <div className="grid gap-2 rounded-md border border-dashed p-3">
       <div className="grid gap-2 md:grid-cols-[200px_1fr]">
@@ -195,11 +258,11 @@ function UploadField({
           value={documentType}
           onChange={(e) => setDocumentType(e.target.value)}
         >
-          <option value="CORP_REGISTRY">등기사항전부증명서</option>
-          <option value="BUSINESS_LICENSE">사업자등록증</option>
-          <option value="SHAREHOLDERS">주주명부</option>
-          <option value="ARTICLES">정관</option>
-          <option value="POA">위임장</option>
+          <option value="CORPORATE_REGISTRATION">등기사항전부증명서</option>
+          <option value="BUSINESS_REGISTRATION">사업자등록증</option>
+          <option value="SHAREHOLDER_LIST">주주명부</option>
+          <option value="ARTICLES_OF_INCORPORATION">정관</option>
+          <option value="POWER_OF_ATTORNEY">위임장</option>
           <option value="OTHER">기타</option>
         </select>
         <input
