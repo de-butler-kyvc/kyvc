@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 
 const BASE_URL = "https://dev-api-kyvc.khuoo.synology.me";
+const REFRESH_TOKEN_PATH = "/api/auth/token/refresh";
 
 type Envelope<T> = {
   success: boolean;
@@ -60,19 +61,60 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshTokenPromise: Promise<boolean> | null = null;
+
+async function refreshToken() {
+  if (!refreshTokenPromise) {
+    refreshTokenPromise = apiClient
+      .post<unknown>(REFRESH_TOKEN_PATH)
+      .then((res) => {
+        const payload = isEnvelope<{ refreshed?: boolean }>(res.data)
+          ? res.data
+          : null;
+
+        return (
+          res.status >= 200 &&
+          res.status < 300 &&
+          (!payload || payload.success !== false)
+        );
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshTokenPromise = null;
+      });
+  }
+
+  return refreshTokenPromise;
+}
+
+async function requestApi<T>(
+  path: string,
+  input: RequestInput,
+) {
+  const { method = "GET", query, body, formData } = input;
+
+  return apiClient.request<T>({
+    url: path,
+    method,
+    params: compactParams(query),
+    data: formData ?? (body !== undefined ? body : undefined),
+  });
+}
+
 export async function api<T>(
   path: string,
   input: RequestInput = {},
 ): Promise<T> {
-  const { method = "GET", query, body, formData } = input;
   let res;
   try {
-    res = await apiClient.request<unknown>({
-      url: path,
-      method,
-      params: compactParams(query),
-      data: formData ?? (body !== undefined ? body : undefined),
-    });
+    res = await requestApi<unknown>(path, input);
+
+    if (res.status === 401 && path !== REFRESH_TOKEN_PATH) {
+      const refreshed = await refreshToken();
+      if (refreshed) {
+        res = await requestApi<unknown>(path, input);
+      }
+    }
   } catch (err) {
     if (axios.isAxiosError(err)) {
       throw new ApiError(0, "NETWORK", err.message || "네트워크 오류");
