@@ -271,6 +271,22 @@ public class KycApplication {
         this.manualReviewReason = manualReviewReason;
     }
 
+    // AI 심사 낮은 신뢰도 후 수동심사 전환
+    public void completeAiReviewAsLowConfidenceManualReview(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            String manualReviewReason // 수동심사 전환 사유
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.MANUAL_REVIEW;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.LOW_CONFIDENCE;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.NEED_MANUAL_REVIEW;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.manualReviewReason = manualReviewReason;
+    }
+
     // Credential 발급 가능 상태 여부
     public boolean isCredentialIssuable() {
         return KyvcEnums.KycStatus.APPROVED == kycStatus;
@@ -308,6 +324,7 @@ public class KycApplication {
     ) {
         this.kycStatus = KyvcEnums.KycStatus.MANUAL_REVIEW;
         this.aiReviewStatus = KyvcEnums.AiReviewStatus.FAILED;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.NEED_MANUAL_REVIEW;
         this.manualReviewReason = manualReviewReason;
     }
 

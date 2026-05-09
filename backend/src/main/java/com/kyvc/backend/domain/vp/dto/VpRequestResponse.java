@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
  * @param nonce VP 요청 nonce
  * @param expiresAt 요청 만료 일시
  * @param status VP 요청 상태
+ * @param result VP 검증 결과
+ * @param verifiedAt 검증 일시
  */
 @Schema(description = "VP 요청 응답")
 public record VpRequestResponse(
@@ -33,6 +35,10 @@ public record VpRequestResponse(
         @Schema(description = "요청 만료 일시", example = "2026-05-07T23:59:59")
         LocalDateTime expiresAt, // 요청 만료 일시
         @Schema(description = "VP 요청 상태", example = "REQUESTED")
-        String status // VP 요청 상태
+        String status, // VP 요청 상태
+        @Schema(description = "VP 검증 결과")
+        VpVerificationResultResponse result, // VP 검증 결과
+        @Schema(description = "검증 일시", example = "2026-05-07T16:05:00")
+        LocalDateTime verifiedAt // 검증 일시
 ) {
 }

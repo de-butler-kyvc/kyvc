@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/internal")
 @RequiredArgsConstructor
-@Tag(name = "Core 연동 / Callback", description = "Core 내부 헬스체크, Issuer 정책, AI/VC/XRPL/VP callback 및 개발용 E2E API")
+@Tag(name = "Core 연동", description = "Core 내부 헬스체크, Issuer 정책 및 개발용 E2E API")
 public class CoreInternalHealthController {
 
     private final CoreAdapter coreAdapter;

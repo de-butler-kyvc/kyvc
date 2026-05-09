@@ -23,7 +23,6 @@ import java.util.Map;
  * @param claims VC Claim 데이터
  * @param validFrom VC 유효 시작 시각
  * @param validUntil VC 유효 종료 시각
- * @param callbackUrl Callback URL
  * @param requestedAt 요청 시각
  */
 @Schema(description = "Core VC 발급 요청")
@@ -58,8 +57,6 @@ public record CoreVcIssuanceRequest(
         LocalDateTime validFrom, // VC 유효 시작 시각
         @Schema(description = "VC 유효 종료 시각", example = "2027-05-07T12:00:00")
         LocalDateTime validUntil, // VC 유효 종료 시각
-        @Schema(description = "Callback URL", example = "http://localhost:8080/api/internal/core/callbacks/vc-issuance")
-        String callbackUrl, // Callback URL
         @Schema(description = "요청 시각", example = "2026-05-06T10:10:00")
         LocalDateTime requestedAt // 요청 시각
 ) {

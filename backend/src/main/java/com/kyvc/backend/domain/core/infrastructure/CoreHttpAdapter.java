@@ -659,7 +659,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (extractBoolean(status, "revoked")) {
             return KyvcEnums.CredentialStatus.REVOKED.name();
         }
-        return KyvcEnums.CredentialStatus.ISSUING.name();
+        return KyvcEnums.CredentialStatus.VALID.name();
     }
 
     private CoreVpVerificationResponse mapVpVerificationResponse(

@@ -20,17 +20,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * KYC 제출 API Controller
  */
 @RestController
-@RequestMapping({
-        "/api/corporate/kyc/applications/{kycId}",
-        "/api/user/kyc/applications/{kycId}"
-})
 @RequiredArgsConstructor
 @Tag(name = "KYC 신청 / 서류", description = "KYC 신청, 필수서류, 문서 업로드, 제출, 완료 및 Credential Offer API")
 public class KycSubmissionController {
@@ -53,7 +48,10 @@ public class KycSubmissionController {
             description = "법인 정보, 업로드 문서, 필수서류 충족 여부, 제출 가능 여부, 누락 항목 목록 반환",
             content = @Content(schema = @Schema(implementation = KycApplicationSummaryResponse.class))
     )
-    @GetMapping("/summary")
+    @GetMapping({
+            "/api/corporate/kyc/applications/{kycId}/summary",
+            "/api/user/kyc/applications/{kycId}/summary"
+    })
     public ResponseEntity<CommonResponse<KycApplicationSummaryResponse>> getSummary(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
@@ -74,14 +72,14 @@ public class KycSubmissionController {
      */
     @Operation(
             summary = "KYC 제출",
-            description = "KYC 제출 가능 조건을 모두 만족하면 Core Stub AI 심사 요청을 생성하고 상태를 AI_REVIEWING으로 변경합니다."
+            description = "CoreAdapter를 통해 Core에 동기 요청하고, Core 응답 수신 후 KYC 상태와 AI 심사 결과를 저장합니다."
     )
     @ApiResponse(
             responseCode = "200",
             description = "제출된 KYC 신청 ID, KYC 상태, 제출일시, 제출 결과 메시지 반환",
             content = @Content(schema = @Schema(implementation = KycSubmitResponse.class))
     )
-    @PostMapping("/submit")
+    @PostMapping("/api/user/kyc/applications/{kycId}/submit")
     public ResponseEntity<CommonResponse<KycSubmitResponse>> submit(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보

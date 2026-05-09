@@ -78,6 +78,8 @@ public enum ErrorCode {
     DOCUMENT_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "DOCUMENT_SIZE_EXCEEDED", "문서 크기가 허용 범위를 초과했습니다."),
     // HTTP 500 - 문서 저장 실패
     DOCUMENT_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_SAVE_FAILED", "문서 저장에 실패했습니다."),
+    // HTTP 404 - 문서 파일 없음
+    DOCUMENT_FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_FILE_NOT_FOUND", "문서 파일을 찾을 수 없습니다."),
     // HTTP 500 - 문서 저장 경로 오류
     DOCUMENT_STORAGE_PATH_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_STORAGE_PATH_INVALID", "문서 저장 경로가 올바르지 않습니다."),
 
@@ -161,6 +163,8 @@ public enum ErrorCode {
     COMMON_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_NOT_FOUND", "공통코드를 찾을 수 없습니다."),
     // HTTP 404 - 공통코드 그룹 없음
     COMMON_CODE_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON_CODE_GROUP_NOT_FOUND", "공통코드 그룹을 찾을 수 없습니다."),
+    // HTTP 410 - 문서 미리보기 만료
+    DOCUMENT_PREVIEW_EXPIRED(HttpStatus.GONE, "DOCUMENT_PREVIEW_EXPIRED", "문서 미리보기 URL이 만료되었습니다."),
     // HTTP 409 - 문서 미리보기 불가
     DOCUMENT_PREVIEW_NOT_AVAILABLE(HttpStatus.CONFLICT, "DOCUMENT_PREVIEW_NOT_AVAILABLE", "문서 미리보기를 사용할 수 없습니다."),
     // HTTP 500 - 내부 알림 저장 실패

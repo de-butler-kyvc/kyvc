@@ -1,5 +1,6 @@
 package com.kyvc.backend.domain.document.infrastructure;
 
+import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -36,6 +37,16 @@ public interface DocumentStorage {
     );
 
     /**
+     * 저장 문서 파일 조회
+     *
+     * @param storedFilePath 저장 파일 경로
+     * @return 저장 문서 파일
+     */
+    StoredContent load(
+            String storedFilePath // 저장 파일 경로
+    );
+
+    /**
      * 저장 파일 정보
      *
      * @param originalFileName 원본 파일명
@@ -50,6 +61,18 @@ public interface DocumentStorage {
             String contentType, // MIME 타입
             Long fileSize, // 파일 크기
             String fileHash // SHA-256 해시
+    ) {
+    }
+
+    /**
+     * 저장 문서 파일
+     *
+     * @param resource 파일 리소스
+     * @param contentLength 파일 크기
+     */
+    record StoredContent(
+            Resource resource, // 파일 리소스
+            long contentLength // 파일 크기
     ) {
     }
 }

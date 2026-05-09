@@ -23,7 +23,7 @@ import java.time.LocalDateTime;
 public record CoreVcIssuanceResponse(
         @Schema(description = "Core 요청 ID", example = "fcf03404-f0eb-43f9-b56a-a5f3b8fdd7de")
         String coreRequestId, // Core 요청 ID
-        @Schema(description = "처리 상태", example = "ISSUING")
+        @Schema(description = "처리 상태", example = "VALID")
         String status, // 처리 상태
         @Schema(description = "처리 메시지", example = "VC issuance request accepted by core.")
         String message, // 처리 메시지

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
-import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
@@ -23,6 +22,7 @@ import com.kyvc.backend.domain.vp.dto.VpPresentationRequest;
 import com.kyvc.backend.domain.vp.dto.VpPresentationResponse;
 import com.kyvc.backend.domain.vp.dto.VpPresentationResultResponse;
 import com.kyvc.backend.domain.vp.dto.VpRequestResponse;
+import com.kyvc.backend.domain.vp.dto.VpVerificationResultResponse;
 import com.kyvc.backend.domain.vp.repository.VpVerificationRepository;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
@@ -49,14 +49,13 @@ public class VpVerificationService {
     private static final String QR_CREDENTIAL_OFFER_MESSAGE = "Credential Offer QR입니다.";
     private static final String QR_VP_REQUEST_MESSAGE = "VP 요청 QR입니다.";
     private static final String ELIGIBLE_MATCH_REASON = "동일 법인의 Wallet 저장 VALID Credential입니다.";
-    private static final String VP_PRESENTATION_MESSAGE = "VP 제출이 접수되었습니다. 검증 결과는 추후 확인할 수 있습니다.";
+    private static final String VP_PRESENTATION_MESSAGE = "VP 검증이 완료되었습니다.";
 
     private final VpVerificationRepository vpVerificationRepository;
     private final CredentialRepository credentialRepository;
     private final CorporateRepository corporateRepository;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
-    private final CoreProperties coreProperties;
     private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
 
@@ -151,11 +150,15 @@ public class VpVerificationService {
                     saved.getVpRequestId(),
                     saved.getCredentialId(),
                     enumName(saved.getVpVerificationStatus()),
+                    toVerificationResultResponse(saved, coreResponse),
                     saved.getPresentedAt(),
+                    saved.getVerifiedAt(),
                     resolveVpPresentationMessage(saved, coreResponse)
             );
         } catch (ApiException exception) {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
+            vpVerification.markInvalid(exception.getMessage(), LocalDateTime.now());
+            vpVerificationRepository.save(vpVerification);
             throw exception;
         }
     }
@@ -174,6 +177,7 @@ public class VpVerificationService {
                 vpVerification.getVpRequestId(),
                 vpVerification.getCredentialId(),
                 enumName(vpVerification.getVpVerificationStatus()),
+                toNullableVerificationResultResponse(vpVerification, null),
                 KyvcEnums.Yn.Y.name().equals(vpVerification.getReplaySuspectedYn()),
                 vpVerification.getResultSummary(),
                 vpVerification.getPresentedAt(),
@@ -192,7 +196,9 @@ public class VpVerificationService {
                 vpVerification.getChallenge(),
                 vpVerification.getRequestNonce(),
                 vpVerification.getExpiresAt(),
-                enumName(vpVerification.getVpVerificationStatus())
+                enumName(vpVerification.getVpVerificationStatus()),
+                toNullableVerificationResultResponse(vpVerification, null),
+                vpVerification.getVerifiedAt()
         );
     }
 
@@ -258,7 +264,6 @@ public class VpVerificationService {
                 vpVerification.getPurpose(),
                 CoreMockSeedData.DEV_VP_AUD,
                 vpVerification.getRequiredClaimsJson(),
-                buildVpVerificationCallbackUrl(coreRequestId),
                 requestedAt
         );
     }
@@ -268,6 +273,7 @@ public class VpVerificationService {
             CoreVpVerificationResponse coreResponse // Core 검증 응답
     ) {
         if (coreResponse == null || !Boolean.TRUE.equals(coreResponse.completed())) {
+            vpVerification.markInvalid("VP 검증 결과를 확인할 수 없습니다.", LocalDateTime.now());
             return;
         }
         String summary = resolveVpPresentationMessage(vpVerification, coreResponse);
@@ -287,14 +293,14 @@ public class VpVerificationService {
             CoreVpVerificationResponse coreResponse // Core 검증 응답
     ) {
         if (coreResponse == null || !Boolean.TRUE.equals(coreResponse.completed())) {
-            coreRequestService.markRequested(coreRequestId, toJson(coreResponse));
+            coreRequestService.markFailed(coreRequestId, "VP 검증 결과를 확인할 수 없습니다.");
             return;
         }
         if (Boolean.TRUE.equals(coreResponse.valid())) {
-            coreRequestService.markCallbackSuccess(coreRequestId, toJson(coreResponse));
+            coreRequestService.markSuccess(coreRequestId, toJson(coreResponse));
             return;
         }
-        coreRequestService.markCallbackFailed(coreRequestId, resolveVpPresentationMessage(null, coreResponse));
+        coreRequestService.markFailed(coreRequestId, resolveVpPresentationMessage(null, coreResponse));
     }
 
     private String resolveVpPresentationMessage(
@@ -313,18 +319,6 @@ public class VpVerificationService {
         return VP_PRESENTATION_MESSAGE;
     }
 
-    private String buildVpVerificationCallbackUrl(
-            String coreRequestId // Core 요청 ID
-    ) {
-        if (!StringUtils.hasText(coreProperties.getCallbackBaseUrl()) || !StringUtils.hasText(coreRequestId)) {
-            return null;
-        }
-        return coreProperties.getCallbackBaseUrl().replaceAll("/+$", "")
-                + "/api/internal/core/vp-verifications/"
-                + coreRequestId
-                + "/callback";
-    }
-
     private void markCoreRequestFailure(
             String coreRequestId, // Core 요청 ID
             ApiException exception // Core 호출 예외
@@ -333,7 +327,36 @@ public class VpVerificationService {
             coreRequestService.markTimeout(coreRequestId, exception.getMessage());
             return;
         }
-        coreRequestService.markCallbackFailed(coreRequestId, exception.getMessage());
+        coreRequestService.markFailed(coreRequestId, exception.getMessage());
+    }
+
+    private VpVerificationResultResponse toVerificationResultResponse(
+            VpVerification vpVerification, // VP 검증 요청
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        boolean replayDetected = KyvcEnums.Yn.Y.name().equals(vpVerification.getReplaySuspectedYn())
+                || Boolean.TRUE.equals(coreResponse == null ? null : coreResponse.replaySuspected());
+        boolean signatureValid = KyvcEnums.VpVerificationStatus.VALID == vpVerification.getVpVerificationStatus();
+        boolean issuerTrusted = signatureValid && !replayDetected;
+        String credentialStatus = signatureValid
+                ? KyvcEnums.CredentialStatus.VALID.name()
+                : KyvcEnums.VpVerificationStatus.INVALID.name();
+        return new VpVerificationResultResponse(
+                signatureValid,
+                issuerTrusted,
+                credentialStatus,
+                replayDetected
+        );
+    }
+
+    private VpVerificationResultResponse toNullableVerificationResultResponse(
+            VpVerification vpVerification, // VP 검증 요청
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        if (vpVerification == null || !vpVerification.isCompleted()) {
+            return null;
+        }
+        return toVerificationResultResponse(vpVerification, coreResponse);
     }
 
     private String toJson(

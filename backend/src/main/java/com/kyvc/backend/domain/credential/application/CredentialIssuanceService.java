@@ -113,16 +113,17 @@ public class CredentialIssuanceService {
             );
 
             if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
-                coreRequestService.markCallbackSuccess(coreRequest.getCoreRequestId(), toJson(response));
+                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(response));
                 kycApplication.markVcIssued(response.issuedAt() == null ? LocalDateTime.now() : response.issuedAt());
                 kycApplicationRepository.save(kycApplication);
             } else {
-                coreRequestService.markRequested(coreRequest.getCoreRequestId(), toJson(response));
+                credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+                coreRequestService.markFailed(coreRequest.getCoreRequestId(), response.message());
             }
 
             logEventLogger.info(
-                    "credential.issuance.requested",
-                    "Credential issuance requested",
+                    "credential.issuance.completed",
+                    "Credential issuance completed",
                     Map.of(
                             "coreRequestId", coreRequest.getCoreRequestId(),
                             "credentialId", credential.getCredentialId(),
@@ -132,10 +133,31 @@ public class CredentialIssuanceService {
             return credentialRepository.save(credential);
         } catch (ApiException exception) {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
-            throw exception;
+            credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+            logEventLogger.warn(
+                    "credential.issuance.failed",
+                    exception.getMessage(),
+                    Map.of(
+                            "coreRequestId", coreRequest.getCoreRequestId(),
+                            "credentialId", credential.getCredentialId(),
+                            "kycId", kycApplication.getKycId()
+                    )
+            );
+            return credentialRepository.save(credential);
         } catch (Exception exception) {
-            coreRequestService.markCallbackFailed(coreRequest.getCoreRequestId(), "VC 발급 Core 요청 처리 중 오류가 발생했습니다.");
-            throw new ApiException(ErrorCode.CORE_API_CALL_FAILED, "VC 발급 Core 요청 처리 중 오류가 발생했습니다.", exception);
+            coreRequestService.markFailed(coreRequest.getCoreRequestId(), "VC 발급 Core 요청 처리 중 오류가 발생했습니다.");
+            credential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+            logEventLogger.error(
+                    "credential.issuance.failed",
+                    "VC 발급 Core 요청 처리 중 오류가 발생했습니다.",
+                    Map.of(
+                            "coreRequestId", coreRequest.getCoreRequestId(),
+                            "credentialId", credential.getCredentialId(),
+                            "kycId", kycApplication.getKycId()
+                    ),
+                    exception
+            );
+            return credentialRepository.save(credential);
         }
     }
 
@@ -162,7 +184,6 @@ public class CredentialIssuanceService {
                 resolveClaims(),
                 now,
                 CoreMockSeedData.validUntil(),
-                buildCallbackUrl(coreRequestId),
                 now
         );
     }
@@ -206,28 +227,19 @@ public class CredentialIssuanceService {
         return CoreMockSeedData.legalEntityClaims();
     }
 
-    private String buildCallbackUrl(
-            String coreRequestId // Core 요청 ID
-    ) {
-        if (!StringUtils.hasText(coreProperties.getCallbackBaseUrl())) {
-            return null;
-        }
-        return coreProperties.getCallbackBaseUrl().replaceAll("/+$", "")
-                + "/api/internal/core/vc-issuances/"
-                + coreRequestId
-                + "/callback";
-    }
-
     private KyvcEnums.CredentialStatus resolveCredentialStatus(
             String status // Core 응답 상태
     ) {
         if (!StringUtils.hasText(status)) {
-            return KyvcEnums.CredentialStatus.ISSUING;
+            return KyvcEnums.CredentialStatus.FAILED;
         }
         try {
-            return KyvcEnums.CredentialStatus.valueOf(status.trim().toUpperCase());
+            KyvcEnums.CredentialStatus resolvedStatus = KyvcEnums.CredentialStatus.valueOf(status.trim().toUpperCase());
+            return KyvcEnums.CredentialStatus.ISSUING == resolvedStatus
+                    ? KyvcEnums.CredentialStatus.FAILED
+                    : resolvedStatus;
         } catch (IllegalArgumentException exception) {
-            return KyvcEnums.CredentialStatus.ISSUING;
+            return KyvcEnums.CredentialStatus.FAILED;
         }
     }
 
@@ -239,7 +251,7 @@ public class CredentialIssuanceService {
             coreRequestService.markTimeout(coreRequestId, exception.getMessage());
             return;
         }
-        coreRequestService.markCallbackFailed(coreRequestId, exception.getMessage());
+        coreRequestService.markFailed(coreRequestId, exception.getMessage());
     }
 
     private String toJson(

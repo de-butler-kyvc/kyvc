@@ -16,6 +16,7 @@ import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -136,6 +137,34 @@ public class KycDocumentService {
                 .toUriString();
 
         return new DocumentPreviewResponse(previewUrl, expiresAt);
+    }
+
+    // 문서 미리보기 파일 조회
+    @Transactional(readOnly = true)
+    public DocumentPreviewContent getDocumentPreviewContent(
+            Long userId, // 사용자 ID
+            Long kycId, // KYC 신청 ID
+            Long documentId, // 문서 ID
+            LocalDateTime expiresAt // URL 만료 일시
+    ) {
+        validateUserId(userId);
+        validateKycId(kycId);
+        validateDocumentId(documentId);
+        validatePreviewExpiresAt(expiresAt);
+        findOwnedKyc(userId, kycId);
+
+        KycDocument kycDocument = findOwnedDocument(kycId, documentId);
+        if (!kycDocument.isPreviewAvailable()) {
+            throw new ApiException(ErrorCode.DOCUMENT_PREVIEW_NOT_AVAILABLE);
+        }
+
+        DocumentStorage.StoredContent storedContent = documentStorage.load(kycDocument.getFilePath());
+        return new DocumentPreviewContent(
+                storedContent.resource(),
+                kycDocument.getFileName(),
+                kycDocument.getMimeType(),
+                storedContent.contentLength()
+        );
     }
 
     // 제출 전 문서 삭제 처리
@@ -270,6 +299,18 @@ public class KycDocumentService {
         return value.trim();
     }
 
+    // 미리보기 만료 일시 검증
+    private void validatePreviewExpiresAt(
+            LocalDateTime expiresAt // URL 만료 일시
+    ) {
+        if (expiresAt == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        if (!expiresAt.isAfter(LocalDateTime.now())) {
+            throw new ApiException(ErrorCode.DOCUMENT_PREVIEW_EXPIRED);
+        }
+    }
+
     // 사용자 ID 검증
     private void validateUserId(
             Long userId // 사용자 ID
@@ -295,5 +336,21 @@ public class KycDocumentService {
         if (documentId == null || documentId <= 0) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    /**
+     * 문서 미리보기 파일
+     *
+     * @param resource 파일 리소스
+     * @param fileName 원본 파일명
+     * @param mimeType MIME 타입
+     * @param fileSize 파일 크기
+     */
+    public record DocumentPreviewContent(
+            Resource resource, // 파일 리소스
+            String fileName, // 원본 파일명
+            String mimeType, // MIME 타입
+            long fileSize // 파일 크기
+    ) {
     }
 }
