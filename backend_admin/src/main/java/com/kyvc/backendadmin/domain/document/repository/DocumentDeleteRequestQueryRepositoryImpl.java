@@ -34,9 +34,12 @@ public class DocumentDeleteRequestQueryRepositoryImpl implements DocumentDeleteR
                        corporate.corporate_id,
                        corporate.corporate_name,
                        document.document_type_code,
-                       document.file_name,
+                       delete_request.requested_by_user_id,
+                       delete_request.request_reason,
                        delete_request.request_status_code,
-                       delete_request.requested_at
+                       delete_request.requested_at,
+                       delete_request.processed_by_admin_id,
+                       delete_request.processed_at
                 from document_delete_requests delete_request
                 join kyc_documents document on document.document_id = delete_request.document_id
                 left join kyc_applications kyc on kyc.kyc_id = document.kyc_id
@@ -87,19 +90,36 @@ public class DocumentDeleteRequestQueryRepositoryImpl implements DocumentDeleteR
                     """);
             parameters.put("keyword", "%" + request.keyword().trim().toLowerCase() + "%");
         }
-        if (request.fromDate() != null) {
-            where.append(" and delete_request.requested_at >= :fromDate");
-            parameters.put("fromDate", request.fromDate().atStartOfDay());
+        if (request.kycId() != null) {
+            where.append(" and document.kyc_id = :kycId");
+            parameters.put("kycId", request.kycId());
         }
-        if (request.toDate() != null) {
-            where.append(" and delete_request.requested_at < :toDateExclusive");
-            parameters.put("toDateExclusive", request.toDate().plusDays(1).atStartOfDay());
+        if (request.corporateId() != null) {
+            where.append(" and corporate.corporate_id = :corporateId");
+            parameters.put("corporateId", request.corporateId());
+        }
+        if (request.documentId() != null) {
+            where.append(" and delete_request.document_id = :documentId");
+            parameters.put("documentId", request.documentId());
+        }
+        if (request.requesterId() != null) {
+            where.append(" and delete_request.requested_by_user_id = :requesterId");
+            parameters.put("requesterId", request.requesterId());
+        }
+        if (request.startDate() != null) {
+            where.append(" and delete_request.requested_at >= :startDate");
+            parameters.put("startDate", request.startDate().atStartOfDay());
+        }
+        if (request.endDate() != null) {
+            where.append(" and delete_request.requested_at < :endDateExclusive");
+            parameters.put("endDateExclusive", request.endDate().plusDays(1).atStartOfDay());
         }
         return new QueryParts(where.toString(), parameters);
     }
 
     private DocumentDeleteRequestSummaryResponse toSummary(Object[] row) {
-        LocalDateTime requestedAt = toLocalDateTime(row[8]);
+        LocalDateTime requestedAt = toLocalDateTime(row[9]);
+        LocalDateTime processedAt = toLocalDateTime(row[11]);
         return new DocumentDeleteRequestSummaryResponse(
                 toLong(row[0]),
                 toLong(row[1]),
@@ -107,9 +127,12 @@ public class DocumentDeleteRequestQueryRepositoryImpl implements DocumentDeleteR
                 toLong(row[3]),
                 toString(row[4]),
                 toString(row[5]),
-                toString(row[6]),
+                toLong(row[6]),
                 toString(row[7]),
-                requestedAt == null ? null : requestedAt.toString()
+                toString(row[8]),
+                requestedAt == null ? null : requestedAt.toString(),
+                toLong(row[10]),
+                processedAt == null ? null : processedAt.toString()
         );
     }
 

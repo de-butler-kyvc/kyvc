@@ -83,6 +83,14 @@ public class IssuerPolicyQueryRepositoryImpl implements IssuerPolicyQueryReposit
             where.append(" and credential_type_code like :credentialType");
             params.put("credentialType", "%" + request.credentialType() + "%");
         }
+        if (request.startDate() != null) {
+            where.append(" and created_at >= :startDate");
+            params.put("startDate", request.startDate().atStartOfDay());
+        }
+        if (request.endDate() != null) {
+            where.append(" and created_at < :endDateExclusive");
+            params.put("endDateExclusive", request.endDate().plusDays(1).atStartOfDay());
+        }
         return new QueryParts(where.toString(), params);
     }
 

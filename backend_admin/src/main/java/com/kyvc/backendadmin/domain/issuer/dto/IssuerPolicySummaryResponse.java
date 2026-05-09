@@ -2,6 +2,7 @@ package com.kyvc.backendadmin.domain.issuer.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -33,11 +34,14 @@ public record IssuerPolicySummaryResponse(
             String status,
             String issuerDid,
             String issuerName,
-            String credentialType
+            String credentialType,
+            LocalDate startDate,
+            LocalDate endDate
     ) {
         /** 검색 조건을 생성합니다. */
         public static SearchRequest of(Integer page, Integer size, String keyword, String policyType, String status,
-                                       String issuerDid, String issuerName, String credentialType) {
+                                       String issuerDid, String issuerName, String credentialType,
+                                       LocalDate startDate, LocalDate endDate) {
             return new SearchRequest(
                     page == null || page < 0 ? 0 : page,
                     size == null || size < 1 ? 20 : Math.min(size, 100),
@@ -46,7 +50,9 @@ public record IssuerPolicySummaryResponse(
                     status,
                     issuerDid,
                     issuerName,
-                    credentialType
+                    credentialType,
+                    startDate,
+                    endDate
             );
         }
     }

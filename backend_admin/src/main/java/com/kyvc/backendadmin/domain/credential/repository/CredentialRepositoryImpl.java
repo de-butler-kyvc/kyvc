@@ -14,6 +14,8 @@ import org.springframework.stereotype.Repository;
 public class CredentialRepositoryImpl implements CredentialRepository {
 
     private static final String DEFAULT_ISSUER_DID = "did:kyvc:backend-admin";
+    private static final String STATUS_REQUESTED = "REQUESTED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
 
     private final ObjectProvider<EntityManager> entityManagerProvider;
 
@@ -124,6 +126,23 @@ public class CredentialRepositoryImpl implements CredentialRepository {
                 .setParameter("coreRequestId", coreRequestId)
                 .getSingleResult();
         return ((Number) result).longValue();
+    }
+
+    @Override
+    public boolean existsInProgressCredentialRequest(Long credentialId, String requestTypeCode) {
+        Number count = (Number) entityManager().createNativeQuery("""
+                        select count(*)
+                        from credential_requests credential_request
+                        where credential_request.credential_id = :credentialId
+                          and credential_request.request_type_code = :requestTypeCode
+                          and credential_request.request_status_code in (:requestedStatus, :processingStatus)
+                        """)
+                .setParameter("credentialId", credentialId)
+                .setParameter("requestTypeCode", requestTypeCode)
+                .setParameter("requestedStatus", STATUS_REQUESTED)
+                .setParameter("processingStatus", STATUS_PROCESSING)
+                .getSingleResult();
+        return count.longValue() > 0;
     }
 
     @Override

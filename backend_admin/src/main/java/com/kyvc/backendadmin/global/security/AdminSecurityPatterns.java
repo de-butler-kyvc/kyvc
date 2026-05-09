@@ -31,6 +31,7 @@ public final class AdminSecurityPatterns {
             "/api/admin/backend/admin-roles/**",
             "/api/admin/backend/kyc-rules/**",
             "/api/admin/backend/document-requirements/**",
+            "/api/admin/backend/document-delete-requests/**",
             "/api/admin/backend/reason-codes/**",
             "/api/admin/backend/notification-templates/**",
             "/api/admin/backend/issuer-policies/**",

@@ -98,9 +98,10 @@ public class BackendCredentialClient {
             if (response == null || !response.success()) {
                 throw new ApiException(failureCode, response == null ? fallbackMessage : response.message());
             }
-            return response.data() == null
+            CredentialActionResponse data = response.data();
+            return data == null
                     ? CredentialActionResponse.accepted(credentialId, action, fallbackMessage)
-                    : response.data();
+                    : CredentialActionResponse.accepted(credentialId, action, data.message());
         } catch (ApiException exception) {
             throw exception;
         } catch (RestClientResponseException exception) {

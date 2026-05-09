@@ -17,6 +17,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class DocumentDeleteRequestRepositoryImpl implements DocumentDeleteRequestRepository {
 
+    private static final String STATUS_APPROVED = "APPROVED";
+    private static final String STATUS_REJECTED = "REJECTED";
+
     private final ObjectProvider<EntityManager> entityManagerProvider;
 
     @Override
@@ -42,12 +45,12 @@ public class DocumentDeleteRequestRepositoryImpl implements DocumentDeleteReques
 
     @Override
     public int approve(Long requestId, Long adminId, String processedReason, LocalDateTime processedAt) {
-        return updateStatus(requestId, "APPROVED", adminId, processedReason, processedAt);
+        return updateStatus(requestId, STATUS_APPROVED, adminId, processedReason, processedAt);
     }
 
     @Override
     public int reject(Long requestId, Long adminId, String processedReason, LocalDateTime processedAt) {
-        return updateStatus(requestId, "REJECTED", adminId, processedReason, processedAt);
+        return updateStatus(requestId, STATUS_REJECTED, adminId, processedReason, processedAt);
     }
 
     private int updateStatus(

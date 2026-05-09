@@ -59,6 +59,8 @@ public interface CredentialRepository {
             String coreRequestId
     );
 
+    boolean existsInProgressCredentialRequest(Long credentialId, String requestTypeCode);
+
     /**
      * Credential 상태 변경 이력을 저장합니다.
      *

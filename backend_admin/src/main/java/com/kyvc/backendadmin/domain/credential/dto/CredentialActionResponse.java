@@ -3,7 +3,7 @@ package com.kyvc.backendadmin.domain.credential.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * VC 재발급 또는 폐기 요청 처리 결과 응답입니다.
+ * VC 재발급 또는 폐기 요청 처리 결과
  */
 @Schema(description = "VC 재발급 또는 폐기 요청 처리 결과")
 public record CredentialActionResponse(
@@ -19,8 +19,8 @@ public record CredentialActionResponse(
         @Schema(description = "요청 접수 여부", example = "true")
         boolean requested,
 
-        /** Backend 또는 Core 요청 ID */
-        @Schema(description = "Backend 또는 Core 요청 ID", example = "VC_REISSUE-1-uuid")
+        /** Credential 요청 이력 ID */
+        @Schema(description = "Credential 요청 이력 ID", example = "100")
         String requestId,
 
         /** 요청 처리 메시지 */
@@ -28,7 +28,7 @@ public record CredentialActionResponse(
         String message
 ) {
     /**
-     * Backend 응답에 명시 데이터가 없을 때 사용할 기본 성공 응답을 생성합니다.
+     * 기본 성공 응답 생성
      *
      * @param credentialId Credential ID
      * @param action 요청 액션
@@ -37,5 +37,18 @@ public record CredentialActionResponse(
      */
     public static CredentialActionResponse accepted(Long credentialId, String action, String message) {
         return new CredentialActionResponse(credentialId, action, true, null, message);
+    }
+
+    /**
+     * 요청 이력 ID 포함 성공 응답 생성
+     *
+     * @param credentialId Credential ID
+     * @param action 요청 액션
+     * @param requestId Credential 요청 이력 ID
+     * @param message 처리 메시지
+     * @return 요청 처리 결과
+     */
+    public static CredentialActionResponse accepted(Long credentialId, String action, String requestId, String message) {
+        return new CredentialActionResponse(credentialId, action, true, requestId, message);
     }
 }

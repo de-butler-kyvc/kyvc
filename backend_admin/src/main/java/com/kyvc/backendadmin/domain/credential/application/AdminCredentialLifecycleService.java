@@ -7,7 +7,7 @@ import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialDetailResponse
 import com.kyvc.backendadmin.domain.credential.dto.CredentialActionResponse;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialReissueRequest;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialRevokeRequest;
-import com.kyvc.backendadmin.domain.credential.infrastructure.BackendCredentialClient;
+import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialQueryRepository;
 import com.kyvc.backendadmin.global.exception.ApiException;
 import com.kyvc.backendadmin.global.exception.ErrorCode;
@@ -31,12 +31,23 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AdminCredentialLifecycleService {
 
-    private static final Set<String> REISSUE_ALLOWED_STATUSES = Set.of("VALID", "EXPIRED", "SUSPENDED");
-    private static final Set<String> REVOKE_ALLOWED_STATUSES = Set.of("VALID", "SUSPENDED");
+    private static final Set<String> REISSUE_ALLOWED_STATUSES = Set.of(
+            KyvcEnums.CredentialStatus.VALID.name(),
+            KyvcEnums.CredentialStatus.EXPIRED.name(),
+            KyvcEnums.CredentialStatus.SUSPENDED.name()
+    );
+    private static final Set<String> REVOKE_ALLOWED_STATUSES = Set.of(
+            KyvcEnums.CredentialStatus.VALID.name(),
+            KyvcEnums.CredentialStatus.SUSPENDED.name()
+    );
+    private static final String REQUEST_TYPE_REISSUE = "REISSUE";
+    private static final String REQUEST_TYPE_REVOKE = "REVOKE";
+    private static final String REQUEST_STATUS_REQUESTED = "REQUESTED";
+    private static final String REQUESTED_BY_TYPE_ADMIN = "ADMIN";
 
     private final CredentialQueryRepository credentialQueryRepository;
+    private final CredentialRepository credentialRepository;
     private final AuthTokenRepository authTokenRepository;
-    private final BackendCredentialClient backendCredentialClient;
     private final AuditLogWriter auditLogWriter;
 
     /**
@@ -53,10 +64,21 @@ public class AdminCredentialLifecycleService {
         validateReissueStatus(credential.credentialStatusCode());
         Long adminId = SecurityUtil.getCurrentAdminId();
         AuthToken mfaToken = validateMfaToken(request.mfaToken(), adminId);
-        CredentialActionResponse response = backendCredentialClient.reissueCredential(credentialId, request, adminId);
+        Long credentialRequestId = createCredentialRequest(
+                credentialId,
+                REQUEST_TYPE_REISSUE,
+                adminId,
+                request.reason(),
+                request.comment()
+        );
         mfaToken.markUsed(LocalDateTime.now());
-        writeAudit("VC_REISSUE_REQUESTED", credentialId, credential.credentialStatusCode(), request.reason());
-        return response;
+        writeAudit("VC_REISSUE_REQUESTED", credentialId, credentialRequestId, credential.credentialStatusCode(), request.reason());
+        return CredentialActionResponse.accepted(
+                credentialId,
+                REQUEST_TYPE_REISSUE,
+                credentialRequestId.toString(),
+                "VC 재발급 요청이 접수되었습니다."
+        );
     }
 
     /**
@@ -73,10 +95,21 @@ public class AdminCredentialLifecycleService {
         validateRevokeStatus(credential.credentialStatusCode());
         Long adminId = SecurityUtil.getCurrentAdminId();
         AuthToken mfaToken = validateMfaToken(request.mfaToken(), adminId);
-        CredentialActionResponse response = backendCredentialClient.revokeCredential(credentialId, request, adminId);
+        Long credentialRequestId = createCredentialRequest(
+                credentialId,
+                REQUEST_TYPE_REVOKE,
+                adminId,
+                request.reason(),
+                request.comment()
+        );
         mfaToken.markUsed(LocalDateTime.now());
-        writeAudit("VC_REVOKE_REQUESTED", credentialId, credential.credentialStatusCode(), request.reason());
-        return response;
+        writeAudit("VC_REVOKE_REQUESTED", credentialId, credentialRequestId, credential.credentialStatusCode(), request.reason());
+        return CredentialActionResponse.accepted(
+                credentialId,
+                REQUEST_TYPE_REVOKE,
+                credentialRequestId.toString(),
+                "VC 폐기 요청이 접수되었습니다."
+        );
     }
 
     private AdminCredentialDetailResponse findCredential(Long credentialId) {
@@ -91,7 +124,7 @@ public class AdminCredentialLifecycleService {
     }
 
     private void validateRevokeStatus(String status) {
-        if ("REVOKED".equals(status)) {
+        if (KyvcEnums.CredentialStatus.REVOKED.name().equals(status)) {
             throw new ApiException(ErrorCode.CREDENTIAL_ALREADY_REVOKED);
         }
         if (!REVOKE_ALLOWED_STATUSES.contains(status)) {
@@ -124,16 +157,45 @@ public class AdminCredentialLifecycleService {
         }
     }
 
-    private void writeAudit(String action, Long credentialId, String beforeStatus, String reason) {
+    private Long createCredentialRequest(
+            Long credentialId,
+            String requestType,
+            Long adminId,
+            String reason,
+            String comment
+    ) {
+        if (credentialRepository.existsInProgressCredentialRequest(credentialId, requestType)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "진행 중인 Credential 요청이 이미 존재합니다.");
+        }
+        return credentialRepository.saveCredentialRequest(
+                credentialId,
+                requestType,
+                REQUEST_STATUS_REQUESTED,
+                REQUESTED_BY_TYPE_ADMIN,
+                adminId,
+                null,
+                buildReason(reason, comment),
+                null
+        );
+    }
+
+    private String buildReason(String reason, String comment) {
+        if (!StringUtils.hasText(comment)) {
+            return reason;
+        }
+        return "%s | comment=%s".formatted(reason, comment);
+    }
+
+    private void writeAudit(String action, Long credentialId, Long credentialRequestId, String beforeStatus, String reason) {
         auditLogWriter.write(
                 KyvcEnums.ActorType.ADMIN,
                 SecurityUtil.getCurrentAdminId(),
                 action,
                 KyvcEnums.AuditTargetType.CREDENTIAL,
                 credentialId,
-                "%s. credentialId=%d, reason=%s".formatted(action, credentialId, reason),
+                "%s. credentialId=%d, credentialRequestId=%d, reason=%s".formatted(action, credentialId, credentialRequestId, reason),
                 beforeStatus,
-                "REQUESTED"
+                REQUEST_STATUS_REQUESTED
         );
     }
 }

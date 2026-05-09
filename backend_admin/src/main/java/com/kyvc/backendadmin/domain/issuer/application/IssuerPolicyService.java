@@ -26,6 +26,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class IssuerPolicyService {
 
+    private static final String ACTION_APPROVAL_SUBMITTED = "ISSUER_POLICY_APPROVAL_SUBMITTED";
+    private static final String ACTION_APPROVED = "ISSUER_POLICY_APPROVED";
+    private static final String ACTION_REJECTED = "ISSUER_POLICY_REJECTED";
+
     private final IssuerPolicyRepository issuerPolicyRepository;
     private final IssuerPolicyQueryRepository issuerPolicyQueryRepository;
     private final AuthTokenRepository authTokenRepository;
@@ -91,6 +95,41 @@ public class IssuerPolicyService {
         return getSavedDetail(policyId);
     }
 
+    /** Issuer 정책 승인요청 상태 전이 */
+    @Transactional
+    public IssuerPolicyResponse submitApproval(Long policyId, IssuerPolicySubmitApprovalRequest request) {
+        IssuerPolicy policy = findPolicy(policyId);
+        validateSubmitApprovalStatus(policy);
+        String before = summarize(policy);
+        policy.submitApproval(blankToNull(request.comment()));
+        writeAudit(ACTION_APPROVAL_SUBMITTED, policyId, before, summarize(policy));
+        return getSavedDetail(policyId);
+    }
+
+    /** Issuer 정책 승인 처리 */
+    @Transactional
+    public IssuerPolicyResponse approve(Long policyId, IssuerPolicyApproveRequest request) {
+        validateMfaToken(request.mfaToken());
+        IssuerPolicy policy = findPolicy(policyId);
+        validatePendingStatus(policy);
+        String before = summarize(policy);
+        policy.approve(blankToNull(request.comment()));
+        writeAudit(ACTION_APPROVED, policyId, before, summarize(policy));
+        return getSavedDetail(policyId);
+    }
+
+    /** Issuer 정책 반려 처리 */
+    @Transactional
+    public IssuerPolicyResponse reject(Long policyId, IssuerPolicyRejectRequest request) {
+        validateMfaToken(request.mfaToken());
+        IssuerPolicy policy = findPolicy(policyId);
+        validatePendingStatus(policy);
+        String before = summarize(policy);
+        policy.reject(request.reason());
+        writeAudit(ACTION_REJECTED, policyId, before, summarize(policy));
+        return getSavedDetail(policyId);
+    }
+
     /** Issuer 정책을 비활성화합니다. */
     @Transactional
     public IssuerPolicyResponse disable(Long policyId) {
@@ -127,6 +166,21 @@ public class IssuerPolicyService {
             return KyvcEnums.IssuerPolicyStatus.valueOf(status);
         } catch (RuntimeException exception) {
             throw new ApiException(ErrorCode.INVALID_CODE_VALUE, "status 값이 유효하지 않습니다.");
+        }
+    }
+
+    private void validateSubmitApprovalStatus(IssuerPolicy policy) {
+        if (KyvcEnums.IssuerPolicyStatus.ACTIVE == policy.getStatus()) {
+            throw new ApiException(ErrorCode.INVALID_STATUS, "이미 활성화된 Issuer 정책은 승인요청할 수 없습니다.");
+        }
+        if (KyvcEnums.IssuerPolicyStatus.PENDING == policy.getStatus()) {
+            throw new ApiException(ErrorCode.INVALID_STATUS, "이미 승인요청된 Issuer 정책입니다.");
+        }
+    }
+
+    private void validatePendingStatus(IssuerPolicy policy) {
+        if (KyvcEnums.IssuerPolicyStatus.PENDING != policy.getStatus()) {
+            throw new ApiException(ErrorCode.INVALID_STATUS, "승인요청 상태의 Issuer 정책만 처리할 수 있습니다.");
         }
     }
 
