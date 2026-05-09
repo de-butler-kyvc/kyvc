@@ -515,8 +515,15 @@ export type DocumentPreviewResponse = {
   previewUrl: string;
   expiresAt?: string;
 };
+export type DocumentDeleteResponse = {
+  deleted?: boolean;
+};
 
 export const kyc = {
+  list: () =>
+    api<KycApplicationResponse | KycApplicationResponse[]>(
+      "/api/corporate/kyc/applications",
+    ),
   /** 현재 진행 중인 KYC 신청 단건. 없으면 ApiError 반환. */
   current: () =>
     api<KycApplicationResponse>("/api/corporate/kyc/applications/current"),
@@ -563,7 +570,7 @@ export const kyc = {
     );
   },
   deleteDocument: (kycId: number, documentId: number) =>
-    api<void>(
+    api<DocumentDeleteResponse>(
       `/api/corporate/kyc/applications/${kycId}/documents/${documentId}`,
       { method: "DELETE" },
     ),
@@ -632,6 +639,19 @@ export type CredentialSummary = {
   walletSaved?: boolean;
   walletSavedAt?: string;
 };
+export type CredentialDetailResponse = CredentialSummary & {
+  corporateId?: number;
+  credentialExternalId?: string;
+  vcHash?: string;
+  xrplTxHash?: string;
+  walletSavedYn?: "Y" | "N" | string;
+  holderDid?: string;
+  holderXrplAddress?: string;
+  credentialStatusId?: string;
+  credentialStatusPurposeCode?: string;
+  kycLevelCode?: string;
+  jurisdictionCode?: string;
+};
 export type CredentialListResponse = {
   credentials: CredentialSummary[];
   totalCount: number;
@@ -649,6 +669,8 @@ export type CredentialIssueGuideResponse = {
 };
 export const credentials = {
   list: () => api<CredentialListResponse>("/api/user/credentials"),
+  detail: (credentialId: number) =>
+    api<CredentialDetailResponse>(`/api/user/credentials/${credentialId}`),
   issueGuide: () =>
     api<CredentialIssueGuideResponse>("/api/corporate/credentials/issue-guide"),
 };
