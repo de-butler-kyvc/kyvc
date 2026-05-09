@@ -1,13 +1,23 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default async function AdminReviewDetailPage({
-  searchParams
-}: {
-  searchParams: Promise<{ id?: string }>;
-}) {
-  const { id } = await searchParams;
+export default function AdminReviewDetailPage() {
+  return (
+    <Suspense>
+      <AdminReviewDetail />
+    </Suspense>
+  );
+}
+
+function AdminReviewDetail() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id") ?? undefined;
   const label = id ?? "(미지정)";
   return (
     <PageShell

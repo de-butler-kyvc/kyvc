@@ -1,12 +1,22 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
 import { PageShell } from "@/components/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default async function WalletVcDetailPage({
-  searchParams
-}: {
-  searchParams: Promise<{ id?: string }>;
-}) {
-  const { id } = await searchParams;
+export default function WalletVcDetailPage() {
+  return (
+    <Suspense>
+      <WalletVcDetail />
+    </Suspense>
+  );
+}
+
+function WalletVcDetail() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id") ?? undefined;
   const label = id ?? "(미지정)";
   return (
     <PageShell
