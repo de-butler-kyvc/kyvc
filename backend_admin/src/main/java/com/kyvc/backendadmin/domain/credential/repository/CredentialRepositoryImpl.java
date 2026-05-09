@@ -79,6 +79,96 @@ public class CredentialRepositoryImpl implements CredentialRepository {
         return ((Number) result).longValue();
     }
 
+    @Override
+    public Long saveCredentialRequest(
+            Long credentialId,
+            String requestTypeCode,
+            String requestStatusCode,
+            String requestedByTypeCode,
+            Long requestedById,
+            String reasonCode,
+            String reason,
+            String coreRequestId
+    ) {
+        Object result = entityManager().createNativeQuery("""
+                        insert into credential_requests (
+                            credential_id,
+                            request_type_code,
+                            request_status_code,
+                            requested_by_type_code,
+                            requested_by_id,
+                            reason_code,
+                            reason,
+                            core_request_id,
+                            requested_at
+                        ) values (
+                            :credentialId,
+                            :requestTypeCode,
+                            :requestStatusCode,
+                            :requestedByTypeCode,
+                            :requestedById,
+                            :reasonCode,
+                            :reason,
+                            :coreRequestId,
+                            now()
+                        )
+                        returning credential_request_id
+                        """)
+                .setParameter("credentialId", credentialId)
+                .setParameter("requestTypeCode", requestTypeCode)
+                .setParameter("requestStatusCode", requestStatusCode)
+                .setParameter("requestedByTypeCode", requestedByTypeCode)
+                .setParameter("requestedById", requestedById)
+                .setParameter("reasonCode", reasonCode)
+                .setParameter("reason", reason)
+                .setParameter("coreRequestId", coreRequestId)
+                .getSingleResult();
+        return ((Number) result).longValue();
+    }
+
+    @Override
+    public Long saveStatusHistory(
+            Long credentialId,
+            String beforeStatusCode,
+            String afterStatusCode,
+            String changedByTypeCode,
+            Long changedById,
+            String reasonCode,
+            String reason
+    ) {
+        Object result = entityManager().createNativeQuery("""
+                        insert into credential_status_histories (
+                            credential_id,
+                            before_status_code,
+                            after_status_code,
+                            changed_by_type_code,
+                            changed_by_id,
+                            reason_code,
+                            reason,
+                            changed_at
+                        ) values (
+                            :credentialId,
+                            :beforeStatusCode,
+                            :afterStatusCode,
+                            :changedByTypeCode,
+                            :changedById,
+                            :reasonCode,
+                            :reason,
+                            now()
+                        )
+                        returning history_id
+                        """)
+                .setParameter("credentialId", credentialId)
+                .setParameter("beforeStatusCode", beforeStatusCode)
+                .setParameter("afterStatusCode", afterStatusCode)
+                .setParameter("changedByTypeCode", changedByTypeCode)
+                .setParameter("changedById", changedById)
+                .setParameter("reasonCode", reasonCode)
+                .setParameter("reason", reason)
+                .getSingleResult();
+        return ((Number) result).longValue();
+    }
+
     private EntityManager entityManager() {
         return entityManagerProvider.getObject();
     }
