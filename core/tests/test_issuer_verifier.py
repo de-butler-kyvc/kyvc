@@ -1737,3 +1737,68 @@ def test_api_issue_xrpl_rejects_issuer_diddoc_ledger_mismatch(tmp_path, monkeypa
     assert issue_response.status_code == 400
     assert "issuer DID Document hash mismatch with XRPL DIDSet" in issue_response.json()["detail"]
     assert repository.get_did_document("did:xrpl:1:rIssuer") is None
+
+
+def test_api_verify_presentation_rejects_malformed_json_body(tmp_path):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/verifier/presentations/verify",
+        content="{not-json",
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "request body must be valid JSON"
+
+
+def test_api_verify_presentation_rejects_payload_validation_error(tmp_path):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/verifier/presentations/verify",
+        json={"status_mode": "local"},
+    )
+
+    assert response.status_code == 422
+    assert any(error["loc"] == ["presentation"] for error in response.json()["detail"])
+
+
+def test_api_verify_presentation_rejects_malformed_multipart_presentation(tmp_path):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/verifier/presentations/verify",
+        files={"presentation": (None, "{not-json", "application/json")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "multipart presentation field must be valid JSON"
+
+
+def test_api_register_did_maps_xrpl_submit_runtime_error_to_400(tmp_path, monkeypatch):
+    app = create_app(settings=Settings(), repository=_repo(tmp_path))
+    client = TestClient(app)
+    issuer_key = generate_private_key()
+
+    monkeypatch.setattr("app.api.issuer.make_client", lambda rpc_url: object())
+    monkeypatch.setattr("app.api.issuer.wallet_from_seed", lambda seed: SimpleNamespace(address="rIssuer"))
+
+    def fail_submit(*args, **kwargs):
+        raise RuntimeError("DIDSet failed with result=tecNO_PERMISSION")
+
+    monkeypatch.setattr("app.api.issuer.submit_did_set", fail_submit)
+
+    response = client.post(
+        "/issuer/did/register",
+        json={
+            "issuer_seed": "dummy-seed",
+            "issuer_private_key_pem": private_key_to_pem(issuer_key),
+        },
+    )
+
+    assert response.status_code == 400
+    assert "DIDSet failed" in response.json()["detail"]

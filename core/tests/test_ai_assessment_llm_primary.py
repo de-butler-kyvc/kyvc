@@ -327,6 +327,23 @@ def test_llm_primary_assessment_api_requires_llm_provider(tmp_path):
     assert "LLM_PROVIDER" in response.json()["detail"]
 
 
+def test_llm_primary_assessment_api_rejects_malformed_json(tmp_path):
+    app = create_app(
+        settings=Settings(app_storage_path=str(tmp_path), llm_provider="openai"),
+        repository=object(),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/ai-assessment/assessments/llm-primary",
+        content="{not-json",
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]
+
+
 def test_openai_llm_primary_provider_classifies_and_normalizes_poa(tmp_path, monkeypatch):
     source = tmp_path / "poa.txt"
     source.write_text("Power of attorney for KYvC Labs", encoding="utf-8")
