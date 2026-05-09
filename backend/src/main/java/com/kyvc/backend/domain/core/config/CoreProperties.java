@@ -13,10 +13,10 @@ import java.util.Locale;
 @ConfigurationProperties(prefix = "kyvc.core")
 public class CoreProperties {
 
-    private String mode = "mock"; // Core 연동 모드
+    private String mode = "http"; // Core 연동 모드
     private String baseUrl; // Core Base URL
-    private Integer connectTimeoutMillis = 3000; // 연결 타임아웃 밀리초
-    private Integer readTimeoutMillis = 10000; // 응답 타임아웃 밀리초
+    private Integer connectTimeoutMillis = 5000; // 연결 타임아웃 밀리초
+    private Integer readTimeoutMillis = 180000; // 응답 타임아웃 밀리초
     private boolean devSeedEnabled = false; // 개발 seed 허용 여부
     private boolean failureFallbackEnabled = false; // 장애 fallback 허용 여부
     private String apiKey; // Core API Key
@@ -25,7 +25,7 @@ public class CoreProperties {
     // 정규화 모드 조회
     public String normalizedMode() {
         if (!StringUtils.hasText(mode)) {
-            return "mock";
+            return "http";
         }
         return mode.trim().toLowerCase(Locale.ROOT);
     }

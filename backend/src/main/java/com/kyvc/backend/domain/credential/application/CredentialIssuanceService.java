@@ -97,9 +97,28 @@ public class CredentialIssuanceService {
         CoreRequest coreRequest = coreRequestService.createVcIssuanceRequest(credential.getCredentialId(), null);
         CoreVcIssuanceRequest request = buildVcIssuanceRequest(kycApplication, credential, coreRequest.getCoreRequestId());
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(request));
+        coreRequestService.markRunning(coreRequest.getCoreRequestId());
 
         try {
+            logEventLogger.info(
+                    "core.call.started",
+                    "Core VC issuance call started",
+                    Map.of(
+                            "coreRequestId", coreRequest.getCoreRequestId(),
+                            "credentialId", credential.getCredentialId(),
+                            "kycId", kycApplication.getKycId()
+                    )
+            );
             CoreVcIssuanceResponse response = coreAdapter.requestVcIssuance(request);
+            logEventLogger.info(
+                    "core.call.completed",
+                    "Core VC issuance call completed",
+                    Map.of(
+                            "coreRequestId", coreRequest.getCoreRequestId(),
+                            "credentialId", credential.getCredentialId(),
+                            "kycId", kycApplication.getKycId()
+                    )
+            );
             KyvcEnums.CredentialStatus credentialStatus = resolveCredentialStatus(response.status());
             credential.applyIssuanceMetadata(
                     response.credentialExternalId(),

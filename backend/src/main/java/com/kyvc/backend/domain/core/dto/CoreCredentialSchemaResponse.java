@@ -15,13 +15,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record CoreCredentialSchemaResponse(
         @Schema(description = "스키마 ID", example = "kyvc-credential-schema-v1")
         String schemaId, // 스키마 ID
-        @Schema(description = "스키마명", example = "Stub KYVC Credential Schema")
+        @Schema(description = "스키마명", example = "KYVC Credential Schema")
         String schemaName, // 스키마명
         @Schema(description = "스키마 버전", example = "1.0")
         String version, // 스키마 버전
         @Schema(description = "스키마 가용 여부", example = "true")
         boolean available, // 스키마 가용 여부
-        @Schema(description = "처리 메시지", example = "Credential schema metadata returned by stub core.")
+        @Schema(description = "처리 메시지", example = "Credential schema metadata returned by Core.")
         String message // 처리 메시지
 ) {
 }

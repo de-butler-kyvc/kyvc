@@ -33,7 +33,7 @@ import java.util.Map;
 // Core Mock Adapter
 @Component
 @RequiredArgsConstructor
-@ConditionalOnExpression("'${kyvc.core.mode:mock}'.toLowerCase() == 'mock'")
+@ConditionalOnExpression("'${kyvc.core.mode:http}'.toLowerCase() == 'mock'")
 public class StubCoreAdapter implements CoreAdapter {
 
     private static final String MOCK_MODE = "MOCK";

@@ -18,7 +18,7 @@ public record CoreVpVerificationStatusResponse(
         String coreRequestId, // Core 요청 ID
         @Schema(description = "처리 상태", example = "REQUESTED")
         String status, // 처리 상태
-        @Schema(description = "처리 메시지", example = "VP verification is requested in stub core.")
+        @Schema(description = "처리 메시지", example = "VP verification status is stored in backend DB.")
         String message, // 처리 메시지
         @Schema(description = "조회 시각", example = "2026-05-06T10:21:00")
         LocalDateTime checkedAt // 조회 시각

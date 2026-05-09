@@ -90,6 +90,15 @@ public class CoreRequestService {
         return coreRequestRepository.save(coreRequest);
     }
 
+    // 동기 Core 호출 진행 상태 반영
+    public CoreRequest markRunning(
+            String coreRequestId // Core 요청 ID
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markRunning();
+        return coreRequestRepository.save(coreRequest);
+    }
+
     // 응답 수신 성공 상태 반영
     public CoreRequest markSuccess(
             String coreRequestId, // Core 요청 ID
