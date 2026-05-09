@@ -262,6 +262,17 @@ ALLOW_MAINNET=0
 The application creates the required MySQL tables on startup when the configured
 database already exists and the configured user has DDL permissions.
 
+## Internal Status
+
+`GET /internal/status` is intended for core-admin and internal operator use. It
+does not replace the public `/health` endpoint. It assumes the core API is
+available only on the internal network and does not add a separate API key.
+
+The response includes overall status plus database, XRPL, and issuer component
+readiness. XRPL probing uses the configured JSON-RPC URL, respects the existing
+mainnet policy, and performs a read-only `server_info` request. Secrets such as
+issuer seeds and private keys are never returned.
+
 Holder behavior is not exposed as a core API. The production holder will be a
 mobile app. This repository keeps a configured-network holder test runner under
 `holder-test/` so the core issuer/verifier flow can still be exercised end to

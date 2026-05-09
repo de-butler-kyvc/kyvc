@@ -138,6 +138,11 @@ class MySQLRepository:
     def _parse_datetime(value: str) -> datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
+    def readiness_probe(self) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
     def save_did_document(self, did: str, did_document: dict[str, Any]) -> None:
         with self._connect() as connection:
             with connection.cursor() as cursor:

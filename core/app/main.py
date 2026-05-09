@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException
 from app.api.ai_assessment import router as ai_assessment_router
 from app.api.did import router as did_router
 from app.api.health import router as health_router
+from app.api.internal_status import router as internal_status_router
 from app.api.issuer import router as issuer_router
 from app.api.credential_status import router as credential_status_router
 from app.api.verifier import router as verifier_router
@@ -51,6 +52,7 @@ def create_app(
     _register_exception_handlers(application)
 
     application.include_router(health_router)
+    application.include_router(internal_status_router)
     application.include_router(ai_assessment_router)
     application.include_router(did_router)
     application.include_router(issuer_router)
