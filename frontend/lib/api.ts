@@ -1,7 +1,8 @@
 import axios, { type AxiosInstance } from "axios";
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
+  "https://dev-api-kyvc.khuoo.synology.me";
 const TOKEN_KEY = "kyvc.accessToken";
 const REFRESH_KEY = "kyvc.refreshToken";
 
@@ -75,7 +76,7 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzIiwiZW1haWwiOiJ0ZXN0QGFiYy5jb20iLCJ1c2VyVHlwZSI6IkNPUlBPUkFURV9VU0VSIiwicm9sZXMiOlsiUk9MRV9DT1JQT1JBVEVfVVNFUiJdLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJpc3MiOiJreXZjLWJhY2tlbmQtZGV2IiwiaWF0IjoxNzc4MjIxMDg5LCJleHAiOjE3NzgyMjI4ODksImp0aSI6IjcyZDM0ZjIzLWU5YTUtNGY0Mi05MjVkLWY4ZWI2YzUyZjhlZCJ9.vounMErDs8moYZM3QQFh3VtdK7RwDKzFgzM0OwGVQbU';
+  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIzIiwiZW1haWwiOiJ0ZXN0QGFiYy5jb20iLCJ1c2VyVHlwZSI6IkNPUlBPUkFURV9VU0VSIiwicm9sZXMiOlsiUk9MRV9DT1JQT1JBVEVfVVNFUiJdLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJpc3MiOiJreXZjLWJhY2tlbmQtZGV2IiwiaWF0IjoxNzc4MzEwODA5LCJleHAiOjE3NzgzMTI2MDksImp0aSI6IjE5Yjk3NjUyLWNjMDMtNGQwZC04NGU3LTNjMWE4YTkzNDlmNyJ9.paaLSpZCAcwijztuxRwaFpriebM3cJeyYNFHASrveD4';
   if (token) {
     config.headers.set("Authorization", `Bearer ${token}`);
   }
@@ -339,6 +340,73 @@ export type RequiredDocument = {
   maxFileSizeMb?: number;
 };
 
+export type KycReviewFinding = {
+  findingType: string;
+  result: string;
+  message?: string;
+  confidenceScore?: number;
+};
+
+export type KycReviewSummary = {
+  kycId: number;
+  kycStatus?: string;
+  aiReviewStatus?: string;
+  aiReviewResult?: string;
+  confidenceScore?: number;
+  summaryMessage?: string;
+  findings?: KycReviewFinding[];
+  manualReviewRequired?: boolean;
+  reviewedAt?: string;
+};
+
+export type KycCompletion = {
+  kycId: number;
+  corporateId?: number;
+  corporateName?: string;
+  status?: string;
+  approvedAt?: string;
+  credentialIssued?: boolean;
+  credentialId?: number;
+  nextActionCode?: string;
+  message?: string;
+};
+
+export type SupplementDocument = {
+  supplementDocumentId: number;
+  documentId?: number;
+  documentTypeCode?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  documentHash?: string;
+  uploadedAt?: string;
+};
+
+export type SupplementDetail = {
+  supplementId: number;
+  kycId: number;
+  supplementStatus?: string;
+  supplementReasonCode?: string;
+  title?: string;
+  message?: string;
+  requestReason?: string;
+  requestedDocumentTypeCodes?: string[];
+  uploadedDocuments?: SupplementDocument[];
+  requestedAt?: string;
+  dueAt?: string;
+  completedAt?: string;
+  submittedComment?: string;
+};
+
+export type SupplementSubmitResponse = {
+  kycId: number;
+  supplementId: number;
+  kycStatus?: string;
+  supplementStatus?: string;
+  submittedAt?: string;
+  message?: string;
+};
+
 export const kyc = {
   list: (params?: { page?: number; size?: number; status?: string }) =>
     api<{ items: KycListItem[]; page?: { totalElements: number } }>(
@@ -413,14 +481,36 @@ export const kyc = {
       `/api/corporate/kyc/applications/${kycId}/documents/${documentId}`,
       { method: "DELETE" }
     ),
-  uploadSupplement: (kycId: number, supplementId: number, file: File) => {
+  uploadSupplement: (kycId: number, supplementId: number, file: File, documentTypeCode?: string) => {
     const fd = new FormData();
     fd.append("file", file);
-    return api<{ documentId: number; supplementId: number; fileHash: string }>(
-      `/api/user/kyc/applications/${kycId}/supplements/${supplementId}/documents`,
+    if (documentTypeCode) fd.append("documentTypeCode", documentTypeCode);
+    return api<SupplementDocument>(
+      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}/documents`,
       { method: "POST", formData: fd }
     );
-  }
+  },
+  reviewSummary: (kycId: number) =>
+    api<KycReviewSummary>(`/api/corporate/kyc/applications/${kycId}/ai-review-summary`),
+  completion: (kycId: number) =>
+    api<KycCompletion>(`/api/corporate/kyc/applications/${kycId}/completion`),
+  current: () =>
+    api<{ kycId: number; kycStatus?: string; corporateTypeCode?: string; submittedAt?: string }>(
+      "/api/corporate/kyc/applications/current"
+    ),
+  supplements: (kycId: number) =>
+    api<{ supplements: SupplementDetail[] }>(
+      `/api/corporate/kyc/applications/${kycId}/supplements`
+    ),
+  supplement: (kycId: number, supplementId: number) =>
+    api<SupplementDetail>(
+      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}`
+    ),
+  submitSupplement: (kycId: number, supplementId: number, submittedComment?: string) =>
+    api<SupplementSubmitResponse>(
+      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}/submit`,
+      { method: "POST", body: { submittedComment } }
+    )
 };
 
 // ── Credentials ──────────────────────────────────────────────────────
