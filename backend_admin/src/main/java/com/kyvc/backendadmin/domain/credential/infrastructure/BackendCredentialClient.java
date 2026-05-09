@@ -48,7 +48,7 @@ public class BackendCredentialClient {
         return callBackend(
                 properties.getReissuePath(),
                 credentialId,
-                new BackendCredentialActionRequest(adminId, request.reason(), request.comment()),
+                new BackendCredentialActionRequest(adminId, request.reason()),
                 ErrorCode.VC_REISSUE_REQUEST_FAILED,
                 "REISSUE",
                 "VC 재발급 요청이 Backend API에 접수되었습니다."
@@ -71,7 +71,7 @@ public class BackendCredentialClient {
         return callBackend(
                 properties.getRevokePath(),
                 credentialId,
-                new BackendCredentialActionRequest(adminId, request.reason(), request.comment()),
+                new BackendCredentialActionRequest(adminId, request.reason()),
                 ErrorCode.VC_REVOKE_REQUEST_FAILED,
                 "REVOKE",
                 "VC 폐기 요청이 Backend API에 접수되었습니다."
@@ -99,9 +99,7 @@ public class BackendCredentialClient {
                 throw new ApiException(failureCode, response == null ? fallbackMessage : response.message());
             }
             CredentialActionResponse data = response.data();
-            return data == null
-                    ? CredentialActionResponse.accepted(credentialId, action, fallbackMessage)
-                    : CredentialActionResponse.accepted(credentialId, action, data.message());
+            return data == null ? CredentialActionResponse.accepted(credentialId, action, fallbackMessage) : data;
         } catch (ApiException exception) {
             throw exception;
         } catch (RestClientResponseException exception) {
@@ -122,12 +120,10 @@ public class BackendCredentialClient {
      *
      * @param adminId 요청 관리자 ID
      * @param reason 요청 사유
-     * @param comment 관리자 코멘트
      */
     private record BackendCredentialActionRequest(
             Long adminId,
-            String reason,
-            String comment
+            String reason
     ) {
     }
 }

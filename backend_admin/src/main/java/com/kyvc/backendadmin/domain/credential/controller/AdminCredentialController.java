@@ -200,7 +200,7 @@ public class AdminCredentialController {
     }
 
     /**
-     * VC 재발급을 Backend API로 요청합니다.
+     * VC 재발급 요청 row를 생성합니다.
      *
      * @param credentialId Credential ID
      * @param request VC 재발급 요청 정보
@@ -208,7 +208,7 @@ public class AdminCredentialController {
      */
     @Operation(
             summary = "VC 재발급 요청",
-            description = "관리자가 선택한 VC에 대해 Backend API로 재발급을 요청한다."
+            description = "관리자가 선택한 VC에 대해 credential_requests REISSUE 요청 row를 생성한다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "VC 재발급 요청 성공"),
@@ -231,7 +231,7 @@ public class AdminCredentialController {
     }
 
     /**
-     * VC 폐기를 Backend API로 요청합니다.
+     * VC 폐기 요청 row를 생성합니다.
      *
      * @param credentialId Credential ID
      * @param request VC 폐기 요청 정보
@@ -239,7 +239,7 @@ public class AdminCredentialController {
      */
     @Operation(
             summary = "VC 폐기 요청",
-            description = "관리자가 선택한 VC에 대해 Backend API로 폐기를 요청한다."
+            description = "관리자가 선택한 VC에 대해 credential_requests REVOKE 요청 row를 생성한다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "VC 폐기 요청 성공"),

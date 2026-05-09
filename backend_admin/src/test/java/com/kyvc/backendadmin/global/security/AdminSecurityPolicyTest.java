@@ -84,6 +84,14 @@ class AdminSecurityPolicyTest {
     }
 
     @Test
+    void credentialLifecycleApisWithoutTokenReturnUnauthorized() throws Exception {
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void backendAdminCannotAccessSystemAdminOnlyApis() throws Exception {
         mockMvc.perform(get(REPORTS_OPERATIONS_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
@@ -106,6 +114,22 @@ class AdminSecurityPolicyTest {
         mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post(ISSUER_POLICY_APPROVE_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void operatorCannotAccessCredentialLifecycleApis() throws Exception {
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI).with(operator()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(operator()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void nonAdminUserCannotAccessCredentialLifecycleApis() throws Exception {
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI).with(corporateUser()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(corporateUser()))
                 .andExpect(status().isForbidden());
     }
 
@@ -186,6 +210,26 @@ class AdminSecurityPolicyTest {
                 "system-admin@example.com",
                 "ADMIN",
                 List.of("ROLE_SYSTEM_ADMIN"),
+                true
+        ));
+    }
+
+    private RequestPostProcessor operator() {
+        return SecurityMockMvcRequestPostProcessors.user(new CustomUserDetails(
+                30L,
+                "operator@example.com",
+                "ADMIN",
+                List.of("ROLE_OPERATOR"),
+                true
+        ));
+    }
+
+    private RequestPostProcessor corporateUser() {
+        return SecurityMockMvcRequestPostProcessors.user(new CustomUserDetails(
+                40L,
+                "user@example.com",
+                "USER",
+                List.of("ROLE_USER"),
                 true
         ));
     }

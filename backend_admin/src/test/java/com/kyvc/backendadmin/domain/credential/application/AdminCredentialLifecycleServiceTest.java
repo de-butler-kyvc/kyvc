@@ -9,6 +9,8 @@ import com.kyvc.backendadmin.domain.credential.dto.CredentialReissueRequest;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialRevokeRequest;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialQueryRepository;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository;
+import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository.CredentialRequestSaveResult;
+import com.kyvc.backendadmin.domain.verifier.application.AdminVerifierSecuritySupport;
 import com.kyvc.backendadmin.global.exception.ApiException;
 import com.kyvc.backendadmin.global.jwt.TokenHashUtil;
 import com.kyvc.backendadmin.global.security.CustomUserDetails;
@@ -28,6 +30,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -56,10 +59,11 @@ class AdminCredentialLifecycleServiceTest {
 
     @BeforeEach
     void setUp() {
+        AdminVerifierSecuritySupport securitySupport = new AdminVerifierSecuritySupport(authTokenRepository);
         service = new AdminCredentialLifecycleService(
                 credentialQueryRepository,
                 credentialRepository,
-                authTokenRepository,
+                securitySupport,
                 auditLogWriter
         );
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
@@ -78,9 +82,9 @@ class AdminCredentialLifecycleServiceTest {
     void reissueCreatesCredentialRequestAndUsesMfaToken() {
         AuthToken authToken = mfaToken();
         when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("VALID")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REISSUE")).thenReturn(false);
         when(authTokenRepository.findByTokenHashAndTokenType(TokenHashUtil.sha256(MFA_TOKEN), KyvcEnums.TokenType.MFA_SESSION))
                 .thenReturn(Optional.of(authToken));
-        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REISSUE")).thenReturn(false);
         when(credentialRepository.saveCredentialRequest(
                 eq(CREDENTIAL_ID),
                 eq("REISSUE"),
@@ -89,16 +93,18 @@ class AdminCredentialLifecycleServiceTest {
                 eq(ADMIN_ID),
                 isNull(),
                 contains("reissue reason"),
-                isNull()
-        )).thenReturn(CREDENTIAL_REQUEST_ID);
+                isNull(),
+                any(LocalDateTime.class)
+        )).thenReturn(saveResult());
 
         CredentialActionResponse response = service.reissue(
                 CREDENTIAL_ID,
-                new CredentialReissueRequest(MFA_TOKEN, "reissue reason", "operator comment")
+                new CredentialReissueRequest(MFA_TOKEN, "reissue reason")
         );
 
-        assertEquals("REISSUE", response.action());
-        assertEquals(CREDENTIAL_REQUEST_ID.toString(), response.requestId());
+        assertEquals("REISSUE", response.requestType());
+        assertEquals("REQUESTED", response.requestStatus());
+        assertEquals(CREDENTIAL_REQUEST_ID, response.credentialRequestId());
         assertEquals(KyvcEnums.TokenStatus.USED, authToken.getStatus());
         verify(auditLogWriter).write(
                 eq(KyvcEnums.ActorType.ADMIN),
@@ -113,23 +119,140 @@ class AdminCredentialLifecycleServiceTest {
     }
 
     @Test
+    void revokeCreatesCredentialRequestAndUsesMfaToken() {
+        AuthToken authToken = mfaToken();
+        when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("SUSPENDED")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REVOKE")).thenReturn(false);
+        when(authTokenRepository.findByTokenHashAndTokenType(TokenHashUtil.sha256(MFA_TOKEN), KyvcEnums.TokenType.MFA_SESSION))
+                .thenReturn(Optional.of(authToken));
+        when(credentialRepository.saveCredentialRequest(
+                eq(CREDENTIAL_ID),
+                eq("REVOKE"),
+                eq("REQUESTED"),
+                eq("ADMIN"),
+                eq(ADMIN_ID),
+                isNull(),
+                contains("revoke reason"),
+                isNull(),
+                any(LocalDateTime.class)
+        )).thenReturn(saveResult());
+
+        CredentialActionResponse response = service.revoke(
+                CREDENTIAL_ID,
+                new CredentialRevokeRequest(MFA_TOKEN, "revoke reason")
+        );
+
+        assertEquals("REVOKE", response.requestType());
+        assertEquals("REQUESTED", response.requestStatus());
+        assertEquals(CREDENTIAL_REQUEST_ID, response.credentialRequestId());
+        assertEquals(KyvcEnums.TokenStatus.USED, authToken.getStatus());
+        verify(auditLogWriter).write(
+                eq(KyvcEnums.ActorType.ADMIN),
+                eq(ADMIN_ID),
+                eq("VC_REVOKE_REQUESTED"),
+                eq(KyvcEnums.AuditTargetType.CREDENTIAL),
+                eq(CREDENTIAL_ID),
+                contains("credentialRequestId=100"),
+                eq("SUSPENDED"),
+                eq("REQUESTED")
+        );
+    }
+
+    @Test
+    void reissueRejectsDuplicateInProgressRequest() {
+        when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("VALID")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REISSUE")).thenReturn(true);
+
+        assertThrows(ApiException.class, () -> service.reissue(
+                CREDENTIAL_ID,
+                new CredentialReissueRequest(MFA_TOKEN, "reissue reason")
+        ));
+        verifyNoInteractions(authTokenRepository, auditLogWriter);
+    }
+
+    @Test
+    void revokeRejectsDuplicateInProgressRequest() {
+        when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("VALID")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REVOKE")).thenReturn(true);
+
+        assertThrows(ApiException.class, () -> service.revoke(
+                CREDENTIAL_ID,
+                new CredentialRevokeRequest(MFA_TOKEN, "revoke reason")
+        ));
+        verifyNoInteractions(authTokenRepository, auditLogWriter);
+    }
+
+    @Test
     void revokeRejectsAlreadyRevokedCredential() {
         when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("REVOKED")));
 
         assertThrows(ApiException.class, () -> service.revoke(
                 CREDENTIAL_ID,
-                new CredentialRevokeRequest(MFA_TOKEN, "revoke reason", null)
+                new CredentialRevokeRequest(MFA_TOKEN, "revoke reason")
         ));
         verifyNoInteractions(authTokenRepository, credentialRepository, auditLogWriter);
     }
 
+    @Test
+    void reissueRejectsInvalidMfaToken() {
+        when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("VALID")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REISSUE")).thenReturn(false);
+        when(authTokenRepository.findByTokenHashAndTokenType(TokenHashUtil.sha256(MFA_TOKEN), KyvcEnums.TokenType.MFA_SESSION))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ApiException.class, () -> service.reissue(
+                CREDENTIAL_ID,
+                new CredentialReissueRequest(MFA_TOKEN, "reissue reason")
+        ));
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    @Test
+    void reissueRejectsExpiredMfaToken() {
+        AuthToken authToken = mfaToken(LocalDateTime.now().minusMinutes(1));
+        when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("VALID")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REISSUE")).thenReturn(false);
+        when(authTokenRepository.findByTokenHashAndTokenType(TokenHashUtil.sha256(MFA_TOKEN), KyvcEnums.TokenType.MFA_SESSION))
+                .thenReturn(Optional.of(authToken));
+
+        assertThrows(ApiException.class, () -> service.reissue(
+                CREDENTIAL_ID,
+                new CredentialReissueRequest(MFA_TOKEN, "reissue reason")
+        ));
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    @Test
+    void reissueRejectsUsedMfaToken() {
+        AuthToken authToken = mfaToken();
+        authToken.markUsed(LocalDateTime.now());
+        when(credentialQueryRepository.findDetailById(CREDENTIAL_ID)).thenReturn(Optional.of(credential("VALID")));
+        when(credentialRepository.existsInProgressCredentialRequest(CREDENTIAL_ID, "REISSUE")).thenReturn(false);
+        when(authTokenRepository.findByTokenHashAndTokenType(TokenHashUtil.sha256(MFA_TOKEN), KyvcEnums.TokenType.MFA_SESSION))
+                .thenReturn(Optional.of(authToken));
+
+        assertThrows(ApiException.class, () -> service.reissue(
+                CREDENTIAL_ID,
+                new CredentialReissueRequest(MFA_TOKEN, "reissue reason")
+        ));
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    private CredentialRequestSaveResult saveResult() {
+        return new CredentialRequestSaveResult(CREDENTIAL_REQUEST_ID, LocalDateTime.now());
+    }
+
     private AuthToken mfaToken() {
+        return mfaToken(LocalDateTime.now().plusMinutes(5));
+    }
+
+    private AuthToken mfaToken(LocalDateTime expiresAt) {
         return AuthToken.create(
                 KyvcEnums.ActorType.ADMIN,
                 ADMIN_ID,
                 KyvcEnums.TokenType.MFA_SESSION,
                 TokenHashUtil.sha256(MFA_TOKEN),
-                LocalDateTime.now().plusMinutes(5)
+                expiresAt
         );
     }
 

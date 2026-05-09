@@ -1,17 +1,16 @@
 package com.kyvc.backendadmin.domain.credential.application;
 
 import com.kyvc.backendadmin.domain.audit.application.AuditLogWriter;
-import com.kyvc.backendadmin.domain.auth.domain.AuthToken;
-import com.kyvc.backendadmin.domain.auth.repository.AuthTokenRepository;
 import com.kyvc.backendadmin.domain.credential.dto.AdminCredentialDetailResponse;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialActionResponse;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialReissueRequest;
 import com.kyvc.backendadmin.domain.credential.dto.CredentialRevokeRequest;
-import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository;
 import com.kyvc.backendadmin.domain.credential.repository.CredentialQueryRepository;
+import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository;
+import com.kyvc.backendadmin.domain.credential.repository.CredentialRepository.CredentialRequestSaveResult;
+import com.kyvc.backendadmin.domain.verifier.application.AdminVerifierSecuritySupport;
 import com.kyvc.backendadmin.global.exception.ApiException;
 import com.kyvc.backendadmin.global.exception.ErrorCode;
-import com.kyvc.backendadmin.global.jwt.TokenHashUtil;
 import com.kyvc.backendadmin.global.security.SecurityUtil;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +22,7 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 /**
- * 관리자 VC 재발급과 폐기 요청 위임을 처리합니다.
- *
- * <p>상태와 MFA를 검증한 뒤 Backend API에 요청을 위임하고, 성공한 관리자 행위만 감사 로그로 기록합니다.</p>
+ * 관리자 VC 재발급과 폐기 요청 생성 서비스
  */
 @Service
 @RequiredArgsConstructor
@@ -33,8 +30,7 @@ public class AdminCredentialLifecycleService {
 
     private static final Set<String> REISSUE_ALLOWED_STATUSES = Set.of(
             KyvcEnums.CredentialStatus.VALID.name(),
-            KyvcEnums.CredentialStatus.EXPIRED.name(),
-            KyvcEnums.CredentialStatus.SUSPENDED.name()
+            KyvcEnums.CredentialStatus.EXPIRED.name()
     );
     private static final Set<String> REVOKE_ALLOWED_STATUSES = Set.of(
             KyvcEnums.CredentialStatus.VALID.name(),
@@ -47,11 +43,11 @@ public class AdminCredentialLifecycleService {
 
     private final CredentialQueryRepository credentialQueryRepository;
     private final CredentialRepository credentialRepository;
-    private final AuthTokenRepository authTokenRepository;
+    private final AdminVerifierSecuritySupport securitySupport;
     private final AuditLogWriter auditLogWriter;
 
     /**
-     * Backend API로 VC 재발급을 요청합니다.
+     * VC 재발급 요청 생성
      *
      * @param credentialId Credential ID
      * @param request VC 재발급 요청 정보
@@ -63,26 +59,33 @@ public class AdminCredentialLifecycleService {
         AdminCredentialDetailResponse credential = findCredential(credentialId);
         validateReissueStatus(credential.credentialStatusCode());
         Long adminId = SecurityUtil.getCurrentAdminId();
-        AuthToken mfaToken = validateMfaToken(request.mfaToken(), adminId);
-        Long credentialRequestId = createCredentialRequest(
+        validateNoInProgressRequest(credentialId, REQUEST_TYPE_REISSUE);
+        securitySupport.validateAndUseMfa(request.mfaToken(), adminId);
+        CredentialRequestSaveResult credentialRequest = createCredentialRequest(
                 credentialId,
                 REQUEST_TYPE_REISSUE,
                 adminId,
-                request.reason(),
-                request.comment()
+                request.reason()
         );
-        mfaToken.markUsed(LocalDateTime.now());
-        writeAudit("VC_REISSUE_REQUESTED", credentialId, credentialRequestId, credential.credentialStatusCode(), request.reason());
+        writeAudit(
+                "VC_REISSUE_REQUESTED",
+                credentialId,
+                credentialRequest.credentialRequestId(),
+                credential.credentialStatusCode(),
+                request.reason()
+        );
         return CredentialActionResponse.accepted(
                 credentialId,
+                credentialRequest.credentialRequestId(),
                 REQUEST_TYPE_REISSUE,
-                credentialRequestId.toString(),
+                REQUEST_STATUS_REQUESTED,
+                credentialRequest.requestedAt(),
                 "VC 재발급 요청이 접수되었습니다."
         );
     }
 
     /**
-     * Backend API로 VC 폐기를 요청합니다.
+     * VC 폐기 요청 생성
      *
      * @param credentialId Credential ID
      * @param request VC 폐기 요청 정보
@@ -94,20 +97,27 @@ public class AdminCredentialLifecycleService {
         AdminCredentialDetailResponse credential = findCredential(credentialId);
         validateRevokeStatus(credential.credentialStatusCode());
         Long adminId = SecurityUtil.getCurrentAdminId();
-        AuthToken mfaToken = validateMfaToken(request.mfaToken(), adminId);
-        Long credentialRequestId = createCredentialRequest(
+        validateNoInProgressRequest(credentialId, REQUEST_TYPE_REVOKE);
+        securitySupport.validateAndUseMfa(request.mfaToken(), adminId);
+        CredentialRequestSaveResult credentialRequest = createCredentialRequest(
                 credentialId,
                 REQUEST_TYPE_REVOKE,
                 adminId,
-                request.reason(),
-                request.comment()
+                request.reason()
         );
-        mfaToken.markUsed(LocalDateTime.now());
-        writeAudit("VC_REVOKE_REQUESTED", credentialId, credentialRequestId, credential.credentialStatusCode(), request.reason());
+        writeAudit(
+                "VC_REVOKE_REQUESTED",
+                credentialId,
+                credentialRequest.credentialRequestId(),
+                credential.credentialStatusCode(),
+                request.reason()
+        );
         return CredentialActionResponse.accepted(
                 credentialId,
+                credentialRequest.credentialRequestId(),
                 REQUEST_TYPE_REVOKE,
-                credentialRequestId.toString(),
+                REQUEST_STATUS_REQUESTED,
+                credentialRequest.requestedAt(),
                 "VC 폐기 요청이 접수되었습니다."
         );
     }
@@ -132,19 +142,6 @@ public class AdminCredentialLifecycleService {
         }
     }
 
-    private AuthToken validateMfaToken(String rawMfaToken, Long adminId) {
-        AuthToken authToken = authTokenRepository
-                .findByTokenHashAndTokenType(TokenHashUtil.sha256(rawMfaToken), KyvcEnums.TokenType.MFA_SESSION)
-                .orElseThrow(() -> new ApiException(ErrorCode.MFA_TOKEN_INVALID));
-        if (KyvcEnums.ActorType.ADMIN != authToken.getActorType()
-                || !adminId.equals(authToken.getActorId())
-                || !authToken.isActive()
-                || authToken.isExpired(LocalDateTime.now())) {
-            throw new ApiException(ErrorCode.MFA_TOKEN_INVALID);
-        }
-        return authToken;
-    }
-
     private void validateReissueRequest(CredentialReissueRequest request) {
         if (request == null || !StringUtils.hasText(request.mfaToken()) || !StringUtils.hasText(request.reason())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
@@ -157,16 +154,18 @@ public class AdminCredentialLifecycleService {
         }
     }
 
-    private Long createCredentialRequest(
-            Long credentialId,
-            String requestType,
-            Long adminId,
-            String reason,
-            String comment
-    ) {
+    private void validateNoInProgressRequest(Long credentialId, String requestType) {
         if (credentialRepository.existsInProgressCredentialRequest(credentialId, requestType)) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "진행 중인 Credential 요청이 이미 존재합니다.");
         }
+    }
+
+    private CredentialRequestSaveResult createCredentialRequest(
+            Long credentialId,
+            String requestType,
+            Long adminId,
+            String reason
+    ) {
         return credentialRepository.saveCredentialRequest(
                 credentialId,
                 requestType,
@@ -174,16 +173,10 @@ public class AdminCredentialLifecycleService {
                 REQUESTED_BY_TYPE_ADMIN,
                 adminId,
                 null,
-                buildReason(reason, comment),
-                null
+                reason,
+                null,
+                LocalDateTime.now()
         );
-    }
-
-    private String buildReason(String reason, String comment) {
-        if (!StringUtils.hasText(comment)) {
-            return reason;
-        }
-        return "%s | comment=%s".formatted(reason, comment);
     }
 
     private void writeAudit(String action, Long credentialId, Long credentialRequestId, String beforeStatus, String reason) {

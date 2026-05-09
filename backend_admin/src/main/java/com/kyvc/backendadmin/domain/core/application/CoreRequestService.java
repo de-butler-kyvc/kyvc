@@ -96,7 +96,7 @@ public class CoreRequestService {
             String payload
     ) {
         try {
-            // 실제 Core 실행은 backend/CoreAdapter가 담당하므로 backend_admin은 요청 대기 row만 생성한다.
+            // 실제 Core 실행은 후속 처리기가 담당, backend_admin은 요청 대기 row만 생성
             int insertedRows = coreRequestRepository.save(
                     coreRequestId,
                     requestType,
