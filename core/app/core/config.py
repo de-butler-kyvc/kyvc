@@ -5,6 +5,12 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 
+def parse_optional_bool(value: str | None) -> bool | None:
+    if value is None or value == "":
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Settings(BaseModel):
     app_name: str = Field(default="kyvc-core")
     app_env: str = Field(default="dev")
@@ -25,6 +31,9 @@ class Settings(BaseModel):
     issuer_private_key_pem_path: str | None = Field(default=None)
     xrpl_faucet_host: str | None = Field(default=None)
     did_doc_base_url: str = Field(default="http://127.0.0.1:8090")
+    auto_create_issuer_wallet_on_boot: bool | None = Field(default=None)
+    auto_register_issuer_did: bool | None = Field(default=None)
+    auto_fund_issuer_on_boot: bool | None = Field(default=None)
     verifier_challenge_ttl_seconds: int = Field(default=300)
     ocr_provider: str = Field(default="structured_payload")
     llm_provider: str = Field(default="none")
@@ -84,6 +93,9 @@ def get_settings() -> Settings:
         issuer_private_key_pem_path=os.getenv("ISSUER_PRIVATE_KEY_PEM_PATH") or os.getenv("ISSUER_KEY_PEM_PATH"),
         xrpl_faucet_host=os.getenv("XRPL_FAUCET_HOST"),
         did_doc_base_url=os.getenv("DID_DOC_BASE_URL", "http://127.0.0.1:8090"),
+        auto_create_issuer_wallet_on_boot=parse_optional_bool(os.getenv("AUTO_CREATE_ISSUER_WALLET_ON_BOOT")),
+        auto_register_issuer_did=parse_optional_bool(os.getenv("AUTO_REGISTER_ISSUER_DID")),
+        auto_fund_issuer_on_boot=parse_optional_bool(os.getenv("AUTO_FUND_ISSUER_ON_BOOT")),
         verifier_challenge_ttl_seconds=int(os.getenv("VERIFIER_CHALLENGE_TTL_SECONDS", "300")),
         ocr_provider=os.getenv("OCR_PROVIDER", "structured_payload"),
         llm_provider=os.getenv("LLM_PROVIDER", "none"),

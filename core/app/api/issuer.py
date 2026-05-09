@@ -15,6 +15,7 @@ from app.issuer.api_models import (
     RevokeCredentialRequest,
     RevokeCredentialResponse,
 )
+from app.issuer.bootstrap import create_funded_issuer_wallet, diddoc_url, register_issuer_did_with_wallet
 from app.issuer.service import IssuerService
 from app.sdjwt.issuer import DEFAULT_LEGAL_ENTITY_KYC_VCT
 from app.status.sdjwt_status import credential_type_hex_for_sdjwt
@@ -28,13 +29,13 @@ from app.xrpl.ledger import (
     submit_did_set,
 )
 from app.xrpl.status import remove_status_mirror, sync_status_mirror
-from app.xrpl.wallets import generate_funded_wallet, wallet_from_seed, wallet_seed
+from app.xrpl.wallets import wallet_from_seed
 
 router = APIRouter(prefix="/issuer", tags=["issuer"])
 
 
 def _diddoc_url(base_url: str, issuer_account: str) -> str:
-    return f"{base_url.rstrip('/')}/dids/{issuer_account}/diddoc.json"
+    return diddoc_url(base_url, issuer_account)
 
 
 def _issuer_private_key_pem(payload_value: str | None, settings) -> str:
@@ -57,11 +58,15 @@ def _issuer_private_key_pem(payload_value: str | None, settings) -> str:
         ) from exc
 
 
-def _issuer_seed(payload_value: str | None, settings, *, detail: str) -> str:
-    seed = payload_value or settings.xrpl_issuer_seed
+def _issuer_seed(payload_value: str | None, settings, *, detail: str, runtime_seed: str | None = None) -> str:
+    seed = payload_value or settings.xrpl_issuer_seed or runtime_seed
     if not seed:
         raise HTTPException(status_code=400, detail=detail)
     return seed
+
+
+def _runtime_issuer_seed(request: Request) -> str | None:
+    return getattr(request.app.state, "runtime_issuer_seed", None)
 
 
 def _default_credential_format(claims: dict) -> str:
@@ -122,10 +127,10 @@ def generate_issuer_wallet(
     rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
     enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
     client = make_client(rpc_url)
-    wallet = generate_funded_wallet(client, payload.faucet_host or settings.xrpl_faucet_host)
+    account, seed = create_funded_issuer_wallet(client, payload.faucet_host or settings.xrpl_faucet_host)
     return GenerateIssuerWalletResponse(
-        account=wallet.address,
-        seed=wallet_seed(wallet),
+        account=account,
+        seed=seed,
         network_rpc_url=rpc_url,
         warning="Store this seed in core/.env as XRPL_ISSUER_SEED. Do not commit it.",
     )
@@ -141,6 +146,7 @@ def register_issuer_did(
         payload.issuer_seed,
         settings,
         detail="issuer seed is required. Set XRPL_ISSUER_SEED or pass issuer_seed.",
+        runtime_seed=_runtime_issuer_seed(request),
     )
     private_key_pem = _issuer_private_key_pem(payload.issuer_private_key_pem, settings)
 
@@ -149,21 +155,21 @@ def register_issuer_did(
     client = make_client(rpc_url)
     wallet = wallet_from_seed(seed)
 
-    service = IssuerService(
-        issuer_account=wallet.address,
-        private_key=private_key_from_pem(private_key_pem),
+    registration = register_issuer_did_with_wallet(
+        client=client,
+        wallet=wallet,
+        private_key_pem=private_key_pem,
         key_id=payload.key_id,
-        did_document_repository=request.app.state.repository,
+        did_doc_base_url=payload.did_doc_base_url or settings.did_doc_base_url,
+        repository=request.app.state.repository,
+        submit_func=submit_did_set,
     )
-    did_document = service.register_did_document()
-    diddoc_url = _diddoc_url(payload.did_doc_base_url or settings.did_doc_base_url, wallet.address)
-    tx = submit_did_set(client, wallet, diddoc_url, did_document)
     return RegisterIssuerDidResponse(
-        issuer_account=wallet.address,
-        issuer_did=service.issuer_did,
-        diddoc_url=diddoc_url,
-        did_document=did_document,
-        did_set_transaction=tx,
+        issuer_account=registration.issuer_account,
+        issuer_did=registration.issuer_did,
+        diddoc_url=registration.diddoc_url,
+        did_document=registration.did_document,
+        did_set_transaction=registration.did_set_transaction,
     )
 
 
@@ -180,6 +186,7 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
             payload.issuer_seed,
             settings,
             detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
+            runtime_seed=_runtime_issuer_seed(request),
         )
         rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
         enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)
@@ -188,8 +195,10 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
         if issuer_account is not None and issuer_account != issuer_wallet.address:
             raise HTTPException(status_code=400, detail="issuer_account does not match issuer_seed wallet address")
         issuer_account = issuer_wallet.address
-    elif issuer_account is None and (payload.issuer_seed or settings.xrpl_issuer_seed):
-        issuer_account = wallet_from_seed(payload.issuer_seed or settings.xrpl_issuer_seed).address
+    elif issuer_account is None and (payload.issuer_seed or settings.xrpl_issuer_seed or _runtime_issuer_seed(request)):
+        issuer_account = wallet_from_seed(
+            payload.issuer_seed or settings.xrpl_issuer_seed or _runtime_issuer_seed(request),
+        ).address
     elif issuer_account is None:
         raise HTTPException(status_code=400, detail="issuer_account is required for local status mode")
 
@@ -318,6 +327,7 @@ def revoke_credential(payload: RevokeCredentialRequest, request: Request) -> Rev
             payload.issuer_seed,
             settings,
             detail="issuer seed is required for XRPL mode. Set XRPL_ISSUER_SEED or pass issuer_seed.",
+            runtime_seed=_runtime_issuer_seed(request),
         )
         rpc_url = payload.xrpl_json_rpc_url or settings.xrpl_json_rpc_url
         enforce_mainnet_policy(rpc_url, settings.allow_mainnet, payload.allow_mainnet)

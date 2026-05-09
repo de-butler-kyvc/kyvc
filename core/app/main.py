@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request, status
@@ -16,6 +17,7 @@ from app.api.provider_selection import router as provider_selection_router
 from app.api.credential_status import router as credential_status_router
 from app.api.verifier import router as verifier_router
 from app.core.config import Settings, get_settings
+from app.issuer.bootstrap import IssuerBootstrapResult, bootstrap_issuer_did
 from app.logging_config import configure_logging
 from app.storage.mysql import MySQLRepository
 
@@ -42,13 +44,35 @@ def create_app(
     configure_logging(selected_settings.log_level)
     selected_repository = repository or create_repository(selected_settings)
 
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        try:
+            result = bootstrap_issuer_did(selected_settings, selected_repository)
+        except Exception as exc:
+            logger.exception("issuer DID bootstrap crashed unexpectedly")
+            result = IssuerBootstrapResult(
+                status="DEGRADED",
+                configured=bool(selected_settings.xrpl_issuer_seed),
+                detail=f"issuer DID bootstrap failed unexpectedly: {type(exc).__name__}",
+            )
+        application.state.issuer_bootstrap = result
+        application.state.runtime_issuer_seed = result.runtime_issuer_seed
+        if result.status == "UP":
+            logger.info("issuer DID bootstrap completed: %s", result.detail)
+        else:
+            logger.warning("issuer DID bootstrap degraded: %s", result.detail)
+        yield
+
     application = FastAPI(
         title=selected_settings.app_name,
         version="0.1.0",
         description="KYvC Core API",
+        lifespan=lifespan,
     )
     application.state.settings = selected_settings
     application.state.repository = selected_repository
+    application.state.issuer_bootstrap = IssuerBootstrapResult()
+    application.state.runtime_issuer_seed = None
 
     _register_exception_handlers(application)
 

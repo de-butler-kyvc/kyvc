@@ -30,14 +30,24 @@ class InternalStatusResponse(BaseModel):
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
-def build_internal_status(settings: Settings, repository: Any) -> InternalStatusResponse:
+def build_internal_status(
+    settings: Settings,
+    repository: Any,
+    issuer_bootstrap: Any | None = None,
+) -> InternalStatusResponse:
     database = _database_status(repository)
     xrpl = _xrpl_status(settings)
-    issuer = _issuer_status(settings, xrpl)
+    issuer = _issuer_status(settings, xrpl, issuer_bootstrap)
     overall = _overall_status(database, xrpl, issuer)
     diagnostics = {
         "xrplNetwork": settings.xrpl_network_name,
     }
+    if issuer_bootstrap is not None:
+        diagnostics["issuerBootstrap"] = {
+            "issuerAccount": getattr(issuer_bootstrap, "issuer_account", None),
+            "issuerDid": getattr(issuer_bootstrap, "issuer_did", None),
+            "events": list(getattr(issuer_bootstrap, "events", [])),
+        }
     return InternalStatusResponse(
         status=overall,
         service=settings.app_name,
@@ -105,7 +115,13 @@ def _xrpl_status(settings: Settings) -> ComponentStatus:
     return ComponentStatus(status="DOWN", configured=True, detail="XRPL server_info response was not successful")
 
 
-def _issuer_status(settings: Settings, xrpl: ComponentStatus) -> ComponentStatus:
+def _issuer_status(settings: Settings, xrpl: ComponentStatus, issuer_bootstrap: Any | None = None) -> ComponentStatus:
+    if issuer_bootstrap is not None and getattr(issuer_bootstrap, "detail", None) != "issuer bootstrap has not run":
+        return ComponentStatus(
+            status=getattr(issuer_bootstrap, "status", "DEGRADED"),
+            configured=bool(getattr(issuer_bootstrap, "configured", False)),
+            detail=str(getattr(issuer_bootstrap, "detail", "")),
+        )
     if not settings.xrpl_issuer_seed:
         return ComponentStatus(status="DEGRADED", configured=False, detail="XRPL issuer seed is not configured")
     if xrpl.status != "UP":
