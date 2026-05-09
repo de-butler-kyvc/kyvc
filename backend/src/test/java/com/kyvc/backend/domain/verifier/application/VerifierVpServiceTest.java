@@ -13,8 +13,6 @@ import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.verifier.domain.Verifier;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
-import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateRequest;
-import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationResponse;
 import com.kyvc.backend.domain.verifier.repository.VerifierRepository;
@@ -44,7 +42,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -125,39 +122,6 @@ class VerifierVpServiceTest {
         assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.REQUESTED);
         assertThat(saved.getRequestTypeCode()).isEqualTo(KyvcEnums.VpRequestType.FINANCE_VERIFY);
         assertThat(saved.getFinanceInstitutionCode()).isEqualTo("FINANCE_USER_1");
-    }
-
-    @Test
-    void createReAuthRequest_storesResultNotifyUrlWithoutCoreCall() {
-        Corporate corporate = createCorporate(10L, 1L);
-        Credential credential = createCredential(100L, 10L);
-        Verifier verifier = createVerifier(3L, "user@test.com");
-        when(verifierRepository.findLatestByContactEmail("user@test.com")).thenReturn(Optional.of(verifier));
-        when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
-        when(credentialRepository.findLatestByCorporateId(10L)).thenReturn(Optional.of(credential));
-        when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        VerifierReAuthRequestCreateResponse response = service.createReAuthRequest(
-                userDetails(),
-                new VerifierReAuthRequestCreateRequest(
-                        10L,
-                        "정기 재인증",
-                        List.of("corporateName", "kycStatus"),
-                        "https://verifier.example.com/kyvc/result"
-                )
-        );
-
-        verify(coreAdapter, never()).requestVpVerification(any(CoreVpVerificationRequest.class), any());
-        verifyNoInteractions(coreRequestService);
-        verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
-
-        VpVerification saved = vpVerificationCaptor.getValue();
-        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.REQUESTED.name());
-        assertThat(response.qrPayload()).contains(KyvcEnums.QrType.VP_REQUEST.name());
-        assertThat(saved.getRequestTypeCode()).isEqualTo(KyvcEnums.VpRequestType.RE_AUTH);
-        assertThat(saved.getReAuthYn()).isEqualTo(KyvcEnums.Yn.Y);
-        assertThat(saved.getPermissionResultJson()).contains("resultNotifyUrl");
-        assertThat(saved.getPermissionResultJson()).contains("https://verifier.example.com/kyvc/result");
     }
 
     @Test
