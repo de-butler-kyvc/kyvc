@@ -112,7 +112,7 @@ function AiReviewView() {
           <div className="form-card-header">
             <div className="form-card-title">자동 심사 통과 항목</div>
             {summary?.confidenceScore != null ? (
-              <Badge variant="outline">신뢰도 {(summary.confidenceScore * 100).toFixed(0)}%</Badge>
+              <Badge variant="outline">신뢰도 {summary.confidenceScore.toFixed(0)}%</Badge>
             ) : null}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

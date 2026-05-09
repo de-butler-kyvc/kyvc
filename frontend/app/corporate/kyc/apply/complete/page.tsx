@@ -57,7 +57,7 @@ function KycComplete() {
       : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[920px] flex-col px-9 py-8">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">KYC 신청 완료</h1>

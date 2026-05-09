@@ -54,7 +54,7 @@ export default function KycApplyReviewPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col px-9 py-8">
+    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">업로드 서류 미리보기</h1>

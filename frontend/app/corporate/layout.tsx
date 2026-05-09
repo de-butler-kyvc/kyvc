@@ -19,6 +19,15 @@ const sections: NavSection[] = [
       { href: "/corporate/representative", label: "대표자 정보", icon: <Icon.User /> },
       { href: "/corporate/agents", label: "대리인 정보", icon: <Icon.UserCheck /> }
     ]
+  },
+  {
+    title: "이력 관리",
+    items: [
+      { href: "/corporate/kyc/history", label: "KYC 신청 이력", icon: <Icon.Clock /> },
+      { href: "/corporate/documents", label: "제출서류 관리", icon: <Icon.File /> },
+      { href: "/corporate/vc", label: "VC 발급 이력", icon: <Icon.CheckSquare /> },
+      { href: "/corporate/vp", label: "VP 제출 이력", icon: <Icon.Upload /> }
+    ]
   }
 ];
 

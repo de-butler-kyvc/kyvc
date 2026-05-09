@@ -76,7 +76,7 @@ export default function KycApplyTypePage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[920px] flex-col px-9 py-8">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">법인 유형 선택</h1>

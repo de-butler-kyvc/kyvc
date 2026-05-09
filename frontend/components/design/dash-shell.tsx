@@ -22,7 +22,8 @@ const ROUTES: Record<string, string> = {
   "kyc-history": "/corporate/kyc/history",
   "vc-history": "/corporate/vc",
   "vp-history": "/corporate/vp",
-  "doc-manage": "/corporate/kyc/detail/documents",
+  "doc-manage": "/corporate/documents",
+  "doc-delete": "/corporate/documents/delete",
   "agent-manage": "/corporate/agents/manage",
 };
 
@@ -65,7 +66,9 @@ export function DashShell({ children, current, lang = "ko" }: DashShellProps) {
       section: t("nav_history"),
       items: [
         { id: "kyc-history", icon: <Icon.Activity />, label: t("nav_kyc_history") },
+        { id: "doc-manage", icon: <Icon.File />, label: "제출서류 관리" },
         { id: "vc-history", icon: <Icon.CheckSquare />, label: t("nav_vc_history") },
+        { id: "vp-history", icon: <Icon.Upload />, label: "VP 제출 이력" },
       ],
     },
   ];
