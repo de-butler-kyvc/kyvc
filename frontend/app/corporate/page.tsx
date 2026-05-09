@@ -10,6 +10,7 @@ import {
   credentials as credentialsApi,
   kyc as kycApi,
   notifications as notificationsApi,
+  type CredentialIssueGuideResponse,
   type KycApplicationResponse,
   type Notification,
   type UserDashboardResponse
@@ -29,6 +30,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 };
 
 const IN_REVIEW_STATUSES = new Set(["AI_REVIEWING", "IN_REVIEW", "SUBMITTED"]);
+const COMPLETED_STATUSES = new Set(["APPROVED", "COMPLETED", "VC_ISSUED"]);
 
 function formatDate(iso?: string | null) {
   if (!iso) return "-";
@@ -45,14 +47,12 @@ export default function CorporateDashboardPage() {
     () => corporate.dashboard()
   );
 
-  const corporateRegistered = !!dash?.corporateRegistered;
-  const activeKycId = dash?.activeKycId;
-
   const { profile } = useCorporateProfile();
+  const corporateRegistered = dash?.corporateRegistered === true || !!profile?.corporateId;
 
   const [activeKyc, setActiveKyc] = useState<KycApplicationResponse | null>(null);
   useEffect(() => {
-    if (!activeKycId) {
+    if (dashLoading || !corporateRegistered) {
       setActiveKyc(null);
       return;
     }
@@ -67,7 +67,7 @@ export default function CorporateDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeKycId]);
+  }, [corporateRegistered, dashLoading]);
 
   const [notes, setNotes] = useState<Notification[]>([]);
   useEffect(() => {
@@ -85,27 +85,57 @@ export default function CorporateDashboardPage() {
   }, []);
 
   const [credentialCount, setCredentialCount] = useState(0);
+  const [issueGuide, setIssueGuide] = useState<CredentialIssueGuideResponse | null>(null);
   useEffect(() => {
+    if (dashLoading || !corporateRegistered) {
+      setCredentialCount(0);
+      setIssueGuide(null);
+      return;
+    }
     let cancelled = false;
-    credentialsApi.list()
-      .then((res) => {
-        if (!cancelled) setCredentialCount(res?.totalCount ?? 0);
-      })
-      .catch((err) => {
+    Promise.allSettled([credentialsApi.list(), credentialsApi.issueGuide()]).then(
+      ([credentialsResult, guideResult]) => {
         if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) setCredentialCount(0);
-        else setCredentialCount(0);
-      });
+
+        if (credentialsResult.status === "fulfilled") {
+          setCredentialCount(credentialsResult.value?.totalCount ?? 0);
+        } else {
+          const err = credentialsResult.reason;
+          setCredentialCount(err instanceof ApiError && err.status === 404 ? 0 : 0);
+        }
+
+        setIssueGuide(guideResult.status === "fulfilled" ? guideResult.value : null);
+      }
+    );
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [corporateRegistered, dashLoading]);
 
   const corporateName = dash?.corporateName ?? profile?.corporateName ?? null;
   const businessNo = profile?.businessRegistrationNo ?? null;
   const supplementCount = dash?.needSupplementCount ?? 0;
-  const inReviewCount = dash?.activeKycStatus && IN_REVIEW_STATUSES.has(dash.activeKycStatus) ? 1 : 0;
+  const activeKycId = activeKyc?.kycId ?? dash?.activeKycId ?? issueGuide?.latestKycId;
+  const activeKycStatus = activeKyc?.kycStatus ?? dash?.activeKycStatus ?? issueGuide?.kycStatus;
+  const inReviewCount = activeKycStatus && IN_REVIEW_STATUSES.has(activeKycStatus) ? 1 : 0;
   const totalKycCount = activeKycId ? 1 : 0;
+  const issuedCredentialCount =
+    credentialCount > 0 || dash?.credentialIssued || issueGuide?.credentialIssued
+      ? Math.max(credentialCount, 1)
+      : 0;
+  const issueAvailable =
+    !!issueGuide?.issueAvailable ||
+    (!!activeKycStatus && COMPLETED_STATUSES.has(activeKycStatus) && !issueGuide?.credentialIssued);
+  const nextStepTitle =
+    supplementCount > 0
+      ? "보완 서류 제출이 필요합니다"
+      : issueGuide?.guideTitle
+        ? issueGuide.guideTitle
+        : issueAvailable
+          ? "VC 발급이 가능합니다"
+          : activeKycId
+            ? "KYC 심사 진행 중"
+            : "신규 KYC 신청을 시작하세요";
 
   const supplementNote = notes.find((n) => !n.read && /보완|supplement/i.test(n.message + n.title));
   const firstUnread = notes.find((n) => !n.read);
@@ -167,7 +197,7 @@ export default function CorporateDashboardPage() {
         <StatCard label="진행 KYC" value={totalKycCount} />
         <StatCard label="심사중" value={inReviewCount} tone="info" />
         <StatCard label="보완필요" value={supplementCount} tone="warn" highlight={supplementCount > 0} />
-        <StatCard label="발급된 VC" value={credentialCount} tone="success" />
+        <StatCard label="발급된 VC" value={issuedCredentialCount} tone="success" />
       </div>
 
       <div className="dash-grid-2">
@@ -197,7 +227,7 @@ export default function CorporateDashboardPage() {
                 </tr>
               ) : (
                 (() => {
-                  const status = statusBadge(activeKyc?.kycStatus ?? dash?.activeKycStatus);
+                  const status = statusBadge(activeKycStatus);
                   return (
                     <tr key={activeKycId}>
                       <td className="mono">{`KYC-${activeKycId}`}</td>
@@ -224,25 +254,21 @@ export default function CorporateDashboardPage() {
             <h3 className="section-title">다음 단계 안내</h3>
           </div>
           <div className={`next-step-card${supplementCount > 0 ? " urgent" : ""}`}>
-            <div className="next-step-title">
-              {supplementCount > 0
-                ? "보완 서류 제출이 필요합니다"
-                : activeKycId
-                  ? "KYC 심사 진행 중"
-                  : "신규 KYC 신청을 시작하세요"}
-            </div>
+            <div className="next-step-title">{nextStepTitle}</div>
             {supplementCount > 0 ? (
               <p className="next-step-desc">
                 보완 요청 {supplementCount}건이 있습니다. 신청 상세 화면에서 서류를 보완해 제출해 주세요.
               </p>
+            ) : issueGuide?.guideMessage ? (
+              <p className="next-step-desc">{issueGuide.guideMessage}</p>
             ) : alertNote?.message ? (
               <p className="next-step-desc">{alertNote.message}</p>
             ) : null}
             <Link
-              href={activeKycId ? "/corporate/kyc" : "/corporate/kyc/apply"}
+              href={activeKycId ? `/corporate/kyc/detail?id=${activeKycId}` : "/corporate/kyc/apply"}
               className="btn btn-primary btn-block btn-sm"
             >
-              {activeKycId ? "신청 내역 보기" : "KYC 신청 시작"}
+              {activeKycId ? "신청 상세 보기" : "KYC 신청 시작"}
             </Link>
           </div>
         </div>

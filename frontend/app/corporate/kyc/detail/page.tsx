@@ -264,7 +264,7 @@ function KycDetail() {
             </section>
           </div>
 
-          {aiReview && !beforeSubmit ? (
+          {aiReview&& !beforeSubmit ? (
             <AiReviewSummary
               review={aiReview}
               hasSupplements={pendingSupplements.length > 0}
@@ -630,7 +630,7 @@ function PendingSupplements({
 function DocumentList({ documents }: { documents: KycDocument[] }) {
   if (documents.length === 0) {
     return (
-      <section className="form-card">
+      <section className="form-card" style={{ marginTop: 16 }}>
         <div className="form-card-header">
           <div className="form-card-title">제출 서류</div>
         </div>
@@ -639,7 +639,7 @@ function DocumentList({ documents }: { documents: KycDocument[] }) {
     );
   }
   return (
-    <section className="form-card">
+    <section className="form-card" style={{ marginTop: 16 }}>
       <div className="form-card-header">
         <div className="form-card-title">제출 서류 {documents.length}건</div>
       </div>

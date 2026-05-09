@@ -16,7 +16,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
-    message: string
+    message: string,
   ) {
     super(message);
   }
@@ -40,7 +40,7 @@ export const session = {
   get refreshToken() {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(REFRESH_KEY);
-  }
+  },
 };
 
 type RequestInput = {
@@ -50,7 +50,9 @@ type RequestInput = {
   formData?: FormData;
 };
 
-function compactParams(query?: Record<string, string | number | boolean | undefined>) {
+function compactParams(
+  query?: Record<string, string | number | boolean | undefined>,
+) {
   if (!query) return undefined;
   const out: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(query)) {
@@ -86,7 +88,10 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-export async function api<T>(path: string, input: RequestInput = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  input: RequestInput = {},
+): Promise<T> {
   const { method = "GET", query, body, formData } = input;
   let res;
   try {
@@ -94,7 +99,7 @@ export async function api<T>(path: string, input: RequestInput = {}): Promise<T>
       url: path,
       method,
       params: compactParams(query),
-      data: formData ?? (body !== undefined ? body : undefined)
+      data: formData ?? (body !== undefined ? body : undefined),
     });
   } catch (err) {
     if (axios.isAxiosError(err)) {
@@ -113,10 +118,10 @@ export async function api<T>(path: string, input: RequestInput = {}): Promise<T>
     throw new ApiError(
       status,
       payload?.code ?? `HTTP_${status}`,
-      payload?.message ?? res.statusText
+      payload?.message ?? res.statusText,
     );
   }
-  return (payload?.data ?? (undefined as T)) as T;
+  return (payload ? payload.data : res.data) as T;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────
@@ -185,28 +190,28 @@ export const auth = {
   signup: (body: CorporateSignupBody) =>
     api<SignupResponse>("/api/auth/signup/corporate", {
       method: "POST",
-      body
+      body,
     }),
   login: (email: string, password: string) =>
     api<LoginResponse>("/api/auth/login", {
       method: "POST",
-      body: { email, password }
+      body: { email, password },
     }),
   logout: () =>
     api<{ loggedOut: boolean }>("/api/auth/logout", {
-      method: "POST"
+      method: "POST",
     }),
   session: () => api<SessionResponse>("/api/common/session"),
   mfaChallenge: (channel: MfaChannel, purpose: MfaPurpose) =>
     api<MfaChallengeResponse>("/api/auth/mfa/challenge", {
       method: "POST",
-      body: { channel, purpose }
+      body: { channel, purpose },
     }),
   mfaVerify: (challengeId: string, verificationCode: string) =>
     api<MfaVerifyResponse>("/api/auth/mfa/verify", {
       method: "POST",
-      body: { challengeId, verificationCode }
-    })
+      body: { challengeId, verificationCode },
+    }),
 };
 
 // ── Corporate ────────────────────────────────────────────────────────
@@ -271,28 +276,37 @@ export type CorporateBasicInfoBody = {
 export type Representative = {
   name: string;
   birthDate: string;
+  nationalityCode: string;
   phone: string;
   email: string;
+  identityFile?: File;
 };
 export type Agent = {
   name: string;
   phone: string;
   email: string;
-  authorityScope: string;
+  relationshipOrPosition: string;
+  powerOfAttorneyFile?: File;
 };
 export type RepresentativeResponse = {
   representativeId: number;
   corporateId: number;
   name: string;
+  birthDate?: string | null;
+  nationalityCode?: string | null;
   phoneNumber?: string | null;
   email?: string | null;
+  identityDocumentId?: number | null;
 };
 export type AgentResponse = {
   agentId: number;
   corporateId: number;
   name: string;
+  relationshipOrPosition?: string | null;
   phoneNumber?: string | null;
   email?: string | null;
+  delegationDocumentId?: number | null;
+  /** @deprecated older API field kept for compatibility with stale responses */
   authorityScope?: string | null;
 };
 export type AgentListItem = {
@@ -315,36 +329,41 @@ export const corporate = {
       `/api/user/corporates/${corporateId}/basic-info`,
       { method: "PUT", body },
     ),
-  updateRepresentative: (corporateId: number, body: Representative) =>
-    api<RepresentativeResponse>(
+  updateRepresentative: (corporateId: number, body: Representative) => {
+    const fd = new FormData();
+    fd.append("name", body.name);
+    fd.append("birthDate", body.birthDate);
+    fd.append("nationalityCode", body.nationalityCode);
+    fd.append("phoneNumber", body.phone);
+    fd.append("email", body.email);
+    if (body.identityFile) fd.append("identityFile", body.identityFile);
+
+    return api<RepresentativeResponse>(
       `/api/user/corporates/${corporateId}/representatives`,
-      {
-        method: "POST",
-        body: {
-          name: body.name,
-          phoneNumber: body.phone,
-          email: body.email
-        }
-      },
-    ),
+      { method: "POST", formData: fd },
+    );
+  },
   representatives: (corporateId: number) =>
     api<RepresentativeResponse[]>(
       `/api/user/corporates/${corporateId}/representatives`,
     ),
-  updateAgent: (corporateId: number, body: Agent) =>
-    api<AgentResponse>(`/api/user/corporates/${corporateId}/agents`, {
+  updateAgent: (corporateId: number, body: Agent) => {
+    const fd = new FormData();
+    fd.append("name", body.name);
+    fd.append("relationshipOrPosition", body.relationshipOrPosition);
+    fd.append("phoneNumber", body.phone);
+    fd.append("email", body.email);
+    if (body.powerOfAttorneyFile) {
+      fd.append("powerOfAttorneyFile", body.powerOfAttorneyFile);
+    }
+
+    return api<AgentResponse>(`/api/user/corporates/${corporateId}/agents`, {
       method: "POST",
-      body: {
-        name: body.name,
-        phoneNumber: body.phone,
-        email: body.email,
-        authorityScope: body.authorityScope
-      },
-    }),
+      formData: fd,
+    });
+  },
   agents: (corporateId: number) =>
-    api<AgentResponse[]>(
-      `/api/user/corporates/${corporateId}/agents`,
-    ),
+    api<AgentResponse[]>(`/api/user/corporates/${corporateId}/agents`),
 };
 
 // ── KYC ──────────────────────────────────────────────────────────────
@@ -508,29 +527,29 @@ export const kyc = {
   create: (corporateTypeCode: string) =>
     api<KycApplicationResponse>("/api/corporate/kyc/applications", {
       method: "POST",
-      body: { corporateTypeCode }
+      body: { corporateTypeCode },
     }),
   setCorporateType: (kycId: number, corporateTypeCode: string) =>
     api<KycApplicationResponse>(
       `/api/corporate/kyc/applications/${kycId}/corporate-type`,
-      { method: "PUT", body: { corporateTypeCode } }
+      { method: "PUT", body: { corporateTypeCode } },
     ),
   setDocumentStoreOption: (kycId: number, storeOption: "STORE" | "DELETE") =>
     api<KycApplicationResponse>(
       `/api/corporate/kyc/applications/${kycId}/document-store-option`,
-      { method: "PUT", body: { storeOption } }
+      { method: "PUT", body: { storeOption } },
     ),
   documentRequirements: (corporateTypeCode: string) =>
     api<RequiredDocument[]>("/api/corporate/kyc/required-documents", {
-      query: { corporateTypeCode }
+      query: { corporateTypeCode },
     }),
   requiredDocumentsByKyc: (kycId: number) =>
     api<RequiredDocument[]>(
-      `/api/corporate/kyc/applications/${kycId}/required-documents`
+      `/api/corporate/kyc/applications/${kycId}/required-documents`,
     ),
   summary: (kycId: number) =>
     api<KycApplicationSummaryResponse>(
-      `/api/corporate/kyc/applications/${kycId}/summary`
+      `/api/corporate/kyc/applications/${kycId}/summary`,
     ),
   documents: (kycId: number) =>
     api<KycDocument[]>(`/api/corporate/kyc/applications/${kycId}/documents`),
@@ -540,66 +559,65 @@ export const kyc = {
     fd.append("documentTypeCode", documentTypeCode);
     return api<KycDocument>(
       `/api/corporate/kyc/applications/${kycId}/documents`,
-      { method: "POST", formData: fd }
+      { method: "POST", formData: fd },
     );
   },
   deleteDocument: (kycId: number, documentId: number) =>
     api<void>(
       `/api/corporate/kyc/applications/${kycId}/documents/${documentId}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
   documentPreview: (kycId: number, documentId: number) =>
     api<DocumentPreviewResponse>(
-      `/api/corporate/kyc/applications/${kycId}/documents/${documentId}/preview`
+      `/api/corporate/kyc/applications/${kycId}/documents/${documentId}/preview`,
     ),
   submit: (kycId: number) =>
-    api<KycSubmitResponse>(
-      `/api/corporate/kyc/applications/${kycId}/submit`,
-      { method: "POST" }
-    ),
+    api<KycSubmitResponse>(`/api/corporate/kyc/applications/${kycId}/submit`, {
+      method: "POST",
+    }),
   completion: (kycId: number) =>
     api<KycCompletionResponse>(
-      `/api/corporate/kyc/applications/${kycId}/completion`
+      `/api/corporate/kyc/applications/${kycId}/completion`,
     ),
   aiReviewSummary: (kycId: number) =>
     api<KycReviewSummaryResponse>(
-      `/api/corporate/kyc/applications/${kycId}/ai-review-summary`
+      `/api/corporate/kyc/applications/${kycId}/ai-review-summary`,
     ),
   supplements: (kycId: number) =>
     api<{ supplements: Supplement[] }>(
-      `/api/corporate/kyc/applications/${kycId}/supplements`
+      `/api/corporate/kyc/applications/${kycId}/supplements`,
     ),
   supplementDetail: (kycId: number, supplementId: number) =>
     api<Supplement>(
-      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}`
+      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}`,
     ),
   uploadSupplement: (
     kycId: number,
     supplementId: number,
     file: File,
-    documentTypeCode: string
+    documentTypeCode: string,
   ) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("documentTypeCode", documentTypeCode);
     return api<SupplementDocument>(
       `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}/documents`,
-      { method: "POST", formData: fd }
+      { method: "POST", formData: fd },
     );
   },
   submitSupplement: (
     kycId: number,
     supplementId: number,
-    submittedComment?: string
+    submittedComment?: string,
   ) =>
     api<SupplementSubmitResponse>(
       `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}/submit`,
-      { method: "POST", body: { submittedComment: submittedComment ?? "" } }
+      { method: "POST", body: { submittedComment: submittedComment ?? "" } },
     ),
   credentialOffer: (kycId: number) =>
     api<CredentialOfferResponse>(
-      `/api/user/kyc/applications/${kycId}/credential-offer`
-    )
+      `/api/user/kyc/applications/${kycId}/credential-offer`,
+    ),
 };
 
 // ── Credentials ──────────────────────────────────────────────────────
@@ -618,8 +636,21 @@ export type CredentialListResponse = {
   credentials: CredentialSummary[];
   totalCount: number;
 };
+export type CredentialIssueGuideResponse = {
+  corporateId?: number;
+  latestKycId?: number;
+  kycStatus?: string;
+  credentialIssued?: boolean;
+  credentialStatus?: string;
+  issueAvailable?: boolean;
+  nextActionCode?: string;
+  guideTitle?: string;
+  guideMessage?: string;
+};
 export const credentials = {
-  list: () => api<CredentialListResponse>("/api/user/credentials")
+  list: () => api<CredentialListResponse>("/api/user/credentials"),
+  issueGuide: () =>
+    api<CredentialIssueGuideResponse>("/api/corporate/credentials/issue-guide"),
 };
 
 // ── Notifications ────────────────────────────────────────────────────
@@ -641,16 +672,16 @@ export type NotificationPageResponse = {
 export const notifications = {
   list: (params?: { page?: number; size?: number }) =>
     api<NotificationPageResponse>("/api/common/notifications", {
-      query: params
+      query: params,
     }),
   unreadCount: () =>
     api<{ unreadCount: number }>("/api/common/notifications/unread-count"),
   markRead: (id: number) =>
     api<{ read: boolean }>(`/api/common/notifications/${id}/read`, {
-      method: "PATCH"
+      method: "PATCH",
     }),
   markAllRead: () =>
     api<{ updated: number }>("/api/common/notifications/read-all", {
-      method: "PATCH"
-    })
+      method: "PATCH",
+    }),
 };

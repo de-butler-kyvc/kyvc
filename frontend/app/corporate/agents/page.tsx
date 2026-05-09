@@ -13,6 +13,8 @@ import { ApiError, type AgentResponse, corporate as corpApi } from "@/lib/api";
 type FileMeta = {
   name: string;
   size: string;
+  file?: File;
+  uploaded?: boolean;
 };
 
 type AgentDraft = {
@@ -82,7 +84,7 @@ export default function CorporateAgentsPage() {
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    update("poaDoc", { name: file.name, size: formatSize(file.size) });
+    update("poaDoc", { name: file.name, size: formatSize(file.size), file });
     event.target.value = "";
   };
 
@@ -121,9 +123,10 @@ export default function CorporateAgentsPage() {
         name: form.name,
         phone: form.phone,
         email: form.email,
-        authorityScope: form.relation
+        relationshipOrPosition: form.relation,
+        powerOfAttorneyFile: form.poaDoc.file
       });
-      setMessage("대리인 정보가 저장되었습니다. 위임장 파일은 현재 화면에만 반영됩니다.");
+      setMessage("대리인 정보가 저장되었습니다.");
       return true;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
@@ -222,7 +225,7 @@ export default function CorporateAgentsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-semibold">{form.poaDoc.name}</div>
                     <div className="text-[12px] text-muted-foreground">
-                      {form.poaDoc.size} · 검증 완료
+                      {form.poaDoc.size} · {form.poaDoc.uploaded ? "등록됨" : "검증 완료"}
                     </div>
                   </div>
                   <Badge variant="success">
@@ -278,9 +281,12 @@ export default function CorporateAgentsPage() {
 function fromAgentResponse(agent: AgentResponse): AgentDraft {
   return {
     name: agent.name ?? "",
-    relation: agent.authorityScope ?? "",
+    relation: agent.relationshipOrPosition ?? agent.authorityScope ?? "",
     phone: agent.phoneNumber ?? "",
     email: agent.email ?? "",
-    poaDoc: null
+    poaDoc:
+      agent.delegationDocumentId != null
+        ? { name: "등록된 위임장", size: "서버 보관", uploaded: true }
+        : null
   };
 }
