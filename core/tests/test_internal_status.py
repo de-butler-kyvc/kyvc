@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.core.config import Settings
+from app.issuer.bootstrap import IssuerBootstrapResult
 from app.main import create_app
 
 
@@ -89,3 +91,21 @@ def test_internal_status_reports_unconfigured_xrpl():
     assert body["status"] == "DEGRADED"
     assert body["components"]["xrpl"]["configured"] is False
     assert body["components"]["xrpl"]["status"] == "DEGRADED"
+
+
+def test_startup_bootstrap_runs_outside_event_loop(monkeypatch):
+    def bootstrap(settings, repository):
+        import asyncio
+
+        with pytest.raises(RuntimeError, match="no running event loop"):
+            asyncio.get_running_loop()
+        return IssuerBootstrapResult(status="UP", configured=True, detail="bootstrap ok")
+
+    monkeypatch.setattr("app.main.bootstrap_issuer_did", bootstrap)
+    app = create_app(settings=Settings(xrpl_issuer_seed="issuer-seed"), repository=ReadyRepository())
+
+    with TestClient(app) as client:
+        response = client.get("/internal/status")
+
+    assert response.status_code == 200
+    assert response.json()["components"]["issuer"]["detail"] == "bootstrap ok"

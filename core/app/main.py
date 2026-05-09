@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
+from anyio.to_thread import run_sync
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -47,7 +48,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         try:
-            result = bootstrap_issuer_did(selected_settings, selected_repository)
+            result = await run_sync(bootstrap_issuer_did, selected_settings, selected_repository)
         except Exception as exc:
             logger.exception("issuer DID bootstrap crashed unexpectedly")
             result = IssuerBootstrapResult(
