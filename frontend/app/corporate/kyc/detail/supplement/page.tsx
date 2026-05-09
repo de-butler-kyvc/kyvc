@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
   type CorporateProfile,
-  type SupplementDetail,
+  type Supplement,
   corporate as corpApi,
   kyc as kycApi
 } from "@/lib/api";
@@ -33,7 +33,7 @@ function SupplementView() {
   const valid =
     Number.isFinite(kycId) && kycId > 0 && Number.isFinite(supplementId) && supplementId > 0;
 
-  const [supplement, setSupplement] = useState<SupplementDetail | null>(null);
+  const [supplement, setSupplement] = useState<Supplement | null>(null);
   const [corp, setCorp] = useState<CorporateProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +41,7 @@ function SupplementView() {
     if (!valid) return;
     setError(null);
     Promise.all([
-      kycApi.supplement(kycId, supplementId),
+      kycApi.supplementDetail(kycId, supplementId),
       corpApi.me().catch(() => null)
     ])
       .then(([s, c]) => {

@@ -14,8 +14,9 @@ from app.core.config import Settings
 def assess_documents_with_llm_primary(
     payload: LlmPrimaryAssessmentRequest,
     settings: Settings,
+    repository=None,
 ) -> LlmPrimaryAssessmentResponse:
-    provider = build_document_extraction_provider(settings)
+    provider = build_document_extraction_provider(settings, repository)
     if provider is None:
         raise ValueError("LLM_PROVIDER must be configured for llm_primary assessment.")
     if not payload.documents:

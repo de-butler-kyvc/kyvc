@@ -1,6 +1,7 @@
 import { Header } from "@/components/nav/header";
 import { Sidebar, type NavSection } from "@/components/nav/sidebar";
 import { Icon } from "@/components/design/icons";
+import { AuthSessionGate } from "@/lib/session-gate";
 
 const sections: NavSection[] = [
   {
@@ -25,20 +26,22 @@ export default function FinanceLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="dash-shell">
-      <Sidebar
-        brand="KYvC"
-        subtitle="금융사 업무"
-        sections={sections}
-        homeHref="/finance"
-      />
-      <main className="dash-main">
-        <Header channel="금융사 업무 화면" channelTag="FI · FINANCE" />
-        <div className="dash-content">{children}</div>
-        <footer className="footer">
-          © 2025 KYvC. All rights reserved.
-        </footer>
-      </main>
-    </div>
+    <AuthSessionGate>
+      <div className="dash-shell">
+        <Sidebar
+          brand="KYvC"
+          subtitle="금융사 업무"
+          sections={sections}
+          homeHref="/finance"
+        />
+        <main className="dash-main">
+          <Header channel="금융사 업무 화면" channelTag="FI · FINANCE" />
+          <div className="dash-content">{children}</div>
+          <footer className="footer">
+            © 2025 KYvC. All rights reserved.
+          </footer>
+        </main>
+      </div>
+    </AuthSessionGate>
   );
 }

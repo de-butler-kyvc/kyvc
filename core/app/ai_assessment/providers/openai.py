@@ -8,6 +8,7 @@ from app.ai_assessment.enums import DocumentType, HolderType
 from app.ai_assessment.providers.base import LlmExtractionError
 from app.ai_assessment.providers.ocr import OcrTextProvider
 from app.ai_assessment.schemas import DocumentMetadata
+from app.resilience.outbound import execute_outbound
 
 
 class OpenAiDocumentExtractionProvider:
@@ -53,40 +54,44 @@ class OpenAiDocumentExtractionProvider:
         )
 
     def _extract_json(self, document_type: DocumentType, source_text: str) -> dict[str, Any]:
-        response = httpx.post(
-            f"{self.base_url}/responses",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "input": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a KYvC KYC document extraction provider. "
-                            "Extract only values present in the document text. "
-                            "Do not decide final KYC status."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Expected document type: {document_type.value}.\n"
-                            "Classify the document and extract all visible KYvC KYC fields into the schema. "
-                            "Use the expected document type when it is consistent with the text. "
-                            "For shareholder names, return the person's or company's name only; omit labels such as shareholder, owner, or representative. "
-                            "Use null for unknown values.\n\n"
-                            f"Document text:\n{source_text[:12000]}"
-                        ),
-                    },
-                ],
-                "text": {"format": self._response_format(document_type)},
-            },
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+        def call_openai() -> httpx.Response:
+            response = httpx.post(
+                f"{self.base_url}/responses",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "input": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a KYvC KYC document extraction provider. "
+                                "Extract only values present in the document text. "
+                                "Do not decide final KYC status."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Expected document type: {document_type.value}.\n"
+                                "Classify the document and extract all visible KYvC KYC fields into the schema. "
+                                "Use the expected document type when it is consistent with the text. "
+                                "For shareholder names, return the person's or company's name only; omit labels such as shareholder, owner, or representative. "
+                                "Use null for unknown values.\n\n"
+                                f"Document text:\n{source_text[:12000]}"
+                            ),
+                        },
+                    ],
+                    "text": {"format": self._response_format(document_type)},
+                },
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response
+
+        response = execute_outbound("llm", "openai_responses", call_openai)
         return json.loads(self._response_output_text(response.json()))
 
     def _response_format(self, document_type: DocumentType) -> dict[str, Any]:

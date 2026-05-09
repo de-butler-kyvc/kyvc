@@ -9,4 +9,4 @@ router = APIRouter(prefix="/ai-assessment", tags=["ai-assessment"])
 
 @router.post("/assessments/llm-primary", response_model=LlmPrimaryAssessmentResponse)
 def assess_llm_primary(payload: LlmPrimaryAssessmentRequest, request: Request) -> LlmPrimaryAssessmentResponse:
-    return assess_documents_with_llm_primary(payload, request.app.state.settings)
+    return assess_documents_with_llm_primary(payload, request.app.state.settings, request.app.state.repository)

@@ -16,8 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
-  type KycCompletion,
-  type KycStatus,
+  type KycCompletionResponse,
+  type KycStatusResponse,
   kyc as kycApi
 } from "@/lib/api";
 
@@ -34,8 +34,8 @@ function Complete() {
   const kycId = Number(params.get("id"));
   const valid = Number.isFinite(kycId) && kycId > 0;
 
-  const [completion, setCompletion] = useState<KycCompletion | null>(null);
-  const [status, setStatus] = useState<KycStatus | null>(null);
+  const [completion, setCompletion] = useState<KycCompletionResponse | null>(null);
+  const [status, setStatus] = useState<KycStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,7 +71,7 @@ function Complete() {
   }
 
   const applicationNo = `KYC-${String(kycId).padStart(7, "0")}`;
-  const finalStatus = completion?.status ?? status?.status ?? status?.kycStatus;
+  const finalStatus = completion?.status ?? status?.kycStatus;
   const credentialIssued = completion?.credentialIssued ?? finalStatus === "VC_ISSUED";
 
   return (

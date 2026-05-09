@@ -49,6 +49,16 @@ class Settings(BaseModel):
     naver_clova_ocr_endpoint: str | None = Field(default=None)
     naver_clova_ocr_secret: str | None = Field(default=None)
     naver_clova_ocr_template_id: str | None = Field(default=None)
+    outbound_default_timeout_seconds: float = Field(default=30.0)
+    outbound_xrpl_timeout_seconds: float = Field(default=30.0)
+    outbound_did_resolver_timeout_seconds: float = Field(default=30.0)
+    outbound_ocr_timeout_seconds: float = Field(default=120.0)
+    outbound_llm_timeout_seconds: float = Field(default=120.0)
+    outbound_retry_max_attempts: int = Field(default=3)
+    outbound_retry_base_delay_seconds: float = Field(default=0.2)
+    outbound_retry_max_delay_seconds: float = Field(default=2.0)
+    outbound_circuit_failure_threshold: int = Field(default=5)
+    outbound_circuit_recovery_timeout_seconds: float = Field(default=30.0)
 
 
 @lru_cache
@@ -98,4 +108,14 @@ def get_settings() -> Settings:
         naver_clova_ocr_endpoint=os.getenv("NAVER_CLOVA_OCR_ENDPOINT"),
         naver_clova_ocr_secret=os.getenv("NAVER_CLOVA_OCR_SECRET"),
         naver_clova_ocr_template_id=os.getenv("NAVER_CLOVA_OCR_TEMPLATE_ID"),
+        outbound_default_timeout_seconds=float(os.getenv("OUTBOUND_DEFAULT_TIMEOUT_SECONDS", "30")),
+        outbound_xrpl_timeout_seconds=float(os.getenv("OUTBOUND_XRPL_TIMEOUT_SECONDS", "30")),
+        outbound_did_resolver_timeout_seconds=float(os.getenv("OUTBOUND_DID_RESOLVER_TIMEOUT_SECONDS", "30")),
+        outbound_ocr_timeout_seconds=float(os.getenv("OUTBOUND_OCR_TIMEOUT_SECONDS", "120")),
+        outbound_llm_timeout_seconds=float(os.getenv("OUTBOUND_LLM_TIMEOUT_SECONDS", "120")),
+        outbound_retry_max_attempts=int(os.getenv("OUTBOUND_RETRY_MAX_ATTEMPTS", "3")),
+        outbound_retry_base_delay_seconds=float(os.getenv("OUTBOUND_RETRY_BASE_DELAY_SECONDS", "0.2")),
+        outbound_retry_max_delay_seconds=float(os.getenv("OUTBOUND_RETRY_MAX_DELAY_SECONDS", "2")),
+        outbound_circuit_failure_threshold=int(os.getenv("OUTBOUND_CIRCUIT_FAILURE_THRESHOLD", "5")),
+        outbound_circuit_recovery_timeout_seconds=float(os.getenv("OUTBOUND_CIRCUIT_RECOVERY_TIMEOUT_SECONDS", "30")),
     )

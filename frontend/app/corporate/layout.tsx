@@ -1,6 +1,7 @@
 import { Header } from "@/components/nav/header";
 import { Sidebar, type NavSection } from "@/components/nav/sidebar";
 import { Icon } from "@/components/design/icons";
+import { AuthSessionGate } from "@/lib/session-gate";
 
 const sections: NavSection[] = [
   {
@@ -27,20 +28,22 @@ export default function CorporateLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="dash-shell">
-      <Sidebar
-        brand="KYvC"
-        subtitle="법인 사용자 웹"
-        sections={sections}
-        homeHref="/corporate"
-      />
-      <main className="dash-main">
-        <Header channel="법인 사용자 웹" channelTag="CW · CORPORATE" />
-        <div className="dash-content">{children}</div>
-        <footer className="footer">
-          © 2025 KYvC. All rights reserved.
-        </footer>
-      </main>
-    </div>
+    <AuthSessionGate>
+      <div className="dash-shell">
+        <Sidebar
+          brand="KYvC"
+          subtitle="법인 사용자 웹"
+          sections={sections}
+          homeHref="/corporate"
+        />
+        <main className="dash-main">
+          <Header channel="법인 사용자 웹" channelTag="CW · CORPORATE" />
+          <div className="dash-content">{children}</div>
+          <footer className="footer">
+            © 2025 KYvC. All rights reserved.
+          </footer>
+        </main>
+      </div>
+    </AuthSessionGate>
   );
 }

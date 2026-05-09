@@ -262,6 +262,95 @@ ALLOW_MAINNET=0
 The application creates the required MySQL tables on startup when the configured
 database already exists and the configured user has DDL permissions.
 
+## Internal Status
+
+`GET /internal/status` is intended for core-admin and internal operator use. It
+does not replace the public `/health` endpoint. It assumes the core API is
+available only on the internal network and does not add a separate API key.
+
+The response includes overall status plus database, XRPL, and issuer component
+readiness. XRPL probing uses the configured JSON-RPC URL, respects the existing
+mainnet policy, and performs a read-only `server_info` request. Secrets such as
+issuer seeds and private keys are never returned.
+
+## Outbound Dependency Resilience
+
+Outbound calls to XRPL, DID document URLs, OCR providers, and LLM providers use a
+shared in-process resilience policy. The policy centralizes timeouts, retries
+transient failures with exponential backoff and jitter, and opens a per-category
+circuit after repeated transient failures. Open circuits fail fast until the
+recovery timeout elapses, then allow a half-open probe.
+
+Network timeouts, connection failures, 5xx responses, and rate-limit responses
+from OCR/LLM providers are retried. Mainnet policy violations, XRPL
+amendment-disabled failures, DID missing-document cases, and obvious 4xx
+caller/configuration failures are not retried.
+
+Key environment variables:
+
+```env
+OUTBOUND_DEFAULT_TIMEOUT_SECONDS=30
+OUTBOUND_XRPL_TIMEOUT_SECONDS=30
+OUTBOUND_DID_RESOLVER_TIMEOUT_SECONDS=30
+OUTBOUND_OCR_TIMEOUT_SECONDS=120
+OUTBOUND_LLM_TIMEOUT_SECONDS=120
+OUTBOUND_RETRY_MAX_ATTEMPTS=3
+OUTBOUND_RETRY_BASE_DELAY_SECONDS=0.2
+OUTBOUND_RETRY_MAX_DELAY_SECONDS=2
+OUTBOUND_CIRCUIT_FAILURE_THRESHOLD=5
+OUTBOUND_CIRCUIT_RECOVERY_TIMEOUT_SECONDS=30
+```
+
+## OCR/LLM Provider Selection
+
+Core stores active OCR/LLM provider selections in its MySQL database so all Core
+instances can read the same runtime choice. Core Admin is expected to call
+Core's internal provider-selection API instead of writing configuration directly.
+
+Core resolves providers in this order:
+
+1. Active runtime selection from `provider_selections`
+2. Environment defaults such as `OCR_PROVIDER` and `LLM_PROVIDER`
+
+Selectable providers are allowlisted in code. Admins can select only provider
+and profile identifiers; secrets, API keys, and raw endpoint URLs remain in env
+or secret storage. Selection activation validates that the chosen provider is
+configured enough to run.
+
+Internal endpoints:
+
+- `GET /internal/provider-selections/options`
+- `GET /internal/provider-selections`
+- `PUT /internal/provider-selections/{ocr|llm}`
+- `GET /internal/provider-selections/history`
+
+Core Admin integration guidance:
+
+- Treat Core as the source of truth; do not create a separate Core Admin
+  provider-selection table.
+- Fetch `GET /internal/provider-selections/options` to render selectable
+  providers and profiles. Show `configured=false` options as unavailable.
+- Fetch `GET /internal/provider-selections` to display the current effective
+  selection, including env fallback when no runtime override exists.
+- On activation, call `PUT /internal/provider-selections/{ocr|llm}` with only:
+
+```json
+{
+  "provider": "openai",
+  "profile": "balanced",
+  "changed_by": "operator-id"
+}
+```
+
+- Pass the operator identity as `changed_by` when available. Until full auth is
+  present, Core Admin may use a simple operator id or service label.
+- Surface Core's `400` validation detail to the operator. Core rejects
+  unsupported providers/profiles and selections whose required env secrets are
+  missing.
+- Use `GET /internal/provider-selections/history` for a simple audit view.
+- Never send API keys, tokens, endpoint URLs, or model override strings through
+  these APIs.
+
 Holder behavior is not exposed as a core API. The production holder will be a
 mobile app. This repository keeps a configured-network holder test runner under
 `holder-test/` so the core issuer/verifier flow can still be exercised end to

@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { Logo } from "@/components/design/primitives";
 import { Icon } from "@/components/design/icons";
 import { ApiError, auth } from "@/lib/api";
+import { SessionGateSplash, useGuestSessionGate } from "@/lib/session-gate";
 
 type SignupForm = {
   email: string;
@@ -18,6 +19,7 @@ type SignupForm = {
 export default function SignupPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const checkingSession = useGuestSessionGate();
 
   const {
     register,
@@ -39,6 +41,10 @@ export default function SignupPage() {
       setError(err instanceof ApiError ? err.message : "회원가입에 실패했습니다.");
     }
   });
+
+  if (checkingSession) {
+    return <SessionGateSplash />;
+  }
 
   return (
     <div className="app-shell page-enter">

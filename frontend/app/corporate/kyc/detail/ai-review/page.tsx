@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
-  type KycReviewSummary,
-  type SupplementDetail,
+  type KycReviewSummaryResponse,
+  type Supplement,
   kyc as kycApi
 } from "@/lib/api";
 
@@ -36,8 +36,8 @@ function AiReviewView() {
   const kycId = Number(params.get("id"));
   const valid = Number.isFinite(kycId) && kycId > 0;
 
-  const [summary, setSummary] = useState<KycReviewSummary | null>(null);
-  const [supplements, setSupplements] = useState<SupplementDetail[]>([]);
+  const [summary, setSummary] = useState<KycReviewSummaryResponse | null>(null);
+  const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +46,7 @@ function AiReviewView() {
     setLoading(true);
     setError(null);
     Promise.all([
-      kycApi.reviewSummary(kycId).catch(() => null),
+      kycApi.aiReviewSummary(kycId).catch(() => null),
       kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
     ])
       .then(([s, sup]) => {
@@ -118,7 +118,7 @@ function AiReviewView() {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {(passItems.length > 0
               ? passItems.map((f) => ({
-                  code: f.findingType,
+                  code: f.findingType ?? "FINDING",
                   label: f.message ?? findingTypeLabel(f.findingType)
                 }))
               : loading

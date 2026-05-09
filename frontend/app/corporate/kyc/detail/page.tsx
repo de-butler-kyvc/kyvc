@@ -17,8 +17,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
   type KycDocument,
-  type KycStatus,
-  type SupplementDetail,
+  type KycReviewSummaryResponse,
+  type KycStatusResponse,
+  type Supplement,
   kyc as kycApi
 } from "@/lib/api";
 
@@ -35,27 +36,36 @@ function KycStatusView() {
   const kycId = Number(params.get("id"));
   const valid = Number.isFinite(kycId) && kycId > 0;
 
-  const [status, setStatus] = useState<KycStatus | null>(null);
+  const [status, setStatus] = useState<KycStatusResponse | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
-  const [supplements, setSupplements] = useState<SupplementDetail[]>([]);
+  const [aiReview, setAiReview] = useState<KycReviewSummaryResponse | null>(null);
+  const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!valid) return;
     setError(null);
+    let cancelled = false;
     Promise.all([
       kycApi.status(kycId),
       kycApi.documents(kycId),
+      kycApi.aiReviewSummary(kycId).catch(() => null),
       kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
     ])
-      .then(([s, d, sup]) => {
+      .then(([s, d, review, sup]) => {
+        if (cancelled) return;
         setStatus(s);
-        setDocuments(d);
+        setDocuments(d.filter((doc) => doc.uploadStatus !== "DELETED"));
+        setAiReview(review);
         setSupplements(sup?.supplements ?? []);
       })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [kycId, valid]);
 
   if (!valid) {
@@ -76,13 +86,10 @@ function KycStatusView() {
 
   const applicationNo = `KYC-${String(kycId).padStart(7, "0")}`;
   const isApproved =
-    status?.status === "APPROVED" ||
-    status?.status === "VC_ISSUED" ||
-    status?.kycStatus === "APPROVED" ||
-    status?.kycStatus === "VC_ISSUED";
-  const needsSupplement =
-    status?.status === "NEED_SUPPLEMENT" || status?.kycStatus === "NEED_SUPPLEMENT";
+    status?.kycStatus === "APPROVED" || status?.kycStatus === "VC_ISSUED";
+  const needsSupplement = status?.kycStatus === "NEED_SUPPLEMENT";
   const activeSupplement = supplements.find((s) => s.supplementStatus === "REQUESTED");
+  const vcIssued = status?.kycStatus === "VC_ISSUED";
 
   return (
     <PageShell
@@ -109,8 +116,9 @@ function KycStatusView() {
             <div className="form-card-title">진행 단계</div>
           </div>
           <StatusTimeline
-            status={status?.status ?? status?.kycStatus}
+            status={status?.kycStatus}
             submittedAt={status?.submittedAt}
+            reviewedAt={aiReview?.reviewedAt}
           />
         </div>
 
@@ -125,8 +133,8 @@ function KycStatusView() {
           <div className="kv-row">
             <div className="kv-key">현재 상태</div>
             <div className="kv-val">
-              <Badge variant={statusBadgeVariant(status?.status ?? status?.kycStatus)}>
-                {statusLabel(status?.status ?? status?.kycStatus)}
+              <Badge variant={statusBadgeVariant(status?.kycStatus)}>
+                {statusLabel(status?.kycStatus)}
               </Badge>
             </div>
           </div>
@@ -137,8 +145,8 @@ function KycStatusView() {
           <div className="kv-row">
             <div className="kv-key">AI 심사</div>
             <div className="kv-val">
-              {status?.aiReviewStatus ? (
-                <Badge variant="outline">{status.aiReviewStatus}</Badge>
+              {aiReview?.aiReviewStatus ? (
+                <Badge variant="outline">{aiReview.aiReviewStatus}</Badge>
               ) : (
                 <Badge variant="secondary">대기</Badge>
               )}
@@ -147,8 +155,8 @@ function KycStatusView() {
           <div className="kv-row">
             <div className="kv-key">VC 상태</div>
             <div className="kv-val">
-              {status?.vcStatus ? (
-                <Badge variant="success">{status.vcStatus}</Badge>
+              {vcIssued ? (
+                <Badge variant="success">발급 완료</Badge>
               ) : (
                 <Badge variant="secondary">미발급</Badge>
               )}

@@ -68,6 +68,7 @@ function isEnvelope<T>(data: unknown): data is Envelope<T> {
   );
 }
 
+/** HttpOnly 인증 쿠키를 크로스 오리진 요청에 포함하려면 반드시 true여야 합니다. */
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   validateStatus: () => true,
@@ -119,11 +120,12 @@ export async function api<T>(path: string, input: RequestInput = {}): Promise<T>
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────
+/** 로그인 본문(액세스·리프레시 토큰은 HttpOnly 쿠키로만 발급). */
 export type LoginResponse = {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  user: { userId: number; email: string; name?: string; userType?: string };
+  userId: number;
+  email: string;
+  userType: string;
+  roles: string[];
 };
 
 export type SignupResponse = {
@@ -131,6 +133,20 @@ export type SignupResponse = {
   email: string;
   userType?: string;
   userStatus?: string;
+};
+
+/** GET /api/common/session — 백엔드 SessionResponse */
+export type SessionResponse = {
+  authenticated: boolean;
+  userId?: number;
+  email?: string;
+  userName?: string;
+  userType?: string;
+  userStatus?: string;
+  roles?: string[];
+  corporateId?: number;
+  corporateName?: string;
+  corporateRegistered?: boolean;
 };
 
 export const auth = {
@@ -144,19 +160,11 @@ export const auth = {
       method: "POST",
       body: { email, password }
     }),
-  logout: (refreshToken: string) =>
+  logout: () =>
     api<{ loggedOut: boolean }>("/api/auth/logout", {
-      method: "POST",
-      body: { refreshToken }
+      method: "POST"
     }),
-  me: () =>
-    api<{
-      userId: number;
-      email: string;
-      name: string;
-      phone: string;
-      mfaEnabled: boolean;
-    }>("/api/user/me")
+  session: () => api<SessionResponse>("/api/common/session")
 };
 
 // ── Corporate ────────────────────────────────────────────────────────
@@ -167,12 +175,42 @@ export type CorporateProfile = {
   corporateName: string;
   businessRegistrationNo: string;
   corporateRegistrationNo?: string | null;
+  corporateTypeCode?: string | null;
+  establishedDate?: string | null;
+  corporatePhone?: string | null;
   representativeName: string;
   representativePhone?: string | null;
   representativeEmail?: string | null;
   address?: string | null;
+  website?: string | null;
   businessType?: string | null;
   corporateStatusCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** GET /api/user/dashboard — 백엔드 UserDashboardResponse */
+export type UserDashboardResponse = {
+  userId?: number;
+  corporateRegistered?: boolean;
+  corporateId?: number;
+  corporateName?: string;
+  activeKycId?: number;
+  activeKycStatus?: string;
+  needSupplementCount?: number;
+  notificationUnreadCount?: number;
+  credentialIssued?: boolean;
+};
+
+/** GET /api/corporate/kyc/applications, /current — KycApplicationResponse */
+export type KycApplicationResponse = {
+  kycId: number;
+  corporateId?: number;
+  applicantUserId?: number;
+  corporateTypeCode?: string;
+  kycStatus?: string;
+  originalDocumentStoreOption?: string;
+  submittedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -223,33 +261,7 @@ export type AgentListItem = {
 };
 
 export const corporate = {
-  dashboard: () =>
-    api<{
-      corporate?: {
-        corporateId?: number;
-        corporateName?: string;
-        businessNo?: string;
-      };
-      kycSummary?: {
-        total?: number;
-        inReview?: number;
-        supplement?: number;
-        approved?: number;
-      };
-      credentialSummary?: { issued?: number };
-      notifications?: Array<{
-        message: string;
-        createdAt: string;
-        severity?: string;
-      }>;
-      recentApplications?: Array<{
-        kycId: number;
-        applicationNo?: string;
-        corporateType?: string;
-        submittedAt?: string;
-        status?: string;
-      }>;
-    }>("/api/user/dashboard"),
+  dashboard: () => api<UserDashboardResponse>("/api/user/dashboard"),
   create: (body: CorporateBasicInfoBody) =>
     api<{ corporateId: number }>("/api/user/corporates", {
       method: "POST",
@@ -294,37 +306,22 @@ export const corporate = {
 };
 
 // ── KYC ──────────────────────────────────────────────────────────────
-export type KycListItem = {
+export type KycStatusResponse = {
   kycId: number;
-  applicationNo?: string;
-  corporateType?: string;
-  status: string;
-  submittedAt?: string;
-  completedAt?: string;
-};
-
-export type KycStatus = {
-  status: string;
   kycStatus?: string;
   corporateTypeCode?: string;
   originalDocumentStoreOption?: string;
   submittedAt?: string;
-  aiReviewStatus?: string;
-  vcStatus?: string;
-  nextAction?: string;
 };
 
 export type KycDocument = {
   documentId: number;
   kycId?: number;
-  documentType?: string;
   documentTypeCode?: string;
   fileName?: string;
   mimeType?: string;
   fileSize?: number;
-  fileHash?: string;
   documentHash?: string;
-  status?: string;
   uploadStatus?: string;
   uploadedAt?: string;
 };
@@ -339,26 +336,46 @@ export type RequiredDocument = {
   maxFileSizeMb?: number;
 };
 
-export type KycReviewFinding = {
-  findingType: string;
-  result: string;
-  message?: string;
-  confidenceScore?: number;
+export type KycMissingItem = {
+  code: string;
+  message: string;
+  target?: string;
 };
 
-export type KycReviewSummary = {
+export type KycApplicationSummaryResponse = {
   kycId: number;
   kycStatus?: string;
-  aiReviewStatus?: string;
-  aiReviewResult?: string;
-  confidenceScore?: number;
-  summaryMessage?: string;
-  findings?: KycReviewFinding[];
-  manualReviewRequired?: boolean;
-  reviewedAt?: string;
+  corporateId?: number;
+  corporateName?: string;
+  businessRegistrationNo?: string;
+  corporateRegistrationNo?: string;
+  representativeName?: string;
+  representativePhone?: string;
+  representativeEmail?: string;
+  agentName?: string;
+  agentPhone?: string;
+  agentEmail?: string;
+  agentAuthorityScope?: string;
+  corporateTypeCode?: string;
+  documentStoreOption?: string;
+  documents: KycDocument[];
+  requiredDocuments: RequiredDocument[];
+  submittable: boolean;
+  missingItems: KycMissingItem[];
+  createdAt?: string;
+  updatedAt?: string;
+  submittedAt?: string;
 };
 
-export type KycCompletion = {
+export type KycSubmitResponse = {
+  kycId: number;
+  kycStatus?: string;
+  submittedAt: string;
+  submittable?: boolean;
+  message?: string;
+};
+
+export type KycCompletionResponse = {
   kycId: number;
   corporateId?: number;
   corporateName?: string;
@@ -368,6 +385,25 @@ export type KycCompletion = {
   credentialId?: number;
   nextActionCode?: string;
   message?: string;
+};
+
+export type KycReviewFinding = {
+  findingType?: string;
+  result?: string;
+  message?: string;
+  confidenceScore?: number;
+};
+
+export type KycReviewSummaryResponse = {
+  kycId: number;
+  kycStatus?: string;
+  aiReviewStatus?: string;
+  aiReviewResult?: string;
+  confidenceScore?: number;
+  summaryMessage?: string;
+  findings?: KycReviewFinding[];
+  manualReviewRequired?: boolean;
+  reviewedAt?: string;
 };
 
 export type SupplementDocument = {
@@ -381,9 +417,9 @@ export type SupplementDocument = {
   uploadedAt?: string;
 };
 
-export type SupplementDetail = {
+export type Supplement = {
   supplementId: number;
-  kycId: number;
+  kycId?: number;
   supplementStatus?: string;
   supplementReasonCode?: string;
   title?: string;
@@ -406,142 +442,173 @@ export type SupplementSubmitResponse = {
   message?: string;
 };
 
+export type CredentialOfferResponse = {
+  offerId: number;
+  credentialId?: number;
+  qrToken?: string;
+  expiresAt?: string;
+  qrPayload?: Record<string, unknown>;
+};
+
+export type DocumentPreviewResponse = {
+  previewUrl: string;
+  expiresAt?: string;
+};
+
 export const kyc = {
-  list: (params?: { page?: number; size?: number; status?: string }) =>
-    api<{ items: KycListItem[]; page?: { totalElements: number } }>(
-      "/api/user/kyc/applications",
-      { query: params }
-    ),
+  /** 현재 진행 중인 KYC 신청 단건. 없으면 ApiError 반환. */
+  current: () =>
+    api<KycApplicationResponse>("/api/corporate/kyc/applications/current"),
   detail: (kycId: number) =>
-    api<{
-      application?: { kycId: number; status?: string; kycStatus?: string; corporateType?: string; corporateTypeCode?: string; submittedAt?: string };
-      kycId?: number;
-      kycStatus?: string;
-      corporateTypeCode?: string;
-      submittedAt?: string;
-      corporate?: CorporateProfile;
-      documents: KycDocument[];
-      statusTimeline?: Array<{ status: string; at: string }>;
-    }>(`/api/corporate/kyc/applications/${kycId}`),
+    api<KycApplicationResponse>(`/api/corporate/kyc/applications/${kycId}`),
   status: (kycId: number) =>
-    api<KycStatus>(`/api/corporate/kyc/applications/${kycId}/status`),
-  create: (body: {
-    corporateId?: number;
-    applicationType?: string;
-    corporateType?: string;
-    corporateTypeCode?: string;
-  }) =>
-    api<{ kycId: number; kycStatus?: string; status?: string; corporateTypeCode?: string }>("/api/corporate/kyc/applications", {
+    api<KycStatusResponse>(`/api/corporate/kyc/applications/${kycId}/status`),
+  create: (corporateTypeCode: string) =>
+    api<KycApplicationResponse>("/api/corporate/kyc/applications", {
       method: "POST",
-      body: { corporateTypeCode: body.corporateTypeCode ?? body.corporateType ?? "CORPORATION" }
+      body: { corporateTypeCode }
     }),
-  setCorporateType: (kycId: number, corporateType: string) =>
-    api<{ kycId: number; kycStatus?: string; corporateTypeCode?: string; requiredDocuments?: string[] }>(
+  setCorporateType: (kycId: number, corporateTypeCode: string) =>
+    api<KycApplicationResponse>(
       `/api/corporate/kyc/applications/${kycId}/corporate-type`,
-      { method: "PUT", body: { corporateTypeCode: corporateType } }
+      { method: "PUT", body: { corporateTypeCode } }
     ),
-  documentRequirements: (corporateType: string) =>
-    api<RequiredDocument[]>("/api/corporate/kyc/required-documents", {
-      query: { corporateTypeCode: corporateType }
-    }),
-  requiredDocumentsByKyc: (kycId: number) =>
-    api<RequiredDocument[]>(`/api/corporate/kyc/applications/${kycId}/required-documents`),
   setDocumentStoreOption: (kycId: number, storeOption: "STORE" | "DELETE") =>
-    api<{ kycId: number; kycStatus?: string; originalDocumentStoreOption?: string }>(
+    api<KycApplicationResponse>(
       `/api/corporate/kyc/applications/${kycId}/document-store-option`,
       { method: "PUT", body: { storeOption } }
     ),
-  submissionSummary: (kycId: number) =>
-    api<{
-      corporate?: CorporateProfile;
-      documents: KycDocument[];
-      missingItems: string[];
-      storeOption?: string;
-      canSubmit?: boolean;
-    }>(`/api/corporate/kyc/applications/${kycId}/summary`),
-  submit: (kycId: number) =>
-    api<{ kycId: number; status?: string; kycStatus?: string; submittedAt: string; submittable?: boolean; message?: string }>(
-      `/api/corporate/kyc/applications/${kycId}/submit`,
-      { method: "POST" }
+  documentRequirements: (corporateTypeCode: string) =>
+    api<RequiredDocument[]>("/api/corporate/kyc/required-documents", {
+      query: { corporateTypeCode }
+    }),
+  requiredDocumentsByKyc: (kycId: number) =>
+    api<RequiredDocument[]>(
+      `/api/corporate/kyc/applications/${kycId}/required-documents`
+    ),
+  summary: (kycId: number) =>
+    api<KycApplicationSummaryResponse>(
+      `/api/corporate/kyc/applications/${kycId}/summary`
     ),
   documents: (kycId: number) =>
     api<KycDocument[]>(`/api/corporate/kyc/applications/${kycId}/documents`),
-  uploadDocument: (kycId: number, file: File, documentType: string) => {
+  uploadDocument: (kycId: number, file: File, documentTypeCode: string) => {
     const fd = new FormData();
     fd.append("file", file);
-    fd.append("documentTypeCode", documentType);
+    fd.append("documentTypeCode", documentTypeCode);
     return api<KycDocument>(
       `/api/corporate/kyc/applications/${kycId}/documents`,
       { method: "POST", formData: fd }
     );
   },
   deleteDocument: (kycId: number, documentId: number) =>
-    api<{ deleted: boolean }>(
+    api<void>(
       `/api/corporate/kyc/applications/${kycId}/documents/${documentId}`,
       { method: "DELETE" }
     ),
-  uploadSupplement: (kycId: number, supplementId: number, file: File, documentTypeCode?: string) => {
+  documentPreview: (kycId: number, documentId: number) =>
+    api<DocumentPreviewResponse>(
+      `/api/corporate/kyc/applications/${kycId}/documents/${documentId}/preview`
+    ),
+  submit: (kycId: number) =>
+    api<KycSubmitResponse>(
+      `/api/corporate/kyc/applications/${kycId}/submit`,
+      { method: "POST" }
+    ),
+  completion: (kycId: number) =>
+    api<KycCompletionResponse>(
+      `/api/corporate/kyc/applications/${kycId}/completion`
+    ),
+  aiReviewSummary: (kycId: number) =>
+    api<KycReviewSummaryResponse>(
+      `/api/corporate/kyc/applications/${kycId}/ai-review-summary`
+    ),
+  supplements: (kycId: number) =>
+    api<{ supplements: Supplement[] }>(
+      `/api/corporate/kyc/applications/${kycId}/supplements`
+    ),
+  supplementDetail: (kycId: number, supplementId: number) =>
+    api<Supplement>(
+      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}`
+    ),
+  uploadSupplement: (
+    kycId: number,
+    supplementId: number,
+    file: File,
+    documentTypeCode: string
+  ) => {
     const fd = new FormData();
     fd.append("file", file);
-    if (documentTypeCode) fd.append("documentTypeCode", documentTypeCode);
+    fd.append("documentTypeCode", documentTypeCode);
     return api<SupplementDocument>(
       `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}/documents`,
       { method: "POST", formData: fd }
     );
   },
-  reviewSummary: (kycId: number) =>
-    api<KycReviewSummary>(`/api/corporate/kyc/applications/${kycId}/ai-review-summary`),
-  completion: (kycId: number) =>
-    api<KycCompletion>(`/api/corporate/kyc/applications/${kycId}/completion`),
-  current: () =>
-    api<{ kycId: number; kycStatus?: string; corporateTypeCode?: string; submittedAt?: string }>(
-      "/api/corporate/kyc/applications/current"
-    ),
-  supplements: (kycId: number) =>
-    api<{ supplements: SupplementDetail[] }>(
-      `/api/corporate/kyc/applications/${kycId}/supplements`
-    ),
-  supplement: (kycId: number, supplementId: number) =>
-    api<SupplementDetail>(
-      `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}`
-    ),
-  submitSupplement: (kycId: number, supplementId: number, submittedComment?: string) =>
+  submitSupplement: (
+    kycId: number,
+    supplementId: number,
+    submittedComment?: string
+  ) =>
     api<SupplementSubmitResponse>(
       `/api/corporate/kyc/applications/${kycId}/supplements/${supplementId}/submit`,
-      { method: "POST", body: { submittedComment } }
+      { method: "POST", body: { submittedComment: submittedComment ?? "" } }
+    ),
+  credentialOffer: (kycId: number) =>
+    api<CredentialOfferResponse>(
+      `/api/user/kyc/applications/${kycId}/credential-offer`
     )
 };
 
 // ── Credentials ──────────────────────────────────────────────────────
-export type CredentialItem = {
+export type CredentialSummary = {
   credentialId: number;
-  type: string;
-  status: string;
-  issuedAt: string;
-  expiresAt: string;
+  kycId?: number;
+  credentialTypeCode?: string;
+  credentialStatusCode?: string;
+  issuerDid?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  walletSaved?: boolean;
+  walletSavedAt?: string;
+};
+export type CredentialListResponse = {
+  credentials: CredentialSummary[];
+  totalCount: number;
 };
 export const credentials = {
-  list: (status?: string) =>
-    api<{ items: CredentialItem[] }>("/api/user/credentials", {
-      query: { status }
-    })
+  list: () => api<CredentialListResponse>("/api/user/credentials")
 };
 
 // ── Notifications ────────────────────────────────────────────────────
 export type Notification = {
   notificationId: number;
+  notificationType?: string;
   title: string;
   message: string;
-  readYn: boolean;
+  read: boolean;
   createdAt: string;
 };
+export type NotificationPageResponse = {
+  content: Notification[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
 export const notifications = {
-  list: (params?: { page?: number; size?: number; readYn?: boolean }) =>
-    api<{ items: Notification[] }>("/api/common/notifications", {
+  list: (params?: { page?: number; size?: number }) =>
+    api<NotificationPageResponse>("/api/common/notifications", {
       query: params
     }),
+  unreadCount: () =>
+    api<{ unreadCount: number }>("/api/common/notifications/unread-count"),
   markRead: (id: number) =>
     api<{ read: boolean }>(`/api/common/notifications/${id}/read`, {
+      method: "PATCH"
+    }),
+  markAllRead: () =>
+    api<{ updated: number }>("/api/common/notifications/read-all", {
       method: "PATCH"
     })
 };

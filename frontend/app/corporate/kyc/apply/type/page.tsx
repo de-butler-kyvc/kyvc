@@ -6,54 +6,44 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/design/icons";
 import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Button } from "@/components/ui/button";
-import { ApiError, corporate as corpApi, kyc as kycApi } from "@/lib/api";
+import { ApiError, kyc as kycApi } from "@/lib/api";
 import {
   CORPORATE_TYPE_OPTIONS,
   getCurrentKycId,
-  getStoredCorporateType
+  getStoredCorporateType,
+  setCurrentKycId,
+  setStoredCorporateType
 } from "@/lib/kyc-flow";
-
-type CorporateIdentity = {
-  corporateName: string;
-  businessNo: string;
-  representativeName: string;
-};
+import { useCorporateProfile } from "@/lib/session-context";
 
 export default function KycApplyTypePage() {
   const router = useRouter();
-  const [corp, setCorp] = useState<CorporateIdentity | null>(null);
+  const { profile } = useCorporateProfile();
   const [selected, setSelected] = useState<string>("CORPORATION");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setSelected(getStoredCorporateType());
-    corpApi
-      .me()
-      .then((res) => {
-        setCorp({
-          corporateName: res.corporateName ?? "",
-          businessNo: res.businessRegistrationNo ?? "",
-          representativeName: res.representativeName ?? ""
-        });
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
   }, []);
 
   const onNext = async () => {
+    if (!profile?.corporateId) {
+      setError("법인 기본정보를 먼저 등록하세요.");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
-      const kycId = getCurrentKycId();
+      setStoredCorporateType(selected);
+      const existingId = getCurrentKycId();
+      let kycId = existingId;
       if (!kycId) {
-        router.push("/corporate/kyc/apply");
-        return;
-      }
-      await kycApi.setCorporateType(kycId, selected);
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("kyvc.corporateType", selected);
+        const created = await kycApi.create(selected);
+        kycId = created.kycId;
+        setCurrentKycId(kycId);
+      } else {
+        await kycApi.setCorporateType(kycId, selected);
       }
       router.push("/corporate/kyc/apply/docs");
     } catch (err) {
@@ -80,9 +70,13 @@ export default function KycApplyTypePage() {
         <div className="form-card-header">
           <div className="form-card-title">기본 정보</div>
         </div>
-        <ConfirmRow label="법인명" value={corp?.corporateName} />
-        <ConfirmRow label="사업자등록번호" value={corp?.businessNo} mono />
-        <ConfirmRow label="대표자" value={corp?.representativeName} />
+        <ConfirmRow label="법인명" value={profile?.corporateName} />
+        <ConfirmRow
+          label="사업자등록번호"
+          value={profile?.businessRegistrationNo}
+          mono
+        />
+        <ConfirmRow label="대표자" value={profile?.representativeName} />
       </section>
 
       <section className="form-card">
@@ -139,7 +133,7 @@ function ConfirmRow({
   mono = false
 }: {
   label: string;
-  value?: string;
+  value?: string | null;
   mono?: boolean;
 }) {
   return (

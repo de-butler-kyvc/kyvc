@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
-  type SupplementDetail,
+  type Supplement,
   type SupplementDocument,
   kyc as kycApi
 } from "@/lib/api";
@@ -40,7 +40,7 @@ function SupplementUpload() {
   const valid =
     Number.isFinite(kycId) && kycId > 0 && Number.isFinite(supplementId) && supplementId > 0;
 
-  const [supplement, setSupplement] = useState<SupplementDetail | null>(null);
+  const [supplement, setSupplement] = useState<Supplement | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -48,7 +48,7 @@ function SupplementUpload() {
 
   const refresh = async () => {
     if (!valid) return;
-    const s = await kycApi.supplement(kycId, supplementId);
+    const s = await kycApi.supplementDetail(kycId, supplementId);
     setSupplement(s);
   };
 

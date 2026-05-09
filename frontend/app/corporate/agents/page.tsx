@@ -49,17 +49,13 @@ export default function CorporateAgentsPage() {
     corpApi
       .me()
       .then(async (res) => {
-        const corporateType =
-          (typeof window !== "undefined"
-            ? window.localStorage.getItem("kyvc.corporateType")
-            : null) ?? "";
         setCorp({
           corporateId: res.corporateId,
           corporateName: res.corporateName ?? "",
           businessNo: res.businessRegistrationNo ?? "",
           corporateNo: res.corporateRegistrationNo ?? "",
           representativeName: res.representativeName ?? "",
-          corporateType
+          corporateType: res.corporateTypeCode ?? ""
         });
 
         try {
