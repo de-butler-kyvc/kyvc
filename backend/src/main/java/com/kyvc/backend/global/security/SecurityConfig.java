@@ -63,6 +63,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/common/session",
+                                "/api/common/dids/*/institution",
                                 "/health",
                                 "/actuator/health",
                                 "/actuator/health/**",

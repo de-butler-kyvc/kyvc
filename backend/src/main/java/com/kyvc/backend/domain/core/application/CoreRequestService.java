@@ -44,6 +44,19 @@ public class CoreRequestService {
         );
     }
 
+    // VC 폐기 요청 생성
+    public CoreRequest createVcRevokeRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.VC_REVOKE,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                requestPayloadJson
+        );
+    }
+
     // VP 검증 요청 생성
     public CoreRequest createVpVerificationRequest(
             Long vpVerificationId, // VP 검증 ID
@@ -87,6 +100,15 @@ public class CoreRequestService {
     ) {
         CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
         coreRequest.markRequested(corePayloadSanitizer.sanitizePayload(responsePayloadJson));
+        return coreRequestRepository.save(coreRequest);
+    }
+
+    // 처리 중 상태 반영
+    public CoreRequest markProcessing(
+            String coreRequestId // Core 요청 ID
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markProcessing();
         return coreRequestRepository.save(coreRequest);
     }
 

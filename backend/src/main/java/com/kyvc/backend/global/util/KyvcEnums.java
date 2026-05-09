@@ -264,6 +264,13 @@ public final class KyvcEnums {
     }
 
     // 관리자 상태
+    // DID 기관 매핑 상태
+    public enum DidInstitutionStatus {
+        ACTIVE, // 사용 가능
+        DELETED, // 삭제
+        SUSPENDED // 정지
+    }
+
     public enum AdminUserStatus {
         ACTIVE, // 활성
         LOCKED, // 잠금
@@ -272,11 +279,7 @@ public final class KyvcEnums {
 
     // 관리자 역할 코드
     public enum RoleCode {
-        BACKEND_ADMIN, // 백엔드 관리자
-        CORE_ADMIN, // 코어 관리자
-        POLICY_MANAGER, // 정책 관리자
-        AUDITOR, // 감사자
-        VIEWER, // 조회자
+        OPERATOR, // 일반 운영자
         SYSTEM_ADMIN // 시스템 관리자
     }
 
@@ -443,6 +446,7 @@ public final class KyvcEnums {
     public enum CoreRequestType {
         AI_REVIEW, // AI 심사
         VC_ISSUE, // VC 발급
+        VC_REVOKE, // VC 폐기
         VC_STATUS_CHECK, // VC 상태 조회
         VP_VERIFY, // VP 검증
         XRPL_TX // XRPL 트랜잭션

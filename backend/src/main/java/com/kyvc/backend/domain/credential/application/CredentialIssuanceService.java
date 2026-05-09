@@ -125,7 +125,6 @@ public class CredentialIssuanceService {
                     "credential.issuance.completed",
                     "Credential issuance completed",
                     Map.of(
-                            "coreRequestId", coreRequest.getCoreRequestId(),
                             "credentialId", credential.getCredentialId(),
                             "kycId", kycApplication.getKycId()
                     )
@@ -138,7 +137,6 @@ public class CredentialIssuanceService {
                     "credential.issuance.failed",
                     exception.getMessage(),
                     Map.of(
-                            "coreRequestId", coreRequest.getCoreRequestId(),
                             "credentialId", credential.getCredentialId(),
                             "kycId", kycApplication.getKycId()
                     )
@@ -151,7 +149,6 @@ public class CredentialIssuanceService {
                     "credential.issuance.failed",
                     "VC 발급 Core 요청 처리 중 오류가 발생했습니다.",
                     Map.of(
-                            "coreRequestId", coreRequest.getCoreRequestId(),
                             "credentialId", credential.getCredentialId(),
                             "kycId", kycApplication.getKycId()
                     ),

@@ -102,6 +102,11 @@ public class CoreRequest {
         this.responsePayloadJson = responsePayloadJson;
     }
 
+    // 처리 중 상태 반영
+    public void markProcessing() {
+        this.coreRequestStatus = KyvcEnums.CoreRequestStatus.PROCESSING;
+    }
+
     // 성공 상태 반영
     public void markSuccess(
             String responsePayloadJson // 성공 Payload JSON
