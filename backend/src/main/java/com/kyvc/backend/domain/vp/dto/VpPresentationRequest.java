@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @param nonce VP 요청 nonce
  * @param challenge VP 요청 challenge
  * @param vpJwt VP JWT 원문
+ * @param format Presentation format
+ * @param presentation Presentation 원문 또는 객체
  * @param deviceId 모바일 기기 ID
  */
 @Schema(description = "VP 제출 요청")
@@ -24,6 +26,10 @@ public record VpPresentationRequest(
         String challenge, // VP 요청 challenge
         @Schema(description = "VP JWT 원문", example = "vp.jwt.value")
         String vpJwt, // VP JWT 원문
+        @Schema(description = "Presentation format", example = "vp+jwt")
+        String format, // Presentation format
+        @Schema(description = "Presentation 원문 또는 객체")
+        Object presentation, // Presentation 원문 또는 객체
         @Schema(description = "모바일 기기 ID", example = "device-001")
         String deviceId // 모바일 기기 ID
 ) {
@@ -32,8 +38,19 @@ public record VpPresentationRequest(
             Long credentialId, // 제출할 Credential ID
             String nonce, // VP 요청 nonce
             String challenge, // VP 요청 challenge
+            String vpJwt, // VP JWT 원문
+            String deviceId // 모바일 기기 ID
+    ) {
+        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, deviceId);
+    }
+
+    public VpPresentationRequest(
+            String requestId, // VP 요청 ID
+            Long credentialId, // 제출할 Credential ID
+            String nonce, // VP 요청 nonce
+            String challenge, // VP 요청 challenge
             String vpJwt // VP JWT 원문
     ) {
-        this(requestId, credentialId, nonce, challenge, vpJwt, null);
+        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null);
     }
 }

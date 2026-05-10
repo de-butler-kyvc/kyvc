@@ -78,6 +78,9 @@ public class StubCoreAdapter implements CoreAdapter {
                 LocalDateTime.now(),
                 "mock-" + request.coreRequestId(),
                 request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
+                "vc+jwt",
+                null,
+                "dev.vc.jwt." + request.credentialId(),
                 "mock-vc-hash-" + request.coreRequestId(),
                 "mock-tx-" + request.coreRequestId(),
                 "mock-status-" + request.coreRequestId(),
@@ -134,7 +137,8 @@ public class StubCoreAdapter implements CoreAdapter {
     @Override
     public CoreVpVerificationResponse requestVpVerification(
             CoreVpVerificationRequest request, // VP 검증 요청
-            String vpJwt // VP JWT 원문
+            String format, // Presentation format
+            Object presentation // Presentation 원문 또는 객체
     ) {
         return new CoreVpVerificationResponse(
                 request.coreRequestId(),

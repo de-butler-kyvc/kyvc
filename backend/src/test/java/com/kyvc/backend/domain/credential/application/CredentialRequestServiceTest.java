@@ -30,6 +30,8 @@ import com.kyvc.backend.global.util.KyvcEnums;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -42,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +69,9 @@ class CredentialRequestServiceTest {
     private CoreAdapter coreAdapter;
     @Mock
     private LogEventLogger logEventLogger;
+
+    @Captor
+    private ArgumentCaptor<Credential> credentialCaptor;
 
     private CredentialRequestService credentialRequestService;
     private CoreProperties coreProperties;
@@ -106,6 +112,9 @@ class CredentialRequestServiceTest {
                 LocalDateTime.now(),
                 "reissued-credential-external-id",
                 CoreMockSeedData.DEV_ISSUER_DID,
+                "vc+jwt",
+                null,
+                "dev.vc.jwt.11",
                 "vc-hash",
                 "tx-hash",
                 "status-id",
@@ -155,6 +164,87 @@ class CredentialRequestServiceTest {
                 .extracting(component -> component.getName())
                 .doesNotContain("coreRequestId");
         verify(coreAdapter).requestVcIssuance(any());
+    }
+
+    @Test
+    void requestReissue_savesVcJwtPayload_whenCoreReturnsStringCredential() {
+        Credential saved = executeReissueAndCaptureCredential(coreIssuanceResponse(
+                KyvcEnums.CredentialStatus.VALID.name(),
+                "vc+jwt",
+                null,
+                "dev.vc.jwt.11"
+        ));
+
+        assertThat(saved.getVcFormat()).isEqualTo("vc+jwt");
+        assertThat(saved.getVcJwt()).isEqualTo("dev.vc.jwt.11");
+        assertThat(saved.getVcPayloadJson()).isNull();
+        assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID);
+    }
+
+    @Test
+    void requestReissue_savesVcJsonPayload_whenCoreReturnsObjectCredential() {
+        String credentialPayloadJson = "{\"id\":\"vc-001\",\"type\":[\"VerifiableCredential\"]}";
+
+        Credential saved = executeReissueAndCaptureCredential(coreIssuanceResponse(
+                KyvcEnums.CredentialStatus.VALID.name(),
+                "kyvc-jsonld-vc-v1",
+                credentialPayloadJson,
+                null
+        ));
+
+        assertThat(saved.getVcFormat()).isEqualTo("kyvc-jsonld-vc-v1");
+        assertThat(saved.getVcJwt()).isNull();
+        assertThat(saved.getVcPayloadJson()).isEqualTo(credentialPayloadJson);
+        assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID);
+    }
+
+    @Test
+    void requestReissue_keepsExistingMetadata_whenCredentialPayloadIsMissing() {
+        LocalDateTime issuedAt = LocalDateTime.now().minusMinutes(1);
+        LocalDateTime expiresAt = LocalDateTime.now().plusYears(1);
+        Credential saved = executeReissueAndCaptureCredential(new CoreVcIssuanceResponse(
+                "core-request-id",
+                KyvcEnums.CredentialStatus.VALID.name(),
+                "issued",
+                LocalDateTime.now(),
+                "reissued-credential-external-id",
+                CoreMockSeedData.DEV_ISSUER_DID,
+                null,
+                null,
+                null,
+                "vc-hash",
+                "tx-hash",
+                "status-id",
+                issuedAt,
+                expiresAt
+        ));
+
+        assertThat(saved.getVcFormat()).isNull();
+        assertThat(saved.getVcJwt()).isNull();
+        assertThat(saved.getVcPayloadJson()).isNull();
+        assertThat(saved.getCredentialExternalId()).isEqualTo("reissued-credential-external-id");
+        assertThat(saved.getIssuerDid()).isEqualTo(CoreMockSeedData.DEV_ISSUER_DID);
+        assertThat(saved.getVcHash()).isEqualTo("vc-hash");
+        assertThat(saved.getXrplTxHash()).isEqualTo("tx-hash");
+        assertThat(saved.getCredentialStatusId()).isEqualTo("status-id");
+        assertThat(saved.getIssuedAt()).isEqualTo(issuedAt);
+        assertThat(saved.getExpiresAt()).isEqualTo(expiresAt);
+        assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID);
+    }
+
+    @Test
+    void requestReissue_doesNotSavePayload_whenCoreIssuanceFails() {
+        Credential saved = executeReissueAndCaptureCredential(coreIssuanceResponse(
+                KyvcEnums.CredentialStatus.FAILED.name(),
+                "vc+jwt",
+                "{\"id\":\"failed-vc\"}",
+                "dev.vc.jwt.failed"
+        ));
+
+        assertThat(saved.getVcFormat()).isNull();
+        assertThat(saved.getVcJwt()).isNull();
+        assertThat(saved.getVcPayloadJson()).isNull();
+        assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.FAILED);
     }
 
     @Test
@@ -259,6 +349,84 @@ class CredentialRequestServiceTest {
         ReflectionTestUtils.setField(corporate, "corporateId", 20L);
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
         when(credentialRepository.getById(credential.getCredentialId())).thenReturn(credential);
+    }
+
+    private Credential executeReissueAndCaptureCredential(
+            CoreVcIssuanceResponse coreResponse // Core VC 발급 응답
+    ) {
+        Credential sourceCredential = createCredential(10L, KyvcEnums.CredentialStatus.VALID);
+        KycApplication kycApplication = createKycApplication(30L, 20L);
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VC_ISSUE,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                sourceCredential.getCredentialId(),
+                null
+        );
+
+        mockBaseOwnership(sourceCredential);
+        when(credentialRequestRepository.existsInProgressByCredentialIdAndType(
+                10L,
+                KyvcEnums.CredentialRequestType.REISSUE
+        )).thenReturn(false);
+        when(credentialRequestRepository.save(any(CredentialRequest.class))).thenAnswer(invocation -> {
+            CredentialRequest request = invocation.getArgument(0);
+            if (request.getCredentialRequestId() == null) {
+                ReflectionTestUtils.setField(request, "credentialRequestId", 100L);
+            }
+            return request;
+        });
+        when(coreRequestService.createVcIssuanceRequest(eq(10L), isNull())).thenReturn(coreRequest);
+        when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreRequestService.markProcessing(coreRequest.getCoreRequestId())).thenReturn(coreRequest);
+        if (KyvcEnums.CredentialStatus.VALID.name().equals(coreResponse.status())) {
+            when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        } else {
+            when(coreRequestService.markFailed(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        }
+        when(kycApplicationRepository.findById(30L)).thenReturn(Optional.of(kycApplication));
+        when(coreAdapter.requestVcIssuance(any())).thenReturn(coreResponse);
+        when(credentialRepository.save(any(Credential.class))).thenAnswer(invocation -> {
+            Credential credential = invocation.getArgument(0);
+            if (credential.getCredentialId() == null) {
+                ReflectionTestUtils.setField(credential, "credentialId", 11L);
+            }
+            return credential;
+        });
+        when(credentialStatusHistoryRepository.save(any(CredentialStatusHistory.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        credentialRequestService.requestReissue(
+                userDetails(),
+                10L,
+                new CredentialReissueRequest("정보 갱신", "VC 재발급 요청")
+        );
+
+        verify(credentialRepository, atLeastOnce()).save(credentialCaptor.capture());
+        List<Credential> savedCredentials = credentialCaptor.getAllValues();
+        return savedCredentials.get(savedCredentials.size() - 1);
+    }
+
+    private CoreVcIssuanceResponse coreIssuanceResponse(
+            String status, // Core 응답 상태
+            String format, // VC format
+            String credentialPayloadJson, // VC JSON 원문
+            String credentialJwt // VC JWT 원문
+    ) {
+        return new CoreVcIssuanceResponse(
+                "core-request-id",
+                status,
+                "issued",
+                LocalDateTime.now(),
+                "reissued-credential-external-id",
+                CoreMockSeedData.DEV_ISSUER_DID,
+                format,
+                credentialPayloadJson,
+                credentialJwt,
+                "vc-hash",
+                "tx-hash",
+                "status-id",
+                LocalDateTime.now(),
+                LocalDateTime.now().plusYears(1)
+        );
     }
 
     private Credential createCredential(

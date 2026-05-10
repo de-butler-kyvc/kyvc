@@ -26,6 +26,11 @@ public class CorePayloadSanitizer {
     private static final Set<String> EXACT_SENSITIVE_FIELDS = Set.of(
             "vc",
             "vp",
+            "credential",
+            "credentialpayloadjson",
+            "vcpayloadjson",
+            "presentation",
+            "sdjwtkb",
             "verifiablecredential",
             "verifiablepresentation",
             "claims",
