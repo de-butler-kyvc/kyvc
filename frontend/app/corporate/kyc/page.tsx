@@ -26,23 +26,28 @@ const STATUS_VARIANT: Record<string, "secondary" | "default" | "outline" | "succ
 };
 
 export default function CorporateKycListPage() {
-  const [current, setCurrent] = useState<KycApplicationResponse | null>(null);
+  const [items, setItems] = useState<KycApplicationResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     kycApi
-      .current()
+      .list()
       .then((res) => {
         if (cancelled) return;
-        setCurrent(res);
+        const list = Array.isArray(res) ? res : res ? [res] : [];
+        const sorted = [...list].sort((a, b) => {
+          const ad = a.submittedAt ?? a.createdAt ?? "";
+          const bd = b.submittedAt ?? b.createdAt ?? "";
+          return bd.localeCompare(ad);
+        });
+        setItems(sorted);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
-          setEmpty(true);
+          setItems([]);
         } else {
           setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.");
         }
@@ -68,7 +73,7 @@ export default function CorporateKycListPage() {
           </CardContent>
         ) : error ? (
           <CardContent className="p-6 text-sm text-destructive">{error}</CardContent>
-        ) : empty || !current ? (
+        ) : items.length === 0 ? (
           <CardContent className="p-12 text-center text-sm text-muted-foreground">
             <p>진행 중인 KYC 신청이 없습니다.</p>
             <Button asChild className="mt-4">
@@ -88,25 +93,27 @@ export default function CorporateKycListPage() {
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-t">
-                  <td className="px-4 py-3 font-mono text-xs">
-                    KYC-{current.kycId}
-                  </td>
-                  <td className="px-4 py-3">{current.corporateTypeCode ?? "-"}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[current.kycStatus ?? ""] ?? "secondary"}>
-                      {current.kycStatus ?? "-"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    {(current.submittedAt ?? current.createdAt)?.slice(0, 10) ?? "-"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/corporate/kyc/detail?id=${current.kycId}`}>상세</Link>
-                    </Button>
-                  </td>
-                </tr>
+                {items.map((item) => (
+                  <tr key={item.kycId} className="border-t">
+                    <td className="px-4 py-3 font-mono text-xs">
+                      KYC-{item.kycId}
+                    </td>
+                    <td className="px-4 py-3">{item.corporateTypeCode ?? "-"}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={STATUS_VARIANT[item.kycStatus ?? ""] ?? "secondary"}>
+                        {item.kycStatus ?? "-"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(item.submittedAt ?? item.createdAt)?.slice(0, 10) ?? "-"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/corporate/kyc/detail?id=${item.kycId}`}>상세</Link>
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </CardContent>

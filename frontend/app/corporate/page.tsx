@@ -50,19 +50,21 @@ export default function CorporateDashboardPage() {
   const { profile } = useCorporateProfile();
   const corporateRegistered = dash?.corporateRegistered === true || !!profile?.corporateId;
 
-  const [activeKyc, setActiveKyc] = useState<KycApplicationResponse | null>(null);
+  const [kycList, setKycList] = useState<KycApplicationResponse[]>([]);
   useEffect(() => {
     if (dashLoading || !corporateRegistered) {
-      setActiveKyc(null);
+      setKycList([]);
       return;
     }
     let cancelled = false;
-    kycApi.current()
-      .then((k) => {
-        if (!cancelled) setActiveKyc(k);
+    kycApi.list()
+      .then((res) => {
+        if (cancelled) return;
+        const items = Array.isArray(res) ? res : res ? [res] : [];
+        setKycList(items);
       })
       .catch(() => {
-        if (!cancelled) setActiveKyc(null);
+        if (!cancelled) setKycList([]);
       });
     return () => {
       cancelled = true;
@@ -115,10 +117,26 @@ export default function CorporateDashboardPage() {
   const corporateName = dash?.corporateName ?? profile?.corporateName ?? null;
   const businessNo = profile?.businessRegistrationNo ?? null;
   const supplementCount = dash?.needSupplementCount ?? 0;
-  const activeKycId = activeKyc?.kycId ?? dash?.activeKycId ?? issueGuide?.latestKycId;
-  const activeKycStatus = activeKyc?.kycStatus ?? dash?.activeKycStatus ?? issueGuide?.kycStatus;
-  const inReviewCount = activeKycStatus && IN_REVIEW_STATUSES.has(activeKycStatus) ? 1 : 0;
-  const totalKycCount = activeKycId ? 1 : 0;
+  const sortedKycList = [...kycList].sort((a, b) => {
+    const ad = a.submittedAt ?? a.createdAt ?? "";
+    const bd = b.submittedAt ?? b.createdAt ?? "";
+    return bd.localeCompare(ad);
+  });
+  const latestKyc = sortedKycList[0] ?? null;
+  const activeKycId =
+    latestKyc?.kycId ?? dash?.activeKycId ?? issueGuide?.latestKycId;
+  const activeKycStatus =
+    latestKyc?.kycStatus ?? dash?.activeKycStatus ?? issueGuide?.kycStatus;
+  const inReviewCount =
+    sortedKycList.length > 0
+      ? sortedKycList.filter(
+          (k) => k.kycStatus && IN_REVIEW_STATUSES.has(k.kycStatus)
+        ).length
+      : activeKycStatus && IN_REVIEW_STATUSES.has(activeKycStatus)
+        ? 1
+        : 0;
+  const totalKycCount =
+    sortedKycList.length > 0 ? sortedKycList.length : activeKycId ? 1 : 0;
   const issuedCredentialCount =
     credentialCount > 0 || dash?.credentialIssued || issueGuide?.credentialIssued
       ? Math.max(credentialCount, 1)
@@ -203,7 +221,7 @@ export default function CorporateDashboardPage() {
       <div className="dash-grid-2">
         <div>
           <div className="section-head">
-            <h3 className="section-title">현재 KYC 신청</h3>
+            <h3 className="section-title">KYC 신청 목록</h3>
             <Link href="/corporate/kyc/apply" className="btn btn-primary btn-sm">
               <Icon.Plus size={14} />새 KYC 신청
             </Link>
@@ -219,31 +237,31 @@ export default function CorporateDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {!activeKycId ? (
+              {sortedKycList.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="empty-state">
                     진행 중인 KYC 신청이 없습니다.
                   </td>
                 </tr>
               ) : (
-                (() => {
-                  const status = statusBadge(activeKycStatus);
+                sortedKycList.map((item) => {
+                  const status = statusBadge(item.kycStatus);
                   return (
-                    <tr key={activeKycId}>
-                      <td className="mono">{`KYC-${activeKycId}`}</td>
-                      <td>{activeKyc?.corporateTypeCode ?? "-"}</td>
-                      <td>{formatDate(activeKyc?.submittedAt ?? activeKyc?.createdAt)}</td>
+                    <tr key={item.kycId}>
+                      <td className="mono">{`KYC-${item.kycId}`}</td>
+                      <td>{item.corporateTypeCode ?? "-"}</td>
+                      <td>{formatDate(item.submittedAt ?? item.createdAt)}</td>
                       <td>
                         <span className={`badge ${status.cls}`}>{status.label}</span>
                       </td>
                       <td>
-                        <Link href={`/corporate/kyc/detail?id=${activeKycId}`} className="link">
+                        <Link href={`/corporate/kyc/detail?id=${item.kycId}`} className="link">
                           상세 보기
                         </Link>
                       </td>
                     </tr>
                   );
-                })()
+                })
               )}
             </tbody>
           </table>

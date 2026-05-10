@@ -13,6 +13,7 @@ import {
   SessionGateSplash,
   useGuestSessionGate
 } from "@/lib/session-gate";
+import { useSession } from "@/lib/session-context";
 
 type LoginForm = { email: string; password: string };
 
@@ -20,6 +21,7 @@ function LoginPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const checkingSession = useGuestSessionGate();
+  const { refreshSession, refreshProfile } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [keepLogin, setKeepLogin] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -40,6 +42,10 @@ function LoginPageInner() {
     setError(null);
     try {
       await auth.login(email, password);
+      const s = await refreshSession();
+      if (s?.authenticated && s.corporateRegistered) {
+        await refreshProfile();
+      }
       router.replace(AUTHENTICATED_HOME);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "로그인에 실패했습니다.");

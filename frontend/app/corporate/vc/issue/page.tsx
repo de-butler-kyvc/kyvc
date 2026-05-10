@@ -54,7 +54,11 @@ export default function CorporateVcIssuePage() {
     setMessage(null);
     setIssuing(true);
     try {
-      await kycApi.credentialOffer(kycId);
+      const res = await kycApi.issueCredential(kycId);
+      if (res?.failureReason) {
+        setError(`VC 발급에 실패했습니다. (${res.failureReason})`);
+        return;
+      }
       setMessage("VC 발급 요청이 완료되었습니다.");
       router.push("/corporate/vc");
     } catch (err) {
