@@ -9,7 +9,7 @@ import java.util.Map;
 // JSON 로그 메시지 생성 유틸
 public final class LogMessageBuilder {
 
-    private static final String SERVICE_NAME = "backend";
+    private static final String SERVICE_NAME = "backend-admin";
     private static final String REQUEST_ID_KEY = "requestId";
 
     private final Map<String, Object> fields = new LinkedHashMap<>(); // JSON 필드 순서 보존

@@ -34,6 +34,9 @@ public class AdminRoleRepositoryImpl implements AdminRoleRepository {
 
     @Override
     public Optional<AdminRole> findById(Long roleId) {
+        if (roleId == null) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(entityManager().find(AdminRole.class, roleId));
     }
 

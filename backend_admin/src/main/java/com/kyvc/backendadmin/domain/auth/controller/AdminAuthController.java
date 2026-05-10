@@ -108,7 +108,7 @@ public class AdminAuthController {
      * @return 새 Access Token과 관리자 세션 정보를 담은 공통 응답
      */
     @Operation(summary = "Access Token 재발급", description = "Refresh Token의 JWT와 서버 저장 상태를 검증한 뒤 새 Access Token을 발급합니다.")
-    @PostMapping("/auth/token/refresh")
+    @PostMapping({"/auth/refresh", "/auth/token/refresh"})
     public ResponseEntity<CommonResponse<AdminLoginResponse>> refresh(
             @RequestBody(required = false) Map<String, String> body,
             HttpServletRequest request
@@ -209,7 +209,7 @@ public class AdminAuthController {
      * @return 현재 관리자 정보, 권한 목록과 읽지 않은 알림 수를 담은 공통 응답
      */
     @Operation(summary = "내 정보 조회", description = "현재 인증된 관리자 정보와 권한 목록을 조회합니다.")
-    @GetMapping("/me")
+    @GetMapping({"/auth/me", "/me"})
     public CommonResponse<AdminSessionResponse> me() {
         return CommonResponseFactory.success(adminAuthService.me());
     }
@@ -222,7 +222,7 @@ public class AdminAuthController {
      * @return 비밀번호 변경 처리 결과를 담은 성공 응답
      */
     @Operation(summary = "내 비밀번호 변경", description = "현재 비밀번호를 검증한 뒤 새 비밀번호를 BCrypt로 저장하고 기존 Refresh Token을 폐기합니다.")
-    @PatchMapping("/me/password")
+    @PatchMapping({"/auth/change-password", "/me/password"})
     public CommonResponse<Void> changePassword(@Valid @RequestBody AdminPasswordChangeRequest request) {
         adminPasswordService.changePassword(request);
         return CommonResponseFactory.successWithoutData();

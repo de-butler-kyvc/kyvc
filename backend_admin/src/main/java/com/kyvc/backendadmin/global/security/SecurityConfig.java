@@ -45,7 +45,8 @@ public class SecurityConfig {
     private static final String BACKEND_ADMIN_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.BACKEND_ADMIN.name();
     private static final String SYSTEM_ADMIN_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.SYSTEM_ADMIN.name();
     private static final Set<String> BACKEND_ADMIN_ACTION_ROLES = Set.of(
-            BACKEND_ADMIN_ROLE
+            BACKEND_ADMIN_ROLE,
+            SYSTEM_ADMIN_ROLE
     );
     private static final Set<String> ADMIN_COMMON_ROLES = Set.of(
             BACKEND_ADMIN_ROLE,
@@ -84,11 +85,22 @@ public class SecurityConfig {
                                 AdminSecurityPatterns.PUBLIC_GET_PATTERNS
                         ).permitAll()
                         .requestMatchers(
+                                AdminSecurityPatterns.FORBIDDEN_PATTERNS
+                        ).denyAll()
+                        .requestMatchers(
                                 AdminSecurityPatterns.SYSTEM_ADMIN_ONLY_PATTERNS
                         ).access(adminRoleAuthorizationManager(SYSTEM_ADMIN_ROLES))
                         .requestMatchers(
                                 HttpMethod.POST,
-                                AdminSecurityPatterns.BACKEND_ADMIN_ONLY_PATTERNS
+                                AdminSecurityPatterns.SYSTEM_ADMIN_ONLY_POST_PATTERNS
+                        ).access(adminRoleAuthorizationManager(SYSTEM_ADMIN_ROLES))
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                AdminSecurityPatterns.ADMIN_WORK_GET_PATTERNS
+                        ).access(adminRoleAuthorizationManager(BACKEND_ADMIN_ACTION_ROLES))
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                AdminSecurityPatterns.ADMIN_WORK_POST_PATTERNS
                         ).access(adminRoleAuthorizationManager(BACKEND_ADMIN_ACTION_ROLES))
                         .requestMatchers(
                                 AdminSecurityPatterns.ADMIN_COMMON_PATTERNS

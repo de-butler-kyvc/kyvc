@@ -12,8 +12,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AdminKycAccessChecker {
 
-    private static final String SCOPE_NOT_CONFIGURED = "KYC_SCOPE_COLUMNS_NOT_CONFIGURED";
-
     private final AuditLogWriter auditLogWriter;
 
     public void validateActionAccess(Long kycId, String actionType) {
@@ -22,8 +20,7 @@ public class AdminKycAccessChecker {
             return;
         }
         if (SecurityUtil.hasRole(KyvcEnums.RoleCode.BACKEND_ADMIN.name())) {
-            writeFailureAudit(adminId, kycId, actionType, SCOPE_NOT_CONFIGURED);
-            throw new ApiException(ErrorCode.FORBIDDEN, "KYC 처리 범위 컬럼이 구성되지 않았습니다.");
+            return;
         }
         writeFailureAudit(adminId, kycId, actionType, "ROLE_NOT_ALLOWED");
         throw new ApiException(ErrorCode.FORBIDDEN);
