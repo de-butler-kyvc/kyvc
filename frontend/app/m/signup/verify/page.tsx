@@ -152,7 +152,7 @@ export default function MobileSignupVerifyPage() {
 
   if (bootstrapping) {
     return (
-      <section className="view wash">
+      <section className="view verify-view">
         <MTopBar title="이메일 인증" back="/m/signup" />
         <div className="m-loading">이메일 인증 준비 중…</div>
       </section>
@@ -160,21 +160,15 @@ export default function MobileSignupVerifyPage() {
   }
 
   return (
-    <section className="view wash">
+    <section className="view verify-view">
       <MTopBar title="이메일 인증" back="/m/signup" />
-      <div className="content center scroll">
+      <div className="content center scroll verify-content">
         <div className="verify-icon">
           <MIcon.mail />
         </div>
-        <h1 className="headline m-auth-title">
-          이메일을
-          <br />
-          확인해 주세요
-        </h1>
+        <h1 className="headline m-auth-title">이메일을 확인해 주세요</h1>
         <p className="subcopy">
-          {(maskedTarget || email) + "로"}
-          <br />
-          6자리 인증 코드를 발송했습니다.
+          {(maskedTarget || email) + "로 6자리 인증 코드를 발송했습니다."}
         </p>
 
         <div className="m-otp-row">
@@ -213,7 +207,7 @@ export default function MobileSignupVerifyPage() {
           {resending ? "재전송 중..." : "인증 코드 재전송"}
         </button>
       </div>
-      <div className="bottom-action">
+      <div className="bottom-action verify-bottom-action">
         <button
           type="button"
           className="primary"

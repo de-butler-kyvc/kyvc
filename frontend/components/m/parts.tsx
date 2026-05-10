@@ -87,11 +87,11 @@ export function MBottomNav({ active }: BottomNavProps) {
         <MIcon.qr />
       </Link>
       <Link
-        href="/m/notifications"
-        className={`nav-btn${active === "notifications" ? " active" : ""}`}
+        href="/m/transactions"
+        className={`nav-btn${active === "transactions" ? " active" : ""}`}
       >
-        <MIcon.bell />
-        <span>알림</span>
+        <MIcon.history />
+        <span>활동</span>
       </Link>
     </nav>
   );
