@@ -529,6 +529,14 @@ export type CredentialOfferResponse = {
   qrPayload?: Record<string, unknown>;
 };
 
+export type CredentialIssueResponse = {
+  credentialId: number;
+  status?: string;
+  txStatus?: string;
+  issuedAt?: string;
+  failureReason?: string;
+};
+
 export type DocumentPreviewResponse = {
   previewUrl: string;
   expiresAt?: string;
@@ -642,6 +650,11 @@ export const kyc = {
   credentialOffer: (kycId: number) =>
     api<CredentialOfferResponse>(
       `/api/user/kyc/applications/${kycId}/credential-offer`,
+    ),
+  issueCredential: (kycId: number) =>
+    api<CredentialIssueResponse>(
+      `/api/user/kyc/applications/${kycId}/credentials`,
+      { method: "POST" },
     ),
 };
 
