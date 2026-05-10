@@ -48,7 +48,8 @@ return (
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-600">이메일</label>
               <input
-                type="email"
+                type="text"
+                inputMode="email"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(null); }}
                 placeholder="admin@kyvc.com"

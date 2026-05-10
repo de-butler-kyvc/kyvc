@@ -39,7 +39,7 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
     setLoading(true);
     setError(null);
     try {
-      await retryAiReview(id, { reason, priority });
+      await retryAiReview(id, { reason: `[${priority}] ${reason}` });
       router.push(`/kyc/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "재심사 요청 중 오류가 발생했습니다.");

@@ -53,18 +53,28 @@ export interface PasswordResetConfirmBody {
 }
 
 export interface MfaChallengeRequest {
-  mfaToken: string;
+  channel?: string;
+  purpose?: string;
+}
+
+export interface MfaChallengeResponse {
+  challengeId?: string | number;
+  id?: string | number;
+  expiresIn?: number;
+  expiresAt?: string;
+  channel?: string;
 }
 
 export interface MfaVerifyRequest {
-  mfaToken: string;
-  code: string;
+  challengeId: string;
+  verificationCode: string;
 }
 
 export interface MfaVerifyResponse {
-  accessToken: string;
-  refreshToken?: string;
+  mfaToken?: string;
+  token?: string;
   expiresIn?: number;
+  expiresAt?: string;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -179,22 +189,24 @@ export async function confirmPasswordReset(body: PasswordResetConfirmBody): Prom
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
 
-/** POST /api/admin/auth/mfa/challenge — OTP 발송 요청 */
-export async function requestMfaChallenge(body: MfaChallengeRequest): Promise<void> {
+/** POST /api/admin/auth/mfa/challenge — OTP 발송 요청 → challengeId 반환 */
+export async function requestMfaChallenge(body: MfaChallengeRequest): Promise<MfaChallengeResponse> {
   const response = await fetch(`${AUTH_BASE}/mfa/challenge`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: getAuthHeaders(),
     credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<MfaChallengeResponse>;
+  return json.data;
 }
 
-/** POST /api/admin/auth/mfa/verify — OTP 검증 및 최종 토큰 발급 */
+/** POST /api/admin/auth/mfa/verify — OTP 검증 → mfaToken 발급 */
 export async function verifyMfa(body: MfaVerifyRequest): Promise<MfaVerifyResponse> {
   const response = await fetch(`${AUTH_BASE}/mfa/verify`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: getAuthHeaders(),
     credentials: "include",
     body: JSON.stringify(body),
   });

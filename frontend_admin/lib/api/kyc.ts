@@ -7,19 +7,28 @@ const KYC_BASE = `${API_BASE}/api/admin/backend/kyc/applications`;
 // ── 상태/채널 코드 매핑 ──────────────────────────────────────
 
 const STATUS_KO_TO_API: Record<string, string> = {
-  수동심사필요: "NEEDS_MANUAL_REVIEW",
-  보완필요: "NEEDS_SUPPLEMENT",
-  심사중: "REVIEWING",
-  정상: "NORMAL",
-  불충족: "UNSATISFACTORY",
+  수동심사필요: "MANUAL_REVIEW",
+  보완필요: "NEED_SUPPLEMENT",
+  심사중: "AI_REVIEWING",
+  정상: "APPROVED",
+  불충족: "REJECTED",
 };
 
 const STATUS_API_TO_KO: Record<string, KycStatus> = {
   NEEDS_MANUAL_REVIEW: "수동심사필요",
+  NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_REVIEW: "수동심사필요",
   NEEDS_SUPPLEMENT: "보완필요",
+  NEED_SUPPLEMENT: "보완필요",
+  SUPPLEMENT_REQUESTED: "보완필요",
   REVIEWING: "심사중",
+  AI_REVIEWING: "심사중",
+  SUBMITTED: "심사중",
+  DRAFT: "심사중",
   NORMAL: "정상",
+  APPROVED: "정상",
   UNSATISFACTORY: "불충족",
+  REJECTED: "불충족",
   수동심사필요: "수동심사필요",
   보완필요: "보완필요",
   심사중: "심사중",
@@ -29,9 +38,17 @@ const STATUS_API_TO_KO: Record<string, KycStatus> = {
 
 const AI_JUDGMENT_KO: Record<string, string> = {
   NORMAL: "정상",
+  PASS: "정상",
+  QUEUED: "심사중",
+  PROCESSING: "심사중",
+  LOW_CONFIDENCE: "수동심사필요",
   NEEDS_SUPPLEMENT: "보완필요",
+  NEED_SUPPLEMENT: "보완필요",
   UNSATISFACTORY: "불충족",
+  FAIL: "불충족",
+  FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
+  NEED_MANUAL_REVIEW: "수동심사필요",
 };
 
 const CHANNEL_KO_TO_API: Record<string, string> = {
@@ -49,14 +66,25 @@ const CHANNEL_API_TO_KO: Record<string, KycChannel> = {
 // ── KYC 신청 관련 API 타입 ────────────────────────────────────
 
 interface BackendKycItem {
-  applicationId: string;
+  kycId?: string | number;
+  applicationId?: string | number;
+  id?: string | number;
+  corporateName?: string;
   corporationName?: string;
   businessRegistrationNumber?: string;
+  businessRegistrationNo?: string;
+  corporateTypeCode?: string;
   corporationType?: string;
   applicationDate?: string;
+  submittedAt?: string;
   channel?: string;
-  status: string;
+  kycStatus?: string;
+  status?: string;
   aiJudgment?: string;
+  aiReviewResult?: string;
+  aiReviewStatus?: string;
+  aiReviewStatusCode?: string;
+  aiReviewResultCode?: string;
   reviewerName?: string;
 }
 
@@ -68,13 +96,24 @@ export interface KycDocument {
 }
 
 export interface BackendKycDetail {
-  applicationId: string;
+  kycId?: string | number;
+  applicationId?: string | number;
+  id?: string | number;
+  corporateName?: string;
   corporationName?: string;
   businessRegistrationNumber?: string;
+  businessRegistrationNo?: string;
   applicationDate?: string;
+  submittedAt?: string;
   channel?: string;
-  status: string;
+  kycStatus?: string;
+  status?: string;
   aiJudgment?: string;
+  aiReviewResult?: string;
+  aiReviewStatus?: string;
+  aiReviewResultCode?: string;
+  aiConfidenceScore?: number;
+  aiReviewSummary?: string;
   reviewerName?: string;
   documents?: KycDocument[];
   recentHistories?: Array<{
@@ -85,9 +124,12 @@ export interface BackendKycDetail {
 }
 
 export interface BackendKycCorporate {
+  corporateName?: string;
   corporationName?: string;
   businessRegistrationNumber?: string;
+  businessRegistrationNo?: string;
   corporateRegistrationNumber?: string;
+  corporateType?: string;
   corporationType?: string;
   representativeName?: string;
   establishedDate?: string;
@@ -105,7 +147,7 @@ function fmtDate(iso?: string) {
   return iso.slice(0, 10).replaceAll("-", ".");
 }
 
-type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };
+type PageLike<T> = { content?: T[]; items?: T[]; list?: T[]; documents?: T[]; mismatches?: T[]; beneficialOwners?: T[] };
 
 function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
   if (Array.isArray(data)) return data;
@@ -114,6 +156,9 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
   if (Array.isArray(o.content)) return o.content;
   if (Array.isArray(o.items)) return o.items;
   if (Array.isArray(o.list)) return o.list;
+  if (Array.isArray(o.documents)) return o.documents;
+  if (Array.isArray(o.mismatches)) return o.mismatches;
+  if (Array.isArray(o.beneficialOwners)) return o.beneficialOwners;
   return [];
 }
 
@@ -130,6 +175,12 @@ function getAuthHeaders() {
     "Content-Type": "application/json",
   };
   if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function getMfaAuthHeaders(mfaToken?: string) {
+  const headers = getAuthHeaders();
+  if (mfaToken) headers["X-MFA-Session-Token"] = mfaToken;
   return headers;
 }
 
@@ -153,13 +204,14 @@ export async function getKycList(filters?: {
   channel?: string;
 }): Promise<KycItem[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
   if (filters?.status && filters.status !== "전체 상태") {
     params.set("status", STATUS_KO_TO_API[filters.status] ?? filters.status);
   }
   if (filters?.channel && filters.channel !== "전체 채널") {
     params.set("channel", CHANNEL_KO_TO_API[filters.channel] ?? filters.channel);
   }
+  params.set("size", "50");
 
   const url = params.toString() ? `${KYC_BASE}?${params}` : KYC_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
@@ -169,17 +221,22 @@ export async function getKycList(filters?: {
     BackendKycItem[] | PageLike<BackendKycItem>
   >;
 
-  return unwrapListData(json.data).map((row) => ({
-    id: row.applicationId,
-    corp: row.corporationName ?? "-",
-    biz: row.businessRegistrationNumber ?? "-",
-    type: row.corporationType ?? "-",
-    date: fmtDt(row.applicationDate),
-    channel: (CHANNEL_API_TO_KO[row.channel ?? ""] ?? row.channel ?? "-") as KycChannel,
-    status: (STATUS_API_TO_KO[row.status] ?? row.status) as KycStatus,
-    ai: AI_JUDGMENT_KO[row.aiJudgment ?? ""] ?? row.aiJudgment ?? "-",
-    reviewer: row.reviewerName ?? "-",
-  }));
+  const rows = unwrapListData(json.data);
+  return rows.map((row) => {
+    const statusCode = row.kycStatus ?? row.status ?? "";
+    const aiCode = row.aiJudgment ?? row.aiReviewResult ?? row.aiReviewResultCode ?? row.aiReviewStatus ?? row.aiReviewStatusCode ?? "";
+    return {
+      id: String(row.kycId ?? row.applicationId ?? row.id ?? ""),
+      corp: row.corporateName ?? row.corporationName ?? "-",
+      biz: row.businessRegistrationNumber ?? row.businessRegistrationNo ?? "-",
+      type: row.corporationType ?? row.corporateTypeCode ?? "-",
+      date: fmtDt(row.applicationDate ?? row.submittedAt),
+      channel: (CHANNEL_API_TO_KO[row.channel ?? ""] ?? row.channel ?? "-") as KycChannel,
+      status: (STATUS_API_TO_KO[statusCode] ?? statusCode) as KycStatus,
+      ai: AI_JUDGMENT_KO[aiCode] ?? aiCode ?? "-",
+      reviewer: row.reviewerName ?? "-",
+    };
+  });
 }
 
 /** GET /api/admin/backend/kyc/applications/{kycId} — KYC 신청 상세 조회 */
@@ -245,10 +302,12 @@ export async function getDocumentRequirements(filters?: {
 export interface KycSubmittedDocument {
   documentId: string;
   documentType?: string;
+  documentTypeName?: string;
   documentName: string;
   fileName: string;
-  fileSize?: string;
+  fileSize?: string | number;
   uploadedAt?: string;
+  submittedAt?: string;
   status?: string;
   hashVerified?: boolean;
 }
@@ -267,7 +326,12 @@ export async function getKycDocuments(kycId: string): Promise<KycSubmittedDocume
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<KycSubmittedDocument[] | PageLike<KycSubmittedDocument>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map((doc) => ({
+    ...doc,
+    documentId: String(doc.documentId),
+    documentName: doc.documentName ?? doc.documentTypeName ?? doc.documentType ?? "-",
+    uploadedAt: doc.uploadedAt ?? doc.submittedAt,
+  }));
 }
 
 /** GET /api/admin/backend/kyc/applications/{kycId}/documents/{documentId}/preview */
@@ -292,17 +356,17 @@ export async function getKycDocumentPreview(
 /** POST /api/admin/backend/kyc/applications/{kycId}/credentials/issue */
 export async function issueKycCredential(
   kycId: string,
-  data?: { comment?: string }
+  data: { mfaToken: string; comment?: string }
 ): Promise<{ credentialId: string }> {
   const response = await fetch(`${KYC_BASE}/${kycId}/credentials/issue`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: getMfaAuthHeaders(data.mfaToken),
     credentials: "include",
-    body: JSON.stringify(data ?? {}),
+    body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<{ credentialId: string }>;
-  return json.data;
+  const json = (await response.json()) as CommonResponse<{ credentialId: string | number }>;
+  return { credentialId: String(json.data.credentialId) };
 }
 
 export { fmtDt, fmtDate };
@@ -358,34 +422,28 @@ export async function getKycSupplements(kycId: string): Promise<SupplementReques
 
 export async function approveKycManualReview(
   kycId: string,
-  data: { reviewComment: string }
+  data: { mfaToken: string; comment?: string }
 ): Promise<void> {
   const response = await fetch(`${KYC_BASE}/${kycId}/manual-review/approve`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: getMfaAuthHeaders(data.mfaToken),
     credentials: "include",
     body: JSON.stringify(data),
   });
-
-  if (!response.ok) {
-    throw new Error(await errorMessageFromResponse(response));
-  }
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
 
 export async function rejectKycManualReview(
   kycId: string,
-  data: { rejectReason: string }
+  data: { mfaToken: string; rejectReasonCode: string; comment: string }
 ): Promise<void> {
   const response = await fetch(`${KYC_BASE}/${kycId}/manual-review/reject`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: getMfaAuthHeaders(data.mfaToken),
     credentials: "include",
     body: JSON.stringify(data),
   });
-
-  if (!response.ok) {
-    throw new Error(await errorMessageFromResponse(response));
-  }
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
 
 // ────────────────────────────────────────────────────────────
@@ -393,12 +451,14 @@ export async function rejectKycManualReview(
 // ────────────────────────────────────────────────────────────
 
 export interface AiReviewResult {
-  reviewId?: string | number;
-  overallJudgment: string;   // "정상" | "보완필요" | "불충족" | "수동심사필요" 또는 영문 코드
-  confidenceScore: number;   // 0~100
+  status?: string;
+  overallJudgment: string;
+  confidenceScore: number;
   modelVersion?: string;
   reviewedAt?: string;
   summaryReason?: string;
+  manualReviewReason?: string;
+  detailJson?: string;
 }
 
 export interface AiMismatch {
@@ -406,17 +466,33 @@ export interface AiMismatch {
   extractedValue?: string;
   confidenceScore?: number;
   judgment: string;          // "일치" | "불일치" | "검토 필요" 또는 영문 코드
+  mismatchTypeCode?: string;
+  mismatchTypeName?: string;
+  sourceValue?: string;
+  targetValue?: string;
+  matchedYn?: string;
+  reason?: string;
 }
 
 export interface BeneficialOwner {
   ownerName: string;
+  ownershipRatio?: number;
   shareRatio?: number;
+  beneficialOwnerYn?: string;
+  controlTypeCode?: string;
+  judgementReason?: string;
   judgment?: string;
 }
 
 export interface AgentAuthority {
   agentName: string;
+  authorityScope?: string;
   authorityType?: string;
+  signatureVerifiedYn?: string;
+  sealVerifiedYn?: string;
+  authorityValidYn?: string;
+  confidenceScore?: number;
+  judgementReason?: string;
   validFrom?: string;
   validTo?: string;
   judgment?: string;
@@ -443,8 +519,18 @@ export async function getAiReview(kycId: string): Promise<AiReviewResult> {
     credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<AiReviewResult>;
-  return json.data;
+  const json = (await response.json()) as CommonResponse<Record<string, unknown>>;
+  const d = json.data ?? {};
+  return {
+    status: (d.status ?? d.aiReviewStatusCode) as string | undefined,
+    overallJudgment: (d.result ?? d.overallJudgment ?? d.aiReviewResultCode ?? "") as string,
+    confidenceScore: (d.confidence ?? d.confidenceScore ?? d.aiConfidenceScore ?? 0) as number,
+    summaryReason: (d.summary ?? d.summaryReason ?? d.aiReviewSummary) as string | undefined,
+    manualReviewReason: d.manualReviewReason as string | undefined,
+    detailJson: (d.detailJson ?? d.aiReviewDetailJson) as string | undefined,
+    modelVersion: d.modelVersion as string | undefined,
+    reviewedAt: (d.reviewedAt ?? d.updatedAt) as string | undefined,
+  };
 }
 
 /** GET /kyc/applications/{kycId}/ai-review/mismatches — AI 불일치 항목 조회 */
@@ -456,7 +542,12 @@ export async function getAiReviewMismatches(kycId: string): Promise<AiMismatch[]
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiMismatch[] | PageLike<AiMismatch>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map((item) => ({
+    ...item,
+    fieldName: item.fieldName ?? item.mismatchTypeName ?? item.mismatchTypeCode ?? "-",
+    extractedValue: item.extractedValue ?? item.sourceValue ?? item.targetValue,
+    judgment: item.judgment ?? (item.matchedYn === "Y" ? "MATCH" : "MISMATCH"),
+  }));
 }
 
 /** GET /kyc/applications/{kycId}/ai-review/beneficial-owners — 실제소유자 조회 */
@@ -468,7 +559,11 @@ export async function getAiReviewBeneficialOwners(kycId: string): Promise<Benefi
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<BeneficialOwner[] | PageLike<BeneficialOwner>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map((owner) => ({
+    ...owner,
+    shareRatio: owner.shareRatio ?? owner.ownershipRatio,
+    judgment: owner.judgment ?? (owner.beneficialOwnerYn === "Y" ? "NORMAL" : "NEEDS_REVIEW"),
+  }));
 }
 
 /** GET /kyc/applications/{kycId}/ai-review/agent-authority — 대리권 조회 */
@@ -479,8 +574,16 @@ export async function getAiReviewAgentAuthority(kycId: string): Promise<AgentAut
     credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<AgentAuthority[] | PageLike<AgentAuthority>>;
-  return unwrapListData(json.data);
+  const json = (await response.json()) as CommonResponse<
+    AgentAuthority[] | PageLike<AgentAuthority> | { agentAuthority?: AgentAuthority | null }
+  >;
+  const data = json.data as { agentAuthority?: AgentAuthority | null };
+  const rows = data?.agentAuthority ? [data.agentAuthority] : unwrapListData(json.data as AgentAuthority[] | PageLike<AgentAuthority>);
+  return rows.map((agent) => ({
+    ...agent,
+    authorityType: agent.authorityType ?? agent.authorityScope,
+    judgment: agent.judgment ?? (agent.authorityValidYn === "Y" ? "VALID" : "NEEDS_REVIEW"),
+  }));
 }
 
 /** GET /kyc/applications/{kycId}/review-histories — 심사 이력 조회 */
@@ -492,13 +595,18 @@ export async function getReviewHistories(kycId: string): Promise<ReviewHistory[]
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<ReviewHistory[] | PageLike<ReviewHistory>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map((history) => ({
+    ...history,
+    actionDate: history.actionDate ?? (history as unknown as { createdAt?: string }).createdAt ?? "",
+    actionType: history.actionType ?? (history as unknown as { actionTypeCode?: string }).actionTypeCode ?? "-",
+    actionContent: history.actionContent ?? (history as unknown as { comment?: string; reason?: string }).comment ?? (history as unknown as { reason?: string }).reason ?? "-",
+  }));
 }
 
 /** POST /kyc/applications/{kycId}/ai-review/retry — AI 재심사 요청 */
 export async function retryAiReview(
   kycId: string,
-  data: { reason: string; priority?: string }
+  data: { reason: string; documentIds?: number[] }
 ): Promise<void> {
   const response = await fetch(`${KYC_BASE}/${kycId}/ai-review/retry`, {
     method: "POST",
@@ -514,11 +622,18 @@ export async function createKycSupplement(
   kycId: string,
   data: { supplementReason: string; requiredDocuments?: string[]; dueDate?: string }
 ): Promise<void> {
+  const body = {
+    supplementReasonCode: "MISSING_REQUIRED_DOC",
+    title: "보완서류 제출 요청",
+    message: data.supplementReason,
+    documentTypes: data.requiredDocuments ?? [],
+    dueAt: data.dueDate ? `${data.dueDate}T23:59:59` : undefined,
+  };
   const response = await fetch(`${KYC_BASE}/${kycId}/supplements`, {
     method: "POST",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(data),
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }

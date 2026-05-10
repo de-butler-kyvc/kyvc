@@ -2,6 +2,7 @@
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { X, FileText, Download, ExternalLink } from "lucide-react";
+import MfaModal from "@/components/MfaModal";
 import {
   getKycDetail,
   getKycCorporate,
@@ -50,16 +51,32 @@ const HISTORY_TYPE_COLOR: Record<string, string> = {
 
 const STATUS_KO: Record<string, string> = {
   NEEDS_MANUAL_REVIEW: "수동심사필요",
+  NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_REVIEW: "수동심사필요",
   NEEDS_SUPPLEMENT: "보완필요",
+  NEED_SUPPLEMENT: "보완필요",
   REVIEWING: "심사중",
+  AI_REVIEWING: "심사중",
+  SUBMITTED: "심사중",
+  DRAFT: "심사중",
   NORMAL: "정상",
+  APPROVED: "정상",
   UNSATISFACTORY: "불충족",
+  REJECTED: "불충족",
 };
 const AI_KO: Record<string, string> = {
   NORMAL: "정상",
+  PASS: "정상",
+  QUEUED: "심사중",
+  PROCESSING: "심사중",
+  LOW_CONFIDENCE: "수동심사필요",
   NEEDS_SUPPLEMENT: "보완필요",
+  NEED_SUPPLEMENT: "보완필요",
   UNSATISFACTORY: "불충족",
+  FAIL: "불충족",
+  FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
+  NEED_MANUAL_REVIEW: "수동심사필요",
 };
 const CHANNEL_KO: Record<string, string> = { WEB: "웹", FINANCIAL: "금융사" };
 
@@ -113,6 +130,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
   const [issueLoading, setIssueLoading] = useState(false);
   const [issueSuccess, setIssueSuccess] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
+  const [showIssueMfa, setShowIssueMfa] = useState(false);
 
   // ── UI 상태 ──────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("법인정보");
@@ -176,13 +194,14 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
   };
 
   // ── VC 발급 핸들러 ───────────────────────────────────────────
-  const handleIssueCredential = async () => {
+  const handleIssueCredential = async (mfaToken: string) => {
     setIssueLoading(true);
     setIssueError(null);
     try {
-      await issueKycCredential(id);
+      await issueKycCredential(id, { mfaToken, comment: "KYC 승인 완료에 따른 VC 발급" });
       setIssueSuccess(true);
       setCredsLoaded(false);
+      setShowIssueMfa(false);
     } catch (err) {
       setIssueError(err instanceof Error ? err.message : "VC 발급 중 오류가 발생했습니다.");
     } finally {
@@ -191,17 +210,17 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
   };
 
   // ── 파생 표시값 ──────────────────────────────────────────────
-  const statusKo = detail ? toKo(STATUS_KO, detail.status) : "-";
-  const aiKo = detail ? toKo(AI_KO, detail.aiJudgment) : "-";
+  const statusKo = detail ? toKo(STATUS_KO, detail.kycStatus ?? detail.status) : "-";
+  const aiKo = detail ? toKo(AI_KO, detail.aiJudgment ?? detail.aiReviewResult ?? detail.aiReviewResultCode) : "-";
   const channelKo = detail ? toKo(CHANNEL_KO, detail.channel) : "-";
   const histories = detail?.recentHistories ?? [];
 
   const corpFields = corporate
     ? [
-        { label: "법인명", value: corporate.corporationName ?? "-" },
-        { label: "사업자등록번호", value: corporate.businessRegistrationNumber ?? "-" },
+        { label: "법인명", value: corporate.corporationName ?? corporate.corporateName ?? "-" },
+        { label: "사업자등록번호", value: corporate.businessRegistrationNumber ?? corporate.businessRegistrationNo ?? "-" },
         { label: "법인등록번호", value: corporate.corporateRegistrationNumber ?? "-" },
-        { label: "법인 유형", value: corporate.corporationType ?? "-" },
+        { label: "법인 유형", value: corporate.corporationType ?? corporate.corporateType ?? "-" },
         { label: "대표자명", value: corporate.representativeName ?? "-" },
         { label: "설립일", value: fmtDate(corporate.establishedDate) },
         { label: "주소", value: corporate.address ?? "-" },
@@ -236,10 +255,10 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
             ) : (
               <div className="space-y-2.5">
                 {[
-                  { label: "신청번호", value: detail?.applicationId ?? id },
-                  { label: "법인명", value: detail?.corporationName ?? "-" },
-                  { label: "사업자번호", value: detail?.businessRegistrationNumber ?? "-" },
-                  { label: "신청일시", value: fmtDt(detail?.applicationDate) },
+                  { label: "신청번호", value: detail?.applicationId ?? detail?.kycId ?? id },
+                  { label: "법인명", value: detail?.corporationName ?? detail?.corporateName ?? "-" },
+                  { label: "사업자번호", value: detail?.businessRegistrationNumber ?? detail?.businessRegistrationNo ?? "-" },
+                  { label: "신청일시", value: fmtDt(detail?.applicationDate ?? detail?.submittedAt) },
                   { label: "신청 채널", value: channelKo },
                 ].map((item) => (
                   <div key={item.label}>
@@ -407,7 +426,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                   <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                     <p className="text-xs text-slate-400 mb-1">처리 모델</p>
-                    <p className="text-sm font-medium text-slate-700">-</p>
+                    <p className="text-sm font-medium text-slate-700">{detail?.aiConfidenceScore != null ? `${detail.aiConfidenceScore}%` : "-"}</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                     <p className="text-xs text-slate-400 mb-1">상세 분석</p>
@@ -480,7 +499,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                   {statusKo === "정상" && !issueSuccess && (
                     <button
-                      onClick={handleIssueCredential}
+                      onClick={() => setShowIssueMfa(true)}
                       disabled={issueLoading}
                       className="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
                     >
@@ -628,6 +647,14 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
             </div>
           </div>
         </div>
+      )}
+
+      {showIssueMfa && (
+        <MfaModal
+          purpose="VC_ISSUE"
+          onConfirm={handleIssueCredential}
+          onClose={() => setShowIssueMfa(false)}
+        />
       )}
     </div>
   );

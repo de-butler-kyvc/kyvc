@@ -1,6 +1,8 @@
 "use client";
 import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import MfaModal from "@/components/MfaModal";
 import { approveKycManualReview, rejectKycManualReview } from "@/lib/api/kyc";
 
 const decisionColors: Record<string, string> = {
@@ -12,22 +14,41 @@ const decisionColors: Record<string, string> = {
 
 export default function ManualReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [reason, setReason] = useState("대표자명 오기재 확인 후 수동 승인 처리. 등기부상 성명은 '김민주'이나 실질 대표자 확인 완료.");
   const [decision, setDecision] = useState("승인");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMfa, setShowMfa] = useState(false);
 
   const handleComplete = async () => {
     if (!reason.trim()) return;
+    if (decision === "보완요청") {
+      router.push(`/kyc/${id}/supplement-request`);
+      return;
+    }
+    if (decision === "재심사") {
+      router.push(`/kyc/${id}/re-review`);
+      return;
+    }
+    setShowMfa(true);
+  };
+
+  const handleMfaConfirm = async (mfaToken: string) => {
     setLoading(true);
     setError(null);
     try {
       if (decision === "승인") {
-        await approveKycManualReview(id, { reviewComment: reason });
+        await approveKycManualReview(id, { mfaToken, comment: reason });
       } else if (decision === "반려") {
-        await rejectKycManualReview(id, { rejectReason: reason });
+        await rejectKycManualReview(id, {
+          mfaToken,
+          rejectReasonCode: "INVALID_DOCUMENT",
+          comment: reason,
+        });
       }
+      setShowMfa(false);
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "처리 중 오류가 발생했습니다.");
@@ -183,6 +204,14 @@ export default function ManualReviewPage({ params }: { params: Promise<{ id: str
         <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
+
+      {showMfa && (
+        <MfaModal
+          purpose={decision === "승인" ? "KYC_APPROVE" : "KYC_REJECT"}
+          onConfirm={handleMfaConfirm}
+          onClose={() => setShowMfa(false)}
+        />
+      )}
     </div>
   );
 }

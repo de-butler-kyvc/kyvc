@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
-const BACK_ADMIN_API = process.env.BACK_ADMIN_API_URL ?? "http://192.168.219.108:8083";
+const BACK_ADMIN_API = process.env.BACK_ADMIN_API_URL ?? "https://dev-admin-api-kyvc.khuoo.synology.me";
 
 const baseConfig: NextConfig = {
   trailingSlash: true,
+  turbopack: {
+    root: __dirname,
+  },
   images: {
     unoptimized: true,
   },

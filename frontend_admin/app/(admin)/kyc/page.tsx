@@ -27,21 +27,19 @@ const channelBadge: Record<KycChannel, string> = {
 export default function KycPage() {
   const [kycList, setKycList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체 상태");
   const [channelFilter, setChannelFilter] = useState("전체 채널");
 
-  const fetchKycList = async () => {
+  const fetchKycList = async (search = searchTerm, status = statusFilter, channel = channelFilter) => {
     setLoading(true);
+    setError(null);
     try {
-      const data = await getKycList({
-        search: searchTerm,
-        status: statusFilter,
-        channel: channelFilter,
-      });
+      const data = await getKycList({ search, status, channel });
       setKycList(data);
-    } catch (error) {
-      console.error("Failed to fetch KYC list:", error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "목록을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -51,15 +49,11 @@ export default function KycPage() {
     fetchKycList();
   }, []);
 
-  const handleSearch = () => {
-    fetchKycList();
-  };
+  const handleSearch = () => fetchKycList();
 
   const handleReset = () => {
-    setSearchTerm("");
-    setStatusFilter("전체 상태");
-    setChannelFilter("전체 채널");
-    fetchKycList();
+    setSearchTerm(""); setStatusFilter("전체 상태"); setChannelFilter("전체 채널");
+    fetchKycList("", "전체 상태", "전체 채널");
   };
 
   return (
