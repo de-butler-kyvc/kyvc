@@ -53,7 +53,7 @@ public class AdminReviewController {
             @Parameter(description = "KYC 신청 ID", required = true)
             @PathVariable Long kycId,
             @RequestHeader(value = MFA_SESSION_TOKEN_HEADER, required = false) String mfaSessionToken,
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 수동심사 승인 요청", required = true)
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 수동심사 승인 요청", required = false)
             @org.springframework.web.bind.annotation.RequestBody(required = false) AdminReviewApproveRequest request
     ) {
         return CommonResponseFactory.success(adminReviewService.approve(kycId, withMfaToken(request, mfaSessionToken)));
@@ -77,8 +77,8 @@ public class AdminReviewController {
     public CommonResponse<AdminReviewActionResponse> reject(
             @Parameter(description = "KYC 신청 ID", required = true)
             @PathVariable Long kycId,
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 수동심사 반려 요청", required = true)
             @RequestHeader(value = MFA_SESSION_TOKEN_HEADER, required = false) String mfaSessionToken,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 수동심사 반려 요청", required = true)
             @Valid @org.springframework.web.bind.annotation.RequestBody AdminReviewRejectRequest request
     ) {
         return CommonResponseFactory.success(adminReviewService.reject(kycId, withMfaToken(request, mfaSessionToken)));
