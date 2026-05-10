@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
+
 import type { KycItem, KycStatus, KycChannel, DashboardStats, SupplementRequest } from "@/types/kyc";
 const API_BASE = "";
 const KYC_BASE = `${API_BASE}/api/admin/backend/kyc/applications`;
@@ -123,7 +125,12 @@ interface CommonResponse<T> {
 }
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -213,8 +220,15 @@ export interface DocumentRequirement {
 }
 
 /** GET /api/admin/backend/document-requirements */
-export async function getDocumentRequirements(): Promise<DocumentRequirement[]> {
-  const response = await fetch(`${API_BASE}/api/admin/backend/document-requirements`, {
+export async function getDocumentRequirements(filters?: {
+  corporationType?: string;
+}): Promise<DocumentRequirement[]> {
+  const params = new URLSearchParams();
+  if (filters?.corporationType) params.set("corporationType", filters.corporationType);
+  const url = params.toString()
+    ? `${API_BASE}/api/admin/backend/document-requirements?${params}`
+    : `${API_BASE}/api/admin/backend/document-requirements`;
+  const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
     credentials: "include",

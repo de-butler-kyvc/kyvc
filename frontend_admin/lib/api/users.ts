@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
+
 import type { UserItem } from "@/types/kyc";
 const API_BASE = "";
 const USERS_URL = `${API_BASE}/api/admin/backend/users`;
@@ -96,7 +98,12 @@ function formatDateTime(iso?: string): string {
 }
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {

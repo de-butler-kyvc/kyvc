@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const BACK_ADMIN_API = process.env.BACK_ADMIN_API_URL ?? "https://dev-api-admin-kyvc.synology.me";
+const BACK_ADMIN_API = process.env.BACK_ADMIN_API_URL ?? "http://192.168.219.108:8083";
 
 const nextConfig: NextConfig = {
   images: { unoptimized: true },

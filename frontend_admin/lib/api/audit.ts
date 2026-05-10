@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
+
 const API_BASE = "";
 const AUDIT_BASE = `${API_BASE}/api/admin/backend/audit-logs`;
 
@@ -49,7 +51,12 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {

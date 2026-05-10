@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, getRefreshToken } from "@/lib/auth-session";
+
 const API_BASE = "";
 const AUTH_BASE = `${API_BASE}/api/admin/auth`;
 
@@ -79,7 +81,12 @@ interface CommonResponse<T> {
 const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -114,22 +121,24 @@ export async function login(body: LoginRequest): Promise<LoginResponse> {
 
 /** POST /api/admin/auth/logout */
 export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken();
   const response = await fetch(`${AUTH_BASE}/logout`, {
     method: "POST",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify({}),
+    body: JSON.stringify(refreshToken ? { refreshToken } : {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
 
 /** POST /api/admin/auth/token/refresh */
 export async function refreshAccessToken(): Promise<TokenRefreshResponse> {
+  const refreshToken = getRefreshToken();
   const response = await fetch(`${AUTH_BASE}/token/refresh`, {
     method: "POST",
     headers: JSON_HEADERS,
     credentials: "include",
-    body: JSON.stringify({}),
+    body: JSON.stringify(refreshToken ? { refreshToken } : {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<TokenRefreshResponse>;

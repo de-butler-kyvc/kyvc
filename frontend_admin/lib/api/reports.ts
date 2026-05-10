@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
+
 const API_BASE = "";
 const REPORTS_BASE = `${API_BASE}/api/admin/backend/reports`;
 
@@ -24,7 +26,12 @@ interface CommonResponse<T> {
 }
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -74,7 +81,10 @@ export async function exportOperationsReport(filters?: {
   const url = params.toString()
     ? `${REPORTS_BASE}/operations/export?${params}`
     : `${REPORTS_BASE}/operations/export`;
-  const response = await fetch(url, { method: "GET", credentials: "include" });
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {};
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(url, { method: "GET", headers, credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   return response.blob();
 }

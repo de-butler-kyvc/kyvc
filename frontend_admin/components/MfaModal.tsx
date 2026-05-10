@@ -93,7 +93,7 @@ export default function MfaModal({ onConfirm, onClose }: MfaModalProps) {
           </button>
           <button
             onClick={handleVerify}
-            disabled={step !== "sent" || !code.trim() || step === "verifying"}
+            disabled={step !== "sent" || !code.trim()}
             className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors"
           >
             {step === "verifying" ? "확인 중..." : "확인"}

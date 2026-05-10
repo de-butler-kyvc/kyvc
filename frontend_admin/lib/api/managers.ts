@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
+
 const API_BASE = "";
 const ADMIN_USERS_URL = `${API_BASE}/api/admin/backend/admin-users`;
 const ADMIN_ROLES_URL = `${API_BASE}/api/admin/backend/admin-roles`;
@@ -50,7 +52,12 @@ export interface AdminUserDetail extends AdminUser {
 }
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {

@@ -1,3 +1,5 @@
+import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
+
 import type { IssuerItem } from "@/types/kyc";
 const API_BASE = "";
 const ISSUER_POLICIES_URL = `${API_BASE}/api/admin/backend/issuer-policies`;
@@ -121,7 +123,12 @@ export interface IssuerPolicyDetail {
 }
 
 function getAuthHeaders() {
-  return { "Content-Type": "application/json" };
+  const token = getAccessTokenForApi();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
