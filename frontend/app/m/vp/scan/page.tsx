@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { MTopBar } from "@/components/m/parts";
+import { mobileVp } from "@/lib/api";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
 
@@ -23,11 +24,15 @@ export default function MobileVpScanPage() {
           setError(r.error ?? "QR 스캔에 실패했습니다.");
           return;
         }
+        const resolved = r.qrData
+          ? await mobileVp.resolveQr(r.qrData).catch(() => null)
+          : null;
         // 결과를 sessionStorage에 보관 → submit/submitting에서 사용
         mSession.writeScanResult({
           qrData: r.qrData,
-          actionType: r.actionType,
+          actionType: resolved?.type ?? r.actionType,
           coreBaseUrl: r.coreBaseUrl,
+          requestId: resolved?.requestId ?? resolved?.targetId,
           challenge: r.challenge,
           domain: r.domain,
           endpoint: r.endpoint,
@@ -35,8 +40,9 @@ export default function MobileVpScanPage() {
         });
 
         // actionType 기반 라우팅
-        const type = r.actionType ?? "VP_REQUEST";
-        if (type === "VC_ISSUE") {
+        const nextAction = resolved?.nextAction;
+        const type = resolved?.type ?? r.actionType ?? "VP_REQUEST";
+        if (type === "VC_ISSUE" || nextAction === "OPEN_CREDENTIAL_OFFER") {
           router.replace("/m/vc/issue");
         } else if (type === "LOGIN_REQUEST") {
           router.replace("/m/home");

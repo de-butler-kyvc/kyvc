@@ -425,9 +425,12 @@ export const bridge = {
     callBridge("getWalletTransactions", { limit }),
   submitXrpPayment: (params: {
     destinationAddress: string;
+    destinationTag?: string;
     amountXrp?: string;
     amountDrops?: string;
   }) => callBridge("submitXrpPayment", { ...params, network: NETWORK }),
+  copyTextToClipboard: (text: string) =>
+    callBridge("copyTextToClipboard", { text }),
 
   // VC
   saveVC: (payload: AnyJson) => callBridge("saveVC", payload),

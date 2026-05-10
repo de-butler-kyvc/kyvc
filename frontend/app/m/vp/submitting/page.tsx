@@ -10,6 +10,7 @@ import {
   defaultPresentationDefinition,
   isBridgeAvailable,
 } from "@/lib/m/android-bridge";
+import { mobileVp } from "@/lib/api";
 import { mSession } from "@/lib/m/session";
 
 type Stage = "challenge" | "sign" | "submit" | "done";
@@ -39,6 +40,8 @@ export default function MobileVpSubmittingPage() {
         }
 
         const scan = mSession.readScanResult();
+        const selectedVcId = mSession.readSelectedVcId();
+        const selectedCredentialId = selectedVcId ? Number(selectedVcId) : NaN;
         const aud = scan?.domain || scan?.coreBaseUrl || CORE_BASE_URL;
         const endpoint =
           scan?.endpoint?.replace("/challenges", "/verify") ||
@@ -68,26 +71,48 @@ export default function MobileVpSubmittingPage() {
 
         // 3) Verifier 제출
         setStage("submit");
-        const sub = await bridge.submitPresentationToVerifier({
-          endpoint,
-          presentation: {
-            format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
-            definitionId: "wallet-direct-kyc-test-v1",
-            aud,
+        if (scan?.requestId && Number.isFinite(selectedCredentialId)) {
+          await mobileVp.submitPresentation({
+            requestId: scan.requestId,
+            credentialId: selectedCredentialId,
             nonce,
+            challenge: nonce,
+            format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
+            vpJwt: signed.presentationJwt,
+            presentation:
+              signed.presentation ??
+              ({
+                format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
+                definitionId: "wallet-direct-kyc-test-v1",
+                aud,
+                nonce,
+                sdJwtKb: signed.sdJwtKb,
+              } as Record<string, unknown>),
+          });
+        } else {
+          const sub = await bridge.submitPresentationToVerifier({
+            endpoint,
+            presentation: {
+              format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
+              definitionId: "wallet-direct-kyc-test-v1",
+              aud,
+              nonce,
+              sdJwtKb: signed.sdJwtKb,
+            },
+            presentationJwt: signed.presentationJwt,
             sdJwtKb: signed.sdJwtKb,
-          },
-          presentationJwt: signed.presentationJwt,
-          sdJwtKb: signed.sdJwtKb,
-          didDocument: signed.didDocument,
-          challenge: nonce,
-          domain: aud,
-        });
-        if (!sub.ok) throw new Error(sub.error ?? "Verifier 제출 실패");
+            didDocument: signed.didDocument,
+            challenge: nonce,
+            domain: aud,
+          });
+          if (!sub.ok) throw new Error(sub.error ?? "Verifier 제출 실패");
+        }
 
         // 완료
         setStage("done");
         mSession.writeScanResult(null);
+        mSession.writeSelectedVcId(null);
+        mSession.writeVpRequest(null);
         router.replace("/m/vp/complete");
       } catch (e) {
         setError(e instanceof Error ? e.message : "제출 실패");
