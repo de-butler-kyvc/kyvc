@@ -9,8 +9,11 @@ public final class AdminSecurityPatterns {
 
     public static final String[] PUBLIC_PATTERNS = {
             "/api/admin/auth/login",
+            "/api/admin/auth/logout",
             "/api/admin/auth/refresh",
             "/api/admin/auth/token/refresh",
+            "/api/admin/auth/mfa/challenge",
+            "/api/admin/auth/mfa/verify",
             "/api/admin/auth/password-reset/request",
             "/api/admin/auth/password-reset/confirm"
     };
@@ -69,10 +72,8 @@ public final class AdminSecurityPatterns {
     };
 
     public static final String[] ADMIN_COMMON_PATTERNS = {
-            "/api/admin/auth/logout",
             "/api/admin/auth/me",
             "/api/admin/auth/change-password",
-            "/api/admin/auth/mfa/**",
             "/api/admin/me",
             "/api/admin/me/**"
     };
