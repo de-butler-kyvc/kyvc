@@ -367,6 +367,7 @@ public class Credential {
     // Core VC 발급 메타데이터 반영
     public void applyIssuanceMetadata(
             String credentialExternalId, // Core Credential 외부 ID
+            String credentialTypeCode, // Core Credential 유형 코드
             String issuerDid, // Issuer DID
             KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
             String vcHash, // VC 해시
@@ -377,6 +378,9 @@ public class Credential {
     ) {
         if (hasText(credentialExternalId)) {
             this.credentialExternalId = credentialExternalId;
+        }
+        if (hasText(credentialTypeCode)) {
+            this.credentialTypeCode = credentialTypeCode;
         }
         if (hasText(issuerDid)) {
             this.issuerDid = issuerDid;

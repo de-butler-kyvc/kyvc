@@ -82,9 +82,15 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String VERIFY_CREDENTIAL_ENDPOINT = "/verifier/credentials/verify";
     private static final String DID_DOCUMENT_ENDPOINT = "/dids/{account}/diddoc.json";
     private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
+    private static final String PRESENTATION_DEFINITION_ID_KYC = "kyvc-kyc-presentation-v1";
+    private static final String PRESENTATION_CHALLENGE_FORMAT_SD_JWT = "dc+sd-jwt";
     private static final String CORE_API_KEY_HEADER = "X-API-Key";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
     private static final String CORE_LEGAL_ENTITY_STOCK_COMPANY = "STOCK_COMPANY";
+    private static final String CORE_LEGAL_ENTITY_LIMITED_COMPANY = "LIMITED_COMPANY";
+    private static final String CORE_LEGAL_ENTITY_INCORPORATED_ASSOCIATION = "INCORPORATED_ASSOCIATION";
+    private static final String CORE_LEGAL_ENTITY_COOPERATIVE = "COOPERATIVE";
+    private static final String CORE_LEGAL_ENTITY_FOREIGN_COMPANY = "FOREIGN_COMPANY";
     private static final String CORE_APPLICANT_ROLE_REPRESENTATIVE = "REPRESENTATIVE";
     private static final String CORE_APPLICANT_ROLE_DELEGATE = "DELEGATE";
     private static final String CORE_ASSESSMENT_NORMAL = "NORMAL";
@@ -93,18 +99,48 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String CORE_ASSESSMENT_REJECTED = "REJECTED";
     private static final String CORE_DOCUMENT_TYPE_UNKNOWN = "UNKNOWN";
     private static final String BACKEND_CORPORATE_TYPE_CORPORATION = "CORPORATION";
+    private static final String BACKEND_CORPORATE_TYPE_LIMITED_COMPANY = "LIMITED_COMPANY";
+    private static final String BACKEND_CORPORATE_TYPE_NON_PROFIT = "NON_PROFIT";
+    private static final String BACKEND_CORPORATE_TYPE_ASSOCIATION = "ASSOCIATION";
+    private static final String BACKEND_CORPORATE_TYPE_FOREIGN_COMPANY = "FOREIGN_COMPANY";
     private static final String BACKEND_DOCUMENT_BUSINESS_REGISTRATION = "BUSINESS_REGISTRATION";
+    private static final String BACKEND_DOCUMENT_CORPORATE_REGISTRATION = "CORPORATE_REGISTRATION";
     private static final String BACKEND_DOCUMENT_CORPORATE_SEAL_CERTIFICATE = "CORPORATE_SEAL_CERTIFICATE";
     private static final String BACKEND_DOCUMENT_SHAREHOLDER_LIST = "SHAREHOLDER_LIST";
+    private static final String BACKEND_DOCUMENT_ARTICLES_OF_INCORPORATION = "ARTICLES_OF_INCORPORATION";
     private static final String BACKEND_DOCUMENT_POWER_OF_ATTORNEY = "POWER_OF_ATTORNEY";
+    private static final String CORE_DOCUMENT_CORPORATE_REGISTRY = "CORPORATE_REGISTRY";
     private static final String CORE_DOCUMENT_SEAL_CERTIFICATE = "SEAL_CERTIFICATE";
     private static final String CORE_DOCUMENT_SHAREHOLDER_REGISTRY = "SHAREHOLDER_REGISTRY";
+    private static final String CORE_DOCUMENT_ARTICLES_OF_ASSOCIATION = "ARTICLES_OF_ASSOCIATION";
     private static final String DEFAULT_STATUS_MODE = "xrpl";
     private static final String DEFAULT_CREDENTIAL_FORMAT = "jwt";
     private static final String DEFAULT_VC_FORMAT = "vc+jwt";
     private static final Set<String> ALLOWED_STATUS_MODES = Set.of("xrpl", "local");
     private static final Set<String> ALLOWED_CREDENTIAL_FORMATS = Set.of("jwt", "embedded_jws");
     private static final Set<String> ALLOWED_VC_FORMATS = Set.of("vc+jwt", "dc+sd-jwt");
+    private static final Set<String> ALLOWED_PRESENTATION_CHALLENGE_FORMATS = Set.of("dc+sd-jwt", "vp+jwt");
+    private static final Set<String> ALLOWED_CORE_DOCUMENT_TYPES = Set.of(
+            "BUSINESS_REGISTRATION",
+            "CORPORATE_REGISTRY",
+            "SHAREHOLDER_REGISTRY",
+            "STOCK_CHANGE_STATEMENT",
+            "INVESTOR_REGISTRY",
+            "MEMBER_REGISTRY",
+            "BOARD_REGISTRY",
+            "ARTICLES_OF_ASSOCIATION",
+            "OPERATING_RULES",
+            "REGULATIONS",
+            "MEETING_MINUTES",
+            "OFFICIAL_LETTER",
+            "PURPOSE_PROOF_DOCUMENT",
+            "ORGANIZATION_IDENTITY_CERTIFICATE",
+            "INVESTMENT_REGISTRATION_CERTIFICATE",
+            "BENEFICIAL_OWNER_PROOF_DOCUMENT",
+            "POWER_OF_ATTORNEY",
+            "SEAL_CERTIFICATE",
+            "UNKNOWN"
+    );
 
     private final RestClient coreRestClient;
     private final CoreProperties coreProperties;
@@ -147,6 +183,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         LlmPrimaryAssessmentApiRequest apiRequest = buildAiAssessmentApiRequest(request);
         String endpoint = AI_ASSESSMENT_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), null, null);
+        fields.put("kycId", request.kycId());
         long startedAt = System.currentTimeMillis();
         logEventLogger.info("core.call.started", "Core AI review API call started", fields);
         try {
@@ -223,6 +260,7 @@ public class CoreHttpAdapter implements CoreAdapter {
 
         String endpoint = ISSUE_KYC_CREDENTIAL_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), null);
+        fields.put("kycId", request.kycId());
         long startedAt = System.currentTimeMillis();
         logEventLogger.info("core.call.started", "Core VC issuance API call started", fields);
         try {
@@ -257,13 +295,25 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (request == null || !StringUtils.hasText(request.holderAccount())) {
             throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Credential 폐기에 필요한 holderAccount가 없습니다.");
         }
+        if (!StringUtils.hasText(request.credentialType())
+                && !StringUtils.hasText(request.credentialStatusId())
+                && !StringUtils.hasText(request.credentialExternalId())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Credential 폐기 식별 데이터가 없습니다.");
+        }
+        String statusMode = resolveAllowedValue(request.statusMode(), DEFAULT_STATUS_MODE, ALLOWED_STATUS_MODES, "statusMode");
         RevokeCredentialApiRequest apiRequest = new RevokeCredentialApiRequest(
-                request.issuerAccount(),
-                request.holderAccount(),
-                request.credentialType(),
-                request.credentialStatusId(),
-                request.credentialExternalId(),
-                "xrpl"
+                normalizeOptional(request.issuerAccount()),
+                normalizeOptional(request.issuerSeed()),
+                request.holderAccount().trim(),
+                normalizeOptional(request.credentialType()),
+                normalizeOptional(request.credentialExternalId()),
+                normalizeOptional(request.credentialStatusId()),
+                normalizeOptional(request.holderDid()),
+                normalizeOptional(request.issuerDid()),
+                normalizeOptional(request.vct()),
+                normalizeOptional(request.xrplJsonRpcUrl()),
+                resolveBoolean(request.allowMainnet(), false),
+                statusMode
         );
 
         String endpoint = REVOKE_CREDENTIAL_ENDPOINT;
@@ -306,7 +356,10 @@ public class CoreHttpAdapter implements CoreAdapter {
         logEventLogger.info("core.call.started", "Core credential-status API call started", fields);
         try {
             ResponseEntity<CredentialStatusApiResponse> responseEntity = coreRestClient.get()
-                    .uri(endpoint, issuerAccount.trim(), holderAccount.trim(), credentialType.trim())
+                    .uri(uriBuilder -> uriBuilder.path(endpoint)
+                            .queryParam("allow_mainnet", false)
+                            .queryParam("status_mode", DEFAULT_STATUS_MODE)
+                            .build(issuerAccount.trim(), holderAccount.trim(), credentialType.trim()))
                     .headers(this::applyApiKeyHeader)
                     .retrieve()
                     .toEntity(CredentialStatusApiResponse.class);
@@ -352,7 +405,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                 null,
                 buildPolicy(parseRequiredClaims(request.requiredClaimsJson())),
                 true,
-                "xrpl"
+                null,
+                false,
+                DEFAULT_STATUS_MODE
         );
 
         String endpoint = VERIFY_PRESENTATION_ENDPOINT;
@@ -398,6 +453,8 @@ public class CoreHttpAdapter implements CoreAdapter {
             List<String> requiredClaims // 필수 Claim 목록
     ) {
         Map<String, Object> policy = new LinkedHashMap<>();
+        policy.put("id", PRESENTATION_DEFINITION_ID_KYC);
+        policy.put("acceptedFormat", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         policy.put("requiredClaims", requiredClaims == null ? List.of() : requiredClaims);
         return policy;
     }
@@ -416,11 +473,17 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (request == null) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
+        String format = resolveAllowedValue(
+                request.format(),
+                PRESENTATION_CHALLENGE_FORMAT_SD_JWT,
+                ALLOWED_PRESENTATION_CHALLENGE_FORMATS,
+                "format"
+        );
         IssuePresentationChallengeApiRequest apiRequest = new IssuePresentationChallengeApiRequest(
                 request.domain(),
                 request.aud(),
                 request.definitionId(),
-                request.format(),
+                format,
                 request.presentationDefinition()
         );
 
@@ -463,7 +526,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                 request.didDocuments(),
                 request.policy(),
                 true,
-                "xrpl"
+                null,
+                false,
+                DEFAULT_STATUS_MODE
         );
 
         String endpoint = VERIFY_CREDENTIAL_ENDPOINT;
@@ -594,10 +659,14 @@ public class CoreHttpAdapter implements CoreAdapter {
             return CORE_LEGAL_ENTITY_STOCK_COMPANY;
         }
         String normalized = corporateTypeCode.trim().toUpperCase(Locale.ROOT);
-        if (BACKEND_CORPORATE_TYPE_CORPORATION.equals(normalized)) {
-            return CORE_LEGAL_ENTITY_STOCK_COMPANY;
-        }
-        return CORE_LEGAL_ENTITY_STOCK_COMPANY;
+        return switch (normalized) {
+            case BACKEND_CORPORATE_TYPE_CORPORATION -> CORE_LEGAL_ENTITY_STOCK_COMPANY;
+            case BACKEND_CORPORATE_TYPE_LIMITED_COMPANY -> CORE_LEGAL_ENTITY_LIMITED_COMPANY;
+            case BACKEND_CORPORATE_TYPE_NON_PROFIT -> CORE_LEGAL_ENTITY_INCORPORATED_ASSOCIATION;
+            case BACKEND_CORPORATE_TYPE_ASSOCIATION -> CORE_LEGAL_ENTITY_COOPERATIVE;
+            case BACKEND_CORPORATE_TYPE_FOREIGN_COMPANY -> CORE_LEGAL_ENTITY_FOREIGN_COMPANY;
+            default -> throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Core AI 심사 법인 유형 매핑이 없습니다.");
+        };
     }
 
     private String resolveCoreApplicantRole(
@@ -615,10 +684,15 @@ public class CoreHttpAdapter implements CoreAdapter {
             return CORE_DOCUMENT_TYPE_UNKNOWN;
         }
         String normalized = documentTypeCode.trim().toUpperCase(Locale.ROOT);
+        if (ALLOWED_CORE_DOCUMENT_TYPES.contains(normalized)) {
+            return normalized;
+        }
         return switch (normalized) {
             case BACKEND_DOCUMENT_BUSINESS_REGISTRATION -> BACKEND_DOCUMENT_BUSINESS_REGISTRATION;
+            case BACKEND_DOCUMENT_CORPORATE_REGISTRATION -> CORE_DOCUMENT_CORPORATE_REGISTRY;
             case BACKEND_DOCUMENT_CORPORATE_SEAL_CERTIFICATE -> CORE_DOCUMENT_SEAL_CERTIFICATE;
             case BACKEND_DOCUMENT_SHAREHOLDER_LIST -> CORE_DOCUMENT_SHAREHOLDER_REGISTRY;
+            case BACKEND_DOCUMENT_ARTICLES_OF_INCORPORATION -> CORE_DOCUMENT_ARTICLES_OF_ASSOCIATION;
             case BACKEND_DOCUMENT_POWER_OF_ATTORNEY -> BACKEND_DOCUMENT_POWER_OF_ATTORNEY;
             default -> CORE_DOCUMENT_TYPE_UNKNOWN;
         };
@@ -791,7 +865,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (allowedValues.contains(resolved)) {
             return resolved;
         }
-        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Core VC 발급 " + fieldName + " 값이 올바르지 않습니다.");
+        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Core 요청 " + fieldName + " 값이 올바르지 않습니다.");
     }
 
     private String resolveHolderKeyId(
@@ -863,6 +937,7 @@ public class CoreHttpAdapter implements CoreAdapter {
                 "Core VC 발급 API 호출 성공",
                 LocalDateTime.now(),
                 credentialExternalId,
+                body.credentialType(),
                 StringUtils.hasText(issuerDid) ? issuerDid : request.issuerDid(),
                 format,
                 credentialPayloadJson,
@@ -1003,12 +1078,17 @@ public class CoreHttpAdapter implements CoreAdapter {
     ) {
         Map<String, Object> fields = new LinkedHashMap<>(baseFields);
         if (exception instanceof RestClientResponseException responseException) {
-            fields.put("httpStatus", responseException.getRawStatusCode());
+            int httpStatus = responseException.getStatusCode().value();
+            fields.put("httpStatus", httpStatus);
             fields.put("responseBody", corePayloadSanitizer.sanitizeText(responseException.getResponseBodyAsString()));
-            logEventLogger.warn("core.call.failed", "Core API call failed", fields);
+            if (httpStatus >= 500) {
+                logEventLogger.error("core.call.failed", "Core API call failed", fields, exception);
+            } else {
+                logEventLogger.warn("core.call.failed", "Core API call failed", fields);
+            }
             return new ApiException(
                     ErrorCode.CORE_API_CALL_FAILED,
-                    "Core API 호출 실패 [" + endpoint + "], status=" + responseException.getRawStatusCode(),
+                    "Core API 호출 실패 [" + endpoint + "], status=" + httpStatus,
                     exception
             );
         }

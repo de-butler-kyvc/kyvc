@@ -179,6 +179,7 @@ public class CredentialIssuanceService {
             KyvcEnums.CredentialStatus beforeStatus = credential.getCredentialStatus();
             credential.applyIssuanceMetadata(
                     response.credentialExternalId(),
+                    response.credentialType(),
                     response.issuerDid(),
                     credentialStatus,
                     response.vcHash(),

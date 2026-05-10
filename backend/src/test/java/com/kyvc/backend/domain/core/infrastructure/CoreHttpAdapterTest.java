@@ -23,6 +23,8 @@ class CoreHttpAdapterTest {
                 null,
                 Map.of("requiredClaims", List.of("kycLevel", "jurisdiction")),
                 true,
+                null,
+                false,
                 "xrpl"
         );
 
@@ -52,6 +54,8 @@ class CoreHttpAdapterTest {
                 null,
                 Map.of("requiredClaims", List.of("kycLevel", "jurisdiction")),
                 true,
+                null,
+                false,
                 "xrpl"
         );
 

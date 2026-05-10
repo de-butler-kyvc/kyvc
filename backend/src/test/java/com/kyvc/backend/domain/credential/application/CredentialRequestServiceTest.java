@@ -111,6 +111,7 @@ class CredentialRequestServiceTest {
                 "issued",
                 LocalDateTime.now(),
                 "reissued-credential-external-id",
+                CoreMockSeedData.DEV_CREDENTIAL_TYPE,
                 CoreMockSeedData.DEV_ISSUER_DID,
                 "vc+jwt",
                 null,
@@ -208,6 +209,7 @@ class CredentialRequestServiceTest {
                 "issued",
                 LocalDateTime.now(),
                 "reissued-credential-external-id",
+                CoreMockSeedData.DEV_CREDENTIAL_TYPE,
                 CoreMockSeedData.DEV_ISSUER_DID,
                 null,
                 null,
@@ -417,6 +419,7 @@ class CredentialRequestServiceTest {
                 "issued",
                 LocalDateTime.now(),
                 "reissued-credential-external-id",
+                CoreMockSeedData.DEV_CREDENTIAL_TYPE,
                 CoreMockSeedData.DEV_ISSUER_DID,
                 format,
                 credentialPayloadJson,
@@ -448,6 +451,7 @@ class CredentialRequestServiceTest {
         ReflectionTestUtils.setField(credential, "credentialId", credentialId);
         credential.applyIssuanceMetadata(
                 "credential-external-id-" + credentialId,
+                CoreMockSeedData.DEV_CREDENTIAL_TYPE,
                 CoreMockSeedData.DEV_ISSUER_DID,
                 status,
                 "vc-hash-" + credentialId,

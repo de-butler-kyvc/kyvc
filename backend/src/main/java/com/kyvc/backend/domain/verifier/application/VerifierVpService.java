@@ -65,6 +65,7 @@ public class VerifierVpService {
     private static final String VERIFIER_NAME_PREFIX = "Verifier ";
     private static final String PRESENTATION_FORMAT_VP_JWT = "vp+jwt";
     private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
+    private static final String PRESENTATION_CHALLENGE_FORMAT_SD_JWT = "dc+sd-jwt";
     private static final String PRESENTATION_FORMAT_JSONLD_VP = "kyvc-jsonld-vp-v1";
 
     private final VpVerificationRepository vpVerificationRepository;
@@ -779,7 +780,7 @@ public class VerifierVpService {
                             "kyvc-backend",
                             CoreMockSeedData.DEV_VP_AUD,
                             "kyvc-kyc-presentation-v1",
-                            PRESENTATION_FORMAT_SD_JWT,
+                            PRESENTATION_CHALLENGE_FORMAT_SD_JWT,
                             createPresentationDefinition(requestedClaims)
                     )
             );
@@ -816,7 +817,8 @@ public class VerifierVpService {
     ) {
         Map<String, Object> definition = new LinkedHashMap<>();
         definition.put("id", "kyvc-kyc-presentation-v1");
-        definition.put("format", PRESENTATION_FORMAT_SD_JWT);
+        definition.put("acceptedFormat", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
+        definition.put("format", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         definition.put("requiredClaims", requestedClaims == null ? List.of() : requestedClaims);
         return definition;
     }

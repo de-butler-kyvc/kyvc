@@ -77,6 +77,7 @@ public class StubCoreAdapter implements CoreAdapter {
                 "VC issuance completed by mock core.",
                 LocalDateTime.now(),
                 "mock-" + request.coreRequestId(),
+                request.credentialType() == null ? CoreMockSeedData.DEV_CREDENTIAL_TYPE : request.credentialType(),
                 request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
                 "vc+jwt",
                 null,
