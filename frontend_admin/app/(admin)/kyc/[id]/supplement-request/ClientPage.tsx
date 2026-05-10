@@ -1,21 +1,52 @@
 "use client";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createKycSupplement } from "@/lib/api/kyc";
+import { createKycSupplement, getKycDetail } from "@/lib/api/kyc";
 
-const docTypes = ["사업자등록증", "등기사항전부증명서", "주주명부", "위임장", "정관", "기타"];
+const docTypes = [
+  { label: "사업자등록증", value: "BUSINESS_REGISTRATION" },
+  { label: "등기사항전부증명서", value: "CORPORATE_REGISTRATION" },
+  { label: "주주명부", value: "SHAREHOLDER_LIST" },
+  { label: "위임장", value: "POWER_OF_ATTORNEY" },
+  { label: "정관", value: "ARTICLES_OF_INCORPORATION" },
+  { label: "대표자 신분확인", value: "REPRESENTATIVE_ID" },
+  { label: "대리인 신분확인", value: "AGENT_ID" },
+];
+
+function defaultDeadline() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function docTypeLabel(value: string) {
+  return docTypes.find((type) => type.value === value)?.label ?? value;
+}
+
+function canRequestSupplement(status?: string) {
+  return status === "MANUAL_REVIEW" || status === "NEED_MANUAL_REVIEW" || status === "NEEDS_MANUAL_REVIEW";
+}
 
 export default function SupplementRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [items, setItems] = useState([{ docType: "주주명부", reason: "" }]);
-  const [deadline, setDeadline] = useState("2025-05-12");
+  const [items, setItems] = useState([{ docType: "SHAREHOLDER_LIST", reason: "" }]);
+  const [deadline, setDeadline] = useState(defaultDeadline);
   const [note, setNote] = useState("");
+  const [status, setStatus] = useState<string | undefined>();
+  const [statusLoading, setStatusLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const addItem = () => setItems([...items, { docType: "사업자등록증", reason: "" }]);
+  useEffect(() => {
+    getKycDetail(id)
+      .then((detail) => setStatus(detail.kycStatus ?? detail.status))
+      .catch((err) => setError(err instanceof Error ? err.message : "KYC 신청 상태를 불러오지 못했습니다."))
+      .finally(() => setStatusLoading(false));
+  }, [id]);
+
+  const addItem = () => setItems([...items, { docType: "BUSINESS_REGISTRATION", reason: "" }]);
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
   const updateItem = (i: number, field: string, value: string) => {
     const next = [...items];
@@ -24,11 +55,16 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
   };
 
   const handleSubmit = async () => {
+    if (!canRequestSupplement(status)) {
+      setError("수동심사필요 상태의 KYC 신청만 보완요청을 생성할 수 있습니다.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
+      const message = items.map((i) => `[${docTypeLabel(i.docType)}] ${i.reason}`).join(" / ");
       await createKycSupplement(id, {
-        supplementReason: items.map((i) => `[${i.docType}] ${i.reason}`).join(" / "),
+        supplementReason: note.trim() ? `${message} / ${note.trim()}` : message,
         requiredDocuments: items.map((i) => i.docType),
         dueDate: deadline,
       });
@@ -50,6 +86,12 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
           <h1 className="text-xl font-bold text-slate-800">보완요청 생성</h1>
         </div>
       </div>
+
+      {!statusLoading && !canRequestSupplement(status) && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-sm text-orange-700">
+          현재 상태가 {status ?? "-"}인 KYC 신청은 보완요청을 생성할 수 없습니다.
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">{error}</div>
@@ -91,7 +133,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-slate-500">서류 유형</label>
                       <select value={item.docType} onChange={(e) => updateItem(i, "docType", e.target.value)} className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        {docTypes.map((t) => <option key={t}>{t}</option>)}
+                        {docTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -122,7 +164,11 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
             <p className="text-xs text-slate-400">처리자: 관리자</p>
             <div className="flex gap-2">
               <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">취소</Link>
-              <button onClick={handleSubmit} disabled={loading || items.some((i) => !i.reason.trim())} className="bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors">
+              <button
+                onClick={handleSubmit}
+                disabled={statusLoading || !canRequestSupplement(status) || loading || items.some((i) => !i.reason.trim())}
+                className="bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              >
                 {loading ? "처리 중..." : "보완요청 발송"}
               </button>
             </div>
