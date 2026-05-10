@@ -36,12 +36,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -76,6 +79,12 @@ class VpVerificationServiceTest {
 
     @Captor
     private ArgumentCaptor<String> responsePayloadCaptor;
+
+    @Captor
+    private ArgumentCaptor<String> formatCaptor;
+
+    @Captor
+    private ArgumentCaptor<Object> presentationCaptor;
 
     private VpVerificationService service;
 
@@ -255,7 +264,7 @@ class VpVerificationServiceTest {
         when(credentialRepository.getById(100L)).thenReturn(credential);
         when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
         when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
-        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq(vpJwt)))
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt)))
                 .thenAnswer(invocation -> {
                     CoreVpVerificationRequest request = invocation.getArgument(0);
                     return new CoreVpVerificationResponse(
@@ -296,6 +305,130 @@ class VpVerificationServiceTest {
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
         assertThat(response.result().signatureValid()).isTrue();
         assertThat(response.result().replayDetected()).isFalse();
+    }
+
+    @Test
+    void submitPresentation_usesVpJwtAsVpJwtPresentation_whenFormatMissing() {
+        String vpJwt = "vp.jwt.value";
+        mockSuccessfulSubmit(vpJwt, coreResponse(true, false));
+
+        service.submitPresentation(
+                userDetails(),
+                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+        );
+
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        assertThat(formatCaptor.getValue()).isEqualTo("vp+jwt");
+        assertThat(presentationCaptor.getValue()).isEqualTo(vpJwt);
+    }
+
+    @Test
+    void submitPresentation_usesPresentationString_whenFormatVpJwt() {
+        String presentation = "compact-vp-jwt";
+        mockSuccessfulSubmit(presentation, coreResponse(true, false));
+
+        service.submitPresentation(
+                userDetails(),
+                new VpPresentationRequest(
+                        "vp-req-001",
+                        100L,
+                        "nonce-001",
+                        "challenge-001",
+                        null,
+                        "vp+jwt",
+                        presentation,
+                        null
+                )
+        );
+
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        assertThat(formatCaptor.getValue()).isEqualTo("vp+jwt");
+        assertThat(presentationCaptor.getValue()).isEqualTo(presentation);
+    }
+
+    @Test
+    void submitPresentation_usesSdJwtPresentationObject_whenFormatSdJwt() {
+        Map<String, Object> presentation = new LinkedHashMap<>();
+        presentation.put("format", "kyvc-sd-jwt-presentation-v1");
+        presentation.put("aud", "https://dev-api-kyvc.khuoo.synology.me");
+        presentation.put("nonce", "nonce-001");
+        presentation.put("sdJwtKb", "sd-jwt-kb");
+        mockSuccessfulSubmit(null, coreResponse(true, false));
+
+        service.submitPresentation(
+                userDetails(),
+                new VpPresentationRequest(
+                        "vp-req-001",
+                        100L,
+                        "nonce-001",
+                        "challenge-001",
+                        null,
+                        "kyvc-sd-jwt-presentation-v1",
+                        presentation,
+                        null
+                )
+        );
+
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        assertThat(formatCaptor.getValue()).isEqualTo("kyvc-sd-jwt-presentation-v1");
+        assertThat(presentationCaptor.getValue()).isEqualTo(presentation);
+    }
+
+    @Test
+    void submitPresentation_fallsBackToVpJwt_whenPresentationMissing() {
+        String sdJwtKb = "sd-jwt-kb";
+        mockSuccessfulSubmit(sdJwtKb, coreResponse(true, false));
+
+        service.submitPresentation(
+                userDetails(),
+                new VpPresentationRequest(
+                        "vp-req-001",
+                        100L,
+                        "nonce-001",
+                        "challenge-001",
+                        sdJwtKb,
+                        "kyvc-sd-jwt-presentation-v1",
+                        null,
+                        null
+                )
+        );
+
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        assertThat(formatCaptor.getValue()).isEqualTo("kyvc-sd-jwt-presentation-v1");
+        assertThat(presentationCaptor.getValue()).isEqualTo(sdJwtKb);
+    }
+
+    @Test
+    void submitPresentation_marksInvalid_whenCoreVerificationFails() {
+        String vpJwt = "vp.jwt.invalid";
+        mockSuccessfulSubmit(vpJwt, coreResponse(false, false));
+
+        VpPresentationResponse response = service.submitPresentation(
+                userDetails(),
+                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+        );
+
+        verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
+        VpVerification saved = vpVerificationCaptor.getValue();
+        assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.INVALID);
+        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.INVALID.name());
+        assertThat(response.result().signatureValid()).isFalse();
+    }
+
+    @Test
+    void submitPresentation_marksReplaySuspected_whenCoreReportsReplay() {
+        String vpJwt = "vp.jwt.replay";
+        mockSuccessfulSubmit(vpJwt, coreResponse(false, true));
+
+        VpPresentationResponse response = service.submitPresentation(
+                userDetails(),
+                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+        );
+
+        verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
+        VpVerification saved = vpVerificationCaptor.getValue();
+        assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.REPLAY_SUSPECTED);
+        assertThat(response.result().replayDetected()).isTrue();
     }
 
     @Test
@@ -398,6 +531,52 @@ class VpVerificationServiceTest {
     }
 
     @Test
+    void submitPresentation_throwsWhenJsonLdVpFormatRequested() {
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.submitPresentation(
+                        userDetails(),
+                        new VpPresentationRequest(
+                                "vp-req-001",
+                                100L,
+                                "nonce-001",
+                                "challenge-001",
+                                "vp.jwt.value",
+                                "kyvc-jsonld-vp-v1",
+                                null,
+                                null
+                        )
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(coreRequestService, never()).createVpVerificationRequest(any(), any());
+    }
+
+    @Test
+    void submitPresentation_throwsWhenPresentationIsMissing() {
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.submitPresentation(
+                        userDetails(),
+                        new VpPresentationRequest(
+                                "vp-req-001",
+                                100L,
+                                "nonce-001",
+                                "challenge-001",
+                                null,
+                                "vp+jwt",
+                                null,
+                                null
+                        )
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(coreRequestService, never()).createVpVerificationRequest(any(), any());
+    }
+
+    @Test
     void getPresentationResult_returnsPresentedStatus() {
         Credential credential = createCredential(
                 100L,
@@ -425,6 +604,101 @@ class VpVerificationServiceTest {
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.PRESENTED.name());
         assertThat(response.replaySuspected()).isFalse();
         assertThat(response.result()).isNull();
+    }
+
+    @Test
+    void submitPresentation_rejectsCredentialNotEligible() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.N.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.submitPresentation(
+                        userDetails(),
+                        new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", "vp.jwt.value")
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        verify(coreRequestService, never()).createVpVerificationRequest(any(), any());
+    }
+
+    private void mockSuccessfulSubmit(
+            String hashSource, // Replay 해시 대상 원문
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                21L,
+                null
+        );
+
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
+        if (hashSource == null) {
+            when(vpVerificationRepository.existsReplayCandidate(eq("nonce-001"), anyString())).thenReturn(false);
+        } else {
+            when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(hashSource))).thenReturn(false);
+        }
+        when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
+        when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreRequestService.markRunning(coreRequest.getCoreRequestId())).thenReturn(coreRequest);
+        if (Boolean.TRUE.equals(coreResponse.valid())) {
+            when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        } else {
+            when(coreRequestService.markFailed(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        }
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), anyString(), any()))
+                .thenReturn(coreResponse);
+        when(vpVerificationRepository.save(any(VpVerification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private CoreVpVerificationResponse coreResponse(
+            boolean valid, // Core 검증 성공 여부
+            boolean replaySuspected // Replay 의심 여부
+    ) {
+        return new CoreVpVerificationResponse(
+                "core-request-id",
+                valid ? KyvcEnums.VpVerificationStatus.VALID.name() : KyvcEnums.VpVerificationStatus.INVALID.name(),
+                valid ? "valid" : "invalid",
+                LocalDateTime.now(),
+                true,
+                valid,
+                replaySuspected,
+                replaySuspected ? "VP Replay 의심" : (valid ? "VP 검증 성공" : "VP 검증 실패")
+        );
     }
 
     private CustomUserDetails userDetails() {

@@ -1,5 +1,8 @@
 package com.kyvc.backend.domain.credential.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
@@ -47,6 +50,7 @@ public class MobileWalletService {
     private final CorporateRepository corporateRepository;
     private final CoreAdapter coreAdapter;
     private final CoreProperties coreProperties;
+    private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
 
     // 모바일 Wallet Credential Offer 조회
@@ -340,7 +344,8 @@ public class MobileWalletService {
                 credential.getCredentialStatusId(),
                 credential.getCredentialStatusPurposeCode(),
                 credential.getKycLevelCode(),
-                credential.getJurisdictionCode()
+                credential.getJurisdictionCode(),
+                createCredentialPayload(credential)
         );
     }
 
@@ -349,11 +354,42 @@ public class MobileWalletService {
             Credential credential // Credential 엔티티
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("credentialId", credential.getCredentialId());
-        payload.put("credentialType", credential.getCredentialTypeCode());
-        payload.put("issuerDid", credential.getIssuerDid());
-        payload.put("vcHash", credential.getVcHash());
+        payload.put("format", credential.getVcFormat());
+        payload.put("credentialJwt", credential.getVcJwt());
+        payload.put("credential", parseCredentialPayloadJson(credential.getVcPayloadJson()));
+        payload.put("metadata", createCredentialMetadata(credential));
         return payload;
+    }
+
+    private Map<String, Object> createCredentialMetadata(
+            Credential credential // Credential 엔티티
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("credentialId", credential.getCredentialId());
+        metadata.put("credentialType", credential.getCredentialTypeCode());
+        metadata.put("issuerDid", credential.getIssuerDid());
+        metadata.put("holderDid", credential.getHolderDid());
+        metadata.put("holderXrplAddress", credential.getHolderXrplAddress());
+        metadata.put("vcHash", credential.getVcHash());
+        metadata.put("xrplTxHash", credential.getXrplTxHash());
+        metadata.put("credentialStatusId", credential.getCredentialStatusId());
+        metadata.put("issuedAt", credential.getIssuedAt());
+        metadata.put("expiresAt", credential.getExpiresAt());
+        return metadata;
+    }
+
+    private Map<String, Object> parseCredentialPayloadJson(
+            String vcPayloadJson // VC JSON 원문
+    ) {
+        if (!StringUtils.hasText(vcPayloadJson)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(vcPayloadJson, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, exception);
+        }
     }
 
     // Issuer XRPL Account 결정

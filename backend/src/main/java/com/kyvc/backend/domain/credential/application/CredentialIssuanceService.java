@@ -184,6 +184,11 @@ public class CredentialIssuanceService {
             );
 
             if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
+                credential.applyCredentialPayload(
+                        response.format(),
+                        response.credentialPayloadJson(),
+                        response.credentialJwt()
+                );
                 coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(response));
                 credentialRequest.markCompleted(null);
                 kycApplication.markVcIssued(response.issuedAt() == null ? LocalDateTime.now() : response.issuedAt());

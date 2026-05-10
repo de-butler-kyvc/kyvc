@@ -101,12 +101,14 @@ public interface CoreAdapter {
      * VP 검증 요청
      *
      * @param request VP 검증 요청
-     * @param vpJwt VP JWT 원문
+     * @param format Presentation format
+     * @param presentation Presentation 원문 또는 객체
      * @return VP 검증 요청 응답
      */
     CoreVpVerificationResponse requestVpVerification(
             CoreVpVerificationRequest request, // VP 검증 요청
-            String vpJwt // VP JWT 원문
+            String format, // Presentation format
+            Object presentation // Presentation 원문 또는 객체
     );
 
     /**

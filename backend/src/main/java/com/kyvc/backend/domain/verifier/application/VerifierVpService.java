@@ -5,6 +5,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
@@ -61,6 +63,9 @@ public class VerifierVpService {
     private static final String TEST_VERIFY_PURPOSE = "TEST_VERIFY";
     private static final String RE_AUTH_PURPOSE = "RE_AUTH";
     private static final String VERIFIER_NAME_PREFIX = "Verifier ";
+    private static final String PRESENTATION_FORMAT_VP_JWT = "vp+jwt";
+    private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
+    private static final String PRESENTATION_FORMAT_JSONLD_VP = "kyvc-jsonld-vp-v1";
 
     private final VpVerificationRepository vpVerificationRepository;
     private final VpVerificationQueryRepository vpVerificationQueryRepository;
@@ -82,23 +87,24 @@ public class VerifierVpService {
         Corporate corporate = getCorporateById(authContext.corporateId());
         Credential credential = getLatestValidCredential(corporate.getCorporateId());
         List<String> requestedClaims = normalizeRequiredClaims(request.requestedClaims());
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(resolveExpiresInSeconds(request.expiresInSeconds()));
+        LocalDateTime fallbackExpiresAt = LocalDateTime.now().plusSeconds(resolveExpiresInSeconds(request.expiresInSeconds()));
+        ChallengeContext challengeContext = issuePresentationChallenge(requestedClaims, fallbackExpiresAt);
         VpVerification vpVerification = VpVerification.createRequest(
                 credential.getCredentialId(),
                 corporate.getCorporateId(),
                 createRequestId(),
-                createRandomValue(),
-                createRandomValue(),
+                challengeContext.nonce(),
+                challengeContext.challenge(),
                 request.purpose().trim(),
                 resolveFinanceRequesterName(userDetails),
                 toJson(requestedClaims),
-                expiresAt,
+                challengeContext.expiresAt(),
                 null,
                 authContext.financeInstitutionCode(),
                 KyvcEnums.VpRequestType.FINANCE_VERIFY,
                 KyvcEnums.Yn.N,
                 KyvcEnums.Yn.N,
-                null
+                toJson(createChallengeMetadata(challengeContext))
         );
         VpVerification saved = vpVerificationRepository.save(vpVerification);
         logEventLogger.info(
@@ -180,6 +186,7 @@ public class VerifierVpService {
     ) {
         AuthContext authContext = resolveAuthContext(userDetails);
         validateTestVpVerificationRequest(request);
+        ResolvedPresentation resolvedPresentation = resolvePresentation(request);
         Verifier verifier = resolveVerifier(userDetails);
         Corporate corporate = getCorporateById(authContext.corporateId());
         Credential credential = getLatestValidCredential(corporate.getCorporateId());
@@ -207,7 +214,7 @@ public class VerifierVpService {
         CoreRequest coreRequest = coreRequestService.createVpVerificationRequest(saved.getVpVerificationId(), null);
         saved.markPresented(
                 credential.getCredentialId(),
-                TokenHashUtil.sha256(request.vpJwt()),
+                TokenHashUtil.sha256(resolvedPresentation.hashSource()),
                 coreRequest.getCoreRequestId(),
                 now
         );
@@ -222,7 +229,11 @@ public class VerifierVpService {
 
         try {
             logCoreStarted(authContext, credential, saved, coreRequest.getCoreRequestId());
-            CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerification(coreRequestDto, request.vpJwt());
+            CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerification(
+                    coreRequestDto,
+                    resolvedPresentation.format(),
+                    resolvedPresentation.presentation()
+            );
             logCoreCompleted(authContext, credential, saved, coreRequest.getCoreRequestId());
             applyCoreVerificationResult(saved, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
@@ -274,23 +285,24 @@ public class VerifierVpService {
         Credential credential = getLatestValidCredential(corporate.getCorporateId());
         String resultNotifyUrl = normalizeResultNotifyUrl(request.resultNotifyUrl());
         List<String> requestedClaims = normalizeOptionalClaims(request.requestedClaims());
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(DEFAULT_EXPIRES_IN_SECONDS);
+        LocalDateTime fallbackExpiresAt = LocalDateTime.now().plusSeconds(DEFAULT_EXPIRES_IN_SECONDS);
+        ChallengeContext challengeContext = issuePresentationChallenge(requestedClaims, fallbackExpiresAt);
         VpVerification vpVerification = VpVerification.createRequest(
                 credential.getCredentialId(),
                 corporate.getCorporateId(),
                 createRequestId(),
-                createRandomValue(),
-                createRandomValue(),
+                challengeContext.nonce(),
+                challengeContext.challenge(),
                 RE_AUTH_PURPOSE,
                 verifier.getVerifierName(),
                 toJson(requestedClaims),
-                expiresAt,
+                challengeContext.expiresAt(),
                 verifier.getVerifierId(),
                 null,
                 KyvcEnums.VpRequestType.RE_AUTH,
                 KyvcEnums.Yn.N,
                 KyvcEnums.Yn.Y,
-                toJson(createReAuthMetadata(request.reason().trim(), resultNotifyUrl))
+                toJson(createReAuthMetadata(request.reason().trim(), resultNotifyUrl, challengeContext))
         );
         VpVerification saved = vpVerificationRepository.save(vpVerification);
         logEventLogger.info(
@@ -349,10 +361,36 @@ public class VerifierVpService {
                 vpVerification.getRequestNonce(),
                 vpVerification.getChallenge(),
                 vpVerification.getPurpose(),
-                CoreMockSeedData.DEV_VP_AUD,
+                resolveVpAud(vpVerification),
                 vpVerification.getRequiredClaimsJson(),
                 requestedAt
         );
+    }
+
+    private String resolveVpAud(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (!StringUtils.hasText(vpVerification.getPermissionResultJson())) {
+            return CoreMockSeedData.DEV_VP_AUD;
+        }
+        try {
+            Map<String, Object> metadata = objectMapper.readValue(vpVerification.getPermissionResultJson(), new TypeReference<>() {
+            });
+            Object coreChallenge = metadata.get("coreChallenge");
+            if (coreChallenge instanceof Map<?, ?> challengeMap) {
+                Object aud = challengeMap.get("aud");
+                if (aud instanceof String audString && StringUtils.hasText(audString)) {
+                    return audString.trim();
+                }
+            }
+            Object aud = metadata.get("aud");
+            if (aud instanceof String audString && StringUtils.hasText(audString)) {
+                return audString.trim();
+            }
+        } catch (JsonProcessingException exception) {
+            return CoreMockSeedData.DEV_VP_AUD;
+        }
+        return CoreMockSeedData.DEV_VP_AUD;
     }
 
     private void applyCoreVerificationResult(
@@ -522,9 +560,70 @@ public class VerifierVpService {
     private void validateTestVpVerificationRequest(
             VerifierTestVpVerificationRequest request // 테스트 VP 검증 요청
     ) {
-        if (request == null || !StringUtils.hasText(request.vpJwt())) {
+        if (request == null) {
             throw new ApiException(ErrorCode.VP_JWT_REQUIRED);
         }
+    }
+
+    private ResolvedPresentation resolvePresentation(
+            VerifierTestVpVerificationRequest request // 테스트 VP 검증 요청
+    ) {
+        String format = resolvePresentationFormat(request);
+        if (PRESENTATION_FORMAT_JSONLD_VP.equals(format)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        if (!PRESENTATION_FORMAT_VP_JWT.equals(format) && !PRESENTATION_FORMAT_SD_JWT.equals(format)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        Object presentation = request.presentation();
+        if (presentation == null && StringUtils.hasText(request.vpJwt())) {
+            presentation = request.vpJwt().trim();
+        }
+        if (presentation == null || isBlankPresentationText(presentation) || isEmptyPresentationMap(presentation)) {
+            throw new ApiException(ErrorCode.VP_JWT_REQUIRED);
+        }
+        if (PRESENTATION_FORMAT_VP_JWT.equals(format) && !(presentation instanceof String)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        String hashSource = presentation instanceof String presentationString
+                ? presentationString.trim()
+                : toRequiredJson(presentation);
+        Object normalizedPresentation = presentation instanceof String presentationString
+                ? presentationString.trim()
+                : presentation;
+        return new ResolvedPresentation(format, normalizedPresentation, hashSource);
+    }
+
+    private String resolvePresentationFormat(
+            VerifierTestVpVerificationRequest request // 테스트 VP 검증 요청
+    ) {
+        if (StringUtils.hasText(request.format())) {
+            return request.format().trim().toLowerCase(java.util.Locale.ROOT);
+        }
+        if (StringUtils.hasText(request.vpJwt())) {
+            return PRESENTATION_FORMAT_VP_JWT;
+        }
+        if (request.presentation() instanceof Map<?, ?> presentationMap) {
+            Object embeddedFormat = presentationMap.get("format");
+            if (embeddedFormat instanceof String embeddedFormatString && StringUtils.hasText(embeddedFormatString)) {
+                return embeddedFormatString.trim().toLowerCase(java.util.Locale.ROOT);
+            }
+        }
+        throw new ApiException(ErrorCode.INVALID_REQUEST);
+    }
+
+    private boolean isEmptyPresentationMap(
+            Object presentation // Presentation 원문 또는 객체
+    ) {
+        return presentation instanceof Map<?, ?> presentationMap && presentationMap.isEmpty();
+    }
+
+    private boolean isBlankPresentationText(
+            Object presentation // Presentation 원문 또는 객체
+    ) {
+        return presentation instanceof String presentationString && !StringUtils.hasText(presentationString);
     }
 
     private void validateReAuthCreateRequest(
@@ -670,14 +769,98 @@ public class VerifierVpService {
         return toJson(payload);
     }
 
+    private ChallengeContext issuePresentationChallenge(
+            List<String> requestedClaims, // 요청 Claim 목록
+            LocalDateTime fallbackExpiresAt // fallback 만료 일시
+    ) {
+        try {
+            CorePresentationChallengeResponse response = coreAdapter.issuePresentationChallenge(
+                    new CorePresentationChallengeRequest(
+                            "kyvc-backend",
+                            CoreMockSeedData.DEV_VP_AUD,
+                            "kyvc-kyc-presentation-v1",
+                            PRESENTATION_FORMAT_SD_JWT,
+                            createPresentationDefinition(requestedClaims)
+                    )
+            );
+            return new ChallengeContext(
+                    resolveChallengeText(response.nonce(), createRandomValue()),
+                    resolveChallengeText(response.challenge(), createRandomValue()),
+                    resolveChallengeText(response.domain(), "kyvc-backend"),
+                    resolveChallengeText(response.aud(), CoreMockSeedData.DEV_VP_AUD),
+                    response.expiresAt() == null ? fallbackExpiresAt : response.expiresAt(),
+                    response.presentationDefinition()
+            );
+        } catch (ApiException exception) {
+            if (!isCoreChallengeFallbackError(exception.getErrorCode())) {
+                throw exception;
+            }
+            logEventLogger.warn(
+                    "core.challenge.fallback",
+                    "Core VP challenge fallback used",
+                    Map.of("errorCode", exception.getErrorCode().getCode())
+            );
+            return new ChallengeContext(
+                    createRandomValue(),
+                    createRandomValue(),
+                    "kyvc-backend",
+                    CoreMockSeedData.DEV_VP_AUD,
+                    fallbackExpiresAt,
+                    createPresentationDefinition(requestedClaims)
+            );
+        }
+    }
+
+    private Map<String, Object> createPresentationDefinition(
+            List<String> requestedClaims // 요청 Claim 목록
+    ) {
+        Map<String, Object> definition = new LinkedHashMap<>();
+        definition.put("id", "kyvc-kyc-presentation-v1");
+        definition.put("format", PRESENTATION_FORMAT_SD_JWT);
+        definition.put("requiredClaims", requestedClaims == null ? List.of() : requestedClaims);
+        return definition;
+    }
+
+    private Map<String, Object> createChallengeMetadata(
+            ChallengeContext challengeContext // Core challenge 컨텍스트
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        Map<String, Object> coreChallenge = new LinkedHashMap<>();
+        coreChallenge.put("domain", challengeContext.domain());
+        coreChallenge.put("aud", challengeContext.aud());
+        coreChallenge.put("presentationDefinition", challengeContext.presentationDefinition());
+        metadata.put("coreChallenge", coreChallenge);
+        return metadata;
+    }
+
     private Map<String, Object> createReAuthMetadata(
             String reason, // 재인증 사유
-            String resultNotifyUrl // 외부 Verifier 결과 통지 URL
+            String resultNotifyUrl, // 외부 Verifier 결과 통지 URL
+            ChallengeContext challengeContext // Core challenge 컨텍스트
     ) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("reason", reason);
         metadata.put("resultNotifyUrl", resultNotifyUrl);
+        metadata.putAll(createChallengeMetadata(challengeContext));
         return metadata;
+    }
+
+    private String resolveChallengeText(
+            String value, // 원본 문자열
+            String fallback // 대체 문자열
+    ) {
+        return StringUtils.hasText(value) ? value.trim() : fallback;
+    }
+
+    private boolean isCoreChallengeFallbackError(
+            ErrorCode errorCode // 오류 코드
+    ) {
+        return ErrorCode.CORE_API_CALL_FAILED == errorCode
+                || ErrorCode.CORE_API_TIMEOUT == errorCode
+                || ErrorCode.CORE_API_RESPONSE_INVALID == errorCode
+                || ErrorCode.CORE_REQUIRED_DATA_MISSING == errorCode
+                || ErrorCode.CORE_DEV_SEED_DISABLED == errorCode
+                || ErrorCode.CORE_UNSUPPORTED_OPERATION == errorCode;
     }
 
     private String toJson(
@@ -687,6 +870,16 @@ public class VerifierVpService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new ApiException(ErrorCode.INTERNAL_SERVER_ERROR, exception);
+        }
+    }
+
+    private String toRequiredJson(
+            Object value // JSON 변환 대상
+    ) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, exception);
         }
     }
 
@@ -782,6 +975,23 @@ public class VerifierVpService {
     private record PageRequest(
             int page, // 페이지 번호
             int size // 페이지 크기
+    ) {
+    }
+
+    private record ResolvedPresentation(
+            String format, // Presentation format
+            Object presentation, // Presentation 원문 또는 객체
+            String hashSource // 해시 대상 문자열
+    ) {
+    }
+
+    private record ChallengeContext(
+            String nonce, // Core nonce
+            String challenge, // Core challenge
+            String domain, // Core domain
+            String aud, // Core aud
+            LocalDateTime expiresAt, // 만료 일시
+            Map<String, Object> presentationDefinition // Presentation Definition 객체
     ) {
     }
 }

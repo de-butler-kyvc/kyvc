@@ -78,6 +78,7 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String ISSUE_PRESENTATION_CHALLENGE_ENDPOINT = "/verifier/presentations/challenges";
     private static final String VERIFY_CREDENTIAL_ENDPOINT = "/verifier/credentials/verify";
     private static final String DID_DOCUMENT_ENDPOINT = "/dids/{account}/diddoc.json";
+    private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
     private static final String CORE_API_KEY_HEADER = "X-API-Key";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
     private static final String CORE_LEGAL_ENTITY_STOCK_COMPANY = "STOCK_COMPANY";
@@ -309,28 +310,31 @@ public class CoreHttpAdapter implements CoreAdapter {
     @Override
     public CoreVpVerificationResponse requestVpVerification(
             CoreVpVerificationRequest request, // VP 검증 요청
-            String vpJwt // VP JWT 또는 SD-JWT 원문
+            String format, // Presentation format
+            Object presentation // Presentation 원문 또는 객체
     ) {
         if (request == null || !StringUtils.hasText(request.coreRequestId())) {
             throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VP 검증 요청 필수 데이터가 부족합니다.");
         }
-        if (!StringUtils.hasText(vpJwt)) {
+        if (!StringUtils.hasText(format) || presentation == null) {
+            throw new ApiException(ErrorCode.VP_JWT_REQUIRED);
+        }
+        if (presentation instanceof String presentationString && !StringUtils.hasText(presentationString)) {
             throw new ApiException(ErrorCode.VP_JWT_REQUIRED);
         }
 
         VerifyPresentationApiRequest apiRequest = new VerifyPresentationApiRequest(
-                "kyvc-sd-jwt-presentation-v1",
-                request.aud(),
-                request.requestNonce(),
-                request.challenge(),
-                parseRequiredClaims(request.requiredClaimsJson()),
+                format.trim(),
+                buildCorePresentation(request, format.trim(), presentation),
                 null,
-                null,
-                vpJwt
+                buildPolicy(parseRequiredClaims(request.requiredClaimsJson())),
+                true,
+                "xrpl"
         );
 
         String endpoint = VERIFY_PRESENTATION_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), request.vpVerificationId());
+        fields.put("presentationFormat", format.trim());
         long startedAt = System.currentTimeMillis();
         logEventLogger.info("core.call.started", "Core VP verify API call started", fields);
         try {
@@ -349,6 +353,30 @@ public class CoreHttpAdapter implements CoreAdapter {
             ApiException mapped = mapCoreException(endpoint, exception, fields);
             throw mapped;
         }
+    }
+
+    private Object buildCorePresentation(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String format, // Presentation format
+            Object presentation // Presentation 원문 또는 객체
+    ) {
+        if (!PRESENTATION_FORMAT_SD_JWT.equals(format) || !(presentation instanceof String presentationString)) {
+            return presentation;
+        }
+        Map<String, Object> presentationObject = new LinkedHashMap<>();
+        presentationObject.put("format", PRESENTATION_FORMAT_SD_JWT);
+        presentationObject.put("aud", request.aud());
+        presentationObject.put("nonce", request.requestNonce());
+        presentationObject.put("sdJwtKb", presentationString);
+        return presentationObject;
+    }
+
+    private Map<String, Object> buildPolicy(
+            List<String> requiredClaims // 필수 Claim 목록
+    ) {
+        Map<String, Object> policy = new LinkedHashMap<>();
+        policy.put("requiredClaims", requiredClaims == null ? List.of() : requiredClaims);
+        return policy;
     }
 
     @Override
@@ -724,6 +752,15 @@ public class CoreHttpAdapter implements CoreAdapter {
         String xrplTxHash = extractString(tx, "hash", "tx_hash", "transaction_hash");
         LocalDateTime issuedAt = parseDateTime(extractString(status, "issued_at", "issuedAt", "created_at"));
         LocalDateTime expiresAt = parseDateTime(extractString(status, "expires_at", "expiresAt", "valid_until"));
+        String format = StringUtils.hasText(body.format()) ? body.format().trim() : null;
+        String credentialPayloadJson = null;
+        String credentialJwt = null;
+        Object credential = body.credential();
+        if (credential instanceof String credentialString) {
+            credentialJwt = credentialString;
+        } else if (credential != null) {
+            credentialPayloadJson = serializeCredentialPayload(credential);
+        }
 
         return new CoreVcIssuanceResponse(
                 request.coreRequestId(),
@@ -732,12 +769,25 @@ public class CoreHttpAdapter implements CoreAdapter {
                 LocalDateTime.now(),
                 credentialExternalId,
                 StringUtils.hasText(issuerDid) ? issuerDid : request.issuerDid(),
+                format,
+                credentialPayloadJson,
+                credentialJwt,
                 vcHash,
                 xrplTxHash,
                 credentialStatusId,
                 issuedAt,
                 expiresAt
         );
+    }
+
+    private String serializeCredentialPayload(
+            Object credential // Core credential 객체
+    ) {
+        try {
+            return objectMapper.writeValueAsString(credential);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.CORE_API_CALL_FAILED, "Core credential 원문 직렬화 실패", exception);
+        }
     }
 
     private String mapCredentialStatusCode(

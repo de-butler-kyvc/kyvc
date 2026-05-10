@@ -120,6 +120,11 @@ public class CredentialRequestService {
                     coreResponse.expiresAt()
             );
             if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
+                reissuedCredential.applyCredentialPayload(
+                        coreResponse.format(),
+                        coreResponse.credentialPayloadJson(),
+                        coreResponse.credentialJwt()
+                );
                 credentialRequest.markCompleted(null);
                 coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(coreResponse));
             } else {

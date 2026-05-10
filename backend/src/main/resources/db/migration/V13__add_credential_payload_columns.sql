@@ -1,0 +1,4 @@
+ALTER TABLE credentials
+    ADD COLUMN IF NOT EXISTS vc_format VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS vc_payload_json TEXT,
+    ADD COLUMN IF NOT EXISTS vc_jwt TEXT;
