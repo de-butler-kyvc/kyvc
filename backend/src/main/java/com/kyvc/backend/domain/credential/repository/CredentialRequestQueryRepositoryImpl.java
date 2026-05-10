@@ -7,6 +7,7 @@ import jakarta.persistence.TypedQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,7 @@ import java.util.Optional;
 public class CredentialRequestQueryRepositoryImpl implements CredentialRequestQueryRepository {
 
     private final EntityManager entityManager;
+    private final CredentialRequestJpaRepository credentialRequestJpaRepository;
 
     // 법인 기준 Credential 요청 목록 조회
     @Override
@@ -31,10 +33,10 @@ public class CredentialRequestQueryRepositoryImpl implements CredentialRequestQu
                   and c.corporateId = :corporateId
                 """); // Credential 소유 법인 기준 조회 JPQL
         if (requestTypeCode != null) {
-            jpql.append(" and cr.requestTypeCode = :requestTypeCode");
+            jpql.append(" and cr.requestType = :requestTypeCode");
         }
         if (requestStatusCode != null) {
-            jpql.append(" and cr.requestStatusCode = :requestStatusCode");
+            jpql.append(" and cr.requestStatus = :requestStatusCode");
         }
         jpql.append(" order by cr.requestedAt desc, cr.credentialRequestId desc");
 
@@ -65,5 +67,21 @@ public class CredentialRequestQueryRepositoryImpl implements CredentialRequestQu
         query.setParameter("credentialRequestId", credentialRequestId);
         query.setParameter("corporateId", corporateId);
         return query.getResultStream().findFirst();
+    }
+
+    // Credential ID 목록 기준 요청 이력 조회
+    @Override
+    public List<CredentialRequest> findByCredentialIds(
+            Collection<Long> credentialIds, // Credential ID 목록
+            KyvcEnums.CredentialRequestType requestType, // 요청 유형 필터
+            KyvcEnums.CredentialRequestStatus requestStatus // 요청 상태 필터
+    ) {
+        if (credentialIds == null || credentialIds.isEmpty()) {
+            return List.of();
+        }
+        return credentialRequestJpaRepository.findByCredentialIdInOrderByRequestedAtDesc(credentialIds).stream()
+                .filter(request -> requestType == null || requestType == request.getRequestType())
+                .filter(request -> requestStatus == null || requestStatus == request.getRequestStatus())
+                .toList();
     }
 }

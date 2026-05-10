@@ -44,6 +44,19 @@ public class CoreRequestService {
         );
     }
 
+    // VC 재발급 요청 생성
+    public CoreRequest createVcReissueRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createRequest(
+                KyvcEnums.CoreRequestType.VC_REISSUE,
+                KyvcEnums.CoreTargetType.CREDENTIAL,
+                credentialId,
+                requestPayloadJson
+        );
+    }
+
     // VC 폐기 요청 생성
     public CoreRequest createVcRevokeRequest(
             Long credentialId, // Credential ID
@@ -55,6 +68,14 @@ public class CoreRequestService {
                 credentialId,
                 requestPayloadJson
         );
+    }
+
+    // VC 폐기 요청 생성
+    public CoreRequest createVcRevocationRequest(
+            Long credentialId, // Credential ID
+            String requestPayloadJson // 요청 Payload JSON
+    ) {
+        return createVcRevokeRequest(credentialId, requestPayloadJson);
     }
 
     // VP 검증 요청 생성
@@ -110,6 +131,13 @@ public class CoreRequestService {
         CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
         coreRequest.markProcessing();
         return coreRequestRepository.save(coreRequest);
+    }
+
+    // 동기 Core 호출 진행 상태 반영
+    public CoreRequest markRunning(
+            String coreRequestId // Core 요청 ID
+    ) {
+        return markProcessing(coreRequestId);
     }
 
     // 응답 수신 성공 상태 반영

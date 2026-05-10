@@ -18,6 +18,7 @@ import com.kyvc.backend.domain.credential.domain.CredentialRequest;
 import com.kyvc.backend.domain.credential.domain.CredentialStatusHistory;
 import com.kyvc.backend.domain.credential.dto.CredentialOperationResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialReissueRequest;
+import com.kyvc.backend.domain.credential.dto.CredentialRequestDetailResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialRequestHistoryResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialRequestListResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialRevokeRequest;
@@ -40,6 +41,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 // Credential 재발급/폐기 요청 서비스
@@ -66,94 +68,105 @@ public class CredentialRequestService {
     public CredentialOperationResponse requestReissue(
             CustomUserDetails userDetails, // 인증 사용자 정보
             Long credentialId, // Credential ID
-            CredentialReissueRequest request // 재발급 요청
+            CredentialReissueRequest request // VC 재발급 요청
     ) {
         validateCredentialId(credentialId);
-        validateRequiredText(request == null ? null : request.reason());
+        validateReissueRequest(request);
 
         Long userId = resolveUserId(userDetails); // 사용자 ID
         Long corporateId = resolveCorporateId(userId); // 법인 ID
-        Credential sourceCredential = resolveOwnedCredential(credentialId, corporateId); // 원본 Credential
-        validateOperableStatus(sourceCredential);
+        Credential sourceCredential = resolveOwnedCredential(credentialId, corporateId);
+        validateReissueAllowed(sourceCredential);
         validateNoInProgressRequest(sourceCredential.getCredentialId(), KyvcEnums.CredentialRequestType.REISSUE);
 
-        String reason = mergeReason(request.reason(), request.requestMessage()); // 요청 사유
         CredentialRequest credentialRequest = credentialRequestRepository.save(CredentialRequest.create(
                 sourceCredential.getCredentialId(),
                 KyvcEnums.CredentialRequestType.REISSUE,
                 KyvcEnums.ActorType.USER,
                 userId,
-                reason
+                KyvcEnums.CredentialRequestType.REISSUE.name(),
+                normalizeReason(request.reason(), request.requestMessage())
         ));
+
         CoreRequest coreRequest = coreRequestService.createVcIssuanceRequest(sourceCredential.getCredentialId(), null);
         credentialRequest.markProcessing(coreRequest.getCoreRequestId());
         credentialRequestRepository.save(credentialRequest);
 
-        try {
-            KycApplication kycApplication = kycApplicationRepository.findById(sourceCredential.getKycId())
-                    .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
-            CoreVcIssuanceRequest coreIssueRequest = buildReissueCoreRequest(
-                    kycApplication,
-                    sourceCredential,
-                    credentialRequest.getCredentialRequestId(),
-                    coreRequest.getCoreRequestId()
-            );
-            coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreIssueRequest));
-            coreRequestService.markProcessing(coreRequest.getCoreRequestId());
+        KycApplication kycApplication = kycApplicationRepository.findById(sourceCredential.getKycId())
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+        Credential reissuedCredential = credentialRepository.save(
+                createReissueCredential(sourceCredential, credentialRequest.getCredentialRequestId())
+        );
+        CoreVcIssuanceRequest coreRequestPayload = buildVcIssuanceRequest(
+                kycApplication,
+                reissuedCredential,
+                coreRequest.getCoreRequestId()
+        );
+        coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestPayload));
+        coreRequestService.markProcessing(coreRequest.getCoreRequestId());
 
-            CoreVcIssuanceResponse coreResponse = coreAdapter.requestVcIssuance(coreIssueRequest);
-            KyvcEnums.CredentialStatus newCredentialStatus = resolveCredentialStatus(coreResponse.status());
-            if (KyvcEnums.CredentialStatus.VALID != newCredentialStatus) {
-                return failCredentialRequest(
-                        credentialRequest,
-                        coreRequest,
-                        sourceCredential.getCredentialId(),
-                        sourceCredential.getCredentialStatus(),
-                        ErrorCode.CORE_API_CALL_FAILED.getCode()
+        try {
+            CoreVcIssuanceResponse coreResponse = coreAdapter.requestVcIssuance(coreRequestPayload);
+            KyvcEnums.CredentialStatus beforeStatus = reissuedCredential.getCredentialStatus();
+            KyvcEnums.CredentialStatus credentialStatus = resolveCredentialStatus(coreResponse.status());
+            reissuedCredential.applyIssuanceMetadata(
+                    coreResponse.credentialExternalId(),
+                    coreResponse.issuerDid(),
+                    credentialStatus,
+                    coreResponse.vcHash(),
+                    coreResponse.xrplTxHash(),
+                    coreResponse.credentialStatusId(),
+                    coreResponse.issuedAt(),
+                    coreResponse.expiresAt()
+            );
+            if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
+                credentialRequest.markCompleted(null);
+                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(coreResponse));
+            } else {
+                reissuedCredential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
+                credentialRequest.markFailed(ErrorCode.CORE_API_CALL_FAILED.getCode());
+                coreRequestService.markFailed(
+                        coreRequest.getCoreRequestId(),
+                        resolveFailureReason(coreResponse.message(), ErrorCode.CORE_API_CALL_FAILED.getCode())
                 );
             }
-
-            Credential newCredential = createReissuedCredential(
-                    kycApplication,
-                    sourceCredential,
-                    credentialRequest.getCredentialRequestId(),
-                    coreResponse,
-                    newCredentialStatus
-            );
-            Credential savedCredential = credentialRepository.save(newCredential);
-            credentialStatusHistoryRepository.save(CredentialStatusHistory.create(
-                    savedCredential.getCredentialId(),
-                    null,
-                    newCredentialStatus,
+            credentialRequestRepository.save(credentialRequest);
+            saveStatusHistoryIfChanged(
+                    reissuedCredential.getCredentialId(),
+                    beforeStatus,
+                    reissuedCredential.getCredentialStatus(),
                     KyvcEnums.ActorType.USER,
                     userId,
-                    reason
-            ));
-            credentialRequest.markCompleted();
-            credentialRequestRepository.save(credentialRequest);
-            coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(coreResponse));
-
+                    KyvcEnums.CredentialRequestType.REISSUE.name(),
+                    "VC 재발급 Core 응답 반영"
+            );
+            credentialRepository.save(reissuedCredential);
             logEventLogger.info(
                     "credential.reissue.completed",
                     "Credential reissue completed",
-                    createLogFields(userId, corporateId, savedCredential.getCredentialId(), credentialRequest.getCredentialRequestId())
+                    createBaseLogFields(userId, corporateId, reissuedCredential.getCredentialId(), credentialRequest.getCredentialRequestId())
             );
-
-            return new CredentialOperationResponse(
-                    credentialRequest.getCredentialRequestId(),
-                    savedCredential.getCredentialId(),
-                    credentialRequest.getRequestStatusCode().name(),
-                    savedCredential.getCredentialStatus().name(),
-                    KyvcEnums.XrplTransactionStatus.CONFIRMED.name(),
-                    null
+            return toOperationResponse(
+                    credentialRequest,
+                    reissuedCredential.getCredentialId(),
+                    reissuedCredential.getCredentialStatus(),
+                    failureReason(credentialRequest)
             );
         } catch (ApiException exception) {
             return failCredentialRequest(
                     credentialRequest,
                     coreRequest,
-                    sourceCredential.getCredentialId(),
-                    sourceCredential.getCredentialStatus(),
+                    reissuedCredential.getCredentialId(),
+                    reissuedCredential.getCredentialStatus(),
                     exception.getErrorCode().getCode()
+            );
+        } catch (Exception exception) {
+            return failCredentialRequest(
+                    credentialRequest,
+                    coreRequest,
+                    reissuedCredential.getCredentialId(),
+                    reissuedCredential.getCredentialStatus(),
+                    ErrorCode.CORE_API_CALL_FAILED.getCode()
             );
         }
     }
@@ -162,73 +175,65 @@ public class CredentialRequestService {
     public CredentialOperationResponse requestRevoke(
             CustomUserDetails userDetails, // 인증 사용자 정보
             Long credentialId, // Credential ID
-            CredentialRevokeRequest request // 폐기 요청
+            CredentialRevokeRequest request // VC 폐기 요청
     ) {
         validateCredentialId(credentialId);
-        validateRequiredText(request == null ? null : request.reason());
+        validateRevokeRequest(request);
 
         Long userId = resolveUserId(userDetails); // 사용자 ID
         Long corporateId = resolveCorporateId(userId); // 법인 ID
-        Credential credential = resolveOwnedCredential(credentialId, corporateId); // 폐기 대상 Credential
-        validateOperableStatus(credential);
+        Credential credential = resolveOwnedCredential(credentialId, corporateId);
+        validateRevokeAllowed(credential);
         validateNoInProgressRequest(credential.getCredentialId(), KyvcEnums.CredentialRequestType.REVOKE);
 
-        String reason = mergeReason(request.reason(), request.requestMessage()); // 요청 사유
         CredentialRequest credentialRequest = credentialRequestRepository.save(CredentialRequest.create(
                 credential.getCredentialId(),
                 KyvcEnums.CredentialRequestType.REVOKE,
                 KyvcEnums.ActorType.USER,
                 userId,
-                reason
+                KyvcEnums.CredentialRequestType.REVOKE.name(),
+                normalizeReason(request.reason(), request.requestMessage())
         ));
+
         CoreRequest coreRequest = coreRequestService.createVcRevokeRequest(credential.getCredentialId(), null);
         credentialRequest.markProcessing(coreRequest.getCoreRequestId());
         credentialRequestRepository.save(credentialRequest);
 
+        CoreRevokeCredentialRequest coreRequestPayload = buildCoreRevokeCredentialRequest(credential, request);
+        coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestPayload));
+        coreRequestService.markProcessing(coreRequest.getCoreRequestId());
+
         try {
-            CoreRevokeCredentialRequest coreRevokeRequest = buildRevokeCoreRequest(credential, reason);
-            coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRevokeRequest));
-            coreRequestService.markProcessing(coreRequest.getCoreRequestId());
-
-            CoreRevokeCredentialResponse coreResponse = coreAdapter.revokeCredential(coreRevokeRequest);
-            if (!coreResponse.revoked()) {
-                return failCredentialRequest(
-                        credentialRequest,
-                        coreRequest,
+            CoreRevokeCredentialResponse coreResponse = coreAdapter.revokeCredential(coreRequestPayload);
+            if (coreResponse.revoked()) {
+                KyvcEnums.CredentialStatus beforeStatus = credential.getCredentialStatus();
+                credential.revoke(LocalDateTime.now());
+                credentialRequest.markCompleted(null);
+                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(coreResponse));
+                credentialRequestRepository.save(credentialRequest);
+                saveStatusHistoryIfChanged(
                         credential.getCredentialId(),
+                        beforeStatus,
                         credential.getCredentialStatus(),
-                        ErrorCode.CORE_API_CALL_FAILED.getCode()
+                        KyvcEnums.ActorType.USER,
+                        userId,
+                        KyvcEnums.CredentialRequestType.REVOKE.name(),
+                        "VC 폐기 Core 응답 반영"
                 );
+                credentialRepository.save(credential);
+                logEventLogger.info(
+                        "credential.revoke.completed",
+                        "Credential revoke completed",
+                        createBaseLogFields(userId, corporateId, credential.getCredentialId(), credentialRequest.getCredentialRequestId())
+                );
+                return toOperationResponse(credentialRequest, credential.getCredentialId(), credential.getCredentialStatus(), null);
             }
-
-            KyvcEnums.CredentialStatus beforeStatus = credential.getCredentialStatus(); // 이전 Credential 상태
-            credential.revoke(LocalDateTime.now());
-            credentialRepository.save(credential);
-            credentialStatusHistoryRepository.save(CredentialStatusHistory.create(
+            return failCredentialRequest(
+                    credentialRequest,
+                    coreRequest,
                     credential.getCredentialId(),
-                    beforeStatus,
                     credential.getCredentialStatus(),
-                    KyvcEnums.ActorType.USER,
-                    userId,
-                    reason
-            ));
-            credentialRequest.markCompleted();
-            credentialRequestRepository.save(credentialRequest);
-            coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(coreResponse));
-
-            logEventLogger.info(
-                    "credential.revoke.completed",
-                    "Credential revoke completed",
-                    createLogFields(userId, corporateId, credential.getCredentialId(), credentialRequest.getCredentialRequestId())
-            );
-
-            return new CredentialOperationResponse(
-                    credentialRequest.getCredentialRequestId(),
-                    credential.getCredentialId(),
-                    credentialRequest.getRequestStatusCode().name(),
-                    credential.getCredentialStatus().name(),
-                    KyvcEnums.XrplTransactionStatus.CONFIRMED.name(),
-                    null
+                    resolveFailureReason(coreResponse.message(), ErrorCode.CORE_API_CALL_FAILED.getCode())
             );
         } catch (ApiException exception) {
             return failCredentialRequest(
@@ -238,6 +243,14 @@ public class CredentialRequestService {
                     credential.getCredentialStatus(),
                     exception.getErrorCode().getCode()
             );
+        } catch (Exception exception) {
+            return failCredentialRequest(
+                    credentialRequest,
+                    coreRequest,
+                    credential.getCredentialId(),
+                    credential.getCredentialStatus(),
+                    ErrorCode.CORE_API_CALL_FAILED.getCode()
+            );
         }
     }
 
@@ -245,13 +258,23 @@ public class CredentialRequestService {
     @Transactional(readOnly = true)
     public CredentialRequestListResponse getCredentialRequests(
             CustomUserDetails userDetails, // 인증 사용자 정보
-            KyvcEnums.CredentialRequestType requestTypeCode, // 요청 유형
-            KyvcEnums.CredentialRequestStatus requestStatusCode // 요청 상태
+            String type, // 요청 유형 필터
+            String status // 요청 상태 필터
+    ) {
+        return getCredentialRequests(userDetails, parseRequestType(type), parseRequestStatus(status));
+    }
+
+    // Credential 요청 이력 목록 조회
+    @Transactional(readOnly = true)
+    public CredentialRequestListResponse getCredentialRequests(
+            CustomUserDetails userDetails, // 인증 사용자 정보
+            KyvcEnums.CredentialRequestType requestType, // 요청 유형
+            KyvcEnums.CredentialRequestStatus status // 요청 상태
     ) {
         Long userId = resolveUserId(userDetails); // 사용자 ID
         Long corporateId = resolveCorporateId(userId); // 법인 ID
         List<CredentialRequestHistoryResponse> requests = credentialRequestQueryRepository
-                .findByCorporateId(corporateId, requestTypeCode, requestStatusCode)
+                .findByCorporateId(corporateId, requestType, status)
                 .stream()
                 .map(this::toHistoryResponse)
                 .toList();
@@ -274,6 +297,33 @@ public class CredentialRequestService {
         return toHistoryResponse(credentialRequest);
     }
 
+    // Credential 요청 이력 상세 조회
+    @Transactional(readOnly = true)
+    public CredentialRequestDetailResponse getCredentialRequestDetail(
+            CustomUserDetails userDetails, // 인증 사용자 정보
+            Long credentialRequestId // Credential 요청 ID
+    ) {
+        validateCredentialRequestId(credentialRequestId);
+
+        Long userId = resolveUserId(userDetails); // 사용자 ID
+        Long corporateId = resolveCorporateId(userId); // 법인 ID
+        CredentialRequest credentialRequest = credentialRequestQueryRepository
+                .findByCredentialRequestIdAndCorporateId(credentialRequestId, corporateId)
+                .orElseThrow(() -> new ApiException(ErrorCode.CREDENTIAL_REQUEST_NOT_FOUND));
+        Credential credential = resolveOwnedCredential(credentialRequest.getCredentialId(), corporateId);
+        return new CredentialRequestDetailResponse(
+                credentialRequest.getCredentialRequestId(),
+                credentialRequest.getCredentialId(),
+                enumName(credentialRequest.getRequestType()),
+                enumName(credentialRequest.getRequestStatus()),
+                enumName(credential.getCredentialStatus()),
+                credentialRequest.getReason(),
+                failureReason(credentialRequest),
+                credentialRequest.getRequestedAt(),
+                credentialRequest.getCompletedAt()
+        );
+    }
+
     private CredentialOperationResponse failCredentialRequest(
             CredentialRequest credentialRequest, // Credential 요청
             CoreRequest coreRequest, // Core 요청
@@ -281,37 +331,40 @@ public class CredentialRequestService {
             KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
             String failureReason // 실패 사유
     ) {
-        credentialRequest.markFailed();
+        credentialRequest.markFailed(failureReason);
         credentialRequestRepository.save(credentialRequest);
         markCoreRequestFailure(coreRequest.getCoreRequestId(), failureReason);
+        return toOperationResponse(credentialRequest, responseCredentialId, credentialStatus, failureReason);
+    }
 
-        logEventLogger.warn(
-                "credential.operation.failed",
-                "Credential operation failed",
-                createLogFields(null, null, responseCredentialId, credentialRequest.getCredentialRequestId())
-        );
-
-        return new CredentialOperationResponse(
-                credentialRequest.getCredentialRequestId(),
-                responseCredentialId,
-                credentialRequest.getRequestStatusCode().name(),
-                enumName(credentialStatus),
-                null,
-                failureReason
+    private Credential createReissueCredential(
+            Credential sourceCredential, // 원본 Credential
+            Long credentialRequestId // Credential 요청 ID
+    ) {
+        return Credential.createIssuing(
+                sourceCredential.getCorporateId(),
+                sourceCredential.getKycId(),
+                PENDING_REISSUE_EXTERNAL_ID_PREFIX + credentialRequestId,
+                sourceCredential.getCredentialTypeCode(),
+                sourceCredential.getIssuerDid(),
+                sourceCredential.getCredentialStatusPurposeCode(),
+                sourceCredential.getKycLevelCode(),
+                sourceCredential.getJurisdictionCode(),
+                sourceCredential.getHolderDid(),
+                sourceCredential.getHolderXrplAddress()
         );
     }
 
-    private CoreVcIssuanceRequest buildReissueCoreRequest(
+    private CoreVcIssuanceRequest buildVcIssuanceRequest(
             KycApplication kycApplication, // KYC 신청
-            Credential sourceCredential, // 원본 Credential
-            Long credentialRequestId, // Credential 요청 ID
+            Credential credential, // 발급 대상 Credential
             String coreRequestId // Core 요청 ID
     ) {
-        IssuanceSeed seed = resolveIssuanceSeed(sourceCredential);
-        LocalDateTime now = LocalDateTime.now(); // 요청 시각
+        IssuanceSeed seed = resolveIssuanceSeed(credential);
+        LocalDateTime now = LocalDateTime.now();
         return new CoreVcIssuanceRequest(
                 coreRequestId,
-                sourceCredential.getCredentialId(),
+                credential.getCredentialId(),
                 kycApplication.getKycId(),
                 kycApplication.getCorporateId(),
                 seed.issuerAccount(),
@@ -319,183 +372,27 @@ public class CredentialRequestService {
                 seed.issuerVerificationMethodId(),
                 seed.holderAccount(),
                 seed.holderDid(),
-                resolveText(sourceCredential.getCredentialTypeCode(), CoreMockSeedData.DEV_CREDENTIAL_TYPE),
-                resolveText(sourceCredential.getKycLevelCode(), CoreMockSeedData.DEV_KYC_LEVEL),
-                resolveText(sourceCredential.getJurisdictionCode(), CoreMockSeedData.DEV_JURISDICTION),
-                resolveClaims(kycApplication, sourceCredential),
+                resolveText(credential.getCredentialTypeCode(), CoreMockSeedData.DEV_CREDENTIAL_TYPE),
+                resolveText(credential.getKycLevelCode(), CoreMockSeedData.DEV_KYC_LEVEL),
+                resolveText(credential.getJurisdictionCode(), CoreMockSeedData.DEV_JURISDICTION),
+                resolveClaims(),
                 now,
                 CoreMockSeedData.validUntil(),
                 now
         );
     }
 
-    private Credential createReissuedCredential(
-            KycApplication kycApplication, // KYC 신청
-            Credential sourceCredential, // 원본 Credential
-            Long credentialRequestId, // Credential 요청 ID
-            CoreVcIssuanceResponse response, // Core 발급 응답
-            KyvcEnums.CredentialStatus credentialStatus // 신규 Credential 상태
+    private CoreRevokeCredentialRequest buildCoreRevokeCredentialRequest(
+            Credential credential, // Credential
+            CredentialRevokeRequest request // 폐기 요청
     ) {
-        IssuanceSeed seed = resolveIssuanceSeed(sourceCredential);
-        Credential credential = Credential.createIssuing(
-                kycApplication.getCorporateId(),
-                kycApplication.getKycId(),
-                PENDING_REISSUE_EXTERNAL_ID_PREFIX + credentialRequestId,
-                resolveText(sourceCredential.getCredentialTypeCode(), CoreMockSeedData.DEV_CREDENTIAL_TYPE),
-                seed.issuerDid(),
-                resolveText(sourceCredential.getCredentialStatusPurposeCode(), CoreMockSeedData.DEV_CREDENTIAL_STATUS_PURPOSE),
-                resolveText(sourceCredential.getKycLevelCode(), CoreMockSeedData.DEV_KYC_LEVEL),
-                resolveText(sourceCredential.getJurisdictionCode(), CoreMockSeedData.DEV_JURISDICTION),
-                seed.holderDid(),
-                seed.holderAccount()
-        );
-        credential.applyIssuanceMetadata(
-                response.credentialExternalId(),
-                response.issuerDid(),
-                credentialStatus,
-                response.vcHash(),
-                response.xrplTxHash(),
-                response.credentialStatusId(),
-                response.issuedAt(),
-                response.expiresAt()
-        );
-        return credential;
-    }
-
-    private CoreRevokeCredentialRequest buildRevokeCoreRequest(
-            Credential credential, // 폐기 대상 Credential
-            String reason // 폐기 사유
-    ) {
-        String issuerAccount = coreProperties.isDevSeedEnabled()
-                ? CoreMockSeedData.DEV_ISSUER_ACCOUNT
-                : accountFromDid(credential.getIssuerDid()); // Issuer XRPL Account
-        String holderAccount = coreProperties.isDevSeedEnabled()
-                ? resolveText(credential.getHolderXrplAddress(), CoreMockSeedData.DEV_HOLDER_ACCOUNT)
-                : credential.getHolderXrplAddress(); // Holder XRPL Account
-        if (!StringUtils.hasText(issuerAccount)
-                || !StringUtils.hasText(holderAccount)
-                || !StringUtils.hasText(credential.getCredentialExternalId())
-                || !StringUtils.hasText(credential.getCredentialTypeCode())) {
-            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
-        }
         return new CoreRevokeCredentialRequest(
-                issuerAccount,
-                holderAccount,
+                accountFromDid(credential.getIssuerDid()),
+                credential.getHolderXrplAddress(),
                 credential.getCredentialTypeCode(),
                 credential.getCredentialStatusId(),
                 credential.getCredentialExternalId(),
-                reason
-        );
-    }
-
-    private IssuanceSeed resolveIssuanceSeed(
-            Credential credential // 기준 Credential
-    ) {
-        if (!coreProperties.isDevSeedEnabled()) {
-            if (!StringUtils.hasText(credential.getIssuerDid())
-                    || !StringUtils.hasText(credential.getHolderDid())
-                    || !StringUtils.hasText(credential.getHolderXrplAddress())) {
-                throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
-            }
-            String issuerAccount = accountFromDid(credential.getIssuerDid());
-            if (!StringUtils.hasText(issuerAccount)) {
-                throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
-            }
-            return new IssuanceSeed(
-                    issuerAccount,
-                    credential.getIssuerDid(),
-                    credential.getIssuerDid() + "#issuer-key-1",
-                    credential.getHolderXrplAddress(),
-                    credential.getHolderDid()
-            );
-        }
-
-        return new IssuanceSeed(
-                CoreMockSeedData.DEV_ISSUER_ACCOUNT,
-                resolveText(credential.getIssuerDid(), CoreMockSeedData.DEV_ISSUER_DID),
-                CoreMockSeedData.DEV_ISSUER_VERIFICATION_METHOD_ID,
-                resolveText(credential.getHolderXrplAddress(), CoreMockSeedData.DEV_HOLDER_ACCOUNT),
-                resolveText(credential.getHolderDid(), CoreMockSeedData.DEV_HOLDER_DID)
-        );
-    }
-
-    private Map<String, Object> resolveClaims(
-            KycApplication kycApplication, // KYC 신청
-            Credential credential // 기준 Credential
-    ) {
-        if (coreProperties.isDevSeedEnabled()) {
-            return CoreMockSeedData.legalEntityClaims();
-        }
-
-        Corporate corporate = corporateRepository.findById(kycApplication.getCorporateId())
-                .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
-        if (!StringUtils.hasText(corporate.getCorporateName())
-                || !StringUtils.hasText(corporate.getBusinessRegistrationNo())) {
-            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
-        }
-
-        Map<String, Object> kyc = new LinkedHashMap<>(); // KYC Claim
-        kyc.put("jurisdiction", resolveText(credential.getJurisdictionCode(), CoreMockSeedData.DEV_JURISDICTION));
-        kyc.put("assuranceLevel", resolveText(credential.getKycLevelCode(), CoreMockSeedData.DEV_KYC_LEVEL));
-
-        Map<String, Object> legalEntity = new LinkedHashMap<>(); // 법인 Claim
-        putIfHasText(legalEntity, "type", corporate.getCorporateTypeCode());
-        putIfHasText(legalEntity, "name", corporate.getCorporateName());
-        putIfHasText(legalEntity, "registrationNumber", corporate.getBusinessRegistrationNo());
-        putIfHasText(legalEntity, "corporateRegistrationNumber", corporate.getCorporateRegistrationNo());
-
-        Map<String, Object> representative = new LinkedHashMap<>(); // 대표자 Claim
-        putIfHasText(representative, "name", corporate.getRepresentativeName());
-        putIfHasText(representative, "phone", corporate.getRepresentativePhone());
-        putIfHasText(representative, "email", corporate.getRepresentativeEmail());
-
-        Map<String, Object> claims = new LinkedHashMap<>(); // Core 전달 Claim
-        claims.put("kyc", kyc);
-        claims.put("legalEntity", legalEntity);
-        if (!representative.isEmpty()) {
-            claims.put("representative", representative);
-        }
-        return claims;
-    }
-
-    private KyvcEnums.CredentialStatus resolveCredentialStatus(
-            String status // Core 응답 상태
-    ) {
-        if (!StringUtils.hasText(status)) {
-            return KyvcEnums.CredentialStatus.FAILED;
-        }
-        try {
-            KyvcEnums.CredentialStatus resolvedStatus = KyvcEnums.CredentialStatus.valueOf(status.trim().toUpperCase());
-            return KyvcEnums.CredentialStatus.ISSUING == resolvedStatus
-                    ? KyvcEnums.CredentialStatus.FAILED
-                    : resolvedStatus;
-        } catch (IllegalArgumentException exception) {
-            return KyvcEnums.CredentialStatus.FAILED;
-        }
-    }
-
-    private void markCoreRequestFailure(
-            String coreRequestId, // Core 요청 ID
-            String failureReason // 실패 사유
-    ) {
-        if (ErrorCode.CORE_API_TIMEOUT.getCode().equals(failureReason)) {
-            coreRequestService.markTimeout(coreRequestId, failureReason);
-            return;
-        }
-        coreRequestService.markFailed(coreRequestId, failureReason);
-    }
-
-    private CredentialRequestHistoryResponse toHistoryResponse(
-            CredentialRequest credentialRequest // Credential 요청
-    ) {
-        return new CredentialRequestHistoryResponse(
-                credentialRequest.getCredentialRequestId(),
-                credentialRequest.getCredentialId(),
-                enumName(credentialRequest.getRequestTypeCode()),
-                enumName(credentialRequest.getRequestStatusCode()),
-                credentialRequest.getReason(),
-                credentialRequest.getRequestedAt(),
-                credentialRequest.getCompletedAt()
+                normalizeReason(request.reason(), request.requestMessage())
         );
     }
 
@@ -510,11 +407,24 @@ public class CredentialRequestService {
         return credential;
     }
 
-    private void validateOperableStatus(
+    private void validateReissueAllowed(
             Credential credential // Credential
     ) {
-        if (KyvcEnums.CredentialStatus.VALID != credential.getCredentialStatus()) {
-            throw new ApiException(ErrorCode.CREDENTIAL_NOT_VALID);
+        if (KyvcEnums.CredentialStatus.VALID != credential.getCredentialStatus()
+                && KyvcEnums.CredentialStatus.EXPIRED != credential.getCredentialStatus()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_REISSUE_NOT_ALLOWED);
+        }
+    }
+
+    private void validateRevokeAllowed(
+            Credential credential // Credential
+    ) {
+        if (KyvcEnums.CredentialStatus.REVOKED == credential.getCredentialStatus()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_REVOKE_NOT_ALLOWED);
+        }
+        if (KyvcEnums.CredentialStatus.VALID != credential.getCredentialStatus()
+                && KyvcEnums.CredentialStatus.SUSPENDED != credential.getCredentialStatus()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_REVOKE_NOT_ALLOWED);
         }
     }
 
@@ -523,7 +433,23 @@ public class CredentialRequestService {
             KyvcEnums.CredentialRequestType requestType // 요청 유형
     ) {
         if (credentialRequestRepository.existsInProgressByCredentialIdAndType(credentialId, requestType)) {
-            throw new ApiException(ErrorCode.DUPLICATE_RESOURCE);
+            throw new ApiException(ErrorCode.CREDENTIAL_REQUEST_DUPLICATED);
+        }
+    }
+
+    private void validateReissueRequest(
+            CredentialReissueRequest request // 재발급 요청
+    ) {
+        if (request == null || !StringUtils.hasText(request.reason())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private void validateRevokeRequest(
+            CredentialRevokeRequest request // 폐기 요청
+    ) {
+        if (request == null || !StringUtils.hasText(request.reason())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
 
@@ -560,19 +486,175 @@ public class CredentialRequestService {
         }
     }
 
-    private void validateRequiredText(
-            String value // 필수 문자열
+    private KyvcEnums.CredentialRequestType parseRequestType(
+            String type // 요청 유형 문자열
     ) {
-        if (!StringUtils.hasText(value)) {
+        if (!StringUtils.hasText(type)) {
+            return null;
+        }
+        try {
+            return KyvcEnums.CredentialRequestType.valueOf(type.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
 
-    private String mergeReason(
+    private KyvcEnums.CredentialRequestStatus parseRequestStatus(
+            String status // 요청 상태 문자열
+    ) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        try {
+            return KyvcEnums.CredentialRequestStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private KyvcEnums.CredentialStatus resolveCredentialStatus(
+            String status // Core 응답 상태
+    ) {
+        if (!StringUtils.hasText(status)) {
+            return KyvcEnums.CredentialStatus.FAILED;
+        }
+        try {
+            KyvcEnums.CredentialStatus resolvedStatus = KyvcEnums.CredentialStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+            return KyvcEnums.CredentialStatus.ISSUING == resolvedStatus
+                    ? KyvcEnums.CredentialStatus.FAILED
+                    : resolvedStatus;
+        } catch (IllegalArgumentException exception) {
+            return KyvcEnums.CredentialStatus.FAILED;
+        }
+    }
+
+    private IssuanceSeed resolveIssuanceSeed(
+            Credential credential // 발급 대상 Credential
+    ) {
+        if (!coreProperties.isDevSeedEnabled()) {
+            if (!StringUtils.hasText(credential.getIssuerDid())
+                    || !StringUtils.hasText(credential.getHolderDid())
+                    || !StringUtils.hasText(credential.getHolderXrplAddress())) {
+                throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
+            }
+            String issuerAccount = accountFromDid(credential.getIssuerDid());
+            if (!StringUtils.hasText(issuerAccount)) {
+                throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
+            }
+            return new IssuanceSeed(
+                    issuerAccount,
+                    credential.getIssuerDid(),
+                    credential.getIssuerDid() + "#issuer-key-1",
+                    credential.getHolderXrplAddress(),
+                    credential.getHolderDid()
+            );
+        }
+
+        return new IssuanceSeed(
+                CoreMockSeedData.DEV_ISSUER_ACCOUNT,
+                resolveText(credential.getIssuerDid(), CoreMockSeedData.DEV_ISSUER_DID),
+                CoreMockSeedData.DEV_ISSUER_VERIFICATION_METHOD_ID,
+                resolveText(credential.getHolderXrplAddress(), CoreMockSeedData.DEV_HOLDER_ACCOUNT),
+                resolveText(credential.getHolderDid(), CoreMockSeedData.DEV_HOLDER_DID)
+        );
+    }
+
+    private Map<String, Object> resolveClaims() {
+        if (!coreProperties.isDevSeedEnabled()) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 claims 데이터 부족");
+        }
+        return CoreMockSeedData.legalEntityClaims();
+    }
+
+    private void saveStatusHistoryIfChanged(
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialStatus beforeStatus, // 변경 전 상태
+            KyvcEnums.CredentialStatus afterStatus, // 변경 후 상태
+            KyvcEnums.ActorType actorType, // 변경자 유형
+            Long actorId, // 변경자 ID
+            String reasonCode, // 변경 사유 코드
+            String reason // 변경 사유
+    ) {
+        if (afterStatus == null || beforeStatus == afterStatus) {
+            return;
+        }
+        credentialStatusHistoryRepository.save(CredentialStatusHistory.create(
+                credentialId,
+                beforeStatus,
+                afterStatus,
+                actorType,
+                actorId,
+                reasonCode,
+                reason
+        ));
+    }
+
+    private void markCoreRequestFailure(
+            String coreRequestId, // Core 요청 ID
+            String failureReason // 실패 사유
+    ) {
+        if (ErrorCode.CORE_API_TIMEOUT.getCode().equals(failureReason)) {
+            coreRequestService.markTimeout(coreRequestId, failureReason);
+            return;
+        }
+        coreRequestService.markFailed(coreRequestId, failureReason);
+    }
+
+    private CredentialOperationResponse toOperationResponse(
+            CredentialRequest credentialRequest, // Credential 요청
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
+            String failureReason // 실패 사유
+    ) {
+        return new CredentialOperationResponse(
+                credentialRequest.getCredentialRequestId(),
+                credentialId,
+                enumName(credentialRequest.getRequestStatus()),
+                enumName(credentialStatus),
+                enumName(resolveTxStatus(credentialRequest)),
+                failureReason
+        );
+    }
+
+    private CredentialRequestHistoryResponse toHistoryResponse(
+            CredentialRequest credentialRequest // Credential 요청
+    ) {
+        return new CredentialRequestHistoryResponse(
+                credentialRequest.getCredentialRequestId(),
+                credentialRequest.getCredentialId(),
+                enumName(credentialRequest.getRequestType()),
+                enumName(credentialRequest.getRequestStatus()),
+                credentialRequest.getReason(),
+                credentialRequest.getRequestedAt(),
+                credentialRequest.getCompletedAt()
+        );
+    }
+
+    private KyvcEnums.XrplTransactionStatus resolveTxStatus(
+            CredentialRequest credentialRequest // Credential 요청
+    ) {
+        if (KyvcEnums.CredentialRequestStatus.COMPLETED == credentialRequest.getRequestStatus()) {
+            return KyvcEnums.XrplTransactionStatus.CONFIRMED;
+        }
+        if (KyvcEnums.CredentialRequestStatus.FAILED == credentialRequest.getRequestStatus()) {
+            return KyvcEnums.XrplTransactionStatus.FAILED;
+        }
+        return KyvcEnums.XrplTransactionStatus.PENDING;
+    }
+
+    private String failureReason(
+            CredentialRequest request // Credential 요청
+    ) {
+        return KyvcEnums.CredentialRequestStatus.FAILED == request.getRequestStatus()
+                ? request.getReasonCode()
+                : null;
+    }
+
+    private String normalizeReason(
             String reason, // 요청 사유
             String requestMessage // 요청 메시지
     ) {
-        String normalizedReason = reason == null ? "" : reason.trim();
+        String normalizedReason = StringUtils.hasText(reason) ? reason.trim() : "사용자 요청";
         if (!StringUtils.hasText(requestMessage)) {
             return normalizedReason;
         }
@@ -614,23 +696,13 @@ public class CredentialRequestService {
         return StringUtils.hasText(value) ? value.trim() : fallback;
     }
 
-    private void putIfHasText(
-            Map<String, Object> values, // 대상 Map
-            String key, // Claim key
-            String value // Claim value
-    ) {
-        if (StringUtils.hasText(value)) {
-            values.put(key, value.trim());
-        }
-    }
-
     private String enumName(
             Enum<?> value // enum 값
     ) {
         return value == null ? null : value.name();
     }
 
-    private Map<String, Object> createLogFields(
+    private Map<String, Object> createBaseLogFields(
             Long userId, // 사용자 ID
             Long corporateId, // 법인 ID
             Long credentialId, // Credential ID

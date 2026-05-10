@@ -315,6 +315,7 @@ public class Credential {
     }
 
     // Credential 폐기 상태 반영
+    // Credential 폐기 처리
     public void revoke(
             LocalDateTime revokedAt // 폐기 일시
     ) {

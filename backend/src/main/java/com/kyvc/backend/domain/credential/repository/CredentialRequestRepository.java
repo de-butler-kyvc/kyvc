@@ -31,6 +31,16 @@ public interface CredentialRequestRepository {
     );
 
     /**
+     * Credential 요청 ID 기준 필수 조회
+     *
+     * @param credentialRequestId Credential 요청 ID
+     * @return Credential 요청
+     */
+    CredentialRequest getById(
+            Long credentialRequestId // Credential 요청 ID
+    );
+
+    /**
      * Credential별 진행 중 요청 존재 여부 조회
      *
      * @param credentialId Credential ID
@@ -40,5 +50,17 @@ public interface CredentialRequestRepository {
     boolean existsInProgressByCredentialIdAndType(
             Long credentialId, // Credential ID
             KyvcEnums.CredentialRequestType requestTypeCode // 요청 유형
+    );
+
+    /**
+     * 진행 중 요청 존재 여부
+     *
+     * @param credentialId Credential ID
+     * @param requestType 요청 유형
+     * @return 진행 중 요청 존재 여부
+     */
+    boolean existsInProgress(
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialRequestType requestType // 요청 유형
     );
 }

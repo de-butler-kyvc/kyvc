@@ -109,7 +109,6 @@ public enum ErrorCode {
     // HTTP 409 - Credential 상태 오류
     CREDENTIAL_NOT_VALID(HttpStatus.CONFLICT, "CREDENTIAL_NOT_VALID", "유효한 Credential 상태가 아닙니다."),
     // HTTP 404 - Credential 요청 없음
-    CREDENTIAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_REQUEST_NOT_FOUND", "Credential 요청을 찾을 수 없습니다."),
     // HTTP 404 - Credential Offer 없음
     CREDENTIAL_OFFER_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_OFFER_NOT_FOUND", "Credential Offer를 찾을 수 없습니다."),
     // HTTP 410 - Credential Offer 만료
@@ -196,6 +195,14 @@ public enum ErrorCode {
     VP_CHALLENGE_INVALID(HttpStatus.BAD_REQUEST, "VP_CHALLENGE_INVALID", "VP challenge가 올바르지 않습니다."),
     // HTTP 400 - VP JWT 필요
     VP_JWT_REQUIRED(HttpStatus.BAD_REQUEST, "VP_JWT_REQUIRED", "VP JWT가 필요합니다."),
+    // HTTP 404 - Verifier 없음
+    VERIFIER_NOT_FOUND(HttpStatus.NOT_FOUND, "VERIFIER_NOT_FOUND", "Verifier를 찾을 수 없습니다."),
+    // HTTP 403 - Verifier 접근 거부
+    VERIFIER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "VERIFIER_ACCESS_DENIED", "Verifier 접근 권한이 없습니다."),
+    // HTTP 404 - Verifier 테스트 검증 없음
+    VERIFIER_TEST_NOT_FOUND(HttpStatus.NOT_FOUND, "VERIFIER_TEST_NOT_FOUND", "Verifier 테스트 검증 이력을 찾을 수 없습니다."),
+    // HTTP 400 - 결과 통지 URL 오류
+    INVALID_NOTIFY_URL(HttpStatus.BAD_REQUEST, "INVALID_NOTIFY_URL", "결과 통지 URL이 올바르지 않습니다."),
 
     // HTTP 404 - DID 기관 없음
     DID_INSTITUTION_NOT_FOUND(HttpStatus.NOT_FOUND, "DID_INSTITUTION_NOT_FOUND", "DID 기관 정보를 찾을 수 없습니다."),
@@ -221,7 +228,15 @@ public enum ErrorCode {
     // HTTP 409 - VC 발급 요청 불가
     CREDENTIAL_ISSUANCE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_ISSUANCE_NOT_ALLOWED", "현재 상태에서는 VC 발급을 요청할 수 없습니다."),
     // HTTP 409 - VC 발급 완료
-    CREDENTIAL_ISSUANCE_ALREADY_COMPLETED(HttpStatus.CONFLICT, "CREDENTIAL_ISSUANCE_ALREADY_COMPLETED", "이미 VC 발급이 완료되었습니다.");
+    CREDENTIAL_ISSUANCE_ALREADY_COMPLETED(HttpStatus.CONFLICT, "CREDENTIAL_ISSUANCE_ALREADY_COMPLETED", "이미 VC 발급이 완료되었습니다."),
+    // HTTP 409 - Credential 요청 중복
+    CREDENTIAL_REQUEST_DUPLICATED(HttpStatus.CONFLICT, "CREDENTIAL_REQUEST_DUPLICATED", "진행 중인 Credential 요청이 이미 존재합니다."),
+    // HTTP 409 - Credential 재발급 불가
+    CREDENTIAL_REISSUE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_REISSUE_NOT_ALLOWED", "현재 상태에서는 VC 재발급을 요청할 수 없습니다."),
+    // HTTP 409 - Credential 폐기 불가
+    CREDENTIAL_REVOKE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_REVOKE_NOT_ALLOWED", "현재 상태에서는 VC 폐기를 요청할 수 없습니다."),
+    // HTTP 404 - Credential 요청 이력 없음
+    CREDENTIAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_REQUEST_NOT_FOUND", "Credential 요청 이력을 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String code;

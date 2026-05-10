@@ -111,6 +111,8 @@ public final class KyvcEnums {
         EXPIRED, // 만료
         REVOKED, // 폐기
         SUSPENDED, // 중지
+        REVOKE_REQUESTED, // 폐기 요청
+        REISSUE_REQUESTED, // 재발급 요청
         FAILED // 발급 실패
     }
 
@@ -157,7 +159,8 @@ public final class KyvcEnums {
         VALID, // 유효
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
-        EXPIRED // 만료
+        EXPIRED, // 만료
+        FAILED // 실패
     }
 
     // VP 요청 유형
@@ -263,7 +266,6 @@ public final class KyvcEnums {
         INACTIVE // 비활성
     }
 
-    // 관리자 상태
     // DID 기관 매핑 상태
     public enum DidInstitutionStatus {
         ACTIVE, // 사용 가능
@@ -271,6 +273,7 @@ public final class KyvcEnums {
         SUSPENDED // 정지
     }
 
+    // 관리자 상태
     public enum AdminUserStatus {
         ACTIVE, // 활성
         LOCKED, // 잠금
@@ -446,6 +449,7 @@ public final class KyvcEnums {
     public enum CoreRequestType {
         AI_REVIEW, // AI 심사
         VC_ISSUE, // VC 발급
+        VC_REISSUE, // VC 재발급
         VC_REVOKE, // VC 폐기
         VC_STATUS_CHECK, // VC 상태 조회
         VP_VERIFY, // VP 검증

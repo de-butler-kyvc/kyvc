@@ -30,6 +30,8 @@ import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiRequ
 import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.IssuePresentationChallengeApiRequest;
 import com.kyvc.backend.domain.core.infrastructure.dto.IssuePresentationChallengeApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.LlmPrimaryAssessmentApiRequest;
+import com.kyvc.backend.domain.core.infrastructure.dto.LlmPrimaryAssessmentApiResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.RevokeCredentialApiRequest;
 import com.kyvc.backend.domain.core.infrastructure.dto.RevokeCredentialApiResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.VerificationApiResponse;
@@ -51,9 +53,11 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -62,10 +66,11 @@ import java.util.Map;
 // Core 실제 HTTP Adapter
 @Component
 @RequiredArgsConstructor
-@ConditionalOnExpression("'${kyvc.core.mode:mock}'.toLowerCase() == 'http' || '${kyvc.core.mode:mock}'.toLowerCase() == 'hybrid'")
+@ConditionalOnExpression("'${kyvc.core.mode:http}'.toLowerCase() == 'http' || '${kyvc.core.mode:http}'.toLowerCase() == 'hybrid'")
 public class CoreHttpAdapter implements CoreAdapter {
 
     private static final String HEALTH_ENDPOINT = "/health";
+    private static final String AI_ASSESSMENT_ENDPOINT = "/ai-assessment/assessments/llm-primary";
     private static final String ISSUE_KYC_CREDENTIAL_ENDPOINT = "/issuer/credentials/kyc";
     private static final String REVOKE_CREDENTIAL_ENDPOINT = "/issuer/credentials/revoke";
     private static final String CREDENTIAL_STATUS_ENDPOINT = "/credential-status/credentials/{issuerAccount}/{holderAccount}/{credentialType}";
@@ -75,10 +80,24 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String DID_DOCUMENT_ENDPOINT = "/dids/{account}/diddoc.json";
     private static final String CORE_API_KEY_HEADER = "X-API-Key";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
+    private static final String CORE_LEGAL_ENTITY_STOCK_COMPANY = "STOCK_COMPANY";
+    private static final String CORE_APPLICANT_ROLE_REPRESENTATIVE = "REPRESENTATIVE";
+    private static final String CORE_APPLICANT_ROLE_DELEGATE = "DELEGATE";
+    private static final String CORE_ASSESSMENT_NORMAL = "NORMAL";
+    private static final String CORE_ASSESSMENT_SUPPLEMENT_REQUIRED = "SUPPLEMENT_REQUIRED";
+    private static final String CORE_ASSESSMENT_MANUAL_REVIEW_REQUIRED = "MANUAL_REVIEW_REQUIRED";
+    private static final String CORE_ASSESSMENT_REJECTED = "REJECTED";
+    private static final String CORE_DOCUMENT_TYPE_UNKNOWN = "UNKNOWN";
+    private static final String BACKEND_CORPORATE_TYPE_CORPORATION = "CORPORATION";
+    private static final String BACKEND_DOCUMENT_BUSINESS_REGISTRATION = "BUSINESS_REGISTRATION";
+    private static final String BACKEND_DOCUMENT_CORPORATE_SEAL_CERTIFICATE = "CORPORATE_SEAL_CERTIFICATE";
+    private static final String BACKEND_DOCUMENT_SHAREHOLDER_LIST = "SHAREHOLDER_LIST";
+    private static final String BACKEND_DOCUMENT_POWER_OF_ATTORNEY = "POWER_OF_ATTORNEY";
+    private static final String CORE_DOCUMENT_SEAL_CERTIFICATE = "SEAL_CERTIFICATE";
+    private static final String CORE_DOCUMENT_SHAREHOLDER_REGISTRY = "SHAREHOLDER_REGISTRY";
 
     private final RestClient coreRestClient;
     private final CoreProperties coreProperties;
-    private final CoreMockResponseFactory coreMockResponseFactory;
     private final LogEventLogger logEventLogger;
     private final ObjectMapper objectMapper;
 
@@ -87,7 +106,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = HEALTH_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core health API call started", fields);
+        logEventLogger.info("core.call.started", "Core health API call started", fields);
         try {
             ResponseEntity<CoreHealthApiResponse> responseEntity = coreRestClient.get()
                     .uri(endpoint)
@@ -104,14 +123,6 @@ public class CoreHttpAdapter implements CoreAdapter {
             );
         } catch (RestClientException exception) {
             ApiException mapped = mapCoreException(endpoint, exception, fields);
-            if (coreProperties.isFailureFallbackEnabled()) {
-                logFallbackUsed(endpoint, mapped.getMessage(), fields);
-                return new CoreHealthResponse(
-                        coreProperties.normalizedMode().toUpperCase(Locale.ROOT),
-                        false,
-                        "Core health 장애 fallback 적용: " + mapped.getMessage()
-                );
-            }
             throw mapped;
         }
     }
@@ -120,24 +131,35 @@ public class CoreHttpAdapter implements CoreAdapter {
     public CoreAiReviewResponse requestAiReview(
             CoreAiReviewRequest request // AI 심사 요청
     ) {
-        logEventLogger.info(
-                "core.ai.mock.created",
-                "Core AI API 미구현으로 Mock 응답 생성",
-                Map.of("coreRequestId", request.coreRequestId())
-        );
-        return coreMockResponseFactory.mockAiReviewAccepted(request);
+        validateAiReviewRequest(request);
+
+        LlmPrimaryAssessmentApiRequest apiRequest = buildAiAssessmentApiRequest(request);
+        String endpoint = AI_ASSESSMENT_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), null, null);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.call.started", "Core AI review API call started", fields);
+        try {
+            ResponseEntity<LlmPrimaryAssessmentApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(LlmPrimaryAssessmentApiResponse.class);
+            LlmPrimaryAssessmentApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            CoreAiReviewResponse mapped = mapAiReviewResponse(request, body);
+            logEventLogger.info("core.response.mapped", "Core AI review response mapped", fields);
+            return mapped;
+        } catch (RestClientException exception) {
+            throw mapCoreException(endpoint, exception, fields);
+        }
     }
 
     @Override
     public CoreAiReviewStatusResponse getAiReviewStatus(
             String coreRequestId // Core 요청 ID
     ) {
-        logEventLogger.info(
-                "core.ai.mock.created",
-                "Core AI 상태 API 미구현으로 Mock 응답 생성",
-                Map.of("coreRequestId", coreRequestId)
-        );
-        return coreMockResponseFactory.mockAiReviewStatus(coreRequestId);
+        throw new ApiException(ErrorCode.CORE_UNSUPPORTED_OPERATION, "Core AI 심사 상태 조회 API가 Swagger에서 확인되지 않았습니다.");
     }
 
     @Override
@@ -178,7 +200,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = ISSUE_KYC_CREDENTIAL_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core VC issuance API call started", fields);
+        logEventLogger.info("core.call.started", "Core VC issuance API call started", fields);
         try {
             ResponseEntity<IssueKycCredentialApiResponse> responseEntity = coreRestClient.post()
                     .uri(endpoint)
@@ -193,10 +215,6 @@ public class CoreHttpAdapter implements CoreAdapter {
             return mapped;
         } catch (RestClientException exception) {
             ApiException mapped = mapCoreException(endpoint, exception, fields);
-            if (coreProperties.isFailureFallbackEnabled()) {
-                logFallbackUsed(endpoint, mapped.getMessage(), fields);
-                return coreMockResponseFactory.fallbackIssueKycCredentialOnFailure(request, mapped.getMessage());
-            }
             throw mapped;
         }
     }
@@ -205,12 +223,7 @@ public class CoreHttpAdapter implements CoreAdapter {
     public CoreVcIssuanceStatusResponse getVcIssuanceStatus(
             String coreRequestId // Core 요청 ID
     ) {
-        return new CoreVcIssuanceStatusResponse(
-                coreRequestId,
-                KyvcEnums.CredentialStatus.ISSUING.name(),
-                "Core VC 발급 상태 전용 API가 없어 진행 상태를 유지합니다.",
-                LocalDateTime.now()
-        );
+        throw new ApiException(ErrorCode.CORE_UNSUPPORTED_OPERATION, "Core VC 발급 상태 조회 API가 Swagger에서 확인되지 않았습니다.");
     }
 
     @Override
@@ -232,7 +245,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = REVOKE_CREDENTIAL_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core revoke credential API call started", fields);
+        logEventLogger.info("core.call.started", "Core revoke credential API call started", fields);
         try {
             ResponseEntity<RevokeCredentialApiResponse> responseEntity = coreRestClient.post()
                     .uri(endpoint)
@@ -249,10 +262,6 @@ public class CoreHttpAdapter implements CoreAdapter {
             );
         } catch (RestClientException exception) {
             ApiException mapped = mapCoreException(endpoint, exception, fields);
-            if (coreProperties.isFailureFallbackEnabled()) {
-                logFallbackUsed(endpoint, mapped.getMessage(), fields);
-                return new CoreRevokeCredentialResponse(false, "fallback", "Core 장애 fallback으로 폐기 미확정 응답을 반환했습니다.");
-            }
             throw mapped;
         }
     }
@@ -270,7 +279,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = CREDENTIAL_STATUS_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core credential-status API call started", fields);
+        logEventLogger.info("core.call.started", "Core credential-status API call started", fields);
         try {
             ResponseEntity<CredentialStatusApiResponse> responseEntity = coreRestClient.get()
                     .uri(endpoint, issuerAccount.trim(), holderAccount.trim(), credentialType.trim())
@@ -293,19 +302,6 @@ public class CoreHttpAdapter implements CoreAdapter {
             return mapped;
         } catch (RestClientException exception) {
             ApiException mapped = mapCoreException(endpoint, exception, fields);
-            if (coreProperties.isFailureFallbackEnabled()) {
-                logFallbackUsed(endpoint, mapped.getMessage(), fields);
-                return new CoreCredentialStatusResponse(
-                        issuerAccount,
-                        holderAccount,
-                        credentialType,
-                        false,
-                        false,
-                        null,
-                        LocalDateTime.now(),
-                        "Core 장애 fallback으로 상태 미확정 응답을 반환했습니다."
-                );
-            }
             throw mapped;
         }
     }
@@ -336,7 +332,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = VERIFY_PRESENTATION_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), request.vpVerificationId());
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core VP verify API call started", fields);
+        logEventLogger.info("core.call.started", "Core VP verify API call started", fields);
         try {
             ResponseEntity<VerificationApiResponse> responseEntity = coreRestClient.post()
                     .uri(endpoint)
@@ -351,10 +347,6 @@ public class CoreHttpAdapter implements CoreAdapter {
             return mapped;
         } catch (RestClientException exception) {
             ApiException mapped = mapCoreException(endpoint, exception, fields);
-            if (coreProperties.isFailureFallbackEnabled()) {
-                logFallbackUsed(endpoint, mapped.getMessage(), fields);
-                return coreMockResponseFactory.fallbackVerifyPresentationOnFailure(request, mapped.getMessage());
-            }
             throw mapped;
         }
     }
@@ -363,12 +355,7 @@ public class CoreHttpAdapter implements CoreAdapter {
     public CoreVpVerificationStatusResponse getVpVerificationStatus(
             String coreRequestId // Core 요청 ID
     ) {
-        return new CoreVpVerificationStatusResponse(
-                coreRequestId,
-                KyvcEnums.VpVerificationStatus.PRESENTED.name(),
-                "Core VP 검증 상태 전용 API가 없어 PRESENTED 상태를 유지합니다.",
-                LocalDateTime.now()
-        );
+        throw new ApiException(ErrorCode.CORE_UNSUPPORTED_OPERATION, "Core VP 검증 상태 조회 API가 Swagger에서 확인되지 않았습니다.");
     }
 
     @Override
@@ -389,7 +376,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = ISSUE_PRESENTATION_CHALLENGE_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core VP challenge API call started", fields);
+        logEventLogger.info("core.call.started", "Core VP challenge API call started", fields);
         try {
             ResponseEntity<IssuePresentationChallengeApiResponse> responseEntity = coreRestClient.post()
                     .uri(endpoint)
@@ -431,7 +418,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = VERIFY_CREDENTIAL_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core credential verify API call started", fields);
+        logEventLogger.info("core.call.started", "Core credential verify API call started", fields);
         try {
             ResponseEntity<VerificationApiResponse> responseEntity = coreRestClient.post()
                     .uri(endpoint)
@@ -458,7 +445,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = DID_DOCUMENT_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         long startedAt = System.currentTimeMillis();
-        logEventLogger.info("core.http.call.started", "Core DID document API call started", fields);
+        logEventLogger.info("core.call.started", "Core DID document API call started", fields);
         try {
             ResponseEntity<Map> responseEntity = coreRestClient.get()
                     .uri(endpoint, account.trim())
@@ -478,16 +465,155 @@ public class CoreHttpAdapter implements CoreAdapter {
     public CoreXrplTransactionResponse getXrplTransaction(
             String txHash // 트랜잭션 해시
     ) {
-        logEventLogger.info("core.ai.mock.created", "Core XRPL API 미구현으로 Mock 응답 생성");
-        return coreMockResponseFactory.mockXrplTransactionStatus(txHash);
+        throw new ApiException(ErrorCode.CORE_UNSUPPORTED_OPERATION, "Core XRPL 트랜잭션 조회 API가 Swagger에서 확인되지 않았습니다.");
     }
 
     @Override
     public CoreCredentialSchemaResponse getCredentialSchema(
             String schemaId // 스키마 ID
     ) {
-        logEventLogger.info("core.ai.mock.created", "Core Credential Schema API 미구현으로 Mock 응답 생성");
-        return coreMockResponseFactory.mockCredentialSchema(schemaId);
+        throw new ApiException(ErrorCode.CORE_UNSUPPORTED_OPERATION, "Core Credential Schema 조회 API가 Swagger에서 확인되지 않았습니다.");
+    }
+
+    private void validateAiReviewRequest(
+            CoreAiReviewRequest request // AI 심사 요청
+    ) {
+        if (request == null
+                || !StringUtils.hasText(request.coreRequestId())
+                || request.kycId() == null
+                || !StringUtils.hasText(request.corporateTypeCode())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "AI 심사 요청 필수 데이터가 부족합니다.");
+        }
+    }
+
+    private LlmPrimaryAssessmentApiRequest buildAiAssessmentApiRequest(
+            CoreAiReviewRequest request // AI 심사 요청
+    ) {
+        return new LlmPrimaryAssessmentApiRequest(
+                String.valueOf(request.kycId()),
+                resolveCoreLegalEntityType(request.corporateTypeCode()),
+                resolveCoreApplicantRole(request.agentName()),
+                request.representativeName(),
+                false,
+                request.businessNumber(),
+                request.corporateRegistrationNumber(),
+                buildDeclaredRepresentative(request),
+                List.of(),
+                buildAiAssessmentDocuments(request.documents())
+        );
+    }
+
+    private LlmPrimaryAssessmentApiRequest.DeclaredPersonApiRequest buildDeclaredRepresentative(
+            CoreAiReviewRequest request // AI 심사 요청
+    ) {
+        return new LlmPrimaryAssessmentApiRequest.DeclaredPersonApiRequest(
+                request.representativeName(),
+                null,
+                null,
+                null
+        );
+    }
+
+    private List<LlmPrimaryAssessmentApiRequest.LlmPrimaryDocumentInputApiRequest> buildAiAssessmentDocuments(
+            List<CoreAiReviewRequest.CoreAiReviewDocumentRequest> documents // AI 심사 문서 목록
+    ) {
+        if (documents == null) {
+            return List.of();
+        }
+        return documents.stream()
+                .map(document -> new LlmPrimaryAssessmentApiRequest.LlmPrimaryDocumentInputApiRequest(
+                        document.documentId() == null ? null : String.valueOf(document.documentId()),
+                        document.originalFileName(),
+                        document.mimeType(),
+                        resolveCoreDocumentType(document.documentTypeCode()),
+                        document.storagePath(),
+                        document.contentBase64(),
+                        null,
+                        document.fileSize(),
+                        document.documentHash(),
+                        null
+                ))
+                .toList();
+    }
+
+    private String resolveCoreLegalEntityType(
+            String corporateTypeCode // backend 법인 유형 코드
+    ) {
+        if (!StringUtils.hasText(corporateTypeCode)) {
+            return CORE_LEGAL_ENTITY_STOCK_COMPANY;
+        }
+        String normalized = corporateTypeCode.trim().toUpperCase(Locale.ROOT);
+        if (BACKEND_CORPORATE_TYPE_CORPORATION.equals(normalized)) {
+            return CORE_LEGAL_ENTITY_STOCK_COMPANY;
+        }
+        return CORE_LEGAL_ENTITY_STOCK_COMPANY;
+    }
+
+    private String resolveCoreApplicantRole(
+            String agentName // 대리인명
+    ) {
+        return StringUtils.hasText(agentName)
+                ? CORE_APPLICANT_ROLE_DELEGATE
+                : CORE_APPLICANT_ROLE_REPRESENTATIVE;
+    }
+
+    private String resolveCoreDocumentType(
+            String documentTypeCode // backend 문서 유형 코드
+    ) {
+        if (!StringUtils.hasText(documentTypeCode)) {
+            return CORE_DOCUMENT_TYPE_UNKNOWN;
+        }
+        String normalized = documentTypeCode.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case BACKEND_DOCUMENT_BUSINESS_REGISTRATION -> BACKEND_DOCUMENT_BUSINESS_REGISTRATION;
+            case BACKEND_DOCUMENT_CORPORATE_SEAL_CERTIFICATE -> CORE_DOCUMENT_SEAL_CERTIFICATE;
+            case BACKEND_DOCUMENT_SHAREHOLDER_LIST -> CORE_DOCUMENT_SHAREHOLDER_REGISTRY;
+            case BACKEND_DOCUMENT_POWER_OF_ATTORNEY -> BACKEND_DOCUMENT_POWER_OF_ATTORNEY;
+            default -> CORE_DOCUMENT_TYPE_UNKNOWN;
+        };
+    }
+
+    private CoreAiReviewResponse mapAiReviewResponse(
+            CoreAiReviewRequest request, // AI 심사 요청
+            LlmPrimaryAssessmentApiResponse body // Core AI 심사 응답
+    ) {
+        LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment = body.assessment();
+        if (assessment == null || !StringUtils.hasText(assessment.status())) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core AI 심사 응답 필수 필드가 부족합니다.");
+        }
+        String assessmentStatus = assessment.status().trim().toUpperCase(Locale.ROOT);
+        return new CoreAiReviewResponse(
+                request.coreRequestId(),
+                resolveAiReviewStatus(assessmentStatus),
+                assessmentStatus,
+                assessment.assessmentId(),
+                assessment.overallConfidence(),
+                resolveAiReviewMessage(assessment),
+                LocalDateTime.now()
+        );
+    }
+
+    private String resolveAiReviewStatus(
+            String assessmentStatus // Core 심사 상태
+    ) {
+        return switch (assessmentStatus) {
+            case CORE_ASSESSMENT_NORMAL -> KyvcEnums.AiReviewStatus.SUCCESS.name();
+            case CORE_ASSESSMENT_SUPPLEMENT_REQUIRED, CORE_ASSESSMENT_MANUAL_REVIEW_REQUIRED, CORE_ASSESSMENT_REJECTED ->
+                    KyvcEnums.AiReviewStatus.LOW_CONFIDENCE.name();
+            default -> KyvcEnums.AiReviewStatus.FAILED.name();
+        };
+    }
+
+    private String resolveAiReviewMessage(
+            LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment // Core 심사 결과
+    ) {
+        if (StringUtils.hasText(assessment.summary())) {
+            return assessment.summary().trim();
+        }
+        if (StringUtils.hasText(assessment.status())) {
+            return "Core AI 심사 상태: " + assessment.status().trim();
+        }
+        return "Core AI 심사가 완료되었습니다.";
     }
 
     private void validateVcIssuanceRequest(
@@ -733,7 +859,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         Map<String, Object> fields = new LinkedHashMap<>(baseFields);
         if (exception instanceof RestClientResponseException responseException) {
             fields.put("httpStatus", responseException.getRawStatusCode());
-            logEventLogger.warn("core.http.call.failed", "Core API call failed", fields);
+            logEventLogger.warn("core.call.failed", "Core API call failed", fields);
             return new ApiException(
                     ErrorCode.CORE_API_CALL_FAILED,
                     "Core API 호출 실패 [" + endpoint + "], status=" + responseException.getRawStatusCode(),
@@ -741,10 +867,10 @@ public class CoreHttpAdapter implements CoreAdapter {
             );
         }
         if (exception instanceof ResourceAccessException && isTimeoutException(exception)) {
-            logEventLogger.warn("core.http.call.timeout", "Core API call timeout", fields);
+            logEventLogger.warn("core.call.timeout", "Core API call timeout", fields);
             return new ApiException(ErrorCode.CORE_API_TIMEOUT, "Core API 타임아웃 [" + endpoint + "]", exception);
         }
-        logEventLogger.error("core.http.call.failed", "Core API call failed", fields, exception);
+        logEventLogger.error("core.call.failed", "Core API call failed", fields, exception);
         return new ApiException(ErrorCode.CORE_API_CALL_FAILED, "Core API 호출 실패 [" + endpoint + "]", exception);
     }
 
@@ -771,18 +897,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         Map<String, Object> fields = new LinkedHashMap<>(baseFields);
         fields.put("httpStatus", httpStatus);
         fields.put("durationMillis", System.currentTimeMillis() - startedAt);
-        logEventLogger.info("core.http.call.completed", "Core API call completed", fields);
-    }
-
-    private void logFallbackUsed(
-            String endpoint, // 호출 endpoint
-            String reason, // fallback 사유
-            Map<String, Object> baseFields // 로그 필드
-    ) {
-        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
-        fields.put("mockReason", reason);
-        fields.put("endpoint", endpoint);
-        logEventLogger.warn("core.mock.fallback.used", "Core 장애 fallback 사용", fields);
+        logEventLogger.info("core.call.completed", "Core API call completed", fields);
     }
 
     private Map<String, Object> createHttpLogFields(

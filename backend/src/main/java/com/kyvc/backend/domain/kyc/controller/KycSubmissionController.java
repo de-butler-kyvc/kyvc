@@ -72,7 +72,7 @@ public class KycSubmissionController {
      */
     @Operation(
             summary = "KYC 제출",
-            description = "CoreAdapter를 통해 Core에 동기 요청하고, Core 응답 수신 후 KYC 상태와 AI 심사 결과를 저장합니다."
+            description = "KYC 제출 가능 조건을 검증한 뒤 CoreAdapter를 통해 Core AI 심사를 동기 요청하고, Core 응답 수신 후 KYC 상태와 심사 결과를 저장합니다."
     )
     @ApiResponse(
             responseCode = "200",

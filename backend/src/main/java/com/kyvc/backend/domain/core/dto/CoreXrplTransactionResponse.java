@@ -18,7 +18,7 @@ public record CoreXrplTransactionResponse(
         String txHash, // 트랜잭션 해시
         @Schema(description = "처리 상태", example = "PENDING")
         String status, // 처리 상태
-        @Schema(description = "처리 메시지", example = "XRPL transaction is pending in stub core.")
+        @Schema(description = "처리 메시지", example = "XRPL transaction status is stored in backend DB.")
         String message, // 처리 메시지
         @Schema(description = "조회 시각", example = "2026-05-06T10:30:00")
         LocalDateTime checkedAt // 조회 시각

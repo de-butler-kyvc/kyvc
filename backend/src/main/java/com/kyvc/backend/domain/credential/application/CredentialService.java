@@ -3,10 +3,12 @@ package com.kyvc.backend.domain.credential.application;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
+import com.kyvc.backend.domain.credential.dto.CredentialIssueResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialDetailResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialListResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialOfferResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialSummaryResponse;
+import com.kyvc.backend.domain.credential.repository.CredentialQueryRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
@@ -23,6 +25,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,8 +38,10 @@ public class CredentialService {
     private static final long CREDENTIAL_OFFER_EXPIRE_MINUTES = 30L;
 
     private final CredentialRepository credentialRepository;
+    private final CredentialQueryRepository credentialQueryRepository;
     private final CorporateRepository corporateRepository;
     private final KycApplicationRepository kycApplicationRepository;
+    private final CredentialIssuanceService credentialIssuanceService;
     private final LogEventLogger logEventLogger;
 
     // 사용자 Credential 목록 조회
@@ -44,10 +49,20 @@ public class CredentialService {
     public CredentialListResponse getCredentials(
             CustomUserDetails userDetails // 인증 사용자 정보
     ) {
+        return getCredentials(userDetails, null);
+    }
+
+    // 사용자 Credential 목록 조회
+    @Transactional(readOnly = true)
+    public CredentialListResponse getCredentials(
+            CustomUserDetails userDetails, // 인증 사용자 정보
+            String status // Credential 상태 필터
+    ) {
         Long userId = resolveUserId(userDetails); // 사용자 ID
         Long corporateId = resolveCorporateId(userId); // 법인 ID
+        KyvcEnums.CredentialStatus credentialStatus = parseCredentialStatus(status); // Credential 상태
 
-        List<CredentialSummaryResponse> credentials = credentialRepository.findByCorporateId(corporateId).stream()
+        List<CredentialSummaryResponse> credentials = credentialQueryRepository.findByCorporateId(corporateId, credentialStatus).stream()
                 .map(this::toSummaryResponse)
                 .toList();
 
@@ -58,6 +73,37 @@ public class CredentialService {
         );
 
         return new CredentialListResponse(credentials, credentials.size());
+    }
+
+    // 사용자 VC 발급 요청
+    @Transactional
+    public CredentialIssueResponse issueCredential(
+            CustomUserDetails userDetails, // 인증 사용자 정보
+            Long kycId // KYC 신청 ID
+    ) {
+        validateKycId(kycId);
+
+        Long userId = resolveUserId(userDetails); // 사용자 ID
+        Long corporateId = resolveCorporateId(userId); // 법인 ID
+        KycApplication kycApplication = kycApplicationRepository.findById(kycId)
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
+        if (!kycApplication.isOwnedBy(userId) || !corporateId.equals(kycApplication.getCorporateId())) {
+            throw new ApiException(ErrorCode.KYC_ACCESS_DENIED);
+        }
+        if (!kycApplication.isCredentialIssuable()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_ISSUANCE_NOT_ALLOWED);
+        }
+
+        credentialRepository.findLatestByKycId(kycId)
+                .ifPresent(this::validateUserIssuanceNotDuplicated);
+
+        Credential credential = credentialIssuanceService.issueKycCredentialForUser(kycApplication, userId);
+        logEventLogger.info(
+                "credential.issue.requested",
+                "Credential issue requested",
+                createBaseLogFields(userId, corporateId, credential.getCredentialId(), kycId)
+        );
+        return toIssueResponse(credential);
     }
 
     // 사용자 Credential 상세 조회
@@ -159,6 +205,25 @@ public class CredentialService {
         );
     }
 
+    // Credential 발급 응답 변환
+    private CredentialIssueResponse toIssueResponse(
+            Credential credential // Credential 엔티티
+    ) {
+        KyvcEnums.XrplTransactionStatus txStatus = KyvcEnums.CredentialStatus.VALID == credential.getCredentialStatus()
+                ? KyvcEnums.XrplTransactionStatus.CONFIRMED
+                : KyvcEnums.XrplTransactionStatus.FAILED;
+        String failureReason = KyvcEnums.CredentialStatus.FAILED == credential.getCredentialStatus()
+                ? ErrorCode.CORE_API_CALL_FAILED.getCode()
+                : null;
+        return new CredentialIssueResponse(
+                credential.getCredentialId(),
+                enumName(credential.getCredentialStatus()),
+                enumName(txStatus),
+                credential.getIssuedAt(),
+                failureReason
+        );
+    }
+
     // Credential 상세 응답 변환
     private CredentialDetailResponse toDetailResponse(
             Credential credential // Credential 엔티티
@@ -250,6 +315,32 @@ public class CredentialService {
             Long kycId // KYC ID
     ) {
         if (kycId == null || kycId <= 0) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    // 사용자 VC 발급 중복 검증
+    private void validateUserIssuanceNotDuplicated(
+            Credential credential // 최신 Credential
+    ) {
+        if (KyvcEnums.CredentialStatus.VALID == credential.getCredentialStatus()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_ISSUANCE_ALREADY_COMPLETED);
+        }
+        if (KyvcEnums.CredentialStatus.ISSUING == credential.getCredentialStatus()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_REQUEST_DUPLICATED);
+        }
+    }
+
+    // Credential 상태 필터 변환
+    private KyvcEnums.CredentialStatus parseCredentialStatus(
+            String status // Credential 상태 문자열
+    ) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        try {
+            return KyvcEnums.CredentialStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
