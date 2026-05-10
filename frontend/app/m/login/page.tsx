@@ -100,9 +100,7 @@ export default function MobileLoginPage() {
       <div className="content scroll">
         <MLogo />
         <h1 className="headline m-auth-title">
-          KYvC 계정으로
-          <br />
-          로그인하세요
+          KYvC 계정으로 로그인하세요
         </h1>
         <p className="subcopy">등록된 사업자번호 또는 이메일로 로그인합니다.</p>
 

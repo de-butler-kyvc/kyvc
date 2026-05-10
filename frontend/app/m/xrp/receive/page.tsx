@@ -1,0 +1,91 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { MIcon } from "@/components/m/icons";
+import { MTopBar } from "@/components/m/parts";
+import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+
+const FALLBACK_ADDRESS = "rD4cBVqm7M3xK9pLnE2tUwYzJsQ8xKq";
+
+export default function MobileXrpReceivePage() {
+  const router = useRouter();
+  const [address, setAddress] = useState(FALLBACK_ADDRESS);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isBridgeAvailable()) return;
+    bridge
+      .getWalletDepositInfo()
+      .then((r) => {
+        const addr =
+          (r.receiveAddress as string | undefined) ??
+          (r.account as string | undefined);
+        if (r.ok && addr) setAddress(addr);
+      })
+      .catch(() => {});
+  }, []);
+
+  const onCopy = async () => {
+    if (isBridgeAvailable()) {
+      try {
+        const r = await bridge.copyWalletAddress();
+        if (r.ok) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+          return;
+        }
+      } catch {
+        /* browser fallback */
+      }
+    }
+    if (navigator.clipboard) await navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <section className="view xrp-flow-view">
+      <MTopBar title="XRP 받기" back="/m/home" />
+      <div className="scroll content xrp-receive-content">
+        <h1 className="headline">
+          내 XRP 주소로
+          <br />
+          받으세요
+        </h1>
+        <p className="subcopy xrp-receive-copy">
+          아래 주소나 QR 코드를 공유하면 XRP를 받을 수 있습니다.
+        </p>
+
+        <div className="m-info-box xrp-info-box">
+          <div className="info-icon">
+            <MIcon.x />
+          </div>
+          <div className="info-text">
+            <strong>데스티네이션 태그 불필요</strong>
+            <p>개인 지갑 주소로, 별도의 태그 없이 받을 수 있습니다.</p>
+          </div>
+        </div>
+
+        <div className="m-info-box xrp-info-box">
+          <div className="info-icon">
+            <MIcon.shield />
+          </div>
+          <div className="info-text">
+            <strong>주의사항</strong>
+            <p>XRP Ledger 네트워크의 XRP만 이 주소로 받을 수 있습니다.</p>
+          </div>
+        </div>
+
+        <div className="xrp-address-card">
+          <h2>내 XRP 주소</h2>
+          <p>{address}</p>
+          <button type="button" className="copy-pill" onClick={onCopy}>
+            <MIcon.link /> {copied ? "복사 완료" : "주소 복사"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}

@@ -169,6 +169,12 @@ export default function MobileHomePage() {
   const accountShort = walletInfo?.account
     ? `${walletInfo.account.slice(0, 6)}...${walletInfo.account.slice(-4)}`
     : null;
+  const didShort = walletInfo?.did
+    ? `${walletInfo.did.slice(0, 13)}...${walletInfo.did.slice(-4)}`
+    : walletInfo?.account
+      ? `${walletInfo.account.slice(0, 10)}...${walletInfo.account.slice(-4)}`
+      : "did:xrpl:rhod...orpd";
+  const balanceKrw = visible.length > 0 ? "₩ 123,000" : "₩ 0";
 
   return (
     <section className="view wash home-view">
@@ -203,63 +209,32 @@ export default function MobileHomePage() {
           </div>
         ) : null}
 
-        <section className="wallet-hero">
-          <div>
-            <span>KYvC Business Wallet</span>
-            <h1>{visible.length}개 VC 보유</h1>
-            <p>
-              {accountShort
-                ? `Holder ${accountShort}`
-                : bridgeError
-                  ? "지갑 미연결"
-                  : "동기화 중..."}
-            </p>
-          </div>
-        </section>
-
-        <section className="wallet-actions">
-          <button type="button" onClick={() => router.push("/m/vc/issue")}>
-            <div className="action-icon-wrap">
-              <MIcon.arrowDown />
-            </div>
-            <b>발급</b>
-            <small>VC 가져오기</small>
-          </button>
-          <button type="button" onClick={() => router.push("/m/vp/scan")}>
-            <div className="action-icon-wrap qr">
-              <MIcon.qr />
-            </div>
-            <b>제출</b>
-            <small>QR 스캔</small>
+        <section className="wallet-hero xrp-home-hero">
+          <h1>{balanceKrw}</h1>
+          <button
+            type="button"
+            className="wallet-did-copy"
+            onClick={() => router.push(walletInfo?.did ? "/m/did/register" : "/m/did/register")}
+          >
+            <span>{accountShort ?? didShort}</span>
+            <MIcon.link />
           </button>
         </section>
 
-        <div className="xrp-banner">
-          <div className="xrp-banner-top">
-            <div className="xrp-banner-left">
-              <div className="xrp-logo-wrap">
-                <MIcon.xrp />
-              </div>
-              <div>
-                <p className="xrp-title">XRP Ledger 기반 DID</p>
-                <p className="xrp-sub">testnet · 블록체인으로 검증된 신원 증명</p>
-              </div>
-            </div>
-            <span className="xrp-badge">{walletInfo?.did ? "연동됨" : "미연결"}</span>
-          </div>
-          <div className="xrp-btn-row">
-            <button
-              type="button"
-              className="xrp-action-btn"
-              onClick={() => router.push("/m/xrp/charge")}
-            >
-              <MIcon.zap /> XRP 충전
-            </button>
-            <button type="button" className="xrp-action-btn">
-              <MIcon.link /> Explorer
-            </button>
-          </div>
-        </div>
+        <section className="wallet-actions xrp-home-actions">
+          <button type="button" onClick={() => router.push("/m/xrp/receive")}>
+            <MIcon.arrowDown />
+            <b>받기</b>
+          </button>
+          <button type="button" onClick={() => router.push("/m/xrp/send")}>
+            <MIcon.arrowUpRight />
+            <b>보내기</b>
+          </button>
+          <button type="button" onClick={() => router.push("/m/transactions")}>
+            <MIcon.history />
+            <b>내역</b>
+          </button>
+        </section>
 
         <section className="stack-section">
           <div className="m-section-title section-title stack-title">
