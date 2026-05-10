@@ -129,9 +129,13 @@ class AdminSecurityPolicyTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get(CREDENTIALS_URI).with(systemAdmin()))
                 .andExpect(status().isOk());
+        mockMvc.perform(get(CREDENTIALS_URI).with(operator()))
+                .andExpect(status().isOk());
         mockMvc.perform(post(MANUAL_APPROVE_URI).with(backendAdmin()))
                 .andExpect(status().isOk());
         mockMvc.perform(post(MANUAL_APPROVE_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(MANUAL_APPROVE_URI).with(operator()))
                 .andExpect(status().isOk());
     }
 
@@ -182,6 +186,8 @@ class AdminSecurityPolicyTest {
         mockMvc.perform(post(MANUAL_APPROVE_URI).with(backendAdmin()))
                 .andExpect(status().isOk());
         mockMvc.perform(post(MANUAL_APPROVE_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(MANUAL_APPROVE_URI).with(operator()))
                 .andExpect(status().isOk());
     }
 

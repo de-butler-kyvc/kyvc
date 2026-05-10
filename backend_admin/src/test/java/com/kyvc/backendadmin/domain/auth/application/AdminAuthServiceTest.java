@@ -10,6 +10,7 @@ import com.kyvc.backendadmin.global.exception.ApiException;
 import com.kyvc.backendadmin.global.exception.ErrorCode;
 import com.kyvc.backendadmin.global.jwt.JwtProperties;
 import com.kyvc.backendadmin.global.jwt.JwtTokenProvider;
+import com.kyvc.backendadmin.global.jwt.TokenHashUtil;
 import com.kyvc.backendadmin.global.jwt.TokenPrincipal;
 import com.kyvc.backendadmin.global.logging.LogEventLogger;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
@@ -122,6 +123,48 @@ class AdminAuthServiceTest {
         assertEquals("access-token", response.accessToken());
         assertEquals("refresh-token", response.refreshToken());
         verify(authTokenRepository).save(any(AuthToken.class));
+    }
+
+    @Test
+    void refreshFailsWithBusinessExceptionWhenRefreshTokenIsMissing() {
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> adminAuthService.refresh(null)
+        );
+
+        assertEquals(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND, exception.getErrorCode());
+        verifyNoInteractions(jwtTokenProvider, authTokenRepository, adminUserRepository);
+    }
+
+    @Test
+    void refreshIssuesNewAccessTokenWithoutAccessToken() {
+        String refreshToken = "refresh-token";
+        AdminUser adminUser = activeAdmin(30L, BCRYPT_HASH);
+        AuthToken storedToken = AuthToken.create(
+                KyvcEnums.ActorType.ADMIN,
+                30L,
+                KyvcEnums.TokenType.REFRESH,
+                TokenHashUtil.sha256(refreshToken),
+                java.time.LocalDateTime.now().plusDays(1)
+        );
+        when(jwtTokenProvider.validateToken(refreshToken)).thenReturn(true);
+        when(jwtTokenProvider.getTokenType(refreshToken)).thenReturn("REFRESH");
+        when(jwtTokenProvider.getActorType(refreshToken)).thenReturn("ADMIN");
+        when(authTokenRepository.findByTokenHashAndTokenType(
+                TokenHashUtil.sha256(refreshToken),
+                KyvcEnums.TokenType.REFRESH
+        )).thenReturn(Optional.of(storedToken));
+        when(adminUserRepository.findById(30L)).thenReturn(Optional.of(adminUser));
+        when(adminUserRepository.findRoleCodesByAdminId(30L)).thenReturn(List.of("ROLE_OPERATOR"));
+        when(jwtTokenProvider.createAccessToken(any(TokenPrincipal.class))).thenReturn("new-access-token");
+        when(jwtProperties.getAccessTokenExpirationMinutes()).thenReturn(30L);
+
+        AdminLoginResponse response = adminAuthService.refresh(refreshToken);
+
+        assertEquals("new-access-token", response.accessToken());
+        assertEquals(refreshToken, response.refreshToken());
+        assertEquals(List.of("ROLE_OPERATOR"), response.roles());
+        verify(jwtTokenProvider, never()).createRefreshToken(any(TokenPrincipal.class));
     }
 
     private AdminUser activeAdmin(Long adminId, String passwordHash) {

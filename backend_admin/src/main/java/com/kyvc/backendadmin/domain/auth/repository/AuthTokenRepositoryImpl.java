@@ -35,6 +35,10 @@ public class AuthTokenRepositoryImpl implements AuthTokenRepository {
     // 원문 토큰이 아닌 해시 값과 토큰 용도로 토큰 조회
     @Override
     public Optional<AuthToken> findByTokenHashAndTokenType(String tokenHash, KyvcEnums.TokenType tokenType) {
+        if (tokenHash == null || tokenHash.isBlank() || tokenType == null) {
+            return Optional.empty();
+        }
+
         List<AuthToken> result = entityManager()
                 .createQuery("""
                         select authToken

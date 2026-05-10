@@ -14,9 +14,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -27,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/admin/backend/kyc/applications")
 public class AdminReviewController {
+
+    private static final String MFA_SESSION_TOKEN_HEADER = "X-MFA-Session-Token";
 
     private final AdminReviewService adminReviewService;
 
@@ -48,10 +52,11 @@ public class AdminReviewController {
     public CommonResponse<AdminReviewActionResponse> approve(
             @Parameter(description = "KYC 신청 ID", required = true)
             @PathVariable Long kycId,
+            @RequestHeader(value = MFA_SESSION_TOKEN_HEADER, required = false) String mfaSessionToken,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 수동심사 승인 요청", required = true)
-            @Valid @org.springframework.web.bind.annotation.RequestBody AdminReviewApproveRequest request
+            @org.springframework.web.bind.annotation.RequestBody(required = false) AdminReviewApproveRequest request
     ) {
-        return CommonResponseFactory.success(adminReviewService.approve(kycId, request));
+        return CommonResponseFactory.success(adminReviewService.approve(kycId, withMfaToken(request, mfaSessionToken)));
     }
 
     /**
@@ -73,9 +78,10 @@ public class AdminReviewController {
             @Parameter(description = "KYC 신청 ID", required = true)
             @PathVariable Long kycId,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 수동심사 반려 요청", required = true)
+            @RequestHeader(value = MFA_SESSION_TOKEN_HEADER, required = false) String mfaSessionToken,
             @Valid @org.springframework.web.bind.annotation.RequestBody AdminReviewRejectRequest request
     ) {
-        return CommonResponseFactory.success(adminReviewService.reject(kycId, request));
+        return CommonResponseFactory.success(adminReviewService.reject(kycId, withMfaToken(request, mfaSessionToken)));
     }
 
     /**
@@ -100,5 +106,17 @@ public class AdminReviewController {
             @Valid @org.springframework.web.bind.annotation.RequestBody AdminSupplementRequest request
     ) {
         return CommonResponseFactory.success(adminReviewService.requestSupplement(kycId, request));
+    }
+
+    private AdminReviewApproveRequest withMfaToken(AdminReviewApproveRequest request, String headerToken) {
+        String mfaToken = StringUtils.hasText(headerToken)
+                ? headerToken
+                : request == null ? null : request.mfaToken();
+        return new AdminReviewApproveRequest(mfaToken, request == null ? null : request.comment());
+    }
+
+    private AdminReviewRejectRequest withMfaToken(AdminReviewRejectRequest request, String headerToken) {
+        String mfaToken = StringUtils.hasText(headerToken) ? headerToken : request.mfaToken();
+        return new AdminReviewRejectRequest(mfaToken, request.rejectReasonCode(), request.comment());
     }
 }

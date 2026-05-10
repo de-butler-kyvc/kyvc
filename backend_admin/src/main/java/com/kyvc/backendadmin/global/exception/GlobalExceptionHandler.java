@@ -1,12 +1,14 @@
 package com.kyvc.backendadmin.global.exception;
 
 import com.kyvc.backendadmin.global.logging.LogEventLogger;
+import com.kyvc.backendadmin.global.jwt.TokenCookieUtil;
 import com.kyvc.backendadmin.global.response.CommonResponse;
 import com.kyvc.backendadmin.global.response.CommonResponseFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -31,6 +33,7 @@ public class GlobalExceptionHandler {
     private static final String DEFAULT_VALIDATION_MESSAGE = "Invalid value.";
 
     private final LogEventLogger logEventLogger;
+    private final TokenCookieUtil tokenCookieUtil;
 
     // 비즈니스 예외 처리, 4xx warn / 5xx error 로그
     @ExceptionHandler(ApiException.class)
@@ -47,9 +50,14 @@ public class GlobalExceptionHandler {
             logEventLogger.warn("exception.api", exception.getMessage(), fields);
         }
 
-        return ResponseEntity
-                .status(errorCode.getStatus())
-                .body(CommonResponseFactory.fail(errorCode, exception.getMessage(), null));
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(errorCode.getStatus());
+        if (isAdminRefreshRequest(request)) {
+            responseBuilder
+                    .header(HttpHeaders.SET_COOKIE, tokenCookieUtil.deleteAccessTokenCookie().toString())
+                    .header(HttpHeaders.SET_COOKIE, tokenCookieUtil.deleteRefreshTokenCookie().toString());
+        }
+
+        return responseBuilder.body(CommonResponseFactory.fail(errorCode, exception.getMessage(), null));
     }
 
     // 요청 본문 검증 예외 처리, warn 로그
@@ -198,6 +206,12 @@ public class GlobalExceptionHandler {
         fields.put("code", errorCode.getCode());
         fields.put("exception", exception);
         return fields;
+    }
+
+    private boolean isAdminRefreshRequest(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return "POST".equalsIgnoreCase(request.getMethod())
+                && ("/api/admin/auth/refresh".equals(path) || "/api/admin/auth/token/refresh".equals(path));
     }
 
     // 필드 검증 오류 응답 변환
