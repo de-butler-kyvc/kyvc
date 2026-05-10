@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const VERIFIER_BASE = `${API_BASE}/api/admin/backend/verifiers`;
 const VERIFIER_LOGS_URL = `${API_BASE}/api/admin/backend/verifier-logs`;
@@ -76,10 +74,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -106,7 +101,7 @@ export async function getVerifierList(filters?: {
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
   if (filters?.status && filters.status !== "전체 상태") params.set("status", filters.status);
   const url = params.toString() ? `${VERIFIER_BASE}?${params}` : VERIFIER_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<Verifier[] | PageLike<Verifier>>;
   return unwrapListData(json.data);
@@ -124,6 +119,7 @@ export async function createVerifier(data: {
   const response = await fetch(VERIFIER_BASE, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -136,6 +132,7 @@ export async function getVerifier(verifierId: string): Promise<VerifierDetail> {
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VerifierDetail>;
@@ -150,6 +147,7 @@ export async function updateVerifier(
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -162,6 +160,7 @@ export async function approveVerifier(verifierId: string, data?: { comment?: str
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/approve`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -172,6 +171,7 @@ export async function suspendVerifier(verifierId: string, data?: { reason?: stri
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/suspend`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -184,6 +184,7 @@ export async function getVerifierKeys(verifierId: string): Promise<VerifierApiKe
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/keys`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VerifierApiKey[] | PageLike<VerifierApiKey>>;
@@ -195,6 +196,7 @@ export async function createVerifierKey(verifierId: string, data?: { expiresAt?:
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/keys`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -207,6 +209,7 @@ export async function rotateVerifierKey(verifierId: string, keyId: string): Prom
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/keys/${keyId}/rotate`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VerifierApiKey>;
@@ -218,6 +221,7 @@ export async function revokeVerifierKey(verifierId: string, keyId: string): Prom
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/keys/${keyId}/revoke`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -229,6 +233,7 @@ export async function getVerifierCallbacks(verifierId: string): Promise<Verifier
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/callbacks`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VerifierCallback>;
@@ -243,6 +248,7 @@ export async function updateVerifierCallbacks(
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/callbacks`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -255,6 +261,7 @@ export async function getVerifierUsageStats(verifierId: string): Promise<Verifie
   const response = await fetch(`${VERIFIER_BASE}/${verifierId}/usage-stats`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VerifierUsageStats>;
@@ -276,7 +283,7 @@ export async function getVerifierLogs(filters?: {
   if (filters?.from) params.set("from", filters.from);
   if (filters?.to) params.set("to", filters.to);
   const url = params.toString() ? `${VERIFIER_LOGS_URL}?${params}` : VERIFIER_LOGS_URL;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VerifierLog[] | PageLike<VerifierLog>>;
   return unwrapListData(json.data);

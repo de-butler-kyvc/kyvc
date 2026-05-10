@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { persistAuthToken, persistRefreshToken } from "@/lib/auth-session";
+import { clearAuthSession } from "@/lib/auth-session";
 import { login } from "@/lib/api/auth";
 
 export default function LoginPage() {
@@ -20,10 +20,8 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await login({ email: email.trim(), password: pw });
-      const maxAgeSec = keepLogin ? 30 * 24 * 3600 : 86400;
-      if (result.accessToken) persistAuthToken(result.accessToken, { maxAgeSec });
-      if (result.refreshToken) persistRefreshToken(result.refreshToken);
+      await login({ email: email.trim(), password: pw });
+      clearAuthSession();
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");

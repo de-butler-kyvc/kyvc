@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const VP_BASE = `${API_BASE}/api/admin/backend/vp-verifications`;
 
@@ -46,10 +44,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -97,7 +92,7 @@ export async function getVpList(filters?: {
   if (filters?.to) params.set("to", filters.to);
   const url = params.toString() ? `${VP_BASE}?${params}` : VP_BASE;
 
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VpVerification[] | PageLike<VpVerification>>;
 
@@ -118,6 +113,7 @@ export async function getVpDetail(verificationId: string): Promise<VpVerificatio
   const response = await fetch(`${VP_BASE}/${verificationId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<VpVerificationDetail>;

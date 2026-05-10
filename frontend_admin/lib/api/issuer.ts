@@ -1,6 +1,4 @@
 import type { IssuerItem } from "@/types/kyc";
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const ISSUER_POLICIES_URL = `${API_BASE}/api/admin/backend/issuer-policies`;
 
@@ -66,6 +64,7 @@ export async function getIssuerList(filters?: { search?: string; type?: string; 
   const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -122,12 +121,7 @@ export interface IssuerPolicyDetail {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -155,6 +149,7 @@ export async function createIssuerWhitelist(data: {
   const response = await fetch(`${ISSUER_POLICIES_URL}/whitelist`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -175,6 +170,7 @@ export async function createIssuerBlacklist(data: {
   const response = await fetch(`${ISSUER_POLICIES_URL}/blacklist`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -189,6 +185,7 @@ export async function getIssuerPolicy(policyId: number): Promise<IssuerPolicyDet
   const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -209,6 +206,7 @@ export async function updateIssuerPolicy(policyId: number, data: {
   const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -224,6 +222,7 @@ export async function disableIssuerPolicy(policyId: number) {
   const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -239,6 +238,7 @@ export async function submitIssuerPolicyApproval(policyId: number): Promise<void
   const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}/submit-approval`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -251,6 +251,7 @@ export async function approveIssuerPolicy(
   const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}/approve`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -264,6 +265,7 @@ export async function rejectIssuerPolicy(
   const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}/reject`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

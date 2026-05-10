@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const CONFIG_BASE = `${API_BASE}/api/admin/backend/issuer-configs`;
 
@@ -51,12 +49,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -83,7 +76,7 @@ export async function getIssuerConfigs(filters?: {
   const params = new URLSearchParams();
   if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
   const url = params.toString() ? `${CONFIG_BASE}?${params}` : CONFIG_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<IssuerConfig[] | PageLike<IssuerConfig>>;
   return unwrapListData(json.data);
@@ -94,6 +87,7 @@ export async function getIssuerConfig(issuerConfigId: string): Promise<IssuerCon
   const response = await fetch(`${CONFIG_BASE}/${issuerConfigId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<IssuerConfigDetail>;

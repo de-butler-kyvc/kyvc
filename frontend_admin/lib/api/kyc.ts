@@ -1,6 +1,4 @@
 import type { KycItem, KycStatus, KycChannel, DashboardStats, SupplementRequest } from "@/types/kyc";
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const KYC_BASE = `${API_BASE}/api/admin/backend/kyc/applications`;
 
@@ -125,12 +123,7 @@ interface CommonResponse<T> {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -162,7 +155,7 @@ export async function getKycList(filters?: {
   }
 
   const url = params.toString() ? `${KYC_BASE}?${params}` : KYC_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 
   const json = (await response.json()) as CommonResponse<
@@ -187,6 +180,7 @@ export async function getKycDetail(kycId: string): Promise<BackendKycDetail> {
   const response = await fetch(`${KYC_BASE}/${kycId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<BackendKycDetail>;
@@ -198,6 +192,7 @@ export async function getKycCorporate(kycId: string): Promise<BackendKycCorporat
   const response = await fetch(`${KYC_BASE}/${kycId}/corporate`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<BackendKycCorporate>;
@@ -222,6 +217,7 @@ export async function getDocumentRequirements(): Promise<DocumentRequirement[]> 
   const response = await fetch(`${API_BASE}/api/admin/backend/document-requirements`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<DocumentRequirement[] | PageLike<DocumentRequirement>>;
@@ -253,6 +249,7 @@ export async function getKycDocuments(kycId: string): Promise<KycSubmittedDocume
   const response = await fetch(`${KYC_BASE}/${kycId}/documents`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<KycSubmittedDocument[] | PageLike<KycSubmittedDocument>>;
@@ -267,6 +264,7 @@ export async function getKycDocumentPreview(
   const response = await fetch(`${KYC_BASE}/${kycId}/documents/${documentId}/preview`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<DocumentPreviewData>;
@@ -285,6 +283,7 @@ export async function issueKycCredential(
   const response = await fetch(`${KYC_BASE}/${kycId}/credentials/issue`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -312,6 +311,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const response = await fetch(`${API_BASE}/api/admin/backend/dashboard`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<BackendDashboardData>;
@@ -329,6 +329,7 @@ export async function getKycSupplements(kycId: string): Promise<SupplementReques
   const response = await fetch(`${KYC_BASE}/${kycId}/supplements`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -348,6 +349,7 @@ export async function approveKycManualReview(
   const response = await fetch(`${KYC_BASE}/${kycId}/manual-review/approve`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -363,6 +365,7 @@ export async function rejectKycManualReview(
   const response = await fetch(`${KYC_BASE}/${kycId}/manual-review/reject`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -423,6 +426,7 @@ export async function getAiReview(kycId: string): Promise<AiReviewResult> {
   const response = await fetch(`${KYC_BASE}/${kycId}/ai-review`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewResult>;
@@ -434,6 +438,7 @@ export async function getAiReviewMismatches(kycId: string): Promise<AiMismatch[]
   const response = await fetch(`${KYC_BASE}/${kycId}/ai-review/mismatches`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiMismatch[] | PageLike<AiMismatch>>;
@@ -445,6 +450,7 @@ export async function getAiReviewBeneficialOwners(kycId: string): Promise<Benefi
   const response = await fetch(`${KYC_BASE}/${kycId}/ai-review/beneficial-owners`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<BeneficialOwner[] | PageLike<BeneficialOwner>>;
@@ -456,6 +462,7 @@ export async function getAiReviewAgentAuthority(kycId: string): Promise<AgentAut
   const response = await fetch(`${KYC_BASE}/${kycId}/ai-review/agent-authority`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AgentAuthority[] | PageLike<AgentAuthority>>;
@@ -467,6 +474,7 @@ export async function getReviewHistories(kycId: string): Promise<ReviewHistory[]
   const response = await fetch(`${KYC_BASE}/${kycId}/review-histories`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<ReviewHistory[] | PageLike<ReviewHistory>>;
@@ -481,6 +489,7 @@ export async function retryAiReview(
   const response = await fetch(`${KYC_BASE}/${kycId}/ai-review/retry`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -494,6 +503,7 @@ export async function createKycSupplement(
   const response = await fetch(`${KYC_BASE}/${kycId}/supplements`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -509,6 +519,7 @@ export async function createDocumentRequirement(data: {
   const response = await fetch(`${API_BASE}/api/admin/backend/document-requirements`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -524,6 +535,7 @@ export async function updateDocumentRequirement(
     {
       method: "PATCH",
       headers: getAuthHeaders(),
+      credentials: "include",
       body: JSON.stringify(data),
     }
   );

@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const CODE_BASE = `${API_BASE}/api/admin/backend/common-codes`;
 const GROUP_BASE = `${API_BASE}/api/admin/backend/common-code-groups`;
@@ -57,12 +55,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -91,7 +84,7 @@ export async function getCommonCodes(filters?: {
   if (filters?.codeGroupId) params.set("codeGroupId", filters.codeGroupId);
   if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
   const url = params.toString() ? `${CODE_BASE}?${params}` : CODE_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCode[] | PageLike<CommonCode>>;
   return unwrapListData(json.data);
@@ -102,6 +95,7 @@ export async function getCommonCode(codeId: string): Promise<CommonCode> {
   const response = await fetch(`${CODE_BASE}/${codeId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCode>;
@@ -113,6 +107,7 @@ export async function enableCommonCode(codeId: string): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/enable`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -122,6 +117,7 @@ export async function disableCommonCode(codeId: string): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/disable`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -137,6 +133,7 @@ export async function createCommonCode(data: {
   const response = await fetch(CODE_BASE, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -152,6 +149,7 @@ export async function updateCommonCode(
   const response = await fetch(`${CODE_BASE}/${codeId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -164,6 +162,7 @@ export async function deleteCommonCode(codeId: string): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -179,7 +178,7 @@ export async function getCommonCodeGroups(filters?: {
   const params = new URLSearchParams();
   if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
   const url = params.toString() ? `${GROUP_BASE}?${params}` : GROUP_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCodeGroup[] | PageLike<CommonCodeGroup>>;
   return unwrapListData(json.data);
@@ -190,6 +189,7 @@ export async function getCommonCodeGroup(codeGroupId: string): Promise<CommonCod
   const response = await fetch(`${GROUP_BASE}/${codeGroupId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCodeGroupDetail>;

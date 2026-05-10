@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const ME_BASE = `${API_BASE}/api/admin/me`;
 
@@ -38,12 +36,7 @@ interface CommonResponse<T> {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -68,6 +61,7 @@ export async function getMe(): Promise<MeProfile> {
   const response = await fetch(ME_BASE, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<MeProfile>;
@@ -79,6 +73,7 @@ export async function changeMyPassword(body: ChangePasswordRequest): Promise<voi
   const response = await fetch(`${ME_BASE}/password`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

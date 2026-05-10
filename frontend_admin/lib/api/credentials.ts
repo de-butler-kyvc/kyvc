@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const CRED_BASE = `${API_BASE}/api/admin/backend/credentials`;
 
@@ -53,12 +51,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -83,7 +76,7 @@ export async function getCredentials(filters?: {
   if (filters?.applicationId) params.set("applicationId", filters.applicationId);
   if (filters?.status) params.set("status", filters.status);
   const url = params.toString() ? `${CRED_BASE}?${params}` : CRED_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<KycCredential[] | PageLike<KycCredential>>;
   return unwrapListData(json.data);
@@ -94,6 +87,7 @@ export async function getCredential(credentialId: string): Promise<KycCredential
   const response = await fetch(`${CRED_BASE}/${encodeURIComponent(credentialId)}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<KycCredentialDetail>;
@@ -108,6 +102,7 @@ export async function requestCredentialReissue(
   const response = await fetch(`${CRED_BASE}/${encodeURIComponent(credentialId)}/reissue`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -121,6 +116,7 @@ export async function requestCredentialRevoke(
   const response = await fetch(`${CRED_BASE}/${encodeURIComponent(credentialId)}/revoke`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -149,7 +145,7 @@ export async function getCredentialStatusHistories(
 ): Promise<CredentialStatusHistory[]> {
   const response = await fetch(
     `${CRED_BASE}/${encodeURIComponent(credentialId)}/status-histories`,
-    { method: "GET", headers: getAuthHeaders() }
+    { method: "GET", headers: getAuthHeaders(), credentials: "include" }
   );
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<
@@ -164,7 +160,7 @@ export async function getCredentialRequests(
 ): Promise<CredentialRequest[]> {
   const response = await fetch(
     `${CRED_BASE}/${encodeURIComponent(credentialId)}/requests`,
-    { method: "GET", headers: getAuthHeaders() }
+    { method: "GET", headers: getAuthHeaders(), credentials: "include" }
   );
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<

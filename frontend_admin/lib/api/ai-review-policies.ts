@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const POLICY_BASE = `${API_BASE}/api/admin/backend/ai-review-policies`;
 
@@ -70,12 +68,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -104,7 +97,7 @@ export async function getAiReviewPolicies(filters?: {
   if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
   if (filters?.corporationType) params.set("corporationType", filters.corporationType);
   const url = params.toString() ? `${POLICY_BASE}?${params}` : POLICY_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewPolicy[] | PageLike<AiReviewPolicy>>;
   return unwrapListData(json.data);
@@ -115,6 +108,7 @@ export async function getAiReviewPolicy(aiPolicyId: string): Promise<AiReviewPol
   const response = await fetch(`${POLICY_BASE}/${aiPolicyId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewPolicyDetail>;
@@ -129,6 +123,7 @@ export async function updateAiReviewPolicy(
   const response = await fetch(`${POLICY_BASE}/${aiPolicyId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -144,6 +139,7 @@ export async function setAiReviewPolicyEnabled(
   const response = await fetch(`${POLICY_BASE}/${aiPolicyId}/enabled`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify({ enabled }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -156,6 +152,7 @@ export async function createAiReviewPolicy(
   const response = await fetch(POLICY_BASE, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

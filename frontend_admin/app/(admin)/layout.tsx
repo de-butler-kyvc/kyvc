@@ -17,20 +17,13 @@ export default function AdminLayout({
     let alive = true;
 
     const checkSession = async () => {
-      const token = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth_token="))
-        ?.split("=")[1];
-
-      if (token && token !== "dev_bypass") return;
-
       try {
         const session = await getSession();
         if (alive && "authenticated" in session && !session.authenticated) {
           router.push("/login");
         }
       } catch {
-        if (alive && !token) router.push("/login");
+        if (alive) router.push("/login");
       }
     };
 

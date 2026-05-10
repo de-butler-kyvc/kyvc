@@ -1,6 +1,4 @@
 import type { UserItem } from "@/types/kyc";
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const USERS_URL = `${API_BASE}/api/admin/backend/users`;
 
@@ -98,12 +96,7 @@ function formatDateTime(iso?: string): string {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -135,6 +128,7 @@ export async function getUserList(filters?: {
   const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -158,6 +152,7 @@ export async function getUserDetail(userId: string): Promise<BackendUserDetail> 
   const response = await fetch(`${USERS_URL}/${userId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -174,6 +169,7 @@ export async function updateUser(
   const response = await fetch(`${USERS_URL}/${userId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -188,6 +184,7 @@ export async function updateUserStatus(
   const response = await fetch(`${USERS_URL}/${userId}/status`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify({ status: STATUS_KO_TO_API[statusKo] }),
   });
 
@@ -209,7 +206,7 @@ export interface CorporateDetail {
 export async function getCorporate(corporateId: string): Promise<CorporateDetail> {
   const response = await fetch(
     `${API_BASE}/api/admin/backend/corporates/${corporateId}`,
-    { method: "GET", headers: getAuthHeaders() }
+    { method: "GET", headers: getAuthHeaders(), credentials: "include" }
   );
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CorporateDetail>;

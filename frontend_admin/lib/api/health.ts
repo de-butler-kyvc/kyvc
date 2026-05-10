@@ -11,6 +11,7 @@ export async function checkHealth(): Promise<HealthStatus> {
   const response = await fetch(`${API_BASE}/health`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
   });
   if (!response.ok) {
     return { status: "DOWN" };

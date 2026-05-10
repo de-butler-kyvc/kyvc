@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const NOTIF_BASE = `${API_BASE}/api/admin/backend/notification-templates`;
 
@@ -54,10 +52,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -84,7 +79,7 @@ export async function getNotificationTemplates(filters?: {
   if (filters?.eventType) params.set("eventType", filters.eventType);
   if (filters?.channel) params.set("channel", filters.channel);
   const url = params.toString() ? `${NOTIF_BASE}?${params}` : NOTIF_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<NotificationTemplate[] | PageLike<NotificationTemplate>>;
   return unwrapListData(json.data);
@@ -97,6 +92,7 @@ export async function createNotificationTemplate(
   const response = await fetch(NOTIF_BASE, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -109,6 +105,7 @@ export async function getNotificationTemplate(templateId: string): Promise<Notif
   const response = await fetch(`${NOTIF_BASE}/${templateId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<NotificationTemplate>;
@@ -123,6 +120,7 @@ export async function updateNotificationTemplate(
   const response = await fetch(`${NOTIF_BASE}/${templateId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -135,6 +133,7 @@ export async function deleteNotificationTemplate(templateId: string): Promise<vo
   const response = await fetch(`${NOTIF_BASE}/${templateId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }

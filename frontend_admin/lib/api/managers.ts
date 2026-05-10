@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const ADMIN_USERS_URL = `${API_BASE}/api/admin/backend/admin-users`;
 const ADMIN_ROLES_URL = `${API_BASE}/api/admin/backend/admin-roles`;
@@ -52,12 +50,7 @@ export interface AdminUserDetail extends AdminUser {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -80,6 +73,7 @@ export async function getAllAdminRoles(): Promise<AdminRole[]> {
   const response = await fetch(ADMIN_ROLES_URL, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AdminRole[] | PageLike<AdminRole>>;
@@ -91,6 +85,7 @@ export async function getAdminUserRoles(adminUserId: string): Promise<AdminRole[
   const response = await fetch(`${ADMIN_USERS_URL}/${adminUserId}/roles`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AdminRole[] | PageLike<AdminRole>>;
@@ -105,6 +100,7 @@ export async function assignAdminUserRole(
   const response = await fetch(`${ADMIN_USERS_URL}/${adminUserId}/roles`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify({ roleId }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -118,6 +114,7 @@ export async function removeAdminUserRole(
   const response = await fetch(`${ADMIN_USERS_URL}/${adminUserId}/roles/${roleId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -135,7 +132,7 @@ export async function getAdminUsers(filters?: {
   if (filters?.role && filters.role !== "전체 역할") params.set("role", filters.role);
   if (filters?.status && filters.status !== "전체 상태") params.set("status", filters.status);
   const url = params.toString() ? `${ADMIN_USERS_URL}?${params}` : ADMIN_USERS_URL;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AdminUser[] | PageLike<AdminUser>>;
   return unwrapListData(json.data);
@@ -146,6 +143,7 @@ export async function getAdminUser(adminUserId: string): Promise<AdminUserDetail
   const response = await fetch(`${ADMIN_USERS_URL}/${adminUserId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AdminUserDetail>;
@@ -170,6 +168,7 @@ export async function createAdminUser(data: {
   const response = await fetch(ADMIN_USERS_URL, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -185,6 +184,7 @@ export async function updateAdminUser(
   const response = await fetch(`${ADMIN_USERS_URL}/${adminUserId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

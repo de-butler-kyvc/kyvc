@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const AUDIT_BASE = `${API_BASE}/api/admin/backend/audit-logs`;
 
@@ -51,12 +49,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -106,7 +99,7 @@ export async function getAuditLogs(filters?: {
   if (filters?.to) params.set("to", filters.to);
   const url = params.toString() ? `${AUDIT_BASE}?${params}` : AUDIT_BASE;
 
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 
   const json = (await response.json()) as CommonResponse<AuditLog[] | PageLike<AuditLog>>;
@@ -127,6 +120,7 @@ export async function getAuditLog(auditId: string): Promise<AuditLogDetail> {
   const response = await fetch(`${AUDIT_BASE}/${auditId}`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AuditLogDetail>;
@@ -170,7 +164,7 @@ export async function getSecurityEvents(filters?: {
   const url = params.toString()
     ? `${API_BASE}/api/admin/backend/security-events?${params}`
     : `${API_BASE}/api/admin/backend/security-events`;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<SecurityEvent[] | PageLike<SecurityEvent>>;
   return unwrapListData(json.data);
@@ -191,7 +185,7 @@ export async function getDataAccessLogs(filters?: {
   const url = params.toString()
     ? `${API_BASE}/api/admin/backend/data-access-logs?${params}`
     : `${API_BASE}/api/admin/backend/data-access-logs`;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<DataAccessLog[] | PageLike<DataAccessLog>>;
   return unwrapListData(json.data);

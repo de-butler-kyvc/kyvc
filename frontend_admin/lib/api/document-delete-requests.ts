@@ -1,5 +1,3 @@
-import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
-
 const API_BASE = "";
 const DOC_DELETE_BASE = `${API_BASE}/api/admin/backend/document-delete-requests`;
 
@@ -38,10 +36,7 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 }
 
 function getAuthHeaders() {
-  const token = getAccessTokenForApi();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return { "Content-Type": "application/json" };
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -70,7 +65,7 @@ export async function getDocumentDeleteRequests(filters?: {
   if (filters?.from) params.set("from", filters.from);
   if (filters?.to) params.set("to", filters.to);
   const url = params.toString() ? `${DOC_DELETE_BASE}?${params}` : DOC_DELETE_BASE;
-  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<DocumentDeleteRequest[] | PageLike<DocumentDeleteRequest>>;
   return unwrapListData(json.data);
@@ -84,6 +79,7 @@ export async function approveDocumentDeleteRequest(
   const response = await fetch(`${DOC_DELETE_BASE}/${requestId}/approve`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -97,6 +93,7 @@ export async function rejectDocumentDeleteRequest(
   const response = await fetch(`${DOC_DELETE_BASE}/${requestId}/reject`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(data),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
