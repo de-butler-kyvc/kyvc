@@ -55,10 +55,6 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  config.headers.set(
-    "Authorization",
-    `Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI0IiwiZW1haWwiOiJqbTAwNDQ3MUBuYXZlci5jb20iLCJ1c2VyVHlwZSI6IkNPUlBPUkFURV9VU0VSIiwicm9sZXMiOlsiUk9MRV9DT1JQT1JBVEVfVVNFUiJdLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJpc3MiOiJreXZjLWJhY2tlbmQtZGV2IiwiaWF0IjoxNzc4MzgwMTY4LCJleHAiOjE3NzgzODE5NjgsImp0aSI6ImI3Zjg5OWEyLWYzZWMtNDc1ZS1hYzBmLTAzOGE5NDZmNDYyYiJ9.KTAx7BDTU70DBbhdiNJlibBmKlC4CtayF7VwtngxnKc`,
-  );
   if (config.data instanceof FormData) {
     config.headers.delete("Content-Type");
   }
