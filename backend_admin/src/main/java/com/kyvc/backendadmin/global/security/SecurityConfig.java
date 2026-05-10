@@ -44,13 +44,16 @@ public class SecurityConfig {
     private static final String ROLE_PREFIX = "ROLE_";
     private static final String BACKEND_ADMIN_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.BACKEND_ADMIN.name();
     private static final String SYSTEM_ADMIN_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.SYSTEM_ADMIN.name();
+    private static final String OPERATOR_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.OPERATOR.name();
     private static final Set<String> BACKEND_ADMIN_ACTION_ROLES = Set.of(
             BACKEND_ADMIN_ROLE,
-            SYSTEM_ADMIN_ROLE
+            SYSTEM_ADMIN_ROLE,
+            OPERATOR_ROLE
     );
     private static final Set<String> ADMIN_COMMON_ROLES = Set.of(
             BACKEND_ADMIN_ROLE,
-            SYSTEM_ADMIN_ROLE
+            SYSTEM_ADMIN_ROLE,
+            OPERATOR_ROLE
     );
     private static final Set<String> SYSTEM_ADMIN_ROLES = Set.of(
             SYSTEM_ADMIN_ROLE

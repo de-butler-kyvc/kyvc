@@ -54,6 +54,16 @@ class AdminKycAccessCheckerTest {
     }
 
     @Test
+    void operatorCanAccessKycAction() {
+        authenticate(3L, List.of("ROLE_OPERATOR"));
+        AdminKycAccessChecker accessChecker = new AdminKycAccessChecker(auditLogWriter);
+
+        assertDoesNotThrow(() -> accessChecker.validateActionAccess(10L, "KYC_MANUAL_REJECT"));
+
+        verify(auditLogWriter, never()).write(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void otherRoleCannotAccessKycAction() {
         authenticate(3L, List.of("ROLE_VIEWER"));
         AdminKycAccessChecker accessChecker = new AdminKycAccessChecker(auditLogWriter);

@@ -23,6 +23,7 @@ import com.kyvc.backendadmin.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 
@@ -57,6 +58,7 @@ public class AdminReviewService {
      */
     @Transactional
     public AdminReviewActionResponse approve(Long kycId, AdminReviewApproveRequest request) {
+        validateApproveRequest(request);
         // 권한 확인: 수동심사 처리는 백엔드 관리자 또는 시스템 관리자만 수행할 수 있다.
         validateReviewPermission();
         adminKycAccessChecker.validateActionAccess(kycId, "KYC_MANUAL_APPROVE");
@@ -98,6 +100,7 @@ public class AdminReviewService {
      */
     @Transactional
     public AdminReviewActionResponse reject(Long kycId, AdminReviewRejectRequest request) {
+        validateRejectRequest(request);
         // 권한 확인: 수동심사 처리는 백엔드 관리자 또는 시스템 관리자만 수행할 수 있다.
         validateReviewPermission();
         adminKycAccessChecker.validateActionAccess(kycId, "KYC_MANUAL_REJECT");
@@ -181,12 +184,16 @@ public class AdminReviewService {
 
     private void validateReviewPermission() {
         if (!SecurityUtil.hasRole(KyvcEnums.RoleCode.BACKEND_ADMIN.name())
-                && !SecurityUtil.hasRole(KyvcEnums.RoleCode.SYSTEM_ADMIN.name())) {
+                && !SecurityUtil.hasRole(KyvcEnums.RoleCode.SYSTEM_ADMIN.name())
+                && !SecurityUtil.hasRole(KyvcEnums.RoleCode.OPERATOR.name())) {
             throw new ApiException(ErrorCode.FORBIDDEN);
         }
     }
 
     private AuthToken validateMfaSessionToken(String rawMfaToken, Long adminId) {
+        if (!StringUtils.hasText(rawMfaToken)) {
+            throw new ApiException(ErrorCode.MFA_TOKEN_INVALID);
+        }
         AuthToken authToken = authTokenRepository
                 .findByTokenHashAndTokenType(TokenHashUtil.sha256(rawMfaToken), KyvcEnums.TokenType.MFA_SESSION)
                 .orElseThrow(() -> new ApiException(ErrorCode.MFA_NOT_FOUND));
@@ -203,6 +210,21 @@ public class AdminReviewService {
             throw new ApiException(ErrorCode.MFA_EXPIRED);
         }
         return authToken;
+    }
+
+    private void validateApproveRequest(AdminReviewApproveRequest request) {
+        if (request == null || !StringUtils.hasText(request.mfaToken())) {
+            throw new ApiException(ErrorCode.MFA_TOKEN_INVALID);
+        }
+    }
+
+    private void validateRejectRequest(AdminReviewRejectRequest request) {
+        if (request == null || !StringUtils.hasText(request.mfaToken())) {
+            throw new ApiException(ErrorCode.MFA_TOKEN_INVALID);
+        }
+        if (!StringUtils.hasText(request.rejectReasonCode()) || !StringUtils.hasText(request.comment())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
     }
 
     private KycApplication getKycApplication(Long kycId) {

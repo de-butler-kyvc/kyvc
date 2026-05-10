@@ -9,7 +9,6 @@ import jakarta.validation.constraints.NotBlank;
 @Schema(description = "KYC 수동심사 반려 요청")
 public record AdminReviewRejectRequest(
         @Schema(description = "MFA_SESSION 원문 토큰", example = "mfa_session_token")
-        @NotBlank
         String mfaToken,
         @Schema(description = "REJECT_REASON 공통코드", example = "INVALID_DOCUMENT")
         @NotBlank

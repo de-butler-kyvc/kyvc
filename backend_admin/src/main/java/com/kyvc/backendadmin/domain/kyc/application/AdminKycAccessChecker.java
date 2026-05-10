@@ -22,6 +22,9 @@ public class AdminKycAccessChecker {
         if (SecurityUtil.hasRole(KyvcEnums.RoleCode.BACKEND_ADMIN.name())) {
             return;
         }
+        if (SecurityUtil.hasRole(KyvcEnums.RoleCode.OPERATOR.name())) {
+            return;
+        }
         writeFailureAudit(adminId, kycId, actionType, "ROLE_NOT_ALLOWED");
         throw new ApiException(ErrorCode.FORBIDDEN);
     }
