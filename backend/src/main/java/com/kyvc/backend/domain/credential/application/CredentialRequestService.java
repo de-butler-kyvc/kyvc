@@ -39,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -51,6 +53,9 @@ import java.util.Map;
 public class CredentialRequestService {
 
     private static final String PENDING_REISSUE_EXTERNAL_ID_PREFIX = "pending-reissue-";
+    private static final String CORE_STATUS_MODE_XRPL = "xrpl";
+    private static final String CORE_CREDENTIAL_FORMAT_JWT = "jwt";
+    private static final String CORE_VC_FORMAT_JWT = "vc+jwt";
 
     private final CredentialRepository credentialRepository;
     private final CredentialRequestRepository credentialRequestRepository;
@@ -366,24 +371,41 @@ public class CredentialRequestService {
             String coreRequestId // Core 요청 ID
     ) {
         IssuanceSeed seed = resolveIssuanceSeed(credential);
-        LocalDateTime now = LocalDateTime.now();
+        OffsetDateTime validFrom = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime validUntil = validFrom.plusYears(1);
+        String credentialType = resolveText(credential.getCredentialTypeCode(), CoreMockSeedData.DEV_CREDENTIAL_TYPE);
         return new CoreVcIssuanceRequest(
                 coreRequestId,
                 credential.getCredentialId(),
                 kycApplication.getKycId(),
                 kycApplication.getCorporateId(),
                 seed.issuerAccount(),
+                null,
+                null,
                 seed.issuerDid(),
                 seed.issuerVerificationMethodId(),
+                null,
                 seed.holderAccount(),
                 seed.holderDid(),
-                resolveText(credential.getCredentialTypeCode(), CoreMockSeedData.DEV_CREDENTIAL_TYPE),
+                credentialType,
                 resolveText(credential.getKycLevelCode(), CoreMockSeedData.DEV_KYC_LEVEL),
                 resolveText(credential.getJurisdictionCode(), CoreMockSeedData.DEV_JURISDICTION),
                 resolveClaims(),
-                now,
-                CoreMockSeedData.validUntil(),
-                now
+                validFrom,
+                validUntil,
+                true,
+                true,
+                false,
+                true,
+                null,
+                null,
+                false,
+                CORE_STATUS_MODE_XRPL,
+                CORE_CREDENTIAL_FORMAT_JWT,
+                CORE_VC_FORMAT_JWT,
+                coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
+                credentialType,
+                validFrom
         );
     }
 

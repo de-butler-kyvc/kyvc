@@ -2,13 +2,17 @@ package com.kyvc.backend.domain.core.infrastructure.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 // Core /issuer/credentials/kyc 요청 DTO
 public record IssueKycCredentialApiRequest(
         @JsonProperty("issuer_account")
         String issuerAccount, // Issuer XRPL Account
+        @JsonProperty("issuer_seed")
+        String issuerSeed, // Issuer seed
+        @JsonProperty("issuer_private_key_pem")
+        String issuerPrivateKeyPem, // Issuer private key PEM
         @JsonProperty("issuer_did")
         String issuerDid, // Issuer DID
         @JsonProperty("key_id")
@@ -20,9 +24,9 @@ public record IssueKycCredentialApiRequest(
         @JsonProperty("claims")
         Map<String, Object> claims, // Credential claims
         @JsonProperty("valid_from")
-        LocalDateTime validFrom, // 유효 시작 시각
+        OffsetDateTime validFrom, // 유효 시작 시각
         @JsonProperty("valid_until")
-        LocalDateTime validUntil, // 유효 종료 시각
+        OffsetDateTime validUntil, // 유효 종료 시각
         @JsonProperty("persist")
         Boolean persist, // 저장 여부
         @JsonProperty("persist_status")
@@ -33,6 +37,10 @@ public record IssueKycCredentialApiRequest(
         Boolean storeIssuerDidDocument, // Issuer DID Document 저장 여부
         @JsonProperty("status_uri")
         String statusUri, // 상태 URI
+        @JsonProperty("xrpl_json_rpc_url")
+        String xrplJsonRpcUrl, // XRPL JSON RPC URL
+        @JsonProperty("allow_mainnet")
+        Boolean allowMainnet, // mainnet 허용 여부
         @JsonProperty("status_mode")
         String statusMode, // 상태 저장 모드
         @JsonProperty("credential_format")

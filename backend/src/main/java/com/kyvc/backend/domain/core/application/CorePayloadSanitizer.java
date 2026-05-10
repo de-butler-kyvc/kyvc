@@ -51,6 +51,7 @@ public class CorePayloadSanitizer {
             "holderaccount",
             "holderxrpladdress",
             "issueraccount",
+            "issuerseed",
             "issuerverificationmethodid"
     );
 
