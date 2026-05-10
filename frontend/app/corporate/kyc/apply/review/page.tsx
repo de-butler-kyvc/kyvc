@@ -7,7 +7,7 @@ import { Icon } from "@/components/design/icons";
 import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError, type KycDocument, kyc as kycApi } from "@/lib/api";
+import { ApiError, BASE_URL, type KycDocument, kyc as kycApi } from "@/lib/api";
 import {
   DOCUMENT_LABELS,
   compactHash,
@@ -43,7 +43,7 @@ export default function KycApplyReviewPage() {
     setError(null);
     try {
       const { previewUrl } = await kycApi.documentPreview(kycId, documentId);
-      window.open(previewUrl, "_blank", "noopener,noreferrer");
+      window.open(`${BASE_URL}${previewUrl}`, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "미리보기 URL 발급에 실패했습니다."
