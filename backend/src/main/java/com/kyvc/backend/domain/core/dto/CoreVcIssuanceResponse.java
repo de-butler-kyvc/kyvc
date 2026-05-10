@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
  * @param message 처리 메시지
  * @param requestedAt 요청 시각
  * @param credentialExternalId Core 외부 Credential ID
+ * @param credentialType Core Credential 유형
  * @param issuerDid Issuer DID
  * @param format Core VC format
  * @param credentialPayloadJson Core credential JSON 원문
@@ -34,6 +35,8 @@ public record CoreVcIssuanceResponse(
         LocalDateTime requestedAt, // 요청 시각
         @Schema(description = "Core 외부 Credential ID", example = "cred-001")
         String credentialExternalId, // Core 외부 Credential ID
+        @Schema(description = "Core Credential 유형", example = "56435F5354415455535F56313A...")
+        String credentialType, // Core Credential 유형
         @Schema(description = "Issuer DID", example = "did:xrpl:1:rIssuer")
         String issuerDid, // Issuer DID
         @Schema(description = "Core VC format", example = "vc+jwt")

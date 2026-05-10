@@ -16,6 +16,10 @@ public record VerifyCredentialApiRequest(
         Map<String, Object> policy, // Policy 객체
         @JsonProperty("require_status")
         Boolean requireStatus, // 상태 검증 여부
+        @JsonProperty("xrpl_json_rpc_url")
+        String xrplJsonRpcUrl, // XRPL JSON RPC URL
+        @JsonProperty("allow_mainnet")
+        Boolean allowMainnet, // mainnet 허용 여부
         @JsonProperty("status_mode")
         String statusMode // 상태 저장 모드
 ) {

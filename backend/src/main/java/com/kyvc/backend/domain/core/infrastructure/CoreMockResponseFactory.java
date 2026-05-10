@@ -95,6 +95,7 @@ public class CoreMockResponseFactory {
                 "Core 장애 fallback VC 발급 응답: " + reason,
                 LocalDateTime.now(),
                 "fallback-" + request.coreRequestId(),
+                request.credentialType() == null ? CoreMockSeedData.DEV_CREDENTIAL_TYPE : request.credentialType(),
                 request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
                 "vc+jwt",
                 null,

@@ -116,6 +116,7 @@ public class CredentialRequestService {
             KyvcEnums.CredentialStatus credentialStatus = resolveCredentialStatus(coreResponse.status());
             reissuedCredential.applyIssuanceMetadata(
                     coreResponse.credentialExternalId(),
+                    coreResponse.credentialType(),
                     coreResponse.issuerDid(),
                     credentialStatus,
                     coreResponse.vcHash(),
@@ -415,10 +416,17 @@ public class CredentialRequestService {
     ) {
         return new CoreRevokeCredentialRequest(
                 accountFromDid(credential.getIssuerDid()),
+                null,
                 credential.getHolderXrplAddress(),
                 credential.getCredentialTypeCode(),
                 credential.getCredentialStatusId(),
                 credential.getCredentialExternalId(),
+                credential.getHolderDid(),
+                credential.getIssuerDid(),
+                null,
+                null,
+                false,
+                CORE_STATUS_MODE_XRPL,
                 normalizeReason(request.reason(), request.requestMessage())
         );
     }
