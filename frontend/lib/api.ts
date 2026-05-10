@@ -1,4 +1,7 @@
-import axios, { type AxiosInstance } from "axios";
+import axios, {
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+} from "axios";
 
 export const BASE_URL = "https://dev-api-kyvc.khuoo.synology.me";
 const REFRESH_TOKEN_PATH = "/api/auth/token/refresh";
@@ -61,31 +64,80 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-let refreshTokenPromise: Promise<boolean> | null = null;
+type KyvcAxiosRequestConfig = InternalAxiosRequestConfig & {
+  _kyvcDidAttemptRefresh?: boolean;
+};
 
-async function refreshToken() {
-  if (!refreshTokenPromise) {
-    refreshTokenPromise = apiClient
-      .post<unknown>(REFRESH_TOKEN_PATH)
-      .then((res) => {
+/** axios config.url은 상대 경로인 경우가 많아 pathname만 뽑는다 */
+function requestPathname(config: InternalAxiosRequestConfig): string {
+  const raw = config.url ?? "";
+  const pathOnly = raw.split("?")[0] ?? "";
+  if (pathOnly.startsWith("/")) return pathOnly;
+  try {
+    return new URL(pathOnly, config.baseURL || BASE_URL).pathname;
+  } catch {
+    return pathOnly;
+  }
+}
+
+/** 비밀번호 실패 등으로 401이 나와도 리프레시를 시도하면 불필요한 요청만 늘어난다 */
+function skipRefreshOn401(pathname: string): boolean {
+  if (pathname === REFRESH_TOKEN_PATH) return true;
+  return (
+    pathname.startsWith("/api/auth/login") ||
+    pathname.startsWith("/api/auth/signup") ||
+    pathname.startsWith("/api/auth/password-reset") ||
+    pathname.startsWith("/api/auth/dev/")
+  );
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await apiClient.post<unknown>(
+          REFRESH_TOKEN_PATH,
+          undefined,
+          {
+            headers: { Accept: "application/json" },
+          },
+        );
         const payload = isEnvelope<{ refreshed?: boolean }>(res.data)
           ? res.data
           : null;
-
         return (
           res.status >= 200 &&
           res.status < 300 &&
           (!payload || payload.success !== false)
         );
-      })
-      .catch(() => false)
-      .finally(() => {
-        refreshTokenPromise = null;
-      });
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+apiClient.interceptors.response.use((response) => {
+  const config = response.config as KyvcAxiosRequestConfig;
+  if (
+    response.status !== 401 ||
+    config._kyvcDidAttemptRefresh ||
+    skipRefreshOn401(requestPathname(config))
+  ) {
+    return response;
   }
 
-  return refreshTokenPromise;
-}
+  config._kyvcDidAttemptRefresh = true;
+  return refreshAccessToken().then((ok) => {
+    if (!ok) return response;
+    return apiClient.request(config);
+  });
+});
 
 async function requestApi<T>(
   path: string,
@@ -108,13 +160,6 @@ export async function api<T>(
   let res;
   try {
     res = await requestApi<unknown>(path, input);
-
-    if (res.status === 401 && path !== REFRESH_TOKEN_PATH) {
-      const refreshed = await refreshToken();
-      if (refreshed) {
-        res = await requestApi<unknown>(path, input);
-      }
-    }
   } catch (err) {
     if (axios.isAxiosError(err)) {
       throw new ApiError(0, "NETWORK", err.message || "네트워크 오류");
