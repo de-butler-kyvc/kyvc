@@ -33,10 +33,9 @@ export default function MobileVpSubmittingPage() {
     const run = async () => {
       try {
         if (!isBridgeAvailable()) {
-          // dev/preview: 바로 완료 화면
-          await new Promise((r) => setTimeout(r, 1200));
-          router.replace("/m/vp/complete");
-          return;
+          throw new Error(
+            "앱 내부 서명 모듈에 연결할 수 없습니다. KYvC 앱에서 다시 열어 주세요.",
+          );
         }
 
         const scan = mSession.readScanResult();

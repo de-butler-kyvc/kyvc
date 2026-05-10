@@ -10,7 +10,11 @@ import {
   MTopBar,
   type CertItem,
 } from "@/components/m/parts";
-import { credentials, type CredentialSummary } from "@/lib/api";
+import {
+  ApiError,
+  credentials,
+  type CredentialSummary,
+} from "@/lib/api";
 import {
   bridge,
   isBridgeAvailable,
@@ -18,7 +22,7 @@ import {
   useBridgeAction,
   type WalletInfo,
 } from "@/lib/m/android-bridge";
-import { MOCK_CERTS, readHiddenCerts } from "@/lib/m/data";
+import { readHiddenCerts } from "@/lib/m/data";
 
 const STATUS_LABEL: Record<string, string> = {
   ACTIVE: "활성",
@@ -27,19 +31,20 @@ const STATUS_LABEL: Record<string, string> = {
   EXPIRED: "만료",
 };
 
+const PALETTES = [
+  "linear-gradient(135deg,#111827 0%,#183b8f 48%,#7c3aed 100%)",
+  "linear-gradient(135deg,#052e2b 0%,#0f766e 48%,#2563eb 100%)",
+  "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
+];
+
 function summaryToCert(s: CredentialSummary, i: number): CertItem {
-  const palettes = [
-    MOCK_CERTS[0]!.gradient,
-    MOCK_CERTS[1]!.gradient,
-    MOCK_CERTS[2]!.gradient,
-  ];
   return {
     issuer: s.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
     title: s.credentialTypeCode ?? "법인 증명서",
     status: STATUS_LABEL[s.credentialStatusCode ?? ""] ?? "발급됨",
     id: `urn:cred:${s.credentialId}`,
     date: (s.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-    gradient: palettes[i % palettes.length] ?? MOCK_CERTS[0]!.gradient,
+    gradient: PALETTES[i % PALETTES.length]!,
   };
 }
 
@@ -54,47 +59,76 @@ type BridgeCred = {
 
 export default function MobileHomePage() {
   const router = useRouter();
-  const [certs, setCerts] = useState<CertItem[]>(MOCK_CERTS);
+  const [certs, setCerts] = useState<CertItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // 1) 백엔드 API: 발급된 VC 목록 (서버 source of truth)
+  // 백엔드 API: 발급된 VC 목록
   useEffect(() => {
     setHidden(readHiddenCerts());
+    let cancelled = false;
     (async () => {
       try {
         const list = await credentials.list();
-        if (list.credentials.length) {
-          setCerts(list.credentials.map(summaryToCert));
+        if (cancelled) return;
+        setCerts(list.credentials.map(summaryToCert));
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 401) {
+          // 세션 만료 → 로그인 화면
+          router.replace("/m/login");
+          return;
         }
-      } catch {
-        /* 비로그인/네트워크 실패 시 mock 유지 */
+        setApiError(
+          e instanceof ApiError
+            ? `VC 목록 조회 실패: ${e.message}`
+            : "VC 목록 조회 중 네트워크 오류가 발생했습니다.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
-  // 2) 브리지: 활성 지갑 정보
+  // 브리지: 활성 지갑 정보 + 단말 저장본
   useEffect(() => {
-    if (!isBridgeAvailable()) return;
+    if (!isBridgeAvailable()) {
+      setBridgeError(
+        "앱 내부 지갑 모듈에 연결할 수 없습니다. KYvC 앱에서 다시 열어 주세요.",
+      );
+      return;
+    }
     (async () => {
       try {
         const r = await bridge.getWalletInfo();
         if (r.ok) setWalletInfo(r);
-      } catch {
-        /* 세션 만료 가능성, 로그인 화면으로 보내지 않음 — 사용자가 명시적 인증 후 진입 */
+        else setBridgeError(r.error ?? "지갑 정보를 가져올 수 없습니다.");
+      } catch (e) {
+        setBridgeError(
+          e instanceof Error ? e.message : "브리지 호출에 실패했습니다.",
+        );
       }
     })();
-    // 지갑 목록도 가져와 LIST_WALLETS 이벤트로 갱신
     bridge.listWallets().catch(() => {});
-    // 저장된 VC 동기화
     bridge.listCredentials().catch(() => {});
   }, []);
 
-  // 3) 이벤트 구독: 다른 화면에서 활성 지갑이 바뀌어도 반영
+  // 다른 화면에서 활성 지갑이 바뀌어도 반영
   useBridgeAction("LIST_WALLETS", (r) => {
     if (!r.ok) return;
     const list = r.wallets as
-      | Array<{ account?: string; isActive?: boolean; did?: string; name?: string }>
+      | Array<{
+          account?: string;
+          isActive?: boolean;
+          did?: string;
+          name?: string;
+        }>
       | undefined;
     const active = list?.find((w) => w.isActive);
     if (active?.account) {
@@ -117,13 +151,11 @@ export default function MobileHomePage() {
         status: c.active ? "활성" : "비활성",
         id: c.credentialId ?? `bridge-${i}`,
         date: (c.acceptedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-        gradient:
-          MOCK_CERTS[i % MOCK_CERTS.length]!.gradient,
+        gradient: PALETTES[i % PALETTES.length]!,
       })),
     );
   });
 
-  // 4) 발급 완료 콜백 직접 구독 — 다른 화면에서 발급되어 돌아왔을 때도 새로고침
   useEffect(() => {
     const off = onBridgeAction("ISSUER_CREDENTIAL_RECEIVED", (r) => {
       if (r.ok) {
@@ -154,14 +186,33 @@ export default function MobileHomePage() {
         }
       />
       <div className="scroll home-scroll">
+        {bridgeError ? (
+          <div
+            className="m-error"
+            style={{ margin: "12px 18px 0", textAlign: "left" }}
+          >
+            {bridgeError}
+          </div>
+        ) : null}
+        {apiError ? (
+          <div
+            className="m-error"
+            style={{ margin: "12px 18px 0", textAlign: "left" }}
+          >
+            {apiError}
+          </div>
+        ) : null}
+
         <section className="wallet-hero">
           <div>
             <span>KYvC Business Wallet</span>
             <h1>{visible.length}개 VC 보유</h1>
             <p>
               {accountShort
-                ? `Holder ${accountShort} · 동기화됨`
-                : "DID 연결 정상 · 마지막 동기화 방금 전"}
+                ? `Holder ${accountShort}`
+                : bridgeError
+                  ? "지갑 미연결"
+                  : "동기화 중..."}
             </p>
           </div>
         </section>
@@ -194,7 +245,7 @@ export default function MobileHomePage() {
                 <p className="xrp-sub">testnet · 블록체인으로 검증된 신원 증명</p>
               </div>
             </div>
-            <span className="xrp-badge">연동됨</span>
+            <span className="xrp-badge">{walletInfo?.did ? "연동됨" : "미연결"}</span>
           </div>
           <div className="xrp-btn-row">
             <button
@@ -222,17 +273,30 @@ export default function MobileHomePage() {
             </button>
           </div>
           <div className="credential-stack" aria-label="내 증명서 스택">
-            {visible.map((c, i) => (
-              <MCertCard
-                key={c.id}
-                cert={c}
-                index={i}
-                extra="stacked"
-                onClick={() =>
-                  router.push(`/m/vc/detail?id=${encodeURIComponent(c.id)}`)
-                }
-              />
-            ))}
+            {loading ? (
+              <p className="m-loading">불러오는 중…</p>
+            ) : visible.length === 0 ? (
+              <p
+                className="subcopy"
+                style={{ padding: "20px 18px", textAlign: "center" }}
+              >
+                {apiError
+                  ? "VC를 불러올 수 없습니다."
+                  : "발급된 증명서가 없습니다."}
+              </p>
+            ) : (
+              visible.map((c, i) => (
+                <MCertCard
+                  key={c.id}
+                  cert={c}
+                  index={i}
+                  extra="stacked"
+                  onClick={() =>
+                    router.push(`/m/vc/detail?id=${encodeURIComponent(c.id)}`)
+                  }
+                />
+              ))
+            )}
           </div>
         </section>
       </div>

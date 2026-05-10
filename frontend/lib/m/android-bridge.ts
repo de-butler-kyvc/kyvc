@@ -183,26 +183,22 @@ function newRequestId(): string {
 
 // ── 핵심 호출 함수 ─────────────────────────────────────────────
 
+/** 브리지/네이티브 호출 실패를 명시하는 에러 코드 */
+export const BRIDGE_UNAVAILABLE = "BRIDGE_UNAVAILABLE";
+export const BRIDGE_METHOD_NOT_FOUND = "BRIDGE_METHOD_NOT_FOUND";
+export const BRIDGE_TIMEOUT = "BRIDGE_TIMEOUT";
+
 /**
  * 결과를 기다리지 않는 호출 (응답은 이벤트 버스로 처리).
- * 브라우저(미리보기)에서는 mock 결과를 즉시 dispatch.
+ * 브리지가 없거나 메서드가 미구현이면 false 반환 (조용한 성공 X).
  */
 export function callAndroidVoid(method: string, payload: AnyJson = {}): boolean {
   setupBridge();
   if (typeof window === "undefined") return false;
-
-  // dev/preview: window.Android 없을 때 mock으로 즉시 dispatch
   if (!window.Android) {
-    const action = methodToAction(method);
-    const mock: BridgeResult = {
-      ok: true,
-      mock: true,
-      action,
-      source: "browser-mock",
-      ...payload,
-    };
-    queueMicrotask(() => dispatchResult(mock));
-    return true;
+    // eslint-disable-next-line no-console
+    console.warn(`[bridge] window.Android missing, cannot call ${method}`);
+    return false;
   }
 
   const fn = window.Android[method];
@@ -240,7 +236,13 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
   const timeoutMs = options.timeoutMs ?? 30_000;
 
   if (typeof window === "undefined") {
-    return Promise.reject(new Error("BRIDGE_NO_WINDOW"));
+    return Promise.reject(new Error(BRIDGE_UNAVAILABLE));
+  }
+
+  if (!window.Android) {
+    // 브리지가 없는 환경(브라우저 미리보기 등)에서는 명시적으로 실패시킨다.
+    // 조용히 mock 응답을 만들어 흐름을 진행시키지 않는다.
+    return Promise.reject(new Error(BRIDGE_UNAVAILABLE));
   }
 
   const requestId =
@@ -252,29 +254,9 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
 
   const finalPayload: AnyJson = { ...payload, requestId, issuedAt };
 
-  // dev/preview: mock
-  if (!window.Android) {
-    return new Promise<T>((resolve) => {
-      const mock = {
-        ok: true,
-        mock: true,
-        action: expectedAction,
-        requestId,
-        source: "browser-mock",
-        ...payload,
-      } as BridgeResult;
-      // 다음 microtask에서 응답해서 호출자가 await 직후 받음
-      queueMicrotask(() => {
-        // emit + resolve
-        emit(mock);
-        resolve(mock as T);
-      });
-    });
-  }
-
   const fn = window.Android[method];
   if (typeof fn !== "function") {
-    return Promise.reject(new Error(`BRIDGE_METHOD_NOT_FOUND:${method}`));
+    return Promise.reject(new Error(`${BRIDGE_METHOD_NOT_FOUND}:${method}`));
   }
 
   return new Promise<T>((resolve, reject) => {
@@ -286,7 +268,7 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
         if (idx >= 0) queue.splice(idx, 1);
         if (queue.length === 0) pendingByAction.delete(expectedAction);
       }
-      reject(new Error(`BRIDGE_TIMEOUT:${expectedAction}`));
+      reject(new Error(`${BRIDGE_TIMEOUT}:${expectedAction}`));
     }, timeoutMs);
 
     const entry: Pending = {

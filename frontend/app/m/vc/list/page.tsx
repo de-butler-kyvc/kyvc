@@ -4,9 +4,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { MCertCard, MTopBar, type CertItem } from "@/components/m/parts";
-import { credentials } from "@/lib/api";
-import { bridge, isBridgeAvailable, useBridgeAction } from "@/lib/m/android-bridge";
-import { MOCK_CERTS, readHiddenCerts } from "@/lib/m/data";
+import { ApiError, credentials } from "@/lib/api";
+import {
+  bridge,
+  isBridgeAvailable,
+  useBridgeAction,
+} from "@/lib/m/android-bridge";
+import { readHiddenCerts } from "@/lib/m/data";
+
+const PALETTES = [
+  "linear-gradient(135deg,#111827 0%,#183b8f 48%,#7c3aed 100%)",
+  "linear-gradient(135deg,#052e2b 0%,#0f766e 48%,#2563eb 100%)",
+  "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
+];
 
 type BridgeCred = {
   credentialId?: string;
@@ -18,40 +28,54 @@ type BridgeCred = {
 
 export default function MobileVcListPage() {
   const router = useRouter();
-  const [certs, setCerts] = useState<CertItem[]>(MOCK_CERTS);
+  const [certs, setCerts] = useState<CertItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // API 측 발급 이력 (서버 인덱스)
+  // API 측 발급 이력
   useEffect(() => {
     setHidden(readHiddenCerts());
+    let cancelled = false;
     (async () => {
       try {
         const list = await credentials.list();
-        if (list.credentials.length) {
-          setCerts(
-            list.credentials.map((c, i) => ({
-              issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-              title: c.credentialTypeCode ?? "법인 증명서",
-              status: "발급됨",
-              id: `urn:cred:${c.credentialId}`,
-              date:
-                (c.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-              gradient: MOCK_CERTS[i % MOCK_CERTS.length]!.gradient,
-            })),
-          );
+        if (cancelled) return;
+        setCerts(
+          list.credentials.map((c, i) => ({
+            issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
+            title: c.credentialTypeCode ?? "법인 증명서",
+            status: "발급됨",
+            id: `urn:cred:${c.credentialId}`,
+            date:
+              (c.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
+            gradient: PALETTES[i % PALETTES.length]!,
+          })),
+        );
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 401) {
+          router.replace("/m/login");
+          return;
         }
-      } catch {
-        /* mock */
+        setError(
+          e instanceof ApiError
+            ? `VC 목록 조회 실패: ${e.message}`
+            : "VC 목록 조회 중 네트워크 오류가 발생했습니다.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
-    // 브리지: 단말 저장본 + 상태 일괄 갱신
     if (isBridgeAvailable()) {
       bridge.listCredentials().catch(() => {});
     }
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
-  // LIST_CREDENTIALS 응답 수신 시 화면 갱신
   useBridgeAction("LIST_CREDENTIALS", (r) => {
     if (!r.ok) return;
     const list = (r.credentials as BridgeCred[] | undefined) ?? [];
@@ -63,24 +87,36 @@ export default function MobileVcListPage() {
         status: c.active ? "활성" : "비활성",
         id: c.credentialId ?? `bridge-${i}`,
         date: (c.acceptedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-        gradient: MOCK_CERTS[i % MOCK_CERTS.length]!.gradient,
+        gradient: PALETTES[i % PALETTES.length]!,
       })),
     );
   });
 
-  // 갱신 응답
-  useBridgeAction("REFRESH_CREDENTIAL_STATUSES", () => {
+  useBridgeAction("REFRESH_CREDENTIAL_STATUSES", (r) => {
     setRefreshing(false);
+    if (!r.ok) {
+      setError(r.error ?? "상태 갱신에 실패했습니다.");
+      return;
+    }
     if (isBridgeAvailable()) bridge.listCredentials().catch(() => {});
   });
 
   const onRefresh = async () => {
-    if (!isBridgeAvailable()) return;
+    if (!isBridgeAvailable()) {
+      setError(
+        "앱 내부 모듈에 연결할 수 없습니다. KYvC 앱에서 다시 열어 주세요.",
+      );
+      return;
+    }
+    setError(null);
     setRefreshing(true);
     try {
       await bridge.refreshAllCredentialStatuses();
-    } catch {
+    } catch (e) {
       setRefreshing(false);
+      setError(
+        e instanceof Error ? e.message : "상태 갱신 호출에 실패했습니다.",
+      );
     }
   };
 
@@ -103,18 +139,30 @@ export default function MobileVcListPage() {
         }
       />
       <div className="scroll content">
+        {error ? <p className="m-error mt-16">{error}</p> : null}
         <div className="vc-grid mt-16">
-          {visible.map((c, i) => (
-            <MCertCard
-              key={c.id}
-              cert={c}
-              index={i}
-              extra="flat-card"
-              onClick={() =>
-                router.push(`/m/vc/detail?id=${encodeURIComponent(c.id)}`)
-              }
-            />
-          ))}
+          {loading ? (
+            <p className="m-loading">불러오는 중…</p>
+          ) : visible.length === 0 ? (
+            <p
+              className="subcopy"
+              style={{ textAlign: "center", padding: "32px 0" }}
+            >
+              {error ? "VC를 불러올 수 없습니다." : "발급된 증명서가 없습니다."}
+            </p>
+          ) : (
+            visible.map((c, i) => (
+              <MCertCard
+                key={c.id}
+                cert={c}
+                index={i}
+                extra="flat-card"
+                onClick={() =>
+                  router.push(`/m/vc/detail?id=${encodeURIComponent(c.id)}`)
+                }
+              />
+            ))
+          )}
         </div>
       </div>
     </section>
