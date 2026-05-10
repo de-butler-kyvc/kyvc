@@ -2303,6 +2303,110 @@ a:hover {
   background: var(--accent-soft);
 }
 
+.terms-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(11, 18, 32, 0.46);
+}
+
+.terms-modal {
+  width: min(640px, calc(100vw - 56px));
+  max-height: min(760px, calc(100vh - 56px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.terms-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.terms-modal-head h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.terms-modal-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.terms-modal-close {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.terms-modal-close:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.terms-modal-body {
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+}
+
+.terms-modal-summary {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.terms-modal-section {
+  padding: 18px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.terms-modal-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.terms-modal-section h3 {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.terms-modal-section p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 /* ─── Email icon illustration ────────────── */
 .email-icon-wrap {
   width: 64px;
