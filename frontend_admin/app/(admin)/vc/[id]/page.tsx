@@ -1,20 +1,8 @@
 "use client";
-import { use } from "react";
-import Link from "next/link";
 
-const mockVc = {
-  credentialId: "vc:kyvc:2025:corp-kyc-001",
-  credentialType: "KYCVerifiableCredential",
-  issuerDid: "did:kyvc:issuer:001",
-  holderDid: "did:kyvc:holder:kim123",
-  issuedAt: "2025.05.02 14:00",
-  expiresAt: "2026.12.31",
-  xrplTxHash: "A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6",
-  mobileStored: "저장 완료",
-  corp: "주식회사 케이원",
-  kyc: "KYC-2025-0502-001",
-  status: "활성",
-};
+import { getVcDetail, type VcDetail } from "@/lib/api/vc";
+import Link from "next/link";
+import { use, useEffect, useState } from "react";
 
 const statusBadge: Record<string, string> = {
   활성: "bg-green-100 text-green-600",
@@ -24,7 +12,33 @@ const statusBadge: Record<string, string> = {
 };
 
 export default function VcDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const { id: rawId } = use(params);
+  const id = decodeURIComponent(rawId);
+  const [vc, setVc] = useState<VcDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+
+    const fetchDetail = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await getVcDetail(id);
+        if (alive) setVc(data);
+      } catch (err) {
+        if (alive) setError(err instanceof Error ? err.message : "VC 상세 정보를 불러오지 못했습니다.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    fetchDetail();
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
   return (
     <div className="space-y-6">
@@ -37,85 +51,81 @@ export default function VcDetailPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
-      <div className="flex gap-4">
-        {/* 좌측 요약 */}
-        <div className="w-56 shrink-0 space-y-3">
-          <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
-            <h2 className="text-xs font-semibold text-slate-500">VC 발급 상태 조회</h2>
-            {[
-              { label: "법인명", value: mockVc.corp },
-              { label: "발급 상태", value: mockVc.status, isBadge: true },
-              { label: "발급 요청일", value: mockVc.issuedAt },
-              { label: "발급 완료일", value: mockVc.issuedAt },
-            ].map((item) => (
-              <div key={item.label}>
-                <p className="text-xs text-slate-400">{item.label}</p>
-                {item.isBadge ? (
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 inline-block ${statusBadge[item.value]}`}>
-                    {item.value}
-                  </span>
-                ) : (
-                  <p className="text-slate-700 text-xs font-medium mt-0.5">{item.value}</p>
-                )}
-              </div>
-            ))}
+      {loading ? (
+        <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">로딩 중...</div>
+      ) : error ? (
+        <div className="bg-red-50 rounded-lg border border-red-200 p-5 text-sm text-red-600">{error}</div>
+      ) : vc ? (
+        <div className="flex gap-4">
+          <div className="w-56 shrink-0 space-y-3">
+            <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+              <h2 className="text-xs font-semibold text-slate-500">VC 발급 상태 조회</h2>
+              {[
+                { label: "법인명", value: vc.corp },
+                { label: "발급 상태", value: vc.status, isBadge: true },
+                { label: "발급 요청일", value: vc.issuedAt },
+                { label: "발급 완료일", value: vc.issuedAt },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-xs text-slate-400">{item.label}</p>
+                  {item.isBadge ? (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 inline-block ${statusBadge[item.value] ?? "bg-slate-100 text-slate-500"}`}>
+                      {item.value}
+                    </span>
+                  ) : (
+                    <p className="text-slate-700 text-xs font-medium mt-0.5">{item.value}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <Link
+              href={`/vc/${encodeURIComponent(id)}/reissue`}
+              className="block w-full text-center border border-slate-200 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+            >
+              VC 재발급 요청
+            </Link>
+            <Link
+              href={`/vc/${encodeURIComponent(id)}/revoke`}
+              className="block w-full text-center border border-red-200 text-red-500 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
+            >
+              VC 폐기 요청
+            </Link>
           </div>
 
-          {/* 액션 버튼 */}
-          <Link
-            href={`/vc/${id}/reissue`}
-            className="block w-full text-center border border-slate-200 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
-          >
-            VC 재발급 요청
-          </Link>
-          <Link
-            href={`/vc/${id}/revoke`}
-            className="block w-full text-center border border-red-200 text-red-500 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
-          >
-            VC 폐기 요청
-          </Link>
+          <div className="flex-1 bg-white rounded-lg border border-slate-200">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-700">VC 발급 상세 정보</h2>
+            </div>
+            <div className="p-5 space-y-0">
+              {[
+                { label: "Credential ID", value: vc.credentialId },
+                { label: "Credential Type", value: vc.credentialType },
+                { label: "Issuer DID", value: vc.issuerDid },
+                { label: "Holder DID", value: vc.holderDid },
+                { label: "발급일", value: vc.issuedAt },
+                { label: "만료일", value: vc.expiresAt },
+                { label: "XRPL Tx Hash", value: vc.xrplTxHash },
+                { label: "모바일 저장 여부", value: vc.mobileStored, isGreen: vc.mobileStored === "저장 완료" },
+                { label: "연결 KYC 신청", value: vc.kyc, isLink: vc.kyc !== "-" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center border-b border-slate-50 py-3 last:border-0">
+                  <span className="text-sm text-slate-400 w-40 shrink-0">{item.label}</span>
+                  {item.isLink ? (
+                    <Link href={`/kyc/${encodeURIComponent(item.value)}`} className="text-sm text-blue-600 hover:underline font-mono">
+                      {item.value}
+                    </Link>
+                  ) : item.isGreen ? (
+                    <span className="bg-green-100 text-green-600 text-xs px-2 py-0.5 rounded-full font-medium">{item.value}</span>
+                  ) : (
+                    <span className="text-sm text-slate-700 font-mono break-all">{item.value}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-
-        {/* 우측 상세 정보 */}
-        <div className="flex-1 bg-white rounded-lg border border-slate-200">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-700">VC 발급 상세 정보</h2>
-          </div>
-          <div className="p-5 space-y-0">
-            {[
-              { label: "Credential ID", value: mockVc.credentialId },
-              { label: "Credential Type", value: mockVc.credentialType },
-              { label: "Issuer DID", value: mockVc.issuerDid },
-              { label: "Holder DID", value: mockVc.holderDid },
-              { label: "발급일", value: mockVc.issuedAt },
-              { label: "만료일", value: mockVc.expiresAt },
-              { label: "XRPL Tx Hash", value: mockVc.xrplTxHash },
-              { label: "모바일 저장 여부", value: mockVc.mobileStored, isGreen: true },
-              { label: "연결 KYC 신청", value: mockVc.kyc, isLink: true },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center border-b border-slate-50 py-3 last:border-0">
-                <span className="text-sm text-slate-400 w-40 shrink-0">{item.label}</span>
-                {item.isLink ? (
-                  <Link href={`/kyc/${item.value}`} className="text-sm text-blue-600 hover:underline font-mono">
-                    {item.value}
-                  </Link>
-                ) : item.isGreen ? (
-                  <span className="bg-green-100 text-green-600 text-xs px-2 py-0.5 rounded-full font-medium">
-                    {item.value}
-                  </span>
-                ) : (
-                  <span className="text-sm text-slate-700 font-mono break-all">{item.value}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
-        <span>© 2025 KYvC. All rights reserved.</span>
-      </div>
+      ) : null}
     </div>
   );
 }

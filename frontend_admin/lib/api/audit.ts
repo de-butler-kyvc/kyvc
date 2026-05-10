@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const AUDIT_BASE = `${API_BASE}/api/admin/backend/audit-logs`;
 
 // ────────────────────────────────────────────────────────────
@@ -52,13 +52,11 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error("유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요.");
-  }
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -133,4 +131,68 @@ export async function getAuditLog(auditId: string): Promise<AuditLogDetail> {
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AuditLogDetail>;
   return json.data;
+}
+
+export interface SecurityEvent {
+  eventId: string;
+  eventType?: string;
+  actorId?: string;
+  actorName?: string;
+  description?: string;
+  severity?: string;
+  ipAddress?: string;
+  createdAt?: string;
+}
+
+export interface DataAccessLog {
+  logId: string;
+  accessorId?: string;
+  accessorName?: string;
+  dataType?: string;
+  targetId?: string;
+  accessReason?: string;
+  ipAddress?: string;
+  accessedAt?: string;
+}
+
+/** GET /api/admin/backend/security-events */
+export async function getSecurityEvents(filters?: {
+  eventType?: string;
+  severity?: string;
+  from?: string;
+  to?: string;
+}): Promise<SecurityEvent[]> {
+  const params = new URLSearchParams();
+  if (filters?.eventType) params.set("eventType", filters.eventType);
+  if (filters?.severity) params.set("severity", filters.severity);
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  const url = params.toString()
+    ? `${API_BASE}/api/admin/backend/security-events?${params}`
+    : `${API_BASE}/api/admin/backend/security-events`;
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<SecurityEvent[] | PageLike<SecurityEvent>>;
+  return unwrapListData(json.data);
+}
+
+/** GET /api/admin/backend/data-access-logs */
+export async function getDataAccessLogs(filters?: {
+  accessorId?: string;
+  dataType?: string;
+  from?: string;
+  to?: string;
+}): Promise<DataAccessLog[]> {
+  const params = new URLSearchParams();
+  if (filters?.accessorId) params.set("accessorId", filters.accessorId);
+  if (filters?.dataType) params.set("dataType", filters.dataType);
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  const url = params.toString()
+    ? `${API_BASE}/api/admin/backend/data-access-logs?${params}`
+    : `${API_BASE}/api/admin/backend/data-access-logs`;
+  const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<DataAccessLog[] | PageLike<DataAccessLog>>;
+  return unwrapListData(json.data);
 }

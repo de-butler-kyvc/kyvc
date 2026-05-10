@@ -4,6 +4,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { getSession } from "@/lib/api/auth";
 
 export default function AdminLayout({
   children,
@@ -13,15 +14,30 @@ export default function AdminLayout({
   const router = useRouter();
 
   useEffect(() => {
-    // 클라이언트 사이드에서 토큰 확인
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("auth_token="))
-      ?.split("=")[1];
+    let alive = true;
 
-    if (!token) {
-      router.push("/login");
-    }
+    const checkSession = async () => {
+      const token = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth_token="))
+        ?.split("=")[1];
+
+      if (token && token !== "dev_bypass") return;
+
+      try {
+        const session = await getSession();
+        if (alive && "authenticated" in session && !session.authenticated) {
+          router.push("/login");
+        }
+      } catch {
+        if (alive && !token) router.push("/login");
+      }
+    };
+
+    checkSession();
+    return () => {
+      alive = false;
+    };
   }, [router]);
 
   return (

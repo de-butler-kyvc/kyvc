@@ -22,8 +22,8 @@ export default function LoginPage() {
     try {
       const result = await login({ email: email.trim(), password: pw });
       const maxAgeSec = keepLogin ? 30 * 24 * 3600 : 86400;
-      persistAuthToken(result.accessToken, { maxAgeSec });
-      persistRefreshToken(result.refreshToken);
+      if (result.accessToken) persistAuthToken(result.accessToken, { maxAgeSec });
+      if (result.refreshToken) persistRefreshToken(result.refreshToken);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
@@ -32,7 +32,8 @@ export default function LoginPage() {
     }
   };
 
-  return (
+
+return (
     <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
 
@@ -108,6 +109,19 @@ export default function LoginPage() {
             >
               🏢 SSO 로그인 (내부 인증 시스템)
             </button>
+
+            {/* TODO: 배포 전 제거 */}
+            <button
+              type="button"
+              onClick={() => {
+                document.cookie = "auth_token=dev_bypass; path=/; max-age=86400";
+                router.push("/dashboard");
+              }}
+              className="w-full border border-red-200 bg-red-50 text-red-500 py-2 rounded text-xs hover:bg-red-100 transition-colors"
+            >
+              [임시] 로그인 건너뛰기
+            </button>
+
           </form>
         </div>
 

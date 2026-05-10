@@ -1,24 +1,57 @@
 "use client";
-import { use, useState } from "react";
+
+import { getVcDetail, requestVcRevoke, type VcDetail } from "@/lib/api/vc";
 import Link from "next/link";
+import { use, useEffect, useState } from "react";
 
 const revokeReasons = ["법인 정보 변경", "부정 발급 의심", "사용자 요청", "만료 전 폐기", "기타"];
 
 export default function VcRevokePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [reason, setReason] = useState("법인 정보 변경");
+  const { id: rawId } = use(params);
+  const id = decodeURIComponent(rawId);
+  const [vc, setVc] = useState<VcDetail | null>(null);
+  const [reason, setReason] = useState(revokeReasons[0]);
   const [detail, setDetail] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = () => {
+  useEffect(() => {
+    let alive = true;
+
+    const fetchDetail = async () => {
+      setDetailLoading(true);
+      setError("");
+      try {
+        const data = await getVcDetail(id);
+        if (alive) setVc(data);
+      } catch (err) {
+        if (alive) setError(err instanceof Error ? err.message : "VC 정보를 불러오지 못했습니다.");
+      } finally {
+        if (alive) setDetailLoading(false);
+      }
+    };
+
+    fetchDetail();
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  const handleSubmit = async () => {
     if (!confirmed) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError("");
+    try {
+      await requestVcRevoke(id, { reason, detail: detail.trim() || undefined });
       setSuccess(true);
-    }, 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "폐기 요청 처리에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,33 +69,31 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
         <div className="flex items-center justify-center py-20">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center max-w-md w-full">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
-              <span className="text-green-600 text-3xl leading-none">✓</span>
+              <span className="text-green-600 text-2xl font-bold leading-none">OK</span>
             </div>
             <h2 className="text-lg font-bold text-slate-800 mb-2">폐기 요청 완료</h2>
-            <p className="text-sm text-slate-500 mb-1">
-              VC 폐기 요청이 정상적으로 처리되었습니다.
-            </p>
+            <p className="text-sm text-slate-500 mb-1">VC 폐기 요청이 정상적으로 처리되었습니다.</p>
             <p className="text-sm text-slate-400 mb-1">사유: <span className="font-medium">{reason}</span></p>
-            <p className="text-xs text-slate-400 mb-8">
-              해당 VC는 즉시 무효 처리되며 XRPL에 폐기 상태가 기록됩니다.
-            </p>
+            <p className="text-xs text-slate-400 mb-8">해당 VC는 무효 처리되며 XRPL에 폐기 상태가 기록됩니다.</p>
             <Link
-              href={`/vc/${id}`}
+              href={`/vc/${encodeURIComponent(id)}`}
               className="bg-slate-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 inline-block transition-colors"
             >
               VC 상세로 돌아가기
             </Link>
           </div>
         </div>
+      ) : detailLoading ? (
+        <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">로딩 중...</div>
       ) : (
         <div className="flex gap-4">
           <div className="w-56 shrink-0 bg-white rounded-lg border border-slate-200 p-4 space-y-3 h-fit">
             <h2 className="text-xs font-semibold text-slate-500">VC 폐기 요청</h2>
             {[
-              { label: "Credential ID", value: id },
-              { label: "법인명", value: "주식회사 케이원" },
-              { label: "Credential Type", value: "KYC VC" },
-              { label: "발급일", value: "2025.05.02 14:00" },
+              { label: "Credential ID", value: vc?.credentialId ?? id },
+              { label: "법인명", value: vc?.corp ?? "-" },
+              { label: "Credential Type", value: vc?.credentialType ?? "-" },
+              { label: "발급일", value: vc?.issuedAt ?? "-" },
             ].map((item) => (
               <div key={item.label}>
                 <p className="text-xs text-slate-400">{item.label}</p>
@@ -71,27 +102,27 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
             ))}
             <div>
               <p className="text-xs text-slate-400">현재 상태</p>
-              <span className="bg-green-100 text-green-600 text-xs px-2 py-0.5 rounded-full font-medium">활성</span>
+              <span className="bg-green-100 text-green-600 text-xs px-2 py-0.5 rounded-full font-medium">{vc?.status ?? "-"}</span>
             </div>
           </div>
 
           <div className="flex-1 bg-white rounded-lg border border-slate-200 p-6 space-y-6">
+            {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+
             <div>
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">
-                폐기 사유 <span className="text-red-500">*</span>
-              </h2>
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">폐기 사유 <span className="text-red-500">*</span></h2>
               <div className="flex flex-wrap gap-3 mb-3">
-                {revokeReasons.map((r) => (
-                  <label key={r} className="flex items-center gap-2 cursor-pointer">
+                {revokeReasons.map((item) => (
+                  <label key={item} className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       name="reason"
-                      value={r}
-                      checked={reason === r}
-                      onChange={() => setReason(r)}
+                      value={item}
+                      checked={reason === item}
+                      onChange={() => setReason(item)}
                       className="accent-blue-600"
                     />
-                    <span className="text-sm text-slate-700">{r}</span>
+                    <span className="text-sm text-slate-700">{item}</span>
                   </label>
                 ))}
               </div>
@@ -105,7 +136,7 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
             </div>
 
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-              <p className="font-medium mb-1">⚠ 폐기 주의사항</p>
+              <p className="font-medium mb-1">폐기 주의사항</p>
               <ul className="text-xs leading-relaxed space-y-1 list-disc list-inside">
                 <li>폐기된 VC는 복구할 수 없습니다.</li>
                 <li>폐기 즉시 모든 VP 검증에서 무효 처리됩니다.</li>
@@ -124,12 +155,9 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
             </label>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-              <p className="text-xs text-slate-400">요청자: 김심사 (admin@kyvc.kr)</p>
+              <p className="text-xs text-slate-400">요청자: 현재 로그인 관리자</p>
               <div className="flex gap-2">
-                <Link
-                  href={`/vc/${id}`}
-                  className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50"
-                >
+                <Link href={`/vc/${encodeURIComponent(id)}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
                   취소
                 </Link>
                 <button
@@ -144,11 +172,6 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
           </div>
         </div>
       )}
-
-      <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
-        <span>© 2025 KYvC. All rights reserved.</span>
-      </div>
     </div>
   );
 }

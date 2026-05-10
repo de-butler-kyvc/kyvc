@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getIssuerPolicy, updateIssuerPolicy, disableIssuerPolicy } from "@/lib/api/issuer";
 import type { IssuerPolicyDetail } from "@/lib/api/issuer";
+import MfaModal from "@/components/MfaModal";
 
 const statusBadge: Record<string, string> = {
   활성: "bg-green-100 text-green-600",
@@ -40,6 +41,7 @@ export default function IssuerDetailPage({ params }: { params: Promise<{ id: str
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [policy, setPolicy] = useState<IssuerPolicyDetail | null>(null);
+  const [showMfa, setShowMfa] = useState(false);
 
   const [did, setDid] = useState("");
   const [type, setType] = useState("화이트리스트");
@@ -50,15 +52,18 @@ export default function IssuerDetailPage({ params }: { params: Promise<{ id: str
   const [status, setStatus] = useState("활성");
   const [reason, setReason] = useState("");
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!policy || Number.isNaN(policyId)) return;
+    setShowMfa(true);
+  };
 
+  const handleMfaConfirm = async (mfaToken: string) => {
+    setShowMfa(false);
     try {
       setSaving(true);
       setError(null);
-      const mfaToken = "mock_mfa_token";
       await updateIssuerPolicy(policyId, {
-        issuerName: policy.issuerName,
+        issuerName: policy!.issuerName,
         credentialTypes: [credential],
         status,
         reason,
@@ -224,6 +229,10 @@ export default function IssuerDetailPage({ params }: { params: Promise<{ id: str
         <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
+
+      {showMfa && (
+        <MfaModal onConfirm={handleMfaConfirm} onClose={() => setShowMfa(false)} />
+      )}
     </div>
   );
 }

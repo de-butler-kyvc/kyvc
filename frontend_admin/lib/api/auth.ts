@@ -3,7 +3,7 @@ import {
   getRefreshToken,
 } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const AUTH_BASE = `${API_BASE}/api/admin/auth`;
 
 // ────────────────────────────────────────────────────────────
@@ -23,9 +23,9 @@ export interface LoginAdmin {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
   admin: LoginAdmin;
   roles: string[];
 }
@@ -37,6 +37,7 @@ export interface TokenRefreshResponse {
 }
 
 export interface SessionInfo {
+  authenticated?: boolean;
   adminUserId: string;
   loginId: string;
   name: string;
@@ -84,10 +85,11 @@ const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -112,6 +114,7 @@ export async function login(body: LoginRequest): Promise<LoginResponse> {
   const response = await fetch(`${AUTH_BASE}/login`, {
     method: "POST",
     headers: JSON_HEADERS,
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -125,6 +128,7 @@ export async function logout(): Promise<void> {
   const response = await fetch(`${AUTH_BASE}/logout`, {
     method: "POST",
     headers: getAuthHeaders(),
+    credentials: "include",
     body: JSON.stringify(refreshToken ? { refreshToken } : {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -137,6 +141,7 @@ export async function refreshAccessToken(): Promise<TokenRefreshResponse> {
   const response = await fetch(`${AUTH_BASE}/token/refresh`, {
     method: "POST",
     headers: JSON_HEADERS,
+    credentials: "include",
     body: JSON.stringify({ refreshToken }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -149,6 +154,7 @@ export async function getSession(): Promise<SessionInfo> {
   const response = await fetch(`${AUTH_BASE}/session`, {
     method: "GET",
     headers: getAuthHeaders(),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<SessionInfo>;
@@ -160,6 +166,7 @@ export async function requestPasswordReset(body: PasswordResetRequestBody): Prom
   const response = await fetch(`${AUTH_BASE}/password-reset/request`, {
     method: "POST",
     headers: JSON_HEADERS,
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -170,6 +177,7 @@ export async function confirmPasswordReset(body: PasswordResetConfirmBody): Prom
   const response = await fetch(`${AUTH_BASE}/password-reset/confirm`, {
     method: "POST",
     headers: JSON_HEADERS,
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -180,6 +188,7 @@ export async function requestMfaChallenge(body: MfaChallengeRequest): Promise<vo
   const response = await fetch(`${AUTH_BASE}/mfa/challenge`, {
     method: "POST",
     headers: JSON_HEADERS,
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -190,6 +199,7 @@ export async function verifyMfa(body: MfaVerifyRequest): Promise<MfaVerifyRespon
   const response = await fetch(`${AUTH_BASE}/mfa/verify`, {
     method: "POST",
     headers: JSON_HEADERS,
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

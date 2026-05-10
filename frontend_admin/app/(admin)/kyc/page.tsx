@@ -143,10 +143,10 @@ export default function KycPage() {
                   <td className="px-4 py-3 text-slate-500">{row.type}</td>
                   <td className="px-4 py-3 text-slate-500">{row.date}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${channelBadge[row.channel]}`}>{row.channel}</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${channelBadge[row.channel as KycChannel]}`}>{row.channel}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status]}`}>{row.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status as KycStatus]}`}>{row.status}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${aiBadge[row.ai] || "bg-slate-100 text-slate-500"}`}>{row.ai}</span>

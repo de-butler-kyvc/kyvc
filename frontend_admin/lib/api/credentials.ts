@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const CRED_BASE = `${API_BASE}/api/admin/backend/credentials`;
 
 export interface KycCredential {
@@ -13,11 +13,23 @@ export interface KycCredential {
   credentialType?: string;
   issuerDid?: string;
   holderDid?: string;
+  xrplTxHash?: string;
+  transactionHash?: string;
+  mobileStored?: boolean | string;
 }
 
 export interface KycCredentialDetail extends KycCredential {
   vcJson?: string;
   vcData?: Record<string, unknown>;
+}
+
+export interface CredentialReissueRequest {
+  reason: string;
+}
+
+export interface CredentialRevokeRequest {
+  reason: string;
+  detail?: string;
 }
 
 interface CommonResponse<T> {
@@ -27,7 +39,7 @@ interface CommonResponse<T> {
   data: T;
 }
 
-type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };
+type PageLike<T> = { content?: T[]; items?: T[]; list?: T[]; data?: T[] };
 
 function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
   if (Array.isArray(data)) return data;
@@ -36,18 +48,17 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
   if (Array.isArray(o.content)) return o.content;
   if (Array.isArray(o.items)) return o.items;
   if (Array.isArray(o.list)) return o.list;
+  if (Array.isArray(o.data)) return o.data;
   return [];
 }
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error("유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요.");
-  }
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -80,11 +91,84 @@ export async function getCredentials(filters?: {
 
 /** GET /api/admin/backend/credentials/{credentialId} */
 export async function getCredential(credentialId: string): Promise<KycCredentialDetail> {
-  const response = await fetch(`${CRED_BASE}/${credentialId}`, {
+  const response = await fetch(`${CRED_BASE}/${encodeURIComponent(credentialId)}`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<KycCredentialDetail>;
   return json.data;
+}
+
+/** POST /api/admin/backend/credentials/{credentialId}/reissue */
+export async function requestCredentialReissue(
+  credentialId: string,
+  body: CredentialReissueRequest
+): Promise<void> {
+  const response = await fetch(`${CRED_BASE}/${encodeURIComponent(credentialId)}/reissue`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** POST /api/admin/backend/credentials/{credentialId}/revoke */
+export async function requestCredentialRevoke(
+  credentialId: string,
+  body: CredentialRevokeRequest
+): Promise<void> {
+  const response = await fetch(`${CRED_BASE}/${encodeURIComponent(credentialId)}/revoke`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+export interface CredentialStatusHistory {
+  historyId?: string;
+  status: string;
+  changedAt?: string;
+  changedBy?: string;
+  reason?: string;
+}
+
+export interface CredentialRequest {
+  requestId?: string;
+  requestType?: string;
+  requestedBy?: string;
+  reason?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+/** GET /api/admin/backend/credentials/{credentialId}/status-histories */
+export async function getCredentialStatusHistories(
+  credentialId: string
+): Promise<CredentialStatusHistory[]> {
+  const response = await fetch(
+    `${CRED_BASE}/${encodeURIComponent(credentialId)}/status-histories`,
+    { method: "GET", headers: getAuthHeaders() }
+  );
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<
+    CredentialStatusHistory[] | PageLike<CredentialStatusHistory>
+  >;
+  return unwrapListData(json.data);
+}
+
+/** GET /api/admin/backend/credentials/{credentialId}/requests */
+export async function getCredentialRequests(
+  credentialId: string
+): Promise<CredentialRequest[]> {
+  const response = await fetch(
+    `${CRED_BASE}/${encodeURIComponent(credentialId)}/requests`,
+    { method: "GET", headers: getAuthHeaders() }
+  );
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<
+    CredentialRequest[] | PageLike<CredentialRequest>
+  >;
+  return unwrapListData(json.data);
 }

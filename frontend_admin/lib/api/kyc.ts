@@ -1,7 +1,7 @@
 import type { KycItem, KycStatus, KycChannel, DashboardStats, SupplementRequest } from "@/types/kyc";
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const KYC_BASE = `${API_BASE}/api/admin/backend/kyc/applications`;
 
 // ── 상태/채널 코드 매핑 ──────────────────────────────────────
@@ -126,15 +126,11 @@ interface CommonResponse<T> {
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error(
-      "유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요."
-    );
-  }
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -487,5 +483,49 @@ export async function retryAiReview(
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** POST /api/admin/backend/kyc/applications/{kycId}/supplements — 보완요청 생성 */
+export async function createKycSupplement(
+  kycId: string,
+  data: { supplementReason: string; requiredDocuments?: string[]; dueDate?: string }
+): Promise<void> {
+  const response = await fetch(`${KYC_BASE}/${kycId}/supplements`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** POST /api/admin/backend/document-requirements — 필수서류 정책 등록 */
+export async function createDocumentRequirement(data: {
+  documentType: string;
+  corporationType?: string;
+  required: boolean;
+  description?: string;
+}): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/admin/backend/document-requirements`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** PATCH /api/admin/backend/document-requirements/{requirementId} — 필수서류 정책 수정 */
+export async function updateDocumentRequirement(
+  requirementId: string,
+  data: { required?: boolean; description?: string }
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE}/api/admin/backend/document-requirements/${requirementId}`,
+    {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }
+  );
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }

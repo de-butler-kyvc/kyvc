@@ -14,9 +14,10 @@ const statusBadge: Record<KycStatus, string> = {
 };
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<any>({});
+  const [stats, setStats] = useState<any>(null);
   const [kycList, setKycList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체 상태");
   const [currentPage, setCurrentPage] = useState(1);
@@ -24,18 +25,16 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [statsData, kycData] = await Promise.all([
         getDashboardStats(),
-        getKycList({
-          search: searchTerm,
-          status: statusFilter,
-        }),
+        getKycList({ search: searchTerm, status: statusFilter }),
       ]);
       setStats(statsData);
       setKycList(kycData);
-    } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "데이터를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -61,11 +60,11 @@ export default function DashboardPage() {
   const paginatedList = kycList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const statCards = [
-    { label: "오늘 KYC 신청", value: stats.todayKyc, sub: "전일 대비 +3", color: "text-blue-600" },
-    { label: "수동심사 대기", value: stats.pendingManual, sub: "즉시 처리 필요", color: "text-red-500" },
-    { label: "보완요청 대기", value: stats.pendingSupplement, sub: "기한 임박 2건", color: "text-orange-500" },
-    { label: "VC 발급 완료", value: stats.vcIssued, sub: "금일 기준", color: "text-green-600" },
-    { label: "VP 검증 건수", value: stats.vpCount, sub: "금일 기준", color: "text-slate-700" },
+    { label: "오늘 KYC 신청", value: stats?.todayKyc, sub: "금일 신규 접수", color: "text-blue-600" },
+    { label: "수동심사 대기", value: stats?.pendingManual, sub: stats?.pendingManual > 0 ? "즉시 처리 필요" : "대기 없음", color: "text-red-500" },
+    { label: "보완요청 대기", value: stats?.pendingSupplement, sub: stats?.pendingSupplement > 0 ? `${stats.pendingSupplement}건 처리 대기` : "대기 없음", color: "text-orange-500" },
+    { label: "VC 발급 완료", value: stats?.vcIssued, sub: "금일 기준", color: "text-green-600" },
+    { label: "VP 검증 건수", value: stats?.vpCount, sub: "금일 기준", color: "text-slate-700" },
   ];
 
   return (
@@ -77,12 +76,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">{error}</div>
+      )}
+
       {/* 요약 카드 */}
       <div className="grid grid-cols-5 gap-4">
         {statCards.map((card) => (
           <div key={card.label} className="bg-white rounded-lg border border-slate-200 p-4">
             <p className="text-xs text-slate-500">{card.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${card.color}`}>{card.value}</p>
+            <p className={`text-3xl font-bold mt-1 ${card.color}`}>
+              {loading ? "..." : card.value ?? "-"}
+            </p>
             <p className="text-xs text-slate-400 mt-1">{card.sub}</p>
           </div>
         ))}
@@ -152,7 +157,7 @@ export default function DashboardPage() {
                   <td className="px-4 py-3 text-slate-500">{row.biz}</td>
                   <td className="px-4 py-3 text-slate-500">{row.date}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status]}`}>{row.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status as KycStatus]}`}>{row.status}</span>
                   </td>
                   <td className="px-4 py-3 text-slate-500">{row.reviewer}</td>
                   <td className="px-4 py-3 text-slate-500">{row.date}</td>

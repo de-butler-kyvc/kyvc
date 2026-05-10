@@ -1,7 +1,7 @@
 const AUTH_COOKIE = "auth_token";
 const STORAGE_KEY = "accessToken";
 const REFRESH_KEY = "refreshToken";
-const PLACEHOLDER_TOKENS = new Set(["dummy_token", "sso_token", "mock_mfa_token"]);
+const PLACEHOLDER_TOKENS = new Set(["dummy_token", "sso_token", "mock_mfa_token", "dev_bypass"]);
 
 function readCookieAuthToken(): string | null {
   if (typeof document === "undefined") return null;

@@ -4,12 +4,19 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
 import { createIssuerWhitelist, createIssuerBlacklist } from "@/lib/api/issuer";
+import MfaModal from "@/components/MfaModal";
 
 function IssuerNewForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const typeParam = searchParams.get("type");
   const isBlacklist = typeParam === "blacklist";
+
+  const CREDENTIAL_TYPE_MAP: Record<string, string> = {
+    "KYC VC": "KYC_CREDENTIAL",
+    "위임권한 VC": "DELEGATION_CREDENTIAL",
+    "전체": "ALL",
+  };
 
   const [form, setForm] = useState({
     did: "",
@@ -24,9 +31,9 @@ function IssuerNewForm() {
   });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
+  const [showMfa, setShowMfa] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validate = () => {
     const newErrors: Record<string, boolean> = {};
     if (!form.did.trim()) newErrors.did = true;
     if (!form.issuerName.trim()) newErrors.issuerName = true;
@@ -38,15 +45,20 @@ function IssuerNewForm() {
       if (!form.startDate) newErrors.startDate = true;
       if (!form.endDate) newErrors.endDate = true;
     }
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+    return newErrors;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors = validate();
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    setShowMfa(true);
+  };
+
+  const handleMfaConfirm = async (mfaToken: string) => {
+    setShowMfa(false);
     setLoading(true);
     try {
-      // 실제로는 MFA 챌린지/검증 후 토큰 얻어야 함
-      const mfaToken = "mock_mfa_token"; // 임시 mock 토큰
-
       if (isBlacklist) {
         await createIssuerBlacklist({
           issuerDid: form.did,
@@ -59,21 +71,16 @@ function IssuerNewForm() {
         await createIssuerWhitelist({
           issuerDid: form.did,
           issuerName: form.issuerName,
-          credentialTypes: [form.credential],
-          reason: "등록 사유",
+          credentialTypes: form.credential ? [CREDENTIAL_TYPE_MAP[form.credential] ?? form.credential] : [],
+          reason: form.reason || "신뢰 가능한 발급기관",
           mfaToken,
         });
       }
-
       alert(`Issuer ${isBlacklist ? "블랙리스트" : "화이트리스트"} 등록 성공!`);
       router.push("/issuer");
     } catch (error) {
-      console.error("등록 실패:", error);
       const message = (error as Error).message;
-      if (
-        message.includes("인증 토큰이 유효하지 않습니다") ||
-        message.includes("유효한 인증 토큰이 없습니다")
-      ) {
+      if (message.includes("인증 토큰이 유효하지 않습니다") || message.includes("유효한 인증 토큰이 없습니다")) {
         alert("등록 실패: 인증이 만료되었습니다. 다시 로그인 후 시도해주세요.");
         router.push("/login");
         return;
@@ -254,6 +261,10 @@ function IssuerNewForm() {
         <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
+
+      {showMfa && (
+        <MfaModal onConfirm={handleMfaConfirm} onClose={() => setShowMfa(false)} />
+      )}
     </div>
   );
 }

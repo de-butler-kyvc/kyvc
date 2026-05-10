@@ -1,7 +1,7 @@
 import type { IssuerItem } from "@/types/kyc";
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const ISSUER_POLICIES_URL = `${API_BASE}/api/admin/backend/issuer-policies`;
 
 type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };
@@ -123,16 +123,11 @@ export interface IssuerPolicyDetail {
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error(
-      "유효한 인증 토큰이 없습니다. 백엔드 로그인으로 실제 토큰을 발급받거나 .env.local의 NEXT_PUBLIC_ADMIN_ACCESS_TOKEN을 설정해주세요."
-    );
-  }
-
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -237,4 +232,39 @@ export async function disableIssuerPolicy(policyId: number) {
 
   const json = (await response.json()) as CommonResponse<IssuerPolicyDetail>;
   return json.data;
+}
+
+/** POST /api/admin/backend/issuer-policies/{policyId}/submit-approval — 승인요청 */
+export async function submitIssuerPolicyApproval(policyId: number): Promise<void> {
+  const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}/submit-approval`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** POST /api/admin/backend/issuer-policies/{policyId}/approve — 정책 승인 */
+export async function approveIssuerPolicy(
+  policyId: number,
+  data?: { comment?: string }
+): Promise<void> {
+  const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}/approve`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data ?? {}),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** POST /api/admin/backend/issuer-policies/{policyId}/reject — 정책 반려 */
+export async function rejectIssuerPolicy(
+  policyId: number,
+  data: { rejectReason: string }
+): Promise<void> {
+  const response = await fetch(`${ISSUER_POLICIES_URL}/${policyId}/reject`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }

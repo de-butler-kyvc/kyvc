@@ -1,4 +1,4 @@
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export interface HealthStatus {
   status: string;

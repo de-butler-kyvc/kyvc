@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const CODE_BASE = `${API_BASE}/api/admin/backend/common-codes`;
 const GROUP_BASE = `${API_BASE}/api/admin/backend/common-code-groups`;
 
@@ -58,13 +58,11 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error("유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요.");
-  }
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -123,6 +121,48 @@ export async function enableCommonCode(codeId: string): Promise<void> {
 export async function disableCommonCode(codeId: string): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/disable`, {
     method: "POST",
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** POST /api/admin/backend/common-codes — 공통코드 등록 */
+export async function createCommonCode(data: {
+  codeGroupId: string;
+  codeName: string;
+  codeValue: string;
+  description?: string;
+  sortOrder?: number;
+}): Promise<CommonCode> {
+  const response = await fetch(CODE_BASE, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<CommonCode>;
+  return json.data;
+}
+
+/** PATCH /api/admin/backend/common-codes/{codeId} — 공통코드 수정 */
+export async function updateCommonCode(
+  codeId: string,
+  data: { codeName?: string; codeValue?: string; description?: string; sortOrder?: number }
+): Promise<CommonCode> {
+  const response = await fetch(`${CODE_BASE}/${codeId}`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<CommonCode>;
+  return json.data;
+}
+
+/** DELETE /api/admin/backend/common-codes/{codeId} — 공통코드 삭제 */
+export async function deleteCommonCode(codeId: string): Promise<void> {
+  const response = await fetch(`${CODE_BASE}/${codeId}`, {
+    method: "DELETE",
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

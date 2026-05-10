@@ -1,7 +1,7 @@
 import type { UserItem } from "@/types/kyc";
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const USERS_URL = `${API_BASE}/api/admin/backend/users`;
 
 type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };
@@ -99,13 +99,11 @@ function formatDateTime(iso?: string): string {
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error("유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요.");
-  }
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -194,6 +192,28 @@ export async function updateUserStatus(
   });
 
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+export interface CorporateDetail {
+  corporateId: string;
+  corporationName?: string;
+  businessRegistrationNumber?: string;
+  corporateRegistrationNumber?: string;
+  corporationType?: string;
+  representativeName?: string;
+  address?: string;
+  createdAt?: string;
+}
+
+/** GET /api/admin/backend/corporates/{corporateId} — 법인 상세 조회 */
+export async function getCorporate(corporateId: string): Promise<CorporateDetail> {
+  const response = await fetch(
+    `${API_BASE}/api/admin/backend/corporates/${corporateId}`,
+    { method: "GET", headers: getAuthHeaders() }
+  );
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<CorporateDetail>;
+  return json.data;
 }
 
 export { formatDate, formatDateTime };

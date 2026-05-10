@@ -2,6 +2,7 @@
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createKycSupplement } from "@/lib/api/kyc";
 
 const docTypes = ["사업자등록증", "등기사항전부증명서", "주주명부", "위임장", "정관", "기타"];
 
@@ -12,6 +13,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
   const [deadline, setDeadline] = useState("2025-05-12");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const addItem = () => setItems([...items, { docType: "사업자등록증", reason: "" }]);
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
@@ -21,9 +23,21 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
     setItems(next);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setLoading(true);
-    setTimeout(() => { router.push(`/kyc/${id}`); }, 600);
+    setError(null);
+    try {
+      await createKycSupplement(id, {
+        supplementReason: items.map((i) => `[${i.docType}] ${i.reason}`).join(" / "),
+        requiredDocuments: items.map((i) => i.docType),
+        dueDate: deadline,
+      });
+      router.push(`/kyc/${id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "보완요청 생성에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -37,14 +51,15 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">{error}</div>
+      )}
+
       <div className="flex gap-4">
-        {/* 좌측 요약 */}
         <div className="w-56 shrink-0 bg-white rounded-lg border border-slate-200 p-4 space-y-3 h-fit">
           <h2 className="text-xs font-semibold text-slate-500">보완요청 생성</h2>
           {[
             { label: "신청번호", value: id },
-            { label: "법인명", value: "주식회사 케이원" },
-            { label: "사업자번호", value: "123-45-67890" },
           ].map((item) => (
             <div key={item.label}>
               <p className="text-xs text-slate-400">{item.label}</p>
@@ -57,9 +72,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        {/* 우측 폼 */}
         <div className="flex-1 space-y-4">
-          {/* 보완 항목 */}
           <div className="bg-white rounded-lg border border-slate-200 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-700">보완 요청 항목 <span className="text-red-500">*</span></h2>
@@ -77,23 +90,13 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-slate-500">서류 유형</label>
-                      <select
-                        value={item.docType}
-                        onChange={(e) => updateItem(i, "docType", e.target.value)}
-                        className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
+                      <select value={item.docType} onChange={(e) => updateItem(i, "docType", e.target.value)} className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
                         {docTypes.map((t) => <option key={t}>{t}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-slate-500">보완 사유 <span className="text-red-500">*</span></label>
-                      <input
-                        type="text"
-                        value={item.reason}
-                        onChange={(e) => updateItem(i, "reason", e.target.value)}
-                        placeholder="예: 해시 불일치, 발급일 초과 등"
-                        className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
+                      <input type="text" value={item.reason} onChange={(e) => updateItem(i, "reason", e.target.value)} placeholder="예: 해시 불일치, 발급일 초과 등" className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -101,42 +104,25 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
             </div>
           </div>
 
-          {/* 제출 기한 + 추가 안내 */}
           <div className="bg-white rounded-lg border border-slate-200 p-5 space-y-4">
             <h2 className="text-sm font-semibold text-slate-700">요청 설정</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-600">제출 기한 <span className="text-red-500">*</span></label>
-                <input
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                  className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+                <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
               </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-600">추가 안내사항 (선택)</label>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                placeholder="사용자에게 추가로 안내할 내용을 입력하세요."
-                className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-              />
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="사용자에게 추가로 안내할 내용을 입력하세요." className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none" />
             </div>
           </div>
 
-          {/* 버튼 */}
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-400">처리자: 김심사 (admin@kyvc.kr)</p>
+            <p className="text-xs text-slate-400">처리자: 관리자</p>
             <div className="flex gap-2">
               <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">취소</Link>
-              <button
-                onClick={handleSubmit}
-                disabled={loading || items.some((i) => !i.reason.trim())}
-                className="bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
-              >
+              <button onClick={handleSubmit} disabled={loading || items.some((i) => !i.reason.trim())} className="bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors">
                 {loading ? "처리 중..." : "보완요청 발송"}
               </button>
             </div>

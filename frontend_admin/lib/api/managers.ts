@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "https://dev-admin-api-kyvc.khuoo.synology.me";
+const API_BASE = "";
 const ADMIN_USERS_URL = `${API_BASE}/api/admin/backend/admin-users`;
 const ADMIN_ROLES_URL = `${API_BASE}/api/admin/backend/admin-roles`;
 
@@ -53,13 +53,11 @@ export interface AdminUserDetail extends AdminUser {
 
 function getAuthHeaders() {
   const token = getAccessTokenForApi();
-  if (isPlaceholderAccessToken(token)) {
-    throw new Error("유효한 인증 토큰이 없습니다. 로그인 후 다시 시도해주세요.");
-  }
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (!isPlaceholderAccessToken(token)) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function errorMessageFromResponse(response: Response): Promise<string> {
@@ -159,6 +157,39 @@ export async function getAdminUser(adminUserId: string): Promise<AdminUserDetail
 function fmtDt(iso?: string) {
   if (!iso) return "-";
   return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
+}
+
+/** POST /api/admin/backend/admin-users — 관리자 계정 생성 */
+export async function createAdminUser(data: {
+  loginId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  roleIds?: (string | number)[];
+}): Promise<AdminUser> {
+  const response = await fetch(ADMIN_USERS_URL, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<AdminUser>;
+  return json.data;
+}
+
+/** PATCH /api/admin/backend/admin-users/{adminUserId} — 관리자 계정 수정 */
+export async function updateAdminUser(
+  adminUserId: string,
+  data: { name?: string; email?: string; phone?: string; status?: string }
+): Promise<AdminUser> {
+  const response = await fetch(`${ADMIN_USERS_URL}/${adminUserId}`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<AdminUser>;
+  return json.data;
 }
 
 export async function getManagers(filters?: {

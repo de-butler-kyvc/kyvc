@@ -1,27 +1,19 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
 const API_BASE = "";
-const VP_BASE = `${API_BASE}/api/admin/backend/vp-verifications`;
+const DOC_DELETE_BASE = `${API_BASE}/api/admin/backend/document-delete-requests`;
 
 // ── 타입 ──────────────────────────────────────────────────────
 
-export interface VpVerification {
-  verificationId: string;
+export interface DocumentDeleteRequest {
+  requestId: string;
+  applicantName?: string;
   corporationName?: string;
-  verifierName?: string;
-  purpose?: string;
-  credentialId?: string;
-  result?: string;
-  failReason?: string;
-  createdAt?: string;
-}
-
-export interface VpVerificationDetail extends VpVerification {
-  holderDid?: string;
-  verifierDid?: string;
-  vpJson?: string;
+  documentType?: string;
+  reason?: string;
+  status?: string;
   requestedAt?: string;
-  respondedAt?: string;
+  processedAt?: string;
 }
 
 // ── 공통 유틸 ─────────────────────────────────────────────────
@@ -65,61 +57,47 @@ async function errorMessageFromResponse(response: Response): Promise<string> {
   }
 }
 
-function fmtDt(iso?: string) {
-  if (!iso) return "-";
-  return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
-}
+// ── 문서 삭제 요청 API ─────────────────────────────────────────
 
-// ── VP 검증 API ────────────────────────────────────────────────
-
-/** GET /api/admin/backend/vp-verifications */
-export async function getVpList(filters?: {
-  search?: string;
-  result?: string;
-  verifierId?: string;
+/** GET /api/admin/backend/document-delete-requests */
+export async function getDocumentDeleteRequests(filters?: {
+  status?: string;
   from?: string;
   to?: string;
-}): Promise<{
-  id: string;
-  corp: string;
-  verifier: string;
-  purpose: string;
-  vc: string;
-  result: string;
-  reason: string;
-  date: string;
-}[]> {
+}): Promise<DocumentDeleteRequest[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.result && filters.result !== "전체 결과") params.set("result", filters.result);
-  if (filters?.verifierId) params.set("verifierId", filters.verifierId);
+  if (filters?.status && filters.status !== "전체 상태") params.set("status", filters.status);
   if (filters?.from) params.set("from", filters.from);
   if (filters?.to) params.set("to", filters.to);
-  const url = params.toString() ? `${VP_BASE}?${params}` : VP_BASE;
-
+  const url = params.toString() ? `${DOC_DELETE_BASE}?${params}` : DOC_DELETE_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders() });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<VpVerification[] | PageLike<VpVerification>>;
-
-  return unwrapListData(json.data).map((v) => ({
-    id: v.verificationId,
-    corp: v.corporationName ?? "-",
-    verifier: v.verifierName ?? "-",
-    purpose: v.purpose ?? "-",
-    vc: v.credentialId ?? "-",
-    result: v.result ?? "-",
-    reason: v.failReason ?? "-",
-    date: fmtDt(v.createdAt),
-  }));
+  const json = (await response.json()) as CommonResponse<DocumentDeleteRequest[] | PageLike<DocumentDeleteRequest>>;
+  return unwrapListData(json.data);
 }
 
-/** GET /api/admin/backend/vp-verifications/{verificationId} */
-export async function getVpDetail(verificationId: string): Promise<VpVerificationDetail> {
-  const response = await fetch(`${VP_BASE}/${verificationId}`, {
-    method: "GET",
+/** POST /api/admin/backend/document-delete-requests/{requestId}/approve */
+export async function approveDocumentDeleteRequest(
+  requestId: string,
+  data?: { comment?: string }
+): Promise<void> {
+  const response = await fetch(`${DOC_DELETE_BASE}/${requestId}/approve`, {
+    method: "POST",
     headers: getAuthHeaders(),
+    body: JSON.stringify(data ?? {}),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<VpVerificationDetail>;
-  return json.data;
+}
+
+/** POST /api/admin/backend/document-delete-requests/{requestId}/reject */
+export async function rejectDocumentDeleteRequest(
+  requestId: string,
+  data: { reason: string }
+): Promise<void> {
+  const response = await fetch(`${DOC_DELETE_BASE}/${requestId}/reject`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
