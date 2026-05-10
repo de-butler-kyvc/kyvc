@@ -79,12 +79,15 @@ public class KycSubmissionController {
             description = "제출된 KYC 신청 ID, KYC 상태, 제출일시, 제출 결과 메시지 반환",
             content = @Content(schema = @Schema(implementation = KycSubmitResponse.class))
     )
-    @PostMapping("/api/user/kyc/applications/{kycId}/submit")
+    @PostMapping({
+            "/api/corporate/kyc/applications/{kycId}/submit",
+            "/api/user/kyc/applications/{kycId}/submit"
+    })
     public ResponseEntity<CommonResponse<KycSubmitResponse>> submit(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @Parameter(description = "KYC 신청 ID", example = "1")
-            @PathVariable Long kycId // KYC 신청 ID
+            @PathVariable Long kycId
     ) {
         return ResponseEntity.ok(CommonResponseFactory.success(
                 kycSubmissionService.submit(getAuthenticatedUserId(userDetails), kycId)
