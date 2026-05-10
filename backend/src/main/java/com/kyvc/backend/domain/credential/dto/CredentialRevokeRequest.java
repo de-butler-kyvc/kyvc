@@ -1,17 +1,24 @@
 package com.kyvc.backend.domain.credential.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
+ * VC 폐기 요청
  * Credential 폐기 요청
  *
  * @param reason 폐기 사유
+ * @param requestMessage 요청 메시지
  */
-@Schema(description = "Credential 폐기 요청")
+@Schema(description = "VC 폐기 요청")
 public record CredentialRevokeRequest(
-        @Schema(description = "폐기 사유", example = "사용자 요청 폐기")
+        @Schema(description = "폐기 사유", example = "사용자 요청")
+        @NotBlank
         @Size(max = 1000)
-        String reason // 폐기 사유
+        String reason, // 폐기 사유
+        @Schema(description = "요청 메시지", example = "VC 폐기 요청")
+        @Size(max = 1000)
+        String requestMessage // 요청 메시지
 ) {
 }

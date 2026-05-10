@@ -14,8 +14,8 @@ public class CredentialStatusHistoryRepositoryImpl implements CredentialStatusHi
     // Credential 상태 이력 저장
     @Override
     public CredentialStatusHistory save(
-            CredentialStatusHistory history // 저장 대상 상태 이력
+            CredentialStatusHistory credentialStatusHistory // 저장 대상 상태 이력
     ) {
-        return credentialStatusHistoryJpaRepository.save(history);
+        return credentialStatusHistoryJpaRepository.save(credentialStatusHistory);
     }
 }

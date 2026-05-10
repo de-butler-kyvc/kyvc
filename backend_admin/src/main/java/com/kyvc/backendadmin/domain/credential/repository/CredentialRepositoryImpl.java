@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+
 /**
  * {@link CredentialRepository}의 EntityManager 기반 구현체입니다.
  */
@@ -14,6 +16,8 @@ import org.springframework.stereotype.Repository;
 public class CredentialRepositoryImpl implements CredentialRepository {
 
     private static final String DEFAULT_ISSUER_DID = "did:kyvc:backend-admin";
+    private static final String STATUS_REQUESTED = "REQUESTED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
 
     private final ObjectProvider<EntityManager> entityManagerProvider;
 
@@ -90,6 +94,31 @@ public class CredentialRepositoryImpl implements CredentialRepository {
             String reason,
             String coreRequestId
     ) {
+        return saveCredentialRequest(
+                credentialId,
+                requestTypeCode,
+                requestStatusCode,
+                requestedByTypeCode,
+                requestedById,
+                reasonCode,
+                reason,
+                coreRequestId,
+                LocalDateTime.now()
+        ).credentialRequestId();
+    }
+
+    @Override
+    public CredentialRequestSaveResult saveCredentialRequest(
+            Long credentialId,
+            String requestTypeCode,
+            String requestStatusCode,
+            String requestedByTypeCode,
+            Long requestedById,
+            String reasonCode,
+            String reason,
+            String coreRequestId,
+            LocalDateTime requestedAt
+    ) {
         Object result = entityManager().createNativeQuery("""
                         insert into credential_requests (
                             credential_id,
@@ -110,7 +139,7 @@ public class CredentialRepositoryImpl implements CredentialRepository {
                             :reasonCode,
                             :reason,
                             :coreRequestId,
-                            now()
+                            :requestedAt
                         )
                         returning credential_request_id
                         """)
@@ -122,8 +151,26 @@ public class CredentialRepositoryImpl implements CredentialRepository {
                 .setParameter("reasonCode", reasonCode)
                 .setParameter("reason", reason)
                 .setParameter("coreRequestId", coreRequestId)
+                .setParameter("requestedAt", requestedAt)
                 .getSingleResult();
-        return ((Number) result).longValue();
+        return new CredentialRequestSaveResult(((Number) result).longValue(), requestedAt);
+    }
+
+    @Override
+    public boolean existsInProgressCredentialRequest(Long credentialId, String requestTypeCode) {
+        Number count = (Number) entityManager().createNativeQuery("""
+                        select count(*)
+                        from credential_requests credential_request
+                        where credential_request.credential_id = :credentialId
+                          and credential_request.request_type_code = :requestTypeCode
+                          and credential_request.request_status_code in (:requestedStatus, :processingStatus)
+                        """)
+                .setParameter("credentialId", credentialId)
+                .setParameter("requestTypeCode", requestTypeCode)
+                .setParameter("requestedStatus", STATUS_REQUESTED)
+                .setParameter("processingStatus", STATUS_PROCESSING)
+                .getSingleResult();
+        return count.longValue() > 0;
     }
 
     @Override

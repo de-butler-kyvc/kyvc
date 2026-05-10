@@ -1,15 +1,15 @@
 package com.kyvc.backend.domain.credential.controller;
 
-import com.kyvc.backend.domain.credential.application.CredentialService;
 import com.kyvc.backend.domain.credential.application.CredentialRequestService;
+import com.kyvc.backend.domain.credential.application.CredentialService;
 import com.kyvc.backend.domain.credential.dto.CredentialDetailResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialIssueResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialListResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialOfferResponse;
+import com.kyvc.backend.domain.credential.dto.CredentialOperationResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialReissueRequest;
-import com.kyvc.backend.domain.credential.dto.CredentialRequestDetailResponse;
+import com.kyvc.backend.domain.credential.dto.CredentialRequestHistoryResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialRequestListResponse;
-import com.kyvc.backend.domain.credential.dto.CredentialRequestResponse;
 import com.kyvc.backend.domain.credential.dto.CredentialRevokeRequest;
 import com.kyvc.backend.global.response.CommonResponse;
 import com.kyvc.backend.global.response.CommonResponseFactory;
@@ -69,7 +69,7 @@ public class CredentialController {
     }
 
     /**
-     * KYC 승인 건에 대해 VC 발급을 요청한다.
+     * KYC 승인 건에 대한 VC 발급을 요청한다.
      *
      * @param userDetails 인증 사용자 정보
      * @param kycId KYC 신청 ID
@@ -77,7 +77,7 @@ public class CredentialController {
      */
     @Operation(
             summary = "사용자 VC 발급 요청",
-            description = "KYC 승인 건에 대해 VC 발급을 요청합니다. CoreAdapter를 통해 Core VC 발급 API를 동기 호출하고, Core 응답 수신 후 Credential 상태를 저장합니다."
+            description = "KYC 승인 건에 대한 VC 발급을 요청합니다. CoreAdapter를 통해 Core VC 발급 API를 동기 호출하고, Core 응답 수신 후 Credential 상태를 저장합니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -103,15 +103,15 @@ public class CredentialController {
      */
     @Operation(
             summary = "사용자 VC 재발급 요청",
-            description = "VC 재발급을 요청합니다. Core 재발급 endpoint가 확인된 경우 동기 호출하고, Core 응답 수신 후 요청 상태와 Credential 상태를 저장합니다."
+            description = "VC 재발급을 요청합니다. Core 전용 재발급 endpoint가 없는 경우 Core VC 발급 API를 재사용해 신규 Credential을 발급하고, Core callback은 사용하지 않습니다."
     )
     @ApiResponse(
             responseCode = "200",
             description = "Credential 재발급 요청 결과 반환",
-            content = @Content(schema = @Schema(implementation = CredentialRequestResponse.class))
+            content = @Content(schema = @Schema(implementation = CredentialOperationResponse.class))
     )
     @PostMapping("/credentials/{credentialId}/reissue-requests")
-    public CommonResponse<CredentialRequestResponse> requestReissue(
+    public CommonResponse<CredentialOperationResponse> requestReissue(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @PathVariable Long credentialId, // Credential ID
@@ -135,10 +135,10 @@ public class CredentialController {
     @ApiResponse(
             responseCode = "200",
             description = "Credential 폐기 요청 결과 반환",
-            content = @Content(schema = @Schema(implementation = CredentialRequestResponse.class))
+            content = @Content(schema = @Schema(implementation = CredentialOperationResponse.class))
     )
     @PostMapping("/credentials/{credentialId}/revoke-requests")
-    public CommonResponse<CredentialRequestResponse> requestRevoke(
+    public CommonResponse<CredentialOperationResponse> requestRevoke(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @PathVariable Long credentialId, // Credential ID
@@ -188,15 +188,15 @@ public class CredentialController {
     @ApiResponse(
             responseCode = "200",
             description = "Credential 요청 이력 상세 반환",
-            content = @Content(schema = @Schema(implementation = CredentialRequestDetailResponse.class))
+            content = @Content(schema = @Schema(implementation = CredentialRequestHistoryResponse.class))
     )
     @GetMapping("/credential-requests/{credentialRequestId}")
-    public CommonResponse<CredentialRequestDetailResponse> getCredentialRequestDetail(
+    public CommonResponse<CredentialRequestHistoryResponse> getCredentialRequest(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @PathVariable Long credentialRequestId // Credential 요청 ID
     ) {
-        return CommonResponseFactory.success(credentialRequestService.getCredentialRequestDetail(userDetails, credentialRequestId));
+        return CommonResponseFactory.success(credentialRequestService.getCredentialRequest(userDetails, credentialRequestId));
     }
 
     /**

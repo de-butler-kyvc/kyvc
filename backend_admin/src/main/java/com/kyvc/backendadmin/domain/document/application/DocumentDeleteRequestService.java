@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -35,9 +36,20 @@ import java.util.Set;
 public class DocumentDeleteRequestService {
 
     private static final String STATUS_REQUESTED = "REQUESTED";
+    private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_APPROVED = "APPROVED";
     private static final String STATUS_REJECTED = "REJECTED";
-    private static final Set<String> ALLOWED_STATUSES = Set.of(STATUS_REQUESTED, STATUS_APPROVED, STATUS_REJECTED);
+    private static final String STATUS_DELETED = "DELETED";
+    private static final String STATUS_CANCELLED = "CANCELLED";
+    private static final Set<String> ALLOWED_STATUSES = Set.of(
+            STATUS_REQUESTED,
+            STATUS_PENDING,
+            STATUS_APPROVED,
+            STATUS_REJECTED,
+            STATUS_DELETED,
+            STATUS_CANCELLED
+    );
+    private static final Set<String> PROCESSABLE_STATUSES = Set.of(STATUS_REQUESTED, STATUS_PENDING);
 
     private final DocumentDeleteRequestRepository documentDeleteRequestRepository;
     private final DocumentDeleteRequestQueryRepository documentDeleteRequestQueryRepository;
@@ -54,6 +66,7 @@ public class DocumentDeleteRequestService {
     @Transactional(readOnly = true)
     public DocumentDeleteRequestListResponse search(DocumentDeleteRequestSearchRequest request) {
         validateStatus(request.status());
+        validatePeriod(request.startDate(), request.endDate());
         List<DocumentDeleteRequestSummaryResponse> items = documentDeleteRequestQueryRepository.search(request);
         long totalElements = documentDeleteRequestQueryRepository.count(request);
         int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / request.size());
@@ -124,7 +137,7 @@ public class DocumentDeleteRequestService {
      */
     @Transactional
     public DocumentDeleteRequestActionResponse reject(Long requestId, DocumentDeleteRequestRejectRequest request) {
-        if (request == null || !StringUtils.hasText(request.mfaToken()) || !StringUtils.hasText(request.rejectReason())) {
+        if (request == null || !StringUtils.hasText(request.mfaToken()) || !StringUtils.hasText(request.reason())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
         DocumentDeleteRequestRepository.Row deleteRequest = findRequestedDeleteRequest(requestId);
@@ -134,7 +147,7 @@ public class DocumentDeleteRequestService {
 
         LocalDateTime processedAt = LocalDateTime.now();
         Long adminId = SecurityUtil.getCurrentAdminId();
-        String processedReason = buildRejectReason(request.rejectReason(), request.comment());
+        String processedReason = buildRejectReason(request.reason(), request.comment());
         int requestUpdated = documentDeleteRequestRepository.reject(requestId, adminId, processedReason, processedAt);
         if (requestUpdated != 1) {
             throw new ApiException(ErrorCode.DOCUMENT_DELETE_REQUEST_NOT_FOUND);
@@ -164,7 +177,7 @@ public class DocumentDeleteRequestService {
     private DocumentDeleteRequestRepository.Row findRequestedDeleteRequest(Long requestId) {
         DocumentDeleteRequestRepository.Row deleteRequest = documentDeleteRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_DELETE_REQUEST_NOT_FOUND));
-        if (!STATUS_REQUESTED.equals(deleteRequest.status())) {
+        if (!PROCESSABLE_STATUSES.contains(deleteRequest.status())) {
             throw new ApiException(ErrorCode.DOCUMENT_DELETE_REQUEST_ALREADY_PROCESSED);
         }
         return deleteRequest;
@@ -173,6 +186,12 @@ public class DocumentDeleteRequestService {
     private void validateStatus(String status) {
         if (StringUtils.hasText(status) && !ALLOWED_STATUSES.contains(status)) {
             throw new ApiException(ErrorCode.INVALID_DOCUMENT_DELETE_REQUEST_STATUS);
+        }
+    }
+
+    private void validatePeriod(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
 

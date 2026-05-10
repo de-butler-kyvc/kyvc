@@ -47,6 +47,15 @@ public class CredentialRequestRepositoryImpl implements CredentialRequestReposit
                 .orElseThrow(() -> new ApiException(ErrorCode.CREDENTIAL_REQUEST_NOT_FOUND));
     }
 
+    // Credential별 진행 중 요청 존재 여부 조회
+    @Override
+    public boolean existsInProgressByCredentialIdAndType(
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialRequestType requestTypeCode // 요청 유형
+    ) {
+        return existsInProgress(credentialId, requestTypeCode);
+    }
+
     // 진행 중 요청 존재 여부
     @Override
     public boolean existsInProgress(

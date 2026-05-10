@@ -153,12 +153,9 @@ public class SecurityConfig {
     }
 
     private List<String> resolveAllowedOriginPatterns() {
-        List<String> patterns = new ArrayList<>(normalizedList(configuredAllowedOriginPatterns()));
-        boolean wildcardOriginConfigured = normalizedList(configuredAllowedOrigins()).stream()
-                .anyMatch("*"::equals);
-        if (wildcardOriginConfigured && patterns.isEmpty() && isLocalOrDevProfile()) {
-            patterns.add("*");
-        }
+        List<String> patterns = new ArrayList<>(normalizedList(configuredAllowedOriginPatterns()).stream()
+                .filter(pattern -> !"*".equals(pattern))
+                .toList());
         if (isProdProfile()) {
             return patterns.stream()
                     .filter(pattern -> !"*".equals(pattern))

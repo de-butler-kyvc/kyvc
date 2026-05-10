@@ -111,6 +111,8 @@ public final class KyvcEnums {
         EXPIRED, // 만료
         REVOKED, // 폐기
         SUSPENDED, // 중지
+        REVOKE_REQUESTED, // 폐기 요청
+        REISSUE_REQUESTED, // 재발급 요청
         FAILED // 발급 실패
     }
 
@@ -264,6 +266,13 @@ public final class KyvcEnums {
         INACTIVE // 비활성
     }
 
+    // DID 기관 매핑 상태
+    public enum DidInstitutionStatus {
+        ACTIVE, // 사용 가능
+        DELETED, // 삭제
+        SUSPENDED // 정지
+    }
+
     // 관리자 상태
     public enum AdminUserStatus {
         ACTIVE, // 활성
@@ -273,11 +282,7 @@ public final class KyvcEnums {
 
     // 관리자 역할 코드
     public enum RoleCode {
-        BACKEND_ADMIN, // 백엔드 관리자
-        CORE_ADMIN, // 코어 관리자
-        POLICY_MANAGER, // 정책 관리자
-        AUDITOR, // 감사자
-        VIEWER, // 조회자
+        OPERATOR, // 일반 운영자
         SYSTEM_ADMIN // 시스템 관리자
     }
 

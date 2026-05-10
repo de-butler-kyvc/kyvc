@@ -85,6 +85,28 @@ public class IssuerPolicy {
         }
     }
 
+    /** 승인요청 상태 전이 */
+    public void submitApproval(String comment) {
+        this.status = KyvcEnums.IssuerPolicyStatus.PENDING;
+        if (comment != null) {
+            this.reason = comment;
+        }
+    }
+
+    /** 승인 상태 전이 */
+    public void approve(String comment) {
+        this.status = KyvcEnums.IssuerPolicyStatus.ACTIVE;
+        if (comment != null) {
+            this.reason = comment;
+        }
+    }
+
+    /** 반려 상태 전이 */
+    public void reject(String reason) {
+        this.status = KyvcEnums.IssuerPolicyStatus.REJECTED;
+        this.reason = reason;
+    }
+
     /** Issuer 정책을 비활성화합니다. */
     public void disable() {
         this.status = KyvcEnums.IssuerPolicyStatus.INACTIVE;

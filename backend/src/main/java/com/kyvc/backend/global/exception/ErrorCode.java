@@ -108,6 +108,7 @@ public enum ErrorCode {
     CREDENTIAL_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CREDENTIAL_ACCESS_DENIED", "Credential 접근 권한이 없습니다."),
     // HTTP 409 - Credential 상태 오류
     CREDENTIAL_NOT_VALID(HttpStatus.CONFLICT, "CREDENTIAL_NOT_VALID", "유효한 Credential 상태가 아닙니다."),
+    // HTTP 404 - Credential 요청 없음
     // HTTP 404 - Credential Offer 없음
     CREDENTIAL_OFFER_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_OFFER_NOT_FOUND", "Credential Offer를 찾을 수 없습니다."),
     // HTTP 410 - Credential Offer 만료
@@ -202,6 +203,11 @@ public enum ErrorCode {
     VERIFIER_TEST_NOT_FOUND(HttpStatus.NOT_FOUND, "VERIFIER_TEST_NOT_FOUND", "Verifier 테스트 검증 이력을 찾을 수 없습니다."),
     // HTTP 400 - 결과 통지 URL 오류
     INVALID_NOTIFY_URL(HttpStatus.BAD_REQUEST, "INVALID_NOTIFY_URL", "결과 통지 URL이 올바르지 않습니다."),
+
+    // HTTP 404 - DID 기관 없음
+    DID_INSTITUTION_NOT_FOUND(HttpStatus.NOT_FOUND, "DID_INSTITUTION_NOT_FOUND", "DID 기관 정보를 찾을 수 없습니다."),
+    // HTTP 400 - DID 형식 오류
+    INVALID_DID(HttpStatus.BAD_REQUEST, "INVALID_DID", "DID 형식이 올바르지 않습니다."),
 
     // HTTP 502 - Core API 호출 실패
     CORE_API_CALL_FAILED(HttpStatus.BAD_GATEWAY, "CORE_API_CALL_FAILED", "Core API 호출에 실패했습니다."),

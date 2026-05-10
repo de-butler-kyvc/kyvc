@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+// Credential 상태 이력 Entity
 // Credential 상태 이력 엔티티
 @Entity
 @Table(name = "credential_status_histories")
@@ -57,6 +58,18 @@ public class CredentialStatusHistory {
     // Credential 상태 이력 생성
     public static CredentialStatusHistory create(
             Long credentialId, // Credential ID
+            KyvcEnums.CredentialStatus beforeStatusCode, // 이전 상태
+            KyvcEnums.CredentialStatus afterStatusCode, // 이후 상태
+            KyvcEnums.ActorType changedByTypeCode, // 변경자 유형
+            Long changedById, // 변경자 ID
+            String reason // 변경 사유
+    ) {
+        return create(credentialId, beforeStatusCode, afterStatusCode, changedByTypeCode, changedById, null, reason);
+    }
+
+    // Credential 상태 이력 생성
+    public static CredentialStatusHistory create(
+            Long credentialId, // Credential ID
             KyvcEnums.CredentialStatus beforeStatus, // 변경 전 상태
             KyvcEnums.CredentialStatus afterStatus, // 변경 후 상태
             KyvcEnums.ActorType changedByType, // 변경자 유형
@@ -74,5 +87,23 @@ public class CredentialStatusHistory {
         history.reason = reason;
         history.changedAt = LocalDateTime.now();
         return history;
+    }
+
+    public String getBeforeStatusCode() {
+        return enumName(beforeStatus);
+    }
+
+    public String getAfterStatusCode() {
+        return enumName(afterStatus);
+    }
+
+    public KyvcEnums.ActorType getChangedByTypeCode() {
+        return changedByType;
+    }
+
+    private static String enumName(
+            Enum<?> value // enum 값
+    ) {
+        return value == null ? null : value.name();
     }
 }

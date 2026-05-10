@@ -41,6 +41,18 @@ public interface CredentialRequestRepository {
     );
 
     /**
+     * Credential별 진행 중 요청 존재 여부 조회
+     *
+     * @param credentialId Credential ID
+     * @param requestTypeCode 요청 유형
+     * @return 진행 중 요청 존재 여부
+     */
+    boolean existsInProgressByCredentialIdAndType(
+            Long credentialId, // Credential ID
+            KyvcEnums.CredentialRequestType requestTypeCode // 요청 유형
+    );
+
+    /**
      * 진행 중 요청 존재 여부
      *
      * @param credentialId Credential ID

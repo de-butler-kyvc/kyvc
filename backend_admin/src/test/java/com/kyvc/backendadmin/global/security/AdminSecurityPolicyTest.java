@@ -27,6 +27,7 @@ import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -37,7 +38,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "spring.autoconfigure.exclude="
                         + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
                         + "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,"
-                        + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"
+                        + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+                "kyvc.cors.allowed-origins[0]=http://localhost:3000",
+                "kyvc.cors.allowed-origins[1]=http://localhost:3001"
         }
 )
 @AutoConfigureMockMvc
@@ -60,6 +63,13 @@ class AdminSecurityPolicyTest {
     private static final String ADMIN_USERS_URI = "/api/admin/backend/admin-users";
     private static final String VERIFIERS_URI = "/api/admin/backend/verifiers";
     private static final String CREDENTIALS_URI = "/api/admin/backend/credentials";
+    private static final String DOCUMENT_REQUIREMENT_PATCH_URI = "/api/admin/backend/document-requirements/1";
+    private static final String DOCUMENT_DELETE_REQUESTS_URI = "/api/admin/backend/document-delete-requests";
+    private static final String DOCUMENT_DELETE_REQUEST_APPROVE_URI = "/api/admin/backend/document-delete-requests/1/approve";
+    private static final String DOCUMENT_DELETE_REQUEST_REJECT_URI = "/api/admin/backend/document-delete-requests/1/reject";
+    private static final String CREDENTIAL_REISSUE_URI = "/api/admin/backend/credentials/1/reissue";
+    private static final String CREDENTIAL_REVOKE_URI = "/api/admin/backend/credentials/1/revoke";
+    private static final String ISSUER_POLICY_APPROVE_URI = "/api/admin/backend/issuer-policies/1/approve";
     private static final String MANUAL_APPROVE_URI = "/api/admin/backend/kyc/applications/1/manual-review/approve";
     private static final String AUTH_ME_URI = "/api/admin/backend/auth/me";
     private static final String UNKNOWN_BACKEND_URI = "/api/admin/backend/unknown-test-path";
@@ -74,6 +84,14 @@ class AdminSecurityPolicyTest {
     }
 
     @Test
+    void credentialLifecycleApisWithoutTokenReturnUnauthorized() throws Exception {
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void backendAdminCannotAccessSystemAdminOnlyApis() throws Exception {
         mockMvc.perform(get(REPORTS_OPERATIONS_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
@@ -82,6 +100,36 @@ class AdminSecurityPolicyTest {
         mockMvc.perform(get(VERIFIERS_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(CREDENTIALS_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch(DOCUMENT_REQUIREMENT_PATCH_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(DOCUMENT_DELETE_REQUESTS_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(DOCUMENT_DELETE_REQUEST_APPROVE_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(DOCUMENT_DELETE_REQUEST_REJECT_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(ISSUER_POLICY_APPROVE_URI).with(backendAdmin()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void operatorCannotAccessCredentialLifecycleApis() throws Exception {
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI).with(operator()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(operator()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void nonAdminUserCannotAccessCredentialLifecycleApis() throws Exception {
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI).with(corporateUser()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(corporateUser()))
                 .andExpect(status().isForbidden());
     }
 
@@ -94,6 +142,20 @@ class AdminSecurityPolicyTest {
         mockMvc.perform(get(VERIFIERS_URI).with(systemAdmin()))
                 .andExpect(status().isOk());
         mockMvc.perform(get(CREDENTIALS_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(patch(DOCUMENT_REQUIREMENT_PATCH_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get(DOCUMENT_DELETE_REQUESTS_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(DOCUMENT_DELETE_REQUEST_APPROVE_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(DOCUMENT_DELETE_REQUEST_REJECT_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(CREDENTIAL_REISSUE_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(CREDENTIAL_REVOKE_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(ISSUER_POLICY_APPROVE_URI).with(systemAdmin()))
                 .andExpect(status().isOk());
     }
 
@@ -152,6 +214,26 @@ class AdminSecurityPolicyTest {
         ));
     }
 
+    private RequestPostProcessor operator() {
+        return SecurityMockMvcRequestPostProcessors.user(new CustomUserDetails(
+                30L,
+                "operator@example.com",
+                "ADMIN",
+                List.of("ROLE_OPERATOR"),
+                true
+        ));
+    }
+
+    private RequestPostProcessor corporateUser() {
+        return SecurityMockMvcRequestPostProcessors.user(new CustomUserDetails(
+                40L,
+                "user@example.com",
+                "USER",
+                List.of("ROLE_USER"),
+                true
+        ));
+    }
+
     @TestConfiguration
     static class JwtFilterDependencyConfig {
 
@@ -192,6 +274,53 @@ class AdminSecurityPolicyTest {
 
         @GetMapping("/credentials")
         public ResponseEntity<Void> credentials() {
+            return ResponseEntity.ok().build();
+        }
+
+        @org.springframework.web.bind.annotation.PatchMapping("/document-requirements/{requirementId}")
+        public ResponseEntity<Void> updateDocumentRequirement(
+                @PathVariable Long requirementId
+        ) {
+            return ResponseEntity.ok().build();
+        }
+
+        @GetMapping("/document-delete-requests")
+        public ResponseEntity<Void> documentDeleteRequests() {
+            return ResponseEntity.ok().build();
+        }
+
+        @PostMapping("/document-delete-requests/{requestId}/approve")
+        public ResponseEntity<Void> approveDocumentDeleteRequest(
+                @PathVariable Long requestId
+        ) {
+            return ResponseEntity.ok().build();
+        }
+
+        @PostMapping("/document-delete-requests/{requestId}/reject")
+        public ResponseEntity<Void> rejectDocumentDeleteRequest(
+                @PathVariable Long requestId
+        ) {
+            return ResponseEntity.ok().build();
+        }
+
+        @PostMapping("/credentials/{credentialId}/reissue")
+        public ResponseEntity<Void> reissueCredential(
+                @PathVariable Long credentialId
+        ) {
+            return ResponseEntity.ok().build();
+        }
+
+        @PostMapping("/credentials/{credentialId}/revoke")
+        public ResponseEntity<Void> revokeCredential(
+                @PathVariable Long credentialId
+        ) {
+            return ResponseEntity.ok().build();
+        }
+
+        @PostMapping("/issuer-policies/{policyId}/approve")
+        public ResponseEntity<Void> approveIssuerPolicy(
+                @PathVariable Long policyId
+        ) {
             return ResponseEntity.ok().build();
         }
 

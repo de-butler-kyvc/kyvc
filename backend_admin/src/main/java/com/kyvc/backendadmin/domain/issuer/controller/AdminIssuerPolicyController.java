@@ -15,7 +15,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 
 /** Backend Admin Issuer 신뢰 정책 관리 API를 담당합니다. */
 @Tag(name = "Backend Admin Issuer Policy", description = "백엔드 관리자 Issuer 신뢰 정책 관리 API")
@@ -39,10 +42,15 @@ public class AdminIssuerPolicyController {
             @Parameter(description = "정책 상태", example = "ACTIVE") @RequestParam(required = false) String status,
             @Parameter(description = "Issuer DID") @RequestParam(required = false) String issuerDid,
             @Parameter(description = "Issuer 이름") @RequestParam(required = false) String issuerName,
-            @Parameter(description = "Credential 유형", example = "KYC_CREDENTIAL") @RequestParam(required = false) String credentialType
+            @Parameter(description = "Credential 유형", example = "KYC_CREDENTIAL") @RequestParam(required = false) String credentialType,
+            @Parameter(description = "검색 시작일", example = "2026-05-01")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @RequestParam(required = false) LocalDate startDate,
+            @Parameter(description = "검색 종료일", example = "2026-05-10")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @RequestParam(required = false) LocalDate endDate
     ) {
         return CommonResponseFactory.success(issuerPolicyQueryService.search(
-                IssuerPolicySummaryResponse.SearchRequest.of(page, size, keyword, policyType, status, issuerDid, issuerName, credentialType)));
+                IssuerPolicySummaryResponse.SearchRequest.of(page, size, keyword, policyType, status,
+                        issuerDid, issuerName, credentialType, startDate, endDate)));
     }
 
     /** Issuer 정책 상세 정보를 조회합니다. */
@@ -104,6 +112,59 @@ public class AdminIssuerPolicyController {
             @Valid @org.springframework.web.bind.annotation.RequestBody IssuerPolicyUpdateRequest request
     ) {
         return CommonResponseFactory.success(issuerPolicyService.update(policyId, request));
+    }
+
+    /** Issuer 정책 승인요청 접수 */
+    @Operation(summary = "Issuer 정책 승인요청", description = "Issuer 정책을 승인요청 대기 상태로 변경한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Issuer 정책 승인요청 성공"),
+            @ApiResponse(responseCode = "404", description = "Issuer 정책을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "승인요청할 수 없는 정책 상태")
+    })
+    @PostMapping("/{policyId}/submit-approval")
+    public CommonResponse<IssuerPolicyResponse> submitApproval(
+            @Parameter(description = "Issuer 정책 ID", required = true) @PathVariable Long policyId,
+            @RequestBody(description = "Issuer 정책 승인요청", required = true,
+                    content = @Content(schema = @Schema(implementation = IssuerPolicySubmitApprovalRequest.class)))
+            @Valid @org.springframework.web.bind.annotation.RequestBody IssuerPolicySubmitApprovalRequest request
+    ) {
+        return CommonResponseFactory.success(issuerPolicyService.submitApproval(policyId, request));
+    }
+
+    /** Issuer 정책 승인 처리 */
+    @Operation(summary = "Issuer 정책 승인", description = "MFA 검증 후 승인요청 상태의 Issuer 정책을 활성화한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Issuer 정책 승인 성공"),
+            @ApiResponse(responseCode = "401", description = "MFA 토큰이 유효하지 않음"),
+            @ApiResponse(responseCode = "404", description = "Issuer 정책을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "승인할 수 없는 정책 상태")
+    })
+    @PostMapping("/{policyId}/approve")
+    public CommonResponse<IssuerPolicyResponse> approve(
+            @Parameter(description = "Issuer 정책 ID", required = true) @PathVariable Long policyId,
+            @RequestBody(description = "Issuer 정책 승인 요청", required = true,
+                    content = @Content(schema = @Schema(implementation = IssuerPolicyApproveRequest.class)))
+            @Valid @org.springframework.web.bind.annotation.RequestBody IssuerPolicyApproveRequest request
+    ) {
+        return CommonResponseFactory.success(issuerPolicyService.approve(policyId, request));
+    }
+
+    /** Issuer 정책 반려 처리 */
+    @Operation(summary = "Issuer 정책 반려", description = "MFA 검증 후 승인요청 상태의 Issuer 정책을 반려한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Issuer 정책 반려 성공"),
+            @ApiResponse(responseCode = "401", description = "MFA 토큰이 유효하지 않음"),
+            @ApiResponse(responseCode = "404", description = "Issuer 정책을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "반려할 수 없는 정책 상태")
+    })
+    @PostMapping("/{policyId}/reject")
+    public CommonResponse<IssuerPolicyResponse> reject(
+            @Parameter(description = "Issuer 정책 ID", required = true) @PathVariable Long policyId,
+            @RequestBody(description = "Issuer 정책 반려 요청", required = true,
+                    content = @Content(schema = @Schema(implementation = IssuerPolicyRejectRequest.class)))
+            @Valid @org.springframework.web.bind.annotation.RequestBody IssuerPolicyRejectRequest request
+    ) {
+        return CommonResponseFactory.success(issuerPolicyService.reject(policyId, request));
     }
 
     /** Issuer 정책을 비활성화합니다. */

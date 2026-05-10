@@ -21,6 +21,7 @@ public class IssuerPolicyQueryService {
     /** Issuer 정책 목록을 조회합니다. */
     @Transactional(readOnly = true)
     public IssuerPolicySummaryResponse search(IssuerPolicySummaryResponse.SearchRequest request) {
+        validateDateRange(request);
         List<IssuerPolicyResponse> items = issuerPolicyQueryRepository.search(request);
         long totalElements = issuerPolicyQueryRepository.count(request);
         int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / request.size());
@@ -32,5 +33,11 @@ public class IssuerPolicyQueryService {
     public IssuerPolicyResponse getDetail(Long policyId) {
         return issuerPolicyQueryRepository.findDetailById(policyId)
                 .orElseThrow(() -> new ApiException(ErrorCode.ISSUER_POLICY_NOT_FOUND));
+    }
+
+    private void validateDateRange(IssuerPolicySummaryResponse.SearchRequest request) {
+        if (request.startDate() != null && request.endDate() != null && request.startDate().isAfter(request.endDate())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "startDate는 endDate보다 이후일 수 없습니다.");
+        }
     }
 }
