@@ -1,6 +1,6 @@
 import axios, { type AxiosInstance } from "axios";
 
-const BASE_URL = "https://dev-api-kyvc.khuoo.synology.me";
+export const BASE_URL = "https://dev-api-kyvc.khuoo.synology.me";
 const REFRESH_TOKEN_PATH = "/api/auth/token/refresh";
 
 type Envelope<T> = {

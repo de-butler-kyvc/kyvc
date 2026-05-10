@@ -2,28 +2,28 @@ export const CORPORATE_TYPE_OPTIONS = [
   {
     value: "CORPORATION",
     label: "주식회사",
-    docs: "사업자등록증 · 등기사항전부증명서 · 주주명부"
+    docs: "사업자등록증 · 등기사항전부증명서 · 주주명부",
   },
   {
-    value: "LIMITED",
+    value: "LIMITED_COMPANY",
     label: "유한회사",
-    docs: "사업자등록증 · 등기사항전부증명서 · 출자자명부"
+    docs: "사업자등록증 · 등기사항전부증명서 · 출자자명부",
   },
   {
-    value: "NONPROFIT",
+    value: "NON_PROFIT",
     label: "비영리법인",
-    docs: "정관 · 설립허가증 · 등기사항전부증명서"
+    docs: "정관 · 설립허가증 · 등기사항전부증명서",
   },
   {
     value: "ASSOCIATION",
     label: "조합·단체",
-    docs: "규약 · 고유번호증 · 대표자 확인서류"
+    docs: "규약 · 고유번호증 · 대표자 확인서류",
   },
   {
-    value: "FOREIGN",
+    value: "FOREIGN_COMPANY",
     label: "외국기업",
-    docs: "국내 사업자등록증 · 등기 · 본국 설립서류"
-  }
+    docs: "국내 사업자등록증 · 등기 · 본국 설립서류",
+  },
 ];
 
 export const KYC_DOCUMENT_SLOTS = [

@@ -37,7 +37,16 @@ export default function KycApplyUploadPage() {
   const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [slots, setSlots] = useState<RequiredDocument[]>(FALLBACK_SLOTS);
   const [error, setError] = useState<string | null>(null);
-  const [busySlot, setBusySlot] = useState<string | null>(null);
+  const [busySlots, setBusySlots] = useState<Set<string>>(() => new Set());
+
+  const markBusy = (code: string, busy: boolean) => {
+    setBusySlots((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(code);
+      else next.delete(code);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const id = getCurrentKycId();
@@ -72,7 +81,7 @@ export default function KycApplyUploadPage() {
       return;
     }
     setError(null);
-    setBusySlot(slot.documentTypeCode);
+    markBusy(slot.documentTypeCode, true);
     try {
       const existing = findDocument(documents, slot.documentTypeCode);
       if (existing) await kycApi.deleteDocument(kycId, existing.documentId);
@@ -81,7 +90,7 @@ export default function KycApplyUploadPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "업로드에 실패했습니다.");
     } finally {
-      setBusySlot(null);
+      markBusy(slot.documentTypeCode, false);
     }
   };
 
@@ -89,7 +98,7 @@ export default function KycApplyUploadPage() {
     if (!kycId) return;
     const existing = findDocument(documents, slot.documentTypeCode);
     if (!existing) return;
-    setBusySlot(slot.documentTypeCode);
+    markBusy(slot.documentTypeCode, true);
     setError(null);
     try {
       await kycApi.deleteDocument(kycId, existing.documentId);
@@ -97,7 +106,7 @@ export default function KycApplyUploadPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "삭제에 실패했습니다.");
     } finally {
-      setBusySlot(null);
+      markBusy(slot.documentTypeCode, false);
     }
   };
 
@@ -124,7 +133,7 @@ export default function KycApplyUploadPage() {
             key={slot.documentTypeCode}
             slot={slot}
             doc={findDocument(documents, slot.documentTypeCode)}
-            busy={busySlot === slot.documentTypeCode}
+            busy={busySlots.has(slot.documentTypeCode)}
             onPick={(file) => upload(slot, file)}
             onRemove={() => remove(slot)}
           />
