@@ -1,19 +1,49 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
+import { mSession, type XrpTransferResult } from "@/lib/m/session";
 
-const DETAILS = [
-  ["받는 주소", "rHb9CJA...tyTh", "link"],
-  ["전송 금액", "1.00 XRP", ""],
-  ["수수료", "0.000012 XRP", ""],
-  ["전송 시각", "2026.05.09 14:32", ""],
-  ["트랜잭션 ID", "7F3A92E1C4D2...", "link"],
-] as const;
+function shorten(value?: string) {
+  if (!value) return "-";
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
 
 export default function MobileXrpCompletePage() {
   const router = useRouter();
+  const [result, setResult] = useState<XrpTransferResult | null>(null);
+
+  useEffect(() => {
+    const current = mSession.readXrpTransferResult();
+    if (!current) {
+      router.replace("/m/home");
+      return;
+    }
+    setResult(current);
+  }, [router]);
+
+  const details = result
+    ? [
+        ["받는 주소", shorten(result.destinationAddress), "link"],
+        ["전송 금액", `${result.amountXrp} XRP`, ""],
+        ["수수료", `${result.feeXrp ?? "0.000012"} XRP`, ""],
+        [
+          "전송 시각",
+          new Date(result.completedAt).toLocaleString("ko-KR"),
+          "",
+        ],
+        ["트랜잭션 ID", shorten(result.txHash), "link"],
+      ]
+    : [];
+
+  const goHome = () => {
+    mSession.writeXrpTransfer(null);
+    mSession.writeXrpTransferResult(null);
+    router.replace("/m/home");
+  };
 
   return (
     <section className="view xrp-flow-view">
@@ -25,7 +55,7 @@ export default function MobileXrpCompletePage() {
         <p className="subcopy">XRP가 성공적으로 전송되었습니다.</p>
 
         <div className="tx-details xrp-complete-details">
-          {DETAILS.map(([label, value, tone]) => (
+          {details.map(([label, value, tone]) => (
             <div key={label} className="tx-row">
               <span>{label}</span>
               <strong className={tone === "link" ? "tx-hash" : ""}>{value}</strong>
@@ -44,7 +74,7 @@ export default function MobileXrpCompletePage() {
         <button
           type="button"
           className="primary"
-          onClick={() => router.replace("/m/home")}
+          onClick={goHome}
         >
           홈으로
         </button>

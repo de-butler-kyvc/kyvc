@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
@@ -80,6 +81,16 @@ export default function MobileXrpReceivePage() {
 
         <div className="xrp-address-card">
           <h2>내 XRP 주소</h2>
+          <div className="xrp-address-qr" aria-label="XRP 주소 QR">
+            <QRCodeSVG
+              value={address}
+              size={148}
+              bgColor="#ffffff"
+              fgColor="#07111f"
+              level="M"
+              marginSize={2}
+            />
+          </div>
           <p>{address}</p>
           <button type="button" className="copy-pill" onClick={onCopy}>
             <MIcon.link /> {copied ? "복사 완료" : "주소 복사"}

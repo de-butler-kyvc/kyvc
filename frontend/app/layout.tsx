@@ -16,7 +16,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body
+        className="min-h-screen bg-background font-sans antialiased"
+        suppressHydrationWarning
+      >
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

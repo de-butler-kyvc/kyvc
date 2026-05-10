@@ -743,8 +743,88 @@ export const credentials = {
   list: () => api<CredentialListResponse>("/api/user/credentials"),
   detail: (credentialId: number) =>
     api<CredentialDetailResponse>(`/api/user/credentials/${credentialId}`),
+  offerForKyc: (kycId: number) =>
+    api<CredentialOfferResponse>(
+      `/api/user/kyc/applications/${kycId}/credential-offer`,
+    ),
   issueGuide: () =>
     api<CredentialIssueGuideResponse>("/api/corporate/credentials/issue-guide"),
+};
+
+// ── Mobile VP / QR ───────────────────────────────────────────────────
+export type QrResolveResponse = {
+  type: string;
+  targetId?: string;
+  offerId?: number;
+  requestId?: string;
+  nextAction?: string;
+  message?: string;
+};
+
+export type VpRequestResponse = {
+  requestId: string;
+  requesterName?: string;
+  purpose?: string;
+  requiredClaims?: string;
+  challenge?: string;
+  nonce?: string;
+  expiresAt?: string;
+  expired?: boolean;
+  submitted?: boolean;
+  status?: string;
+};
+
+export type EligibleCredentialResponse = {
+  credentialId: number;
+  credentialTypeCode?: string;
+  issuerDid?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  matchReason?: string;
+};
+
+export type EligibleCredentialListResponse = {
+  requestId: string;
+  credentials: EligibleCredentialResponse[];
+  totalCount: number;
+};
+
+export type VpPresentationResponse = {
+  presentationId: number;
+  requestId: string;
+  credentialId: number;
+  status?: string;
+  submittedAt?: string;
+  verifiedAt?: string;
+  message?: string;
+};
+
+export const mobileVp = {
+  resolveQr: (qrPayload: string) =>
+    api<QrResolveResponse>("/api/mobile/qr/resolve", {
+      method: "POST",
+      body: { qrPayload },
+    }),
+  request: (requestId: string) =>
+    api<VpRequestResponse>(`/api/mobile/vp/requests/${requestId}`),
+  eligibleCredentials: (requestId: string) =>
+    api<EligibleCredentialListResponse>(
+      `/api/mobile/vp/requests/${requestId}/eligible-credentials`,
+    ),
+  submitPresentation: (body: {
+    requestId: string;
+    credentialId: number;
+    nonce?: string;
+    challenge?: string;
+    vpJwt?: string;
+    format?: string;
+    presentation?: unknown;
+    deviceId?: string;
+  }) =>
+    api<VpPresentationResponse>("/api/mobile/vp/presentations", {
+      method: "POST",
+      body,
+    }),
 };
 
 // ── Notifications ────────────────────────────────────────────────────

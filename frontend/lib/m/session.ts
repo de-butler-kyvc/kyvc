@@ -9,12 +9,18 @@ const KEYS = {
   scan: "kyvc.m.scanResult",
   vpRequest: "kyvc.m.vpRequest",
   selectedVcId: "kyvc.m.selectedVcId",
+  xrpTransfer: "kyvc.m.xrpTransfer",
+  xrpTransferResult: "kyvc.m.xrpTransferResult",
 } as const;
 
 export type ScanResult = {
   qrData?: string;
   actionType?: string;
   coreBaseUrl?: string;
+  requestId?: string;
+  requesterName?: string;
+  purpose?: string;
+  nonce?: string;
   challenge?: string;
   domain?: string;
   endpoint?: string;
@@ -27,6 +33,20 @@ export type VpRequest = {
   endpoint: string;
   credentialId?: string;
   receivedAt: number;
+};
+
+export type XrpTransferDraft = {
+  destinationAddress: string;
+  destinationTag?: string;
+  amountXrp: string;
+  feeXrp?: string;
+  createdAt: number;
+};
+
+export type XrpTransferResult = XrpTransferDraft & {
+  txHash?: string;
+  ledgerIndex?: string | number;
+  completedAt: number;
 };
 
 function read<T>(key: string): T | null {
@@ -53,9 +73,17 @@ export const mSession = {
   readSelectedVcId: () => read<{ id: string }>(KEYS.selectedVcId)?.id ?? null,
   writeSelectedVcId: (id: string | null) =>
     write(KEYS.selectedVcId, id ? { id } : null),
+  readXrpTransfer: () => read<XrpTransferDraft>(KEYS.xrpTransfer),
+  writeXrpTransfer: (v: XrpTransferDraft | null) => write(KEYS.xrpTransfer, v),
+  readXrpTransferResult: () =>
+    read<XrpTransferResult>(KEYS.xrpTransferResult),
+  writeXrpTransferResult: (v: XrpTransferResult | null) =>
+    write(KEYS.xrpTransferResult, v),
   clearAll: () => {
     write(KEYS.scan, null);
     write(KEYS.vpRequest, null);
     write(KEYS.selectedVcId, null);
+    write(KEYS.xrpTransfer, null);
+    write(KEYS.xrpTransferResult, null);
   },
 };

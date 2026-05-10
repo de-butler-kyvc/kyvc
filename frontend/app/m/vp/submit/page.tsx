@@ -5,41 +5,99 @@ import { useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
+import {
+  ApiError,
+  credentials,
+  mobileVp,
+  type VpRequestResponse,
+} from "@/lib/api";
 import { mSession, type ScanResult } from "@/lib/m/session";
 
-const VC_LIST = [
-  {
-    title: "법인등록증명서",
-    issuer: "법원행정처",
-    gradient: "linear-gradient(135deg, #a5b4fc, #818cf8)",
-  },
-  {
-    title: "사업자등록증",
-    issuer: "국세청",
-    gradient: "linear-gradient(135deg, #d8b4fe, #c084fc)",
-  },
+type SubmitCredential = {
+  credentialId: number;
+  title: string;
+  issuer: string;
+  status: string;
+  gradient: string;
+};
+
+const PALETTES = [
+  "linear-gradient(135deg, #a5b4fc, #818cf8)",
+  "linear-gradient(135deg, #d8b4fe, #c084fc)",
+  "linear-gradient(135deg, #99f6e4, #38bdf8)",
 ];
 
 export default function MobileVpSubmitPage() {
   const router = useRouter();
   const [scan, setScan] = useState<ScanResult | null>(null);
-  const [selected, setSelected] = useState<Set<number>>(
-    () => new Set(VC_LIST.map((_, i) => i)),
-  );
+  const [request, setRequest] = useState<VpRequestResponse | null>(null);
+  const [vcList, setVcList] = useState<SubmitCredential[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setScan(mSession.readScanResult());
+    const nextScan = mSession.readScanResult();
+    setScan(nextScan);
+    let cancelled = false;
+    (async () => {
+      try {
+        if (nextScan?.requestId) {
+          const [req, eligible] = await Promise.all([
+            mobileVp.request(nextScan.requestId),
+            mobileVp.eligibleCredentials(nextScan.requestId),
+          ]);
+          if (cancelled) return;
+          setRequest(req);
+          const list = eligible.credentials.map((c, i) => ({
+            credentialId: c.credentialId,
+            title: c.credentialTypeCode ?? "법인 증명서",
+            issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
+            status: "유효",
+            gradient: PALETTES[i % PALETTES.length]!,
+          }));
+          setVcList(list);
+          setSelected(new Set(list.map((c) => c.credentialId)));
+          return;
+        }
+
+        const list = await credentials.list();
+        if (cancelled) return;
+        const mapped = list.credentials.map((c, i) => ({
+          credentialId: c.credentialId,
+          title: c.credentialTypeCode ?? "법인 증명서",
+          issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
+          status: c.credentialStatusCode === "REVOKED" ? "폐기" : "유효",
+          gradient: PALETTES[i % PALETTES.length]!,
+        }));
+        setVcList(mapped);
+        setSelected(new Set(mapped.map((c) => c.credentialId)));
+      } catch (e) {
+        if (cancelled) return;
+        setError(
+          e instanceof ApiError
+            ? `제출 가능 증명서 조회 실패: ${e.message}`
+            : "제출 가능 증명서를 불러오지 못했습니다.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const toggle = (i: number) =>
+  const toggle = (credentialId: number) =>
     setSelected((p) => {
       const n = new Set(p);
-      if (n.has(i)) n.delete(i);
-      else n.add(i);
+      if (n.has(credentialId)) n.delete(credentialId);
+      else n.add(credentialId);
       return n;
     });
 
   const verifierName = (() => {
+    if (request?.requesterName) return request.requesterName;
     if (!scan?.endpoint && !scan?.domain) return "신한은행";
     try {
       const url = new URL(scan.endpoint ?? scan.domain ?? "");
@@ -48,6 +106,22 @@ export default function MobileVpSubmitPage() {
       return scan.domain ?? "신한은행";
     }
   })();
+
+  const onSubmit = () => {
+    const [first] = Array.from(selected);
+    if (!first) return;
+    mSession.writeSelectedVcId(String(first));
+    if (request?.requestId) {
+      mSession.writeVpRequest({
+        nonce: request.nonce ?? request.challenge ?? "",
+        aud: scan?.domain ?? scan?.coreBaseUrl ?? "",
+        endpoint: scan?.endpoint ?? "",
+        credentialId: String(first),
+        receivedAt: Date.now(),
+      });
+    }
+    router.push("/m/vp/submitting");
+  };
 
   return (
     <section className="view wash">
@@ -62,9 +136,10 @@ export default function MobileVpSubmitPage() {
             <div className="sb-org-info">
               <h3>{verifierName}</h3>
               <p>
-                {scan?.actionType === "VP_REQUEST"
-                  ? "법인계좌 개설용 인증"
-                  : "VP 제출 요청"}
+                {request?.purpose ??
+                  (scan?.actionType === "VP_REQUEST"
+                    ? "법인계좌 개설용 인증"
+                    : "VP 제출 요청")}
               </p>
             </div>
             <div className="sb-badge green">
@@ -84,29 +159,40 @@ export default function MobileVpSubmitPage() {
                 challenge: {scan.challenge ?? "(서버에서 발급 예정)"}
                 <br />
                 aud/domain: {scan.domain ?? scan.coreBaseUrl ?? "-"}
+                {request?.requestId ? (
+                  <>
+                    <br />
+                    request: {request.requestId}
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
         ) : null}
 
         <div className="sb-title mt-24">
-          제출할 증명서 ({VC_LIST.length}건)
+          제출할 증명서 ({vcList.length}건)
         </div>
         <div className="submit-vc-list">
-          {VC_LIST.map((vc, i) => (
+          {loading ? <p className="m-loading">불러오는 중...</p> : null}
+          {error ? <p className="m-error">{error}</p> : null}
+          {!loading && !error && vcList.length === 0 ? (
+            <p className="subcopy">제출 가능한 증명서가 없습니다.</p>
+          ) : null}
+          {vcList.map((vc) => (
             <div
-              key={vc.title}
+              key={vc.credentialId}
               className="submit-vc-card"
-              onClick={() => toggle(i)}
+              onClick={() => toggle(vc.credentialId)}
             >
               <div className="sv-icon" style={{ background: vc.gradient }}>
-                <div className="sv-badge">유효</div>
+                <div className="sv-badge">{vc.status}</div>
               </div>
               <div className="sv-info">
                 <h4>{vc.title}</h4>
                 <p>{vc.issuer}</p>
               </div>
-              <div className={`sv-check${selected.has(i) ? " active" : ""}`}>
+              <div className={`sv-check${selected.has(vc.credentialId) ? " active" : ""}`}>
                 <MIcon.check />
               </div>
             </div>
@@ -132,7 +218,7 @@ export default function MobileVpSubmitPage() {
           </div>
           <div className="fee-row">
             <span>잔액</span>
-            <span>12.48 XRP</span>
+            <span>앱 지갑 기준</span>
           </div>
         </div>
       </div>
@@ -141,7 +227,7 @@ export default function MobileVpSubmitPage() {
           type="button"
           className="primary"
           disabled={selected.size === 0}
-          onClick={() => router.push("/m/vp/submitting")}
+          onClick={onSubmit}
         >
           증명서 제출하기
         </button>
