@@ -54,7 +54,8 @@ class AdminSecurityPolicyTest {
             JwtAuthenticationEntryPoint.class,
             JwtAccessDeniedHandler.class,
             AdminSecurityPolicyTest.JwtFilterDependencyConfig.class,
-            AdminSecurityPolicyTest.SecurityProbeController.class
+            AdminSecurityPolicyTest.SecurityProbeController.class,
+            AdminSecurityPolicyTest.AuthProbeController.class
 })
     static class SecurityTestApplication {
     }
@@ -71,7 +72,10 @@ class AdminSecurityPolicyTest {
     private static final String CREDENTIAL_REVOKE_URI = "/api/admin/backend/credentials/1/revoke";
     private static final String ISSUER_POLICY_APPROVE_URI = "/api/admin/backend/issuer-policies/1/approve";
     private static final String MANUAL_APPROVE_URI = "/api/admin/backend/kyc/applications/1/manual-review/approve";
-    private static final String AUTH_ME_URI = "/api/admin/backend/auth/me";
+    private static final String AUTH_ME_URI = "/api/admin/auth/me";
+    private static final String AUTH_LOGIN_URI = "/api/admin/auth/login";
+    private static final String AUTH_REFRESH_URI = "/api/admin/auth/refresh";
+    private static final String AUTH_CHANGE_PASSWORD_URI = "/api/admin/auth/change-password";
     private static final String UNKNOWN_BACKEND_URI = "/api/admin/backend/unknown-test-path";
 
     @Autowired
@@ -99,8 +103,6 @@ class AdminSecurityPolicyTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(VERIFIERS_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get(CREDENTIALS_URI).with(backendAdmin()))
-                .andExpect(status().isForbidden());
         mockMvc.perform(patch(DOCUMENT_REQUIREMENT_PATCH_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(DOCUMENT_DELETE_REQUESTS_URI).with(backendAdmin()))
@@ -115,6 +117,18 @@ class AdminSecurityPolicyTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(post(ISSUER_POLICY_APPROVE_URI).with(backendAdmin()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void backendAdminAndSystemAdminCanAccessAdminWorkApis() throws Exception {
+        mockMvc.perform(get(CREDENTIALS_URI).with(backendAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get(CREDENTIALS_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(MANUAL_APPROVE_URI).with(backendAdmin()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(MANUAL_APPROVE_URI).with(systemAdmin()))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -160,11 +174,11 @@ class AdminSecurityPolicyTest {
     }
 
     @Test
-    void backendAdminOnlyApiAllowsBackendAdminAndRejectsSystemAdmin() throws Exception {
+    void adminWorkActionAllowsBackendAdminAndSystemAdmin() throws Exception {
         mockMvc.perform(post(MANUAL_APPROVE_URI).with(backendAdmin()))
                 .andExpect(status().isOk());
         mockMvc.perform(post(MANUAL_APPROVE_URI).with(systemAdmin()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -192,6 +206,27 @@ class AdminSecurityPolicyTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3001"))
                 .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+    }
+
+    @Test
+    void publicAuthApisBypassAuthentication() throws Exception {
+        mockMvc.perform(options(AUTH_LOGIN_URI)
+                        .header("Origin", "http://localhost:3001")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(AUTH_LOGIN_URI))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post(AUTH_REFRESH_URI))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void protectedAuthAndBackendApisWithoutTokenReturnUnauthorized() throws Exception {
+        mockMvc.perform(patch(AUTH_CHANGE_PASSWORD_URI))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(UNKNOWN_BACKEND_URI))
+                .andExpect(status().isUnauthorized());
     }
 
     private RequestPostProcessor backendAdmin() {
@@ -333,6 +368,21 @@ class AdminSecurityPolicyTest {
 
         @GetMapping("/auth/me")
         public ResponseEntity<Void> authMe() {
+            return ResponseEntity.ok().build();
+        }
+    }
+
+    @RestController
+    @RequestMapping("/api/admin")
+    public static class AuthProbeController {
+
+        @GetMapping("/auth/me")
+        public ResponseEntity<Void> authMe() {
+            return ResponseEntity.ok().build();
+        }
+
+        @org.springframework.web.bind.annotation.PatchMapping("/auth/change-password")
+        public ResponseEntity<Void> changePassword() {
             return ResponseEntity.ok().build();
         }
     }

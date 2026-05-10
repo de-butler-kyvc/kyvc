@@ -72,6 +72,9 @@ kyvc:
     allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173,https://dev-admin-kyvc.khuoo.synology.me,https://admin-kyvc.khuoo.synology.me}
     allowed-origin-patterns: ${KYVC_CORS_ALLOWED_ORIGIN_PATTERNS:}
     allow-credentials: ${KYVC_CORS_ALLOW_CREDENTIALS:true}
+  openapi:
+    server-url: ${KYVC_OPENAPI_SERVER_URL:}
+    server-description: ${KYVC_OPENAPI_SERVER_DESCRIPTION:KYvC backendadmin API}
   backend:
     base-url: ${KYVC_BACKEND_BASE_URL:http://localhost:8080}
     internal-api-key: ${KYVC_BACKEND_INTERNAL_API_KEY:}

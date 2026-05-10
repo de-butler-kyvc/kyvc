@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 // EntityManager 기반 관리자 Repository 구현체
@@ -25,12 +26,18 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AdminUserRepositoryImpl implements AdminUserRepository {
 
+    // 활성 권한 상태 코드
+    private static final String ACTIVE_STATUS = "ACTIVE";
+
     // 테스트에서 JPA 자동 구성이 제외되어도 컨텍스트가 뜨도록 지연 조회
     private final ObjectProvider<EntityManager> entityManagerProvider;
 
     // 관리자 ID로 admin_users 조회
     @Override
     public Optional<AdminUser> findById(Long adminId) {
+        if (adminId == null) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(entityManager().find(AdminUser.class, adminId));
     }
 
@@ -58,6 +65,10 @@ public class AdminUserRepositoryImpl implements AdminUserRepository {
     // 이메일 대소문자를 구분하지 않고 관리자 조회
     @Override
     public Optional<AdminUser> findByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
+
         List<AdminUser> result = entityManager()
                 .createQuery("""
                         select adminUser
@@ -73,6 +84,10 @@ public class AdminUserRepositoryImpl implements AdminUserRepository {
     // 이메일 존재 여부 확인
     @Override
     public boolean existsByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+
         Long count = entityManager()
                 .createQuery("""
                         select count(adminUser)
@@ -91,27 +106,41 @@ public class AdminUserRepositoryImpl implements AdminUserRepository {
             return List.of();
         }
 
+        List<Long> filteredRoleIds = roleIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (filteredRoleIds.isEmpty()) {
+            return List.of();
+        }
+
         return entityManager()
                 .createQuery("""
                         select role
                         from AdminRole role
                         where role.roleId in :roleIds
                         """, AdminRole.class)
-                .setParameter("roleIds", roleIds)
+                .setParameter("roleIds", filteredRoleIds)
                 .getResultList();
     }
 
     // admin_user_roles와 admin_roles를 조인해 Spring Security 권한 문자열로 변환
     @Override
     public List<String> findRoleCodesByAdminId(Long adminId) {
+        if (adminId == null) {
+            return List.of();
+        }
+
         return entityManager()
                 .createQuery("""
-                        select role.roleCode
+                        select distinct role.roleCode
                         from AdminUserRole userRole
                         join userRole.adminRole role
                         where userRole.adminUser.adminId = :adminId
+                          and (role.status is null or trim(role.status) = '' or upper(role.status) = :activeStatus)
                         """, KyvcEnums.RoleCode.class)
                 .setParameter("adminId", adminId)
+                .setParameter("activeStatus", ACTIVE_STATUS)
                 .getResultList()
                 .stream()
                 .map(roleCode -> "ROLE_" + roleCode.name())

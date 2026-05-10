@@ -25,6 +25,10 @@ public class AdminUserRoleRepositoryImpl implements AdminUserRoleRepository {
 
     @Override
     public Optional<AdminUserRole> findByAdminUserIdAndRoleId(Long adminUserId, Long roleId) {
+        if (adminUserId == null || roleId == null) {
+            return Optional.empty();
+        }
+
         List<AdminUserRole> result = entityManager()
                 .createQuery("""
                         select userRole
@@ -43,6 +47,10 @@ public class AdminUserRoleRepositoryImpl implements AdminUserRoleRepository {
 
     @Override
     public boolean existsByAdminUserIdAndRoleId(Long adminUserId, Long roleId) {
+        if (adminUserId == null || roleId == null) {
+            return false;
+        }
+
         Long count = entityManager()
                 .createQuery("""
                         select count(userRole)
@@ -69,6 +77,10 @@ public class AdminUserRoleRepositoryImpl implements AdminUserRoleRepository {
 
     @Override
     public long countByRoleCode(KyvcEnums.RoleCode roleCode) {
+        if (roleCode == null) {
+            return 0;
+        }
+
         return entityManager()
                 .createQuery("""
                         select count(distinct userRole.adminUser.adminId)

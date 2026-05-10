@@ -13,6 +13,7 @@ import com.kyvc.backendadmin.global.jwt.JwtProperties;
 import com.kyvc.backendadmin.global.jwt.JwtTokenProvider;
 import com.kyvc.backendadmin.global.jwt.TokenHashUtil;
 import com.kyvc.backendadmin.global.jwt.TokenPrincipal;
+import com.kyvc.backendadmin.global.logging.LogEventLogger;
 import com.kyvc.backendadmin.global.security.SecurityUtil;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 // Backend Admin 로그인, 로그아웃, 토큰 재발급, 세션 조회 유스케이스 서비스
 /**
@@ -42,6 +46,12 @@ public class AdminAuthService {
     private static final String REFRESH_TOKEN_TYPE = "REFRESH";
     // 관리자 토큰임을 식별하는 actorType 값
     private static final String ADMIN_ACTOR_TYPE = "ADMIN";
+    // BCrypt 해시 형식 검증 기준
+    private static final Pattern BCRYPT_HASH_PATTERN = Pattern.compile("\\A\\$2[aby]?\\$\\d{2}\\$[./0-9A-Za-z]{53}\\z");
+    // BCrypt 최소 cost
+    private static final int MIN_BCRYPT_COST = 4;
+    // BCrypt 최대 cost
+    private static final int MAX_BCRYPT_COST = 31;
 
     // 관리자 계정과 권한 조회 저장소
     private final AdminUserRepository adminUserRepository;
@@ -53,6 +63,8 @@ public class AdminAuthService {
     private final JwtTokenProvider jwtTokenProvider;
     // JWT 만료 시간과 쿠키 설정 프로퍼티
     private final JwtProperties jwtProperties;
+    // 로그인 실패 내부 이벤트 로그
+    private final LogEventLogger logEventLogger;
 
     // 이메일/비밀번호로 관리자 로그인 후 Access/Refresh Token 발급
     /**
@@ -71,11 +83,16 @@ public class AdminAuthService {
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_LOGIN_FAILED));
         validateAdminCanLogin(adminUser);
 
+        if (!isValidPasswordHash(adminUser.getPasswordHash())) {
+            logInvalidPasswordHash(adminUser);
+            throw new ApiException(ErrorCode.AUTH_LOGIN_FAILED);
+        }
+
         if (!passwordEncoder.matches(request.password(), adminUser.getPasswordHash())) {
             throw new ApiException(ErrorCode.AUTH_LOGIN_FAILED);
         }
 
-        List<String> roles = adminUserRepository.findRoleCodesByAdminId(adminUser.getAdminId());
+        List<String> roles = findActiveRoleCodes(adminUser);
         validateRoles(roles);
         TokenPrincipal principal = adminPrincipal(adminUser, roles);
         String accessToken = jwtTokenProvider.createAccessToken(principal);
@@ -159,7 +176,7 @@ public class AdminAuthService {
                 .orElseThrow(() -> new ApiException(ErrorCode.ADMIN_NOT_FOUND));
         validateAdminCanLogin(adminUser);
 
-        List<String> roles = adminUserRepository.findRoleCodesByAdminId(adminUser.getAdminId());
+        List<String> roles = findActiveRoleCodes(adminUser);
         validateRoles(roles);
         String accessToken = jwtTokenProvider.createAccessToken(adminPrincipal(adminUser, roles));
         // TODO refresh token rotation policy 확정 후 refresh token 재발급과 기존 토큰 폐기를 적용한다.
@@ -200,7 +217,7 @@ public class AdminAuthService {
                 .orElseThrow(() -> new ApiException(ErrorCode.ADMIN_NOT_FOUND));
         validateAdminCanLogin(adminUser);
 
-        List<String> roles = adminUserRepository.findRoleCodesByAdminId(adminUser.getAdminId());
+        List<String> roles = findActiveRoleCodes(adminUser);
         validateRoles(roles);
         return new AdminSessionResponse(true, toAdminSummary(adminUser), roles, 0);
     }
@@ -217,7 +234,7 @@ public class AdminAuthService {
     public AdminSessionResponse me() {
         AdminUser adminUser = adminUserRepository.findById(SecurityUtil.getCurrentAdminId())
                 .orElseThrow(() -> new ApiException(ErrorCode.ADMIN_NOT_FOUND));
-        List<String> roles = adminUserRepository.findRoleCodesByAdminId(adminUser.getAdminId());
+        List<String> roles = findActiveRoleCodes(adminUser);
         validateRoles(roles);
         return new AdminSessionResponse(true, toAdminSummary(adminUser), roles, 0);
     }
@@ -241,6 +258,46 @@ public class AdminAuthService {
     // JWT 발급에 사용할 관리자 principal 생성
     private TokenPrincipal adminPrincipal(AdminUser adminUser, List<String> roles) {
         return new TokenPrincipal(adminUser.getAdminId(), adminUser.getEmail(), ADMIN_ACTOR_TYPE, roles);
+    }
+
+    // 관리자 ID 기준 활성 권한 문자열 조회
+    private List<String> findActiveRoleCodes(AdminUser adminUser // 권한 조회 대상 관리자
+    ) {
+        Long adminId = adminUser.getAdminId();
+        if (adminId == null) {
+            throw new ApiException(ErrorCode.ADMIN_ROLE_NOT_FOUND);
+        }
+
+        List<String> roles = adminUserRepository.findRoleCodesByAdminId(adminId);
+        if (roles == null) {
+            return List.of();
+        }
+        return roles.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+    }
+
+    // 저장된 비밀번호 해시 형식 검증
+    private boolean isValidPasswordHash(String passwordHash // 저장된 비밀번호 해시
+    ) {
+        if (!StringUtils.hasText(passwordHash) || !BCRYPT_HASH_PATTERN.matcher(passwordHash).matches()) {
+            return false;
+        }
+
+        int cost = Integer.parseInt(passwordHash.split("\\$")[2]);
+        return cost >= MIN_BCRYPT_COST && cost <= MAX_BCRYPT_COST;
+    }
+
+    // 비정상 비밀번호 해시 로그인 실패 로그
+    private void logInvalidPasswordHash(AdminUser adminUser // 로그인 대상 관리자
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        if (adminUser.getAdminId() != null) {
+            fields.put("adminId", adminUser.getAdminId());
+        }
+        fields.put("reason", "invalid_password_hash");
+        logEventLogger.warn("auth.login.failed", ErrorCode.AUTH_LOGIN_FAILED.getMessage(), fields);
     }
 
     // DB에 저장된 토큰 상태와 만료 여부 검증

@@ -18,7 +18,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 
 // JWT 인증 필터
 @Component
@@ -32,6 +31,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request // 요청 정보
     ) {
+        if (AdminSecurityPatterns.isPublicRequest(request.getMethod(), requestPath(request))) {
+            return true;
+        }
+
         String path = request.getRequestURI(); // 요청 경로
         return "/api/admin/auth/login".equals(path)
                 || "/api/admin/auth/token/refresh".equals(path)
@@ -106,5 +109,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return null;
         }
         return authorization.substring(7);
+    }
+
+    private String requestPath(HttpServletRequest request // 요청 경로
+    ) {
+        String path = request.getRequestURI(); // 요청 URI
+        String contextPath = request.getContextPath(); // 서블릿 context path
+        if (StringUtils.hasText(contextPath) && path.startsWith(contextPath)) {
+            return path.substring(contextPath.length());
+        }
+        return path;
     }
 }

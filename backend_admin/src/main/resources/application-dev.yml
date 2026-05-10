@@ -11,6 +11,15 @@ logging:
   level:
     com.kyvc.backendadmin: DEBUG
 
+server:
+  forward-headers-strategy: framework
+
 kyvc:
+  cors:
+    allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173,https://dev-admin-kyvc.khuoo.synology.me}
+    allowed-origin-patterns: ${KYVC_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+  openapi:
+    server-url: ${KYVC_OPENAPI_SERVER_URL:https://dev-admin-kyvc.khuoo.synology.me}
+    server-description: ${KYVC_OPENAPI_SERVER_DESCRIPTION:KYvC backendadmin dev API}
   backend:
     base-url: ${KYVC_BACKEND_BASE_URL:http://kyvc-backend-dev:8082}

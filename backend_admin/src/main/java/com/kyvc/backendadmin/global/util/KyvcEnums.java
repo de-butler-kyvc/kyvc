@@ -178,6 +178,7 @@ public final class KyvcEnums {
         POLICY_MANAGER, // 정책 관리자
         AUDITOR, // 감사담당자
         VIEWER, // 조회 전용
+        OPERATOR, // 운영자
         SYSTEM_ADMIN // 시스템 관리자
     }
 
@@ -188,6 +189,7 @@ public final class KyvcEnums {
         POLICY_MANAGER, // 정책 관리자
         AUDITOR, // 감사담당자
         VIEWER, // 조회 전용
+        OPERATOR, // 운영자
         SYSTEM_ADMIN // 시스템 관리자
     }
 
