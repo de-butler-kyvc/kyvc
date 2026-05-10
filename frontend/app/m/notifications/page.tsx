@@ -4,19 +4,30 @@ import { useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MBottomNav, MTopBar } from "@/components/m/parts";
-import { notifications, type Notification } from "@/lib/api";
-import { MOCK_NOTIFS, type MNotifItem } from "@/lib/m/data";
+import { ApiError, notifications, type Notification } from "@/lib/api";
 
 type Tab = "all" | "vc" | "vp" | "warn";
 
-const ICON: Record<MNotifItem["type"], React.ReactNode> = {
+type NotifItem = {
+  id: number;
+  type: "check" | "shield" | "bell" | "cert";
+  cat: "vc" | "vp" | "warn";
+  title: string;
+  desc: string;
+  time: string;
+  unread: boolean;
+  color: "green" | "blue" | "orange" | "purple";
+  group: string;
+};
+
+const ICON: Record<NotifItem["type"], React.ReactNode> = {
   check: <MIcon.check />,
   shield: <MIcon.shield />,
   bell: <MIcon.bell />,
   cert: <MIcon.cert />,
 };
 
-function classifyNotificationType(t?: string): MNotifItem["type"] {
+function classifyType(t?: string): NotifItem["type"] {
   if (!t) return "bell";
   const u = t.toUpperCase();
   if (u.includes("VC")) return "cert";
@@ -25,14 +36,14 @@ function classifyNotificationType(t?: string): MNotifItem["type"] {
   return "bell";
 }
 
-function classifyNotificationCat(t?: string): MNotifItem["cat"] {
+function classifyCat(t?: string): NotifItem["cat"] {
   const u = (t ?? "").toUpperCase();
   if (u.includes("VP")) return "vp";
   if (u.includes("VC") || u.includes("CRED")) return "vc";
   return "warn";
 }
 
-function classifyNotificationColor(t?: string): MNotifItem["color"] {
+function classifyColor(t?: string): NotifItem["color"] {
   const u = (t ?? "").toUpperCase();
   if (u.includes("VC")) return "purple";
   if (u.includes("VP")) return "green";
@@ -40,41 +51,68 @@ function classifyNotificationColor(t?: string): MNotifItem["color"] {
   return "orange";
 }
 
-function fromApi(n: Notification): MNotifItem {
+function fromApi(n: Notification): NotifItem {
+  const created = n.createdAt ? new Date(n.createdAt) : null;
+  const today = new Date();
+  let group = "이전";
+  if (created) {
+    const diffDays = Math.floor(
+      (today.getTime() - created.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (diffDays < 1) group = "오늘";
+    else if (diffDays < 7) group = "이번 주";
+  }
   return {
     id: n.notificationId,
-    type: classifyNotificationType(n.notificationType),
-    cat: classifyNotificationCat(n.notificationType),
+    type: classifyType(n.notificationType),
+    cat: classifyCat(n.notificationType),
     title: n.title,
     desc: n.message,
-    time: (n.createdAt ?? "").slice(11, 16) || "방금",
+    time: created
+      ? created.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "",
     unread: !n.read,
-    color: classifyNotificationColor(n.notificationType),
-    group: "오늘",
+    color: classifyColor(n.notificationType),
+    group,
   };
 }
 
 export default function MobileNotificationsPage() {
   const [tab, setTab] = useState<Tab>("all");
-  const [items, setItems] = useState<MNotifItem[]>(MOCK_NOTIFS);
+  const [items, setItems] = useState<NotifItem[]>([]);
   const [readAll, setReadAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const res = await notifications.list({ page: 0, size: 30 });
-        if (res.content.length) {
-          setItems(res.content.map(fromApi));
-        }
-      } catch {
-        /* mock 유지 */
+        if (cancelled) return;
+        setItems(res.content.map(fromApi));
+      } catch (e) {
+        if (cancelled) return;
+        setError(
+          e instanceof ApiError
+            ? `알림 조회 실패: ${e.message}`
+            : "알림을 불러오는 중 오류가 발생했습니다.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered =
     tab === "all" ? items : items.filter((i) => i.cat === tab);
-  const groups = filtered.reduce<{ section: string; items: MNotifItem[] }[]>(
+  const groups = filtered.reduce<{ section: string; items: NotifItem[] }[]>(
     (acc, item) => {
       const g = acc.find((x) => x.section === item.group);
       if (g) g.items.push(item);
@@ -85,11 +123,15 @@ export default function MobileNotificationsPage() {
   );
 
   const onReadAll = async () => {
-    setReadAll(true);
     try {
       await notifications.markAllRead();
-    } catch {
-      /* ignore */
+      setReadAll(true);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? `읽음 처리 실패: ${e.message}`
+          : "읽음 처리 중 오류가 발생했습니다.",
+      );
     }
   };
 
@@ -110,6 +152,7 @@ export default function MobileNotificationsPage() {
             type="button"
             className="notif-read-all"
             onClick={onReadAll}
+            disabled={readAll}
           >
             모두 읽음
           </button>
@@ -131,8 +174,13 @@ export default function MobileNotificationsPage() {
       </div>
 
       <div className="scroll notif-container">
-        {groups.length === 0 ? (
-          <p className="notif-empty">해당하는 알림이 없습니다.</p>
+        {error ? <p className="m-error">{error}</p> : null}
+        {loading ? (
+          <p className="m-loading">불러오는 중…</p>
+        ) : groups.length === 0 ? (
+          <p className="notif-empty">
+            {error ? "알림을 불러올 수 없습니다." : "해당하는 알림이 없습니다."}
+          </p>
         ) : (
           groups.map((g) => (
             <div key={g.section} className="notif-group">

@@ -11,38 +11,44 @@ export default function MobileBiometricPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [bridgeReady, setBridgeReady] = useState<boolean | null>(null);
   const autoTriedRef = useRef(false);
+
+  useEffect(() => {
+    setBridgeReady(isBridgeAvailable());
+  }, []);
 
   const onAuth = async () => {
     setError(null);
     setBusy(true);
     try {
-      if (!isBridgeAvailable()) {
-        setTimeout(() => router.replace("/m/home"), 400);
-        return;
-      }
       const r = await bridge.requestNativeAuth("biometric", "wallet-login");
       if (r.ok && r.authenticated) {
         router.replace("/m/home");
-      } else if (r.emailVerificationRequired) {
-        setError("인증 5회 실패. 이메일 인증으로 잠금을 풀어주세요.");
-      } else {
-        setError(r.error ?? "생체 인증에 실패했습니다.");
+        return;
       }
+      if (r.emailVerificationRequired) {
+        setError("인증 5회 실패. 이메일 인증으로 잠금을 풀어주세요.");
+        return;
+      }
+      setError(r.error ?? "생체 인증에 실패했습니다.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "브리지 호출 실패");
+      setError(
+        e instanceof Error ? e.message : "생체 인증 호출에 실패했습니다.",
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  // 진입 시 자동으로 한 번 시도 (네이티브 인증 다이얼로그가 뜬다)
+  // 진입 시 브리지가 있으면 자동으로 한 번 시도 (네이티브 인증 다이얼로그 표시)
   useEffect(() => {
     if (autoTriedRef.current) return;
+    if (bridgeReady !== true) return;
     autoTriedRef.current = true;
     onAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bridgeReady]);
 
   return (
     <section className="view wash">
@@ -50,12 +56,21 @@ export default function MobileBiometricPage() {
       <div className="content center spread">
         <h1 className="headline m-auth-title">지문을 인식해주세요</h1>
         <p className="subcopy">등록한 생체정보로 로그인합니다.</p>
+
+        {bridgeReady === false ? (
+          <p className="m-error">
+            앱 내부 인증 모듈에 연결할 수 없습니다.
+            <br />
+            KYvC 앱에서 다시 열어 주세요.
+          </p>
+        ) : null}
+
         <button
           type="button"
           className="bio-circle"
           aria-label="생체인증 시작"
           onClick={onAuth}
-          disabled={busy}
+          disabled={busy || bridgeReady !== true}
         >
           <MIcon.fingerprint />
         </button>

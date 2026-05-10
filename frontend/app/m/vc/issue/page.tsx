@@ -97,22 +97,30 @@ export default function MobileVcIssuePage() {
   const onIssue = async () => {
     setError(null);
     if (!isBridgeAvailable()) {
-      // dev/preview: 그냥 축하 화면으로 진행
-      router.replace("/m/vc/celebration");
+      setError(
+        "앱 내부 발급 모듈에 연결할 수 없습니다. KYvC 앱에서 다시 열어 주세요.",
+      );
       return;
     }
     try {
       // 1) 활성 지갑 확인 (선행조건)
-      await bridge.getWalletInfo();
+      const wallet = await bridge.getWalletInfo();
+      if (!wallet.ok) {
+        throw new Error(wallet.error ?? "활성 지갑을 확인할 수 없습니다.");
+      }
       // 2) Issuer 발급 요청 (응답은 ISSUER_CREDENTIAL_RECEIVED 이벤트로)
       startedRef.current = true;
       setStep("requesting");
-      await bridge.requestIssuerCredential({
+      const ack = await bridge.requestIssuerCredential({
         coreBaseUrl: CORE_BASE_URL,
         format: "dc+sd-jwt",
         jurisdiction: "KR",
         assuranceLevel: "STANDARD",
       });
+      // 일부 구현은 즉시 ok=false ack를 반환할 수 있음 — 그 경우 즉시 실패 처리
+      if (!ack.ok && !ack.credentialId) {
+        throw new Error(ack.error ?? "발급 요청이 거절되었습니다.");
+      }
       // 응답이 ack로 오는지 늦게 오는지에 따라 결과 처리는 onBridgeAction에 위임
     } catch (e) {
       setError(e instanceof Error ? e.message : "발급 요청 실패");
@@ -122,6 +130,7 @@ export default function MobileVcIssuePage() {
   };
 
   const busy = step !== "idle";
+  const bridgeMissing = typeof window !== "undefined" && !isBridgeAvailable();
 
   return (
     <section className="view wash">
@@ -168,6 +177,13 @@ export default function MobileVcIssuePage() {
             {STEP_LABEL[step]}
           </p>
         ) : null}
+        {bridgeMissing ? (
+          <p className="m-error">
+            앱 내부 발급 모듈에 연결할 수 없습니다.
+            <br />
+            KYvC 앱에서 다시 열어 주세요.
+          </p>
+        ) : null}
         {error ? <p className="m-error">{error}</p> : null}
       </div>
       <div className="bottom-action">
@@ -175,7 +191,7 @@ export default function MobileVcIssuePage() {
           type="button"
           className="primary"
           onClick={onIssue}
-          disabled={busy}
+          disabled={busy || bridgeMissing}
         >
           {busy ? STEP_LABEL[step] : "발급 신청하기"}
         </button>
