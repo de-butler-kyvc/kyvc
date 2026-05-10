@@ -37,7 +37,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI(); // 요청 경로
         return "/api/admin/auth/login".equals(path)
+                || "/api/admin/auth/logout".equals(path)
+                || "/api/admin/auth/refresh".equals(path)
                 || "/api/admin/auth/token/refresh".equals(path)
+                || "/api/admin/auth/mfa/challenge".equals(path)
+                || "/api/admin/auth/mfa/verify".equals(path)
                 || "/api/admin/auth/password-reset/request".equals(path)
                 || "/api/admin/auth/password-reset/confirm".equals(path)
                 || "/api/admin/auth/session".equals(path)

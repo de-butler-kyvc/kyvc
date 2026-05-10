@@ -149,8 +149,11 @@ public class AdminAuthController {
             content = @Content(schema = @Schema(implementation = AdminMfaChallengeResponse.class))
     )
     @PostMapping("/auth/mfa/challenge")
-    public CommonResponse<AdminMfaChallengeResponse> challenge(@Valid @RequestBody AdminMfaChallengeRequest request) {
-        return CommonResponseFactory.success(adminMfaService.challenge(request));
+    public CommonResponse<AdminMfaChallengeResponse> challenge(
+            @Valid @RequestBody AdminMfaChallengeRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return CommonResponseFactory.success(adminMfaService.challenge(request, resolveAccessToken(servletRequest)));
     }
 
     // 관리자 MFA 인증번호 검증
@@ -170,8 +173,11 @@ public class AdminAuthController {
             content = @Content(schema = @Schema(implementation = AdminMfaVerifyResponse.class))
     )
     @PostMapping("/auth/mfa/verify")
-    public CommonResponse<AdminMfaVerifyResponse> verify(@Valid @RequestBody AdminMfaVerifyRequest request) {
-        return CommonResponseFactory.success(adminMfaService.verify(request));
+    public CommonResponse<AdminMfaVerifyResponse> verify(
+            @Valid @RequestBody AdminMfaVerifyRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return CommonResponseFactory.success(adminMfaService.verify(request, resolveAccessToken(servletRequest)));
     }
 
     // 비밀번호 재설정 요청, 이메일 존재 여부와 무관하게 동일 성공 응답

@@ -13,10 +13,10 @@ import com.kyvc.backendadmin.domain.auth.repository.AuthTokenRepository;
 import com.kyvc.backendadmin.domain.auth.repository.MfaEmailVerificationRepository;
 import com.kyvc.backendadmin.global.exception.ApiException;
 import com.kyvc.backendadmin.global.exception.ErrorCode;
+import com.kyvc.backendadmin.global.jwt.JwtTokenProvider;
 import com.kyvc.backendadmin.global.jwt.TokenHashUtil;
 import com.kyvc.backendadmin.global.logging.LogEventLogger;
 import com.kyvc.backendadmin.global.mail.EmailSender;
-import com.kyvc.backendadmin.global.security.SecurityUtil;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,10 +40,13 @@ import java.util.Map;
 public class AdminMfaService {
 
     private static final String EMAIL_CHANNEL = "EMAIL";
+    private static final String ACCESS_TOKEN_TYPE = "ACCESS";
+    private static final String ADMIN_ACTOR_TYPE = "ADMIN";
 
     private final AdminUserRepository adminUserRepository;
     private final MfaEmailVerificationRepository mfaEmailVerificationRepository;
     private final AuthTokenRepository authTokenRepository;
+    private final JwtTokenProvider jwtTokenProvider;
     private final EmailSender emailSender;
     private final AdminMfaProperties mfaProperties;
     private final LogEventLogger logEventLogger;
@@ -56,14 +59,17 @@ public class AdminMfaService {
      * @return challenge ID, 만료 시각, 마스킹된 이메일 대상
      */
     @Transactional
-    public AdminMfaChallengeResponse challenge(AdminMfaChallengeRequest request) {
+    public AdminMfaChallengeResponse challenge(
+            AdminMfaChallengeRequest request,
+            String accessToken
+    ) {
         validateChallengeRequest(request);
         if (!EMAIL_CHANNEL.equalsIgnoreCase(request.channel().trim())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "EMAIL channel is required.");
         }
 
         KyvcEnums.MfaPurpose purpose = parsePurpose(request.purpose());
-        Long adminId = SecurityUtil.getCurrentAdminId();
+        Long adminId = resolveAdminId(accessToken);
         AdminUser adminUser = adminUserRepository.findById(adminId)
                 .orElseThrow(() -> new ApiException(ErrorCode.ADMIN_NOT_FOUND));
         if (!StringUtils.hasText(adminUser.getEmail())) {
@@ -111,9 +117,12 @@ public class AdminMfaService {
      * @return MFA 세션 토큰과 만료 시각
      */
     @Transactional
-    public AdminMfaVerifyResponse verify(AdminMfaVerifyRequest request) {
+    public AdminMfaVerifyResponse verify(
+            AdminMfaVerifyRequest request,
+            String accessToken
+    ) {
         validateVerifyRequest(request);
-        Long adminId = SecurityUtil.getCurrentAdminId();
+        Long adminId = resolveAdminId(accessToken);
         MfaEmailVerification verification = mfaEmailVerificationRepository.findByChallengeId(request.challengeId().trim())
                 .orElseThrow(() -> new ApiException(ErrorCode.MFA_NOT_FOUND));
 
@@ -180,6 +189,20 @@ public class AdminMfaService {
         } catch (RuntimeException exception) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "Invalid MFA purpose.");
         }
+    }
+
+    private Long resolveAdminId(String accessToken) {
+        if (!StringUtils.hasText(accessToken)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "MFA admin context is required.");
+        }
+        jwtTokenProvider.validateToken(accessToken);
+        if (!ACCESS_TOKEN_TYPE.equals(jwtTokenProvider.getTokenType(accessToken))) {
+            throw new ApiException(ErrorCode.AUTH_INVALID_TOKEN_TYPE);
+        }
+        if (!ADMIN_ACTOR_TYPE.equals(jwtTokenProvider.getActorType(accessToken))) {
+            throw new ApiException(ErrorCode.AUTH_TOKEN_INVALID);
+        }
+        return jwtTokenProvider.getUserId(accessToken);
     }
 
     private String normalizeEmail(String email) {

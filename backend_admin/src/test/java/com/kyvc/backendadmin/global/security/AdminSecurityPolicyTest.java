@@ -74,8 +74,12 @@ class AdminSecurityPolicyTest {
     private static final String MANUAL_APPROVE_URI = "/api/admin/backend/kyc/applications/1/manual-review/approve";
     private static final String AUTH_ME_URI = "/api/admin/auth/me";
     private static final String AUTH_LOGIN_URI = "/api/admin/auth/login";
+    private static final String AUTH_LOGOUT_URI = "/api/admin/auth/logout";
     private static final String AUTH_REFRESH_URI = "/api/admin/auth/refresh";
+    private static final String AUTH_MFA_CHALLENGE_URI = "/api/admin/auth/mfa/challenge";
+    private static final String AUTH_MFA_VERIFY_URI = "/api/admin/auth/mfa/verify";
     private static final String AUTH_CHANGE_PASSWORD_URI = "/api/admin/auth/change-password";
+    private static final String BACKEND_DASHBOARD_URI = "/api/admin/backend/dashboard";
     private static final String UNKNOWN_BACKEND_URI = "/api/admin/backend/unknown-test-path";
 
     @Autowired
@@ -217,13 +221,21 @@ class AdminSecurityPolicyTest {
                 .andExpect(status().isOk());
         mockMvc.perform(post(AUTH_LOGIN_URI))
                 .andExpect(status().isNotFound());
+        mockMvc.perform(post(AUTH_LOGOUT_URI))
+                .andExpect(status().isNotFound());
         mockMvc.perform(post(AUTH_REFRESH_URI))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post(AUTH_MFA_CHALLENGE_URI))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post(AUTH_MFA_VERIFY_URI))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void protectedAuthAndBackendApisWithoutTokenReturnUnauthorized() throws Exception {
         mockMvc.perform(patch(AUTH_CHANGE_PASSWORD_URI))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(BACKEND_DASHBOARD_URI))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get(UNKNOWN_BACKEND_URI))
                 .andExpect(status().isUnauthorized());
