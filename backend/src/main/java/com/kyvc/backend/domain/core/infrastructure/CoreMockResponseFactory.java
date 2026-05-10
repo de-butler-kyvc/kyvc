@@ -103,7 +103,7 @@ public class CoreMockResponseFactory {
                 null,
                 null,
                 LocalDateTime.now(),
-                request.validUntil()
+                request.validUntil() == null ? null : request.validUntil().toLocalDateTime()
         );
     }
 

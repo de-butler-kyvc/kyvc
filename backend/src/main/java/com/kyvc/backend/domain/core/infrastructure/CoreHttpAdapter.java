@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.core.infrastructure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kyvc.backend.domain.core.application.CorePayloadSanitizer;
 import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
@@ -56,12 +57,14 @@ import org.springframework.web.client.RestClientResponseException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 // Core 실제 HTTP Adapter
 @Component
@@ -96,11 +99,18 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String BACKEND_DOCUMENT_POWER_OF_ATTORNEY = "POWER_OF_ATTORNEY";
     private static final String CORE_DOCUMENT_SEAL_CERTIFICATE = "SEAL_CERTIFICATE";
     private static final String CORE_DOCUMENT_SHAREHOLDER_REGISTRY = "SHAREHOLDER_REGISTRY";
+    private static final String DEFAULT_STATUS_MODE = "xrpl";
+    private static final String DEFAULT_CREDENTIAL_FORMAT = "jwt";
+    private static final String DEFAULT_VC_FORMAT = "vc+jwt";
+    private static final Set<String> ALLOWED_STATUS_MODES = Set.of("xrpl", "local");
+    private static final Set<String> ALLOWED_CREDENTIAL_FORMATS = Set.of("jwt", "embedded_jws");
+    private static final Set<String> ALLOWED_VC_FORMATS = Set.of("vc+jwt", "dc+sd-jwt");
 
     private final RestClient coreRestClient;
     private final CoreProperties coreProperties;
     private final LogEventLogger logEventLogger;
     private final ObjectMapper objectMapper;
+    private final CorePayloadSanitizer corePayloadSanitizer;
 
     @Override
     public CoreHealthResponse checkHealth() {
@@ -172,30 +182,43 @@ public class CoreHttpAdapter implements CoreAdapter {
         String issuerAccount = resolveIssuerAccount(request);
         String issuerDid = resolveIssuerDid(request);
         String issuerVerificationMethodId = resolveIssuerVerificationMethodId(request, issuerDid);
+        String keyId = resolveKeyId(request, issuerVerificationMethodId);
         String holderAccount = resolveHolderAccount(request);
         String holderDid = resolveHolderDid(request, holderAccount);
-        LocalDateTime validFrom = request.validFrom() == null ? LocalDateTime.now() : request.validFrom();
-        LocalDateTime validUntil = request.validUntil() == null ? CoreMockSeedData.validUntil() : request.validUntil();
+        OffsetDateTime validFrom = resolveValidFrom(request);
+        OffsetDateTime validUntil = resolveValidUntil(request, validFrom);
+        String statusMode = resolveAllowedValue(request.statusMode(), DEFAULT_STATUS_MODE, ALLOWED_STATUS_MODES, "statusMode");
+        String credentialFormat = resolveAllowedValue(
+                request.credentialFormat(),
+                DEFAULT_CREDENTIAL_FORMAT,
+                ALLOWED_CREDENTIAL_FORMATS,
+                "credentialFormat"
+        );
+        String format = resolveAllowedValue(request.format(), DEFAULT_VC_FORMAT, ALLOWED_VC_FORMATS, "format");
 
         IssueKycCredentialApiRequest apiRequest = new IssueKycCredentialApiRequest(
                 issuerAccount,
+                normalizeOptional(request.issuerSeed()),
+                normalizeOptional(request.issuerPrivateKeyPem()),
                 issuerDid,
-                extractKeyId(issuerVerificationMethodId),
+                keyId,
                 holderAccount,
                 holderDid,
                 resolveClaims(request.claims()),
                 validFrom,
                 validUntil,
-                true,
-                true,
-                false,
-                true,
-                null,
-                "xrpl",
-                "jwt",
-                "vc+jwt",
-                coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
-                request.credentialType()
+                resolveBoolean(request.persist(), true),
+                resolveBoolean(request.persistStatus(), true),
+                resolveBoolean(request.markStatusAccepted(), false),
+                resolveBoolean(request.storeIssuerDidDocument(), true),
+                normalizeOptional(request.statusUri()),
+                normalizeOptional(request.xrplJsonRpcUrl()),
+                resolveBoolean(request.allowMainnet(), false),
+                statusMode,
+                credentialFormat,
+                format,
+                resolveHolderKeyId(request),
+                resolveVct(request)
         );
 
         String endpoint = ISSUE_KYC_CREDENTIAL_ENDPOINT;
@@ -681,10 +704,23 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (StringUtils.hasText(request.issuerVerificationMethodId())) {
             return request.issuerVerificationMethodId().trim();
         }
+        if (StringUtils.hasText(request.keyId()) && StringUtils.hasText(issuerDid)) {
+            return issuerDid + "#" + request.keyId().trim();
+        }
         if (StringUtils.hasText(issuerDid)) {
             return issuerDid + "#issuer-key-1";
         }
         return resolveDevSeedOrThrow("issuerVerificationMethodId", CoreMockSeedData.DEV_ISSUER_VERIFICATION_METHOD_ID);
+    }
+
+    private String resolveKeyId(
+            CoreVcIssuanceRequest request, // VC 발급 요청
+            String issuerVerificationMethodId // Issuer Verification Method ID
+    ) {
+        if (StringUtils.hasText(request.keyId())) {
+            return request.keyId().trim();
+        }
+        return extractKeyId(issuerVerificationMethodId);
     }
 
     private String resolveHolderAccount(
@@ -719,6 +755,65 @@ public class CoreHttpAdapter implements CoreAdapter {
             return CoreMockSeedData.legalEntityClaims();
         }
         throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 claims 데이터가 부족합니다.");
+    }
+
+    private OffsetDateTime resolveValidFrom(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        return request.validFrom() == null
+                ? OffsetDateTime.now(ZoneOffset.UTC)
+                : request.validFrom();
+    }
+
+    private OffsetDateTime resolveValidUntil(
+            CoreVcIssuanceRequest request, // VC 발급 요청
+            OffsetDateTime validFrom // VC 유효 시작 시각
+    ) {
+        return request.validUntil() == null
+                ? validFrom.plusYears(1)
+                : request.validUntil();
+    }
+
+    private Boolean resolveBoolean(
+            Boolean value, // 원본 여부 값
+            boolean defaultValue // 기본 여부 값
+    ) {
+        return value == null ? defaultValue : value;
+    }
+
+    private String resolveAllowedValue(
+            String value, // 원본 값
+            String defaultValue, // 기본 값
+            Set<String> allowedValues, // 허용 값 목록
+            String fieldName // 필드명
+    ) {
+        String resolved = StringUtils.hasText(value) ? value.trim().toLowerCase(Locale.ROOT) : defaultValue;
+        if (allowedValues.contains(resolved)) {
+            return resolved;
+        }
+        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "Core VC 발급 " + fieldName + " 값이 올바르지 않습니다.");
+    }
+
+    private String resolveHolderKeyId(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        if (StringUtils.hasText(request.holderKeyId())) {
+            return request.holderKeyId().trim();
+        }
+        return coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null;
+    }
+
+    private String resolveVct(
+            CoreVcIssuanceRequest request // VC 발급 요청
+    ) {
+        String vct = normalizeOptional(request.vct());
+        return vct == null ? normalizeOptional(request.credentialType()) : vct;
+    }
+
+    private String normalizeOptional(
+            String value // 원본 문자열
+    ) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private String resolveDevSeedOrThrow(
@@ -909,6 +1004,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         Map<String, Object> fields = new LinkedHashMap<>(baseFields);
         if (exception instanceof RestClientResponseException responseException) {
             fields.put("httpStatus", responseException.getRawStatusCode());
+            fields.put("responseBody", corePayloadSanitizer.sanitizeText(responseException.getResponseBodyAsString()));
             logEventLogger.warn("core.call.failed", "Core API call failed", fields);
             return new ApiException(
                     ErrorCode.CORE_API_CALL_FAILED,

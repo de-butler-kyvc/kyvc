@@ -85,7 +85,7 @@ public class StubCoreAdapter implements CoreAdapter {
                 "mock-tx-" + request.coreRequestId(),
                 "mock-status-" + request.coreRequestId(),
                 LocalDateTime.now(),
-                request.validUntil()
+                request.validUntil() == null ? null : request.validUntil().toLocalDateTime()
         );
     }
 
