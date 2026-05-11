@@ -9,21 +9,26 @@ body[data-mobile="true"] {
   min-width: auto !important;
   background: var(--m-paper, #ffffff);
   color: var(--m-ink, #0b1d40);
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: none;
 }
 
 html {
   width: 100%;
-  height: 100%;
   min-height: 100%;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--m-paper, #ffffff);
 }
 
-body[data-mobile="true"] .m-shell {
+.m-shell {
   /* tokens */
   --m-ink: #0b1d40;
   --m-text: #1f2937;
@@ -40,11 +45,11 @@ body[data-mobile="true"] .m-shell {
   --m-shadow: 0 18px 48px rgba(15, 23, 42, .16);
 
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  display: block;
+  height: auto;
   min-height: 100vh;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow: visible;
   overscroll-behavior: none;
   background: var(--m-paper);
   color: var(--m-ink);
@@ -83,8 +88,7 @@ body[data-mobile="true"] .m-shell {
 /* ── 기본 화면 컨테이너 ────────────────────────────────────────── */
 .view {
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  height: auto;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -104,6 +108,7 @@ body[data-mobile="true"] .m-shell {
 .scroll {
   flex: 0 0 auto;
   min-height: 0;
+  width: 100%;
   overflow: visible;
   -webkit-overflow-scrolling: auto;
   overscroll-behavior: none;
@@ -222,13 +227,16 @@ body[data-mobile="true"] .m-shell {
   left: 0;
   right: 0;
   bottom: 0;
+  min-height: 84px;
   z-index: 20;
   padding: 16px 22px max(28px, env(safe-area-inset-bottom));
-  background: transparent;
+  background: #fff;
   border-top: 1px solid var(--m-line);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  color: var(--m-ink);
+  visibility: visible;
 }
 
 .secondary {
@@ -261,10 +269,12 @@ body[data-mobile="true"] .m-shell {
   font-size: 12px;
   color: #555;
   font-weight: 800;
+  visibility: visible;
 }
 
 .input-box {
   height: 50px;
+  min-height: 50px;
   border: 1px solid var(--m-line);
   border-radius: 12px;
   background: #fff;
@@ -275,6 +285,8 @@ body[data-mobile="true"] .m-shell {
   color: var(--m-ink);
   font-size: 14px;
   width: 100%;
+  visibility: visible;
+  opacity: 1;
 }
 
 .input-box.focus {
@@ -295,14 +307,17 @@ body[data-mobile="true"] .m-shell {
   background: transparent;
   color: inherit;
   height: 100%;
-  min-height: 0;
+  min-height: 24px;
   font-size: 14px;
   opacity: 1;
+  visibility: visible;
   -webkit-text-fill-color: currentColor;
 }
 
 .input-box input::placeholder {
   color: var(--m-soft);
+  opacity: 1;
+  -webkit-text-fill-color: var(--m-soft);
 }
 
 .tabs {
@@ -711,12 +726,17 @@ body[data-mobile="true"] .m-shell {
     radial-gradient(circle at 8% 0%, rgba(58, 96, 196, .56), transparent 45%),
     linear-gradient(180deg, #07142f 0%, #080d1d 100%);
   color: #fff;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .intro {
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 24% 8%, rgba(79, 124, 255, .55) 0 8%, rgba(79, 124, 255, 0) 34%),
     radial-gradient(circle at 92% 22%, rgba(157, 107, 255, .38) 0 7%, rgba(157, 107, 255, 0) 34%),
@@ -892,6 +912,8 @@ body[data-mobile="true"] .m-shell {
 .intro-copy {
   margin-top: auto;
   width: 100%;
+  color: #fff;
+  visibility: visible;
   padding-bottom: max(34px, env(safe-area-inset-bottom));
 }
 
@@ -1468,6 +1490,129 @@ body[data-mobile="true"] .m-shell {
   font-weight: 400;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.inactive-qr-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+}
+
+.inactive-qr-dim {
+  position: fixed;
+  inset: 0 0 75px;
+  border: 0;
+  background: rgba(0, 0, 0, .5);
+  opacity: .7;
+  pointer-events: auto;
+}
+
+.inactive-qr-notice,
+.inactive-qr-menu {
+  position: fixed;
+  left: 27px;
+  right: 28px;
+  width: auto;
+  pointer-events: auto;
+}
+
+.inactive-qr-notice {
+  bottom: 274px;
+  min-height: 65px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 17px;
+  border: 1px solid #eef2ff;
+  border-radius: 14px;
+  background: #fdfdff;
+}
+
+.inactive-qr-notice-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+}
+
+.inactive-qr-notice-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+.inactive-qr-notice strong {
+  display: block;
+  color: var(--m-ink);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.inactive-qr-notice p {
+  margin: 3px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 16.8px;
+}
+
+.inactive-qr-menu {
+  bottom: 109px;
+  height: 152px;
+  overflow: hidden;
+  border: 1px solid var(--m-line);
+  border-radius: 24px;
+  background: #fff;
+}
+
+.inactive-qr-menu button {
+  width: 100%;
+  height: 76px;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 16px 20px 16px 30px;
+  color: var(--m-ink);
+  text-align: left;
+  font-family: inherit;
+}
+
+.inactive-qr-menu button + button {
+  border-top: 0;
+}
+
+.inactive-qr-menu svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: #111;
+}
+
+.inactive-qr-menu span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.inactive-qr-menu strong {
+  color: var(--m-ink);
+  font-size: 15px;
+  line-height: 18px;
+  font-weight: 950;
+}
+
+.inactive-qr-menu small {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .wallet-sheet-layer {
@@ -2865,10 +3010,30 @@ body[data-mobile="true"] .m-shell {
   color: var(--m-blue);
 }
 
+.fab-slot {
+  height: 71px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  color: var(--m-soft);
+  font-size: 10.4px;
+  line-height: 12px;
+  font-weight: 800;
+  text-align: center;
+  position: relative;
+  z-index: 50;
+}
+
+.fab-slot > span {
+  margin-top: -1px;
+}
+
 .fab {
   width: 56px;
   height: 56px;
-  margin-top: -22px;
+  margin-top: -36px;
   border-radius: 50%;
   border: 0;
   color: #fff;
@@ -2877,6 +3042,8 @@ body[data-mobile="true"] .m-shell {
   display: grid;
   place-items: center;
   transition: transform .12s, box-shadow .12s;
+  padding: 0;
+  font-family: inherit;
 }
 
 .fab:active {
@@ -2892,6 +3059,9 @@ body[data-mobile="true"] .m-shell {
 
 /* ── Signup steps ────────────────────────────────────────────── */
 .signup-view {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
     #fff;
@@ -2932,7 +3102,6 @@ body[data-mobile="true"] .m-shell {
   flex: 1 0 auto;
   display: block;
   width: 100%;
-  min-height: 0;
   min-height: calc(100vh - 218px);
   min-height: calc(100dvh - 218px);
   padding: 17px 22px 111px;
@@ -2956,11 +3125,14 @@ body[data-mobile="true"] .m-shell {
 .signup-view .m-field-label {
   margin-top: 17px;
   margin-bottom: 5px;
+  color: #555;
+  font-weight: 800;
 }
 
 .signup-view .input-box {
   height: 50px;
   min-height: 50px;
+  border: 1px solid var(--m-line);
   border-radius: 14px;
   padding: 0 15px;
   background: #fff;
