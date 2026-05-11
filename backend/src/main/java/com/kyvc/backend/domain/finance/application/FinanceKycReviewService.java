@@ -8,6 +8,7 @@ import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
+import com.kyvc.backend.domain.core.exception.CoreAiReviewException;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
@@ -23,6 +24,7 @@ import com.kyvc.backend.domain.finance.repository.FinanceKycQrRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
+import com.kyvc.backend.global.logging.LogEventLogger;
 import com.kyvc.backend.global.security.CustomUserDetails;
 import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
@@ -35,8 +37,10 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -65,6 +69,7 @@ public class FinanceKycReviewService {
     private final CoreAdapter coreAdapter;
     private final ObjectMapper objectMapper;
     private final AuditLogService auditLogService;
+    private final LogEventLogger logEventLogger;
 
     // 금융사 방문 KYC 제출 및 AI 심사
     public FinanceKycSubmitResponse submit(
@@ -114,12 +119,17 @@ public class FinanceKycReviewService {
             );
             return toSubmitResponse(savedApplication);
         } catch (ApiException exception) {
-            if (coreRequestId == null) {
+            if (coreRequestId == null || !isCoreAiReviewFailure(exception)) {
                 throw exception;
             }
             markCoreRequestFailure(coreRequestId, exception);
             kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
             KycApplication savedApplication = financeKycApplicationRepository.save(kycApplication);
+            logEventLogger.warn(
+                    "kyc.ai_review.fallback_manual_review",
+                    exception.getMessage(),
+                    createAiReviewFailureLogFields(savedApplication, coreRequestId, exception)
+            );
             saveAudit(
                     context.userId(),
                     savedApplication.getKycId(),
@@ -334,11 +344,52 @@ public class FinanceKycReviewService {
             String coreRequestId, // Core 요청 ID
             ApiException exception // Core 호출 예외
     ) {
-        if (ErrorCode.CORE_API_TIMEOUT == exception.getErrorCode()) {
-            coreRequestService.markTimeout(coreRequestId, exception.getMessage());
-            return;
+        coreRequestService.markFailed(coreRequestId, coreFailureReasonCode(exception));
+    }
+
+    private boolean isCoreAiReviewFailure(
+            ApiException exception // API 예외
+    ) {
+        if (exception instanceof CoreAiReviewException) {
+            return true;
         }
-        coreRequestService.markFailed(coreRequestId, exception.getMessage());
+        return ErrorCode.CORE_API_TIMEOUT == exception.getErrorCode()
+                || ErrorCode.CORE_AI_REVIEW_FAILED == exception.getErrorCode()
+                || ErrorCode.CORE_API_RESPONSE_INVALID == exception.getErrorCode()
+                || ErrorCode.CORE_API_CALL_FAILED == exception.getErrorCode();
+    }
+
+    private String coreFailureReasonCode(
+            ApiException exception // Core 호출 예외
+    ) {
+        if (exception instanceof CoreAiReviewException coreAiReviewException) {
+            return coreAiReviewException.failureReasonCode();
+        }
+        return exception.getErrorCode().getCode();
+    }
+
+    private Map<String, Object> createAiReviewFailureLogFields(
+            KycApplication kycApplication, // KYC 신청
+            String coreRequestId, // Core 요청 ID
+            ApiException exception // Core 호출 예외
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("kycId", kycApplication.getKycId());
+        fields.put("corporateId", kycApplication.getCorporateId());
+        fields.put("coreRequestId", coreRequestId);
+        fields.put("kycStatus", enumName(kycApplication.getKycStatus()));
+        fields.put("aiReviewStatus", enumName(kycApplication.getAiReviewStatus()));
+        fields.put("failureReason", coreFailureReasonCode(exception));
+        fields.put("exceptionClass", exception.getClass().getName());
+        if (exception instanceof CoreAiReviewException coreAiReviewException) {
+            fields.put("failureType", coreAiReviewException.getFailureType().name());
+            fields.put("statusCode", coreAiReviewException.getStatusCode());
+            fields.put("contentType", coreAiReviewException.getContentType());
+            fields.put("durationMs", coreAiReviewException.getDurationMs());
+            fields.put("responseBodySummary", coreAiReviewException.getResponseBodySummary());
+            fields.put("configuredAiReviewTimeoutSeconds", coreAiReviewException.getConfiguredAiReviewTimeoutSeconds());
+        }
+        return fields;
     }
 
     // 제출 응답 변환

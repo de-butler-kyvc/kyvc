@@ -6,6 +6,7 @@ import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
+import com.kyvc.backend.domain.core.exception.CoreAiReviewException;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.domain.CorporateAgent;
@@ -172,14 +173,14 @@ public class KycSubmissionService {
                     AI_REVIEW_COMPLETED_MESSAGE
             );
         } catch (ApiException exception) {
-            if (coreRequestId != null) {
+            if (coreRequestId != null && isCoreAiReviewFailure(exception)) {
                 markCoreRequestFailure(coreRequestId, exception);
                 kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
                 KycApplication savedApplication = kycApplicationRepository.save(kycApplication);
                 logEventLogger.warn(
-                        "core.call.failed",
+                        "kyc.ai_review.fallback_manual_review",
                         exception.getMessage(),
-                        createSubmitLogFields(kycApplication, coreRequestId)
+                        createAiReviewFailureLogFields(savedApplication, coreRequestId, exception)
                 );
                 return new KycSubmitResponse(
                         savedApplication.getKycId(),
@@ -534,11 +535,47 @@ public class KycSubmissionService {
             String coreRequestId, // Core 요청 ID
             ApiException exception // Core 호출 예외
     ) {
-        if (ErrorCode.CORE_API_TIMEOUT == exception.getErrorCode()) {
-            coreRequestService.markTimeout(coreRequestId, exception.getMessage());
-            return;
+        coreRequestService.markFailed(coreRequestId, coreFailureReasonCode(exception));
+    }
+
+    private boolean isCoreAiReviewFailure(
+            ApiException exception // API 예외
+    ) {
+        if (exception instanceof CoreAiReviewException) {
+            return true;
         }
-        coreRequestService.markFailed(coreRequestId, exception.getMessage());
+        return ErrorCode.CORE_API_TIMEOUT == exception.getErrorCode()
+                || ErrorCode.CORE_AI_REVIEW_FAILED == exception.getErrorCode()
+                || ErrorCode.CORE_API_RESPONSE_INVALID == exception.getErrorCode()
+                || ErrorCode.CORE_API_CALL_FAILED == exception.getErrorCode();
+    }
+
+    private String coreFailureReasonCode(
+            ApiException exception // Core 호출 예외
+    ) {
+        if (exception instanceof CoreAiReviewException coreAiReviewException) {
+            return coreAiReviewException.failureReasonCode();
+        }
+        return exception.getErrorCode().getCode();
+    }
+
+    private Map<String, Object> createAiReviewFailureLogFields(
+            KycApplication kycApplication, // KYC 엔티티
+            String coreRequestId, // Core 요청 ID
+            ApiException exception // Core 호출 예외
+    ) {
+        Map<String, Object> fields = createSubmitLogFields(kycApplication, coreRequestId);
+        fields.put("failureReason", coreFailureReasonCode(exception));
+        fields.put("exceptionClass", exception.getClass().getName());
+        if (exception instanceof CoreAiReviewException coreAiReviewException) {
+            fields.put("failureType", coreAiReviewException.getFailureType().name());
+            fields.put("statusCode", coreAiReviewException.getStatusCode());
+            fields.put("contentType", coreAiReviewException.getContentType());
+            fields.put("durationMs", coreAiReviewException.getDurationMs());
+            fields.put("responseBodySummary", coreAiReviewException.getResponseBodySummary());
+            fields.put("configuredAiReviewTimeoutSeconds", coreAiReviewException.getConfiguredAiReviewTimeoutSeconds());
+        }
+        return fields;
     }
 
     // 다음 행동 코드 결정
