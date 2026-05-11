@@ -64,6 +64,7 @@ export default function MobileHomePage() {
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
+  const [inactiveQrOpen, setInactiveQrOpen] = useState(false);
 
   // 백엔드 API: 발급된 VC 목록
   useEffect(() => {
@@ -170,6 +171,7 @@ export default function MobileHomePage() {
     : walletInfo?.did
       ? "지갑 활성화됨"
       : "지갑 활성화 필요";
+  const walletActive = Boolean(accountShort || walletInfo?.did);
   const balanceKrw = visible.length > 0 ? "₩ 123,000" : "₩ 0";
 
   return (
@@ -204,7 +206,7 @@ export default function MobileHomePage() {
               type="button"
               className={`wallet-did-copy${accountShort ? "" : " needs-wallet"}`}
               onClick={() => {
-                if (accountShort || walletInfo?.did) {
+                if (walletActive) {
                   router.push("/m/did/register");
                 } else {
                   setWalletSheetOpen(true);
@@ -269,11 +271,61 @@ export default function MobileHomePage() {
           </section>
         </div>
       </div>
-      <MBottomNav active="home" />
+      <MBottomNav
+        active="home"
+        onQrClick={() => {
+          if (walletActive) {
+            router.push("/m/vp/scan");
+            return;
+          }
+          setInactiveQrOpen(true);
+        }}
+      />
+      {inactiveQrOpen ? (
+        <InactiveQrMenu onClose={() => setInactiveQrOpen(false)} />
+      ) : null}
       {walletSheetOpen ? (
         <WalletActivationSheet onClose={() => setWalletSheetOpen(false)} />
       ) : null}
     </section>
+  );
+}
+
+function InactiveQrMenu({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="inactive-qr-layer" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        className="inactive-qr-dim"
+        aria-label="QR 메뉴 닫기"
+        onClick={onClose}
+      />
+      <section className="inactive-qr-notice" aria-live="polite">
+        <span className="inactive-qr-notice-icon">
+          <MIcon.help />
+        </span>
+        <div>
+          <strong>안내</strong>
+          <p>계정 활성화를 완료해주세요.</p>
+        </div>
+      </section>
+      <section className="inactive-qr-menu" aria-label="비활성화된 QR 메뉴">
+        <button type="button" aria-disabled="true">
+          <MIcon.lockSlash />
+          <span>
+            <strong>증명서 발급</strong>
+            <small>법인 KYC 증명서를 발급받아 지갑에 저장</small>
+          </span>
+        </button>
+        <button type="button" aria-disabled="true">
+          <MIcon.lockSlash />
+          <span>
+            <strong>증명서 제출</strong>
+            <small>기관 QR을 스캔하여 증명서 제출</small>
+          </span>
+        </button>
+      </section>
+    </div>
   );
 }
 

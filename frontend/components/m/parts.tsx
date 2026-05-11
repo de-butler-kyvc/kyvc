@@ -74,18 +74,30 @@ export function MTopBar({ title, back, logo, right, glass }: TopBarProps) {
 
 type BottomNavProps = {
   active?: "home" | "notifications" | "settings" | "transactions";
+  onQrClick?: () => void;
 };
 
-export function MBottomNav({ active }: BottomNavProps) {
+export function MBottomNav({ active, onQrClick }: BottomNavProps) {
+  const qrControl = onQrClick ? (
+    <button type="button" className="fab" aria-label="QR 스캔" onClick={onQrClick}>
+      <MIcon.qr />
+    </button>
+  ) : (
+    <Link href="/m/vp/scan" className="fab" aria-label="QR 스캔">
+      <MIcon.qr />
+    </Link>
+  );
+
   return (
     <nav className="bottom-nav">
       <Link href="/m/home" className={`nav-btn${active === "home" ? " active" : ""}`}>
         <MIcon.wallet />
         <span>지갑</span>
       </Link>
-      <Link href="/m/vp/scan" className="fab" aria-label="QR 스캔">
-        <MIcon.qr />
-      </Link>
+      <div className="fab-slot">
+        {qrControl}
+        <span>QR</span>
+      </div>
       <Link
         href="/m/transactions"
         className={`nav-btn${active === "transactions" ? " active" : ""}`}
