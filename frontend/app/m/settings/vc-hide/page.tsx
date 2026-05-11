@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MToggle, MTopBar } from "@/components/m/parts";
-import { ApiError, credentials } from "@/lib/api";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { nativeCredentialTitle } from "@/lib/m/credential-summaries";
 import { readHiddenCerts, toggleHiddenCert } from "@/lib/m/data";
@@ -24,35 +23,28 @@ export default function MobileSettingsVcHidePage() {
     let cancelled = false;
     (async () => {
       try {
-        if (isBridgeAvailable()) {
-          const list = await bridge.getCredentialSummaries();
-          if (cancelled) return;
-          setItems(
-            (list.credentials ?? []).map((c, i) => ({
-              title: nativeCredentialTitle(c),
-              id: c.credentialId || `native-credential-${i}`,
-            })),
-          );
+        if (!isBridgeAvailable()) {
+          if (!cancelled) {
+            setItems([]);
+            setError("증명서는 KYvC 앱 지갑에서 관리할 수 있습니다.");
+          }
           return;
         }
-        const list = await credentials.list();
+        const list = await bridge.getCredentialSummaries();
         if (cancelled) return;
         setItems(
-          list.credentials.map((c) => ({
-            title: c.credentialTypeCode ?? `VC #${c.credentialId}`,
-            id: String(c.credentialId),
+          (list.credentials ?? []).map((c, i) => ({
+            title: nativeCredentialTitle(c),
+            id: c.credentialId || `native-credential-${i}`,
           })),
         );
+        setError(null);
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError && e.status === 401) {
-          router.replace("/m/login");
-          return;
-        }
         setError(
-          e instanceof ApiError
-            ? `VC 목록 조회 실패: ${e.message}`
-            : "VC 목록 조회 중 오류가 발생했습니다.",
+          e instanceof Error
+            ? `지갑 증명서 조회 실패: ${e.message}`
+            : "지갑 증명서 조회 중 오류가 발생했습니다.",
         );
       } finally {
         if (!cancelled) setLoading(false);

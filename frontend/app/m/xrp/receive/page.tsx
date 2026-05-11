@@ -7,25 +7,35 @@ import { useEffect, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
-
-const FALLBACK_ADDRESS = "rD4cBVqm7M3xK9pLnE2tUwYzJsQ8xKq";
+import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 
 export default function MobileXrpReceivePage() {
   const router = useRouter();
-  const [address, setAddress] = useState(FALLBACK_ADDRESS);
+  const [address, setAddress] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isBridgeAvailable()) return;
-    bridge
-      .getWalletDepositInfo()
-      .then((r) => {
+    if (!isBridgeAvailable()) {
+      setError("KYvC 앱에서 지갑 주소를 확인할 수 있습니다.");
+      return;
+    }
+    (async () => {
+      try {
+        await ensureMobileWallet();
+        const r = await bridge.getWalletDepositInfo();
         const addr =
           (r.receiveAddress as string | undefined) ??
           (r.account as string | undefined);
-        if (r.ok && addr) setAddress(addr);
-      })
-      .catch(() => {});
+        if (r.ok && addr) {
+          setAddress(addr);
+          return;
+        }
+        setError(r.error ?? "입금 주소를 가져올 수 없습니다.");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "입금 주소 조회에 실패했습니다.");
+      }
+    })();
   }, []);
 
   const onCopy = async () => {
@@ -41,7 +51,7 @@ export default function MobileXrpReceivePage() {
         /* browser fallback */
       }
     }
-    if (navigator.clipboard) await navigator.clipboard.writeText(address);
+    if (address && navigator.clipboard) await navigator.clipboard.writeText(address);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
@@ -82,20 +92,28 @@ export default function MobileXrpReceivePage() {
         <div className="xrp-address-card">
           <h2>내 XRP 주소</h2>
           <div className="xrp-address-qr" aria-label="XRP 주소 QR">
-            <QRCodeSVG
-              value={address}
-              size={148}
-              bgColor="#ffffff"
-              fgColor="#07111f"
-              level="M"
-              marginSize={2}
-            />
+            {address ? (
+              <QRCodeSVG
+                value={address}
+                size={148}
+                bgColor="#ffffff"
+                fgColor="#07111f"
+                level="M"
+                marginSize={2}
+              />
+            ) : null}
           </div>
-          <p>{address}</p>
-          <button type="button" className="copy-pill" onClick={onCopy}>
+          <p>{address ?? "주소 확인 중"}</p>
+          <button
+            type="button"
+            className="copy-pill"
+            onClick={onCopy}
+            disabled={!address}
+          >
             <MIcon.link /> {copied ? "복사 완료" : "주소 복사"}
           </button>
         </div>
+        {error ? <p className="m-error">{error}</p> : null}
       </div>
     </section>
   );

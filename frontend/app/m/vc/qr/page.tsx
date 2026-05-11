@@ -6,12 +6,11 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { MTopBar } from "@/components/m/parts";
 import {
-  ApiError,
-  credentials,
-  type CredentialDetailResponse,
-  type CredentialOfferResponse,
-} from "@/lib/api";
-import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+  bridge,
+  isBridgeAvailable,
+  type NativeCredentialSummary,
+} from "@/lib/m/android-bridge";
+import { nativeCredentialTitle } from "@/lib/m/credential-summaries";
 
 type QrPayload = Record<string, unknown>;
 
@@ -26,30 +25,27 @@ function makeClientExpiresAt() {
 }
 
 function buildQrPayload(
-  detail: CredentialDetailResponse,
+  detail: NativeCredentialSummary,
   holderXrplAddress: string | null,
-  offer: CredentialOfferResponse | null,
   fallbackExpiresAt: string,
 ) {
-  const base =
-    offer?.qrPayload && typeof offer.qrPayload === "object"
-      ? { ...offer.qrPayload }
-      : { type: "KYVC_HOLDER_XRPL_ADDRESS" };
-
   return compactPayload({
-    ...base,
+    type: "KYVC_WALLET_CREDENTIAL",
     version: 1,
     source: "KYVC_MOBILE_WALLET",
     credentialId: detail.credentialId,
-    credentialExternalId: detail.credentialExternalId,
-    credentialTypeCode: detail.credentialTypeCode,
-    credentialStatusCode: detail.credentialStatusCode,
+    credentialType: detail.credentialType,
+    credentialKind: detail.credentialKind,
+    format: detail.format,
+    status: detail.status,
     issuerDid: detail.issuerDid,
+    issuerAccount: detail.issuerAccount,
     holderDid: detail.holderDid,
+    holderAccount: detail.holderAccount,
     holderXrplAddress,
     credentialExpiresAt: detail.expiresAt,
-    qrExpiresAt: offer?.expiresAt ?? fallbackExpiresAt,
-    expiresAt: offer?.expiresAt ?? fallbackExpiresAt,
+    qrExpiresAt: fallbackExpiresAt,
+    expiresAt: fallbackExpiresAt,
   });
 }
 
@@ -73,14 +69,9 @@ function shortenAddress(value: string | null) {
 function MobileVcQrInner() {
   const sp = useSearchParams();
   const id = sp.get("id");
-  const credentialId = (() => {
-    if (!id) return null;
-    const m = id.match(/^urn:cred:(\d+)$/);
-    return m ? Number(m[1]) : null;
-  })();
 
   const qrRef = useRef<HTMLDivElement>(null);
-  const [detail, setDetail] = useState<CredentialDetailResponse | null>(null);
+  const [detail, setDetail] = useState<NativeCredentialSummary | null>(null);
   const [holderXrplAddress, setHolderXrplAddress] = useState<string | null>(null);
   const [qrValue, setQrValue] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -95,56 +86,52 @@ function MobileVcQrInner() {
       setLoading(false);
       return;
     }
-    if (credentialId == null) {
-      setError("증명서 ID 형식이 잘못되었습니다.");
+    if (!isBridgeAvailable()) {
+      setError("증명서 QR은 KYvC 앱 지갑에서 생성할 수 있습니다.");
       setLoading(false);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const d = await credentials.detail(credentialId);
+        const summaries = await bridge.getCredentialSummaries();
+        const d = (summaries.credentials ?? []).find(
+          (credential) => credential.credentialId === id,
+        );
         if (cancelled) return;
+        if (!d) {
+          setError("지갑에서 해당 증명서를 찾을 수 없습니다.");
+          return;
+        }
         setDetail(d);
 
         let bridgeAddress: string | null = null;
-        if (isBridgeAvailable()) {
-          try {
-            const wallet = await bridge.getWalletInfo();
-            bridgeAddress = wallet.ok && wallet.account ? wallet.account : null;
-          } catch {
-            bridgeAddress = null;
-          }
+        try {
+          const wallet = await bridge.getWalletInfo();
+          bridgeAddress = wallet.ok && wallet.account ? wallet.account : null;
+        } catch {
+          bridgeAddress = null;
         }
 
-        let offer: CredentialOfferResponse | null = null;
-        if (d.kycId) {
-          try {
-            offer = await credentials.offerForKyc(d.kycId);
-          } catch {
-            offer = null;
-          }
-        }
-
-        const address = d.holderXrplAddress ?? bridgeAddress;
+        const address = d.holderAccount ?? bridgeAddress;
         const fallbackExpiresAt = makeClientExpiresAt();
-        const payload = buildQrPayload(d, address, offer, fallbackExpiresAt);
+        const payload = buildQrPayload(d, address, fallbackExpiresAt);
 
-        if (!address && !offer?.qrPayload) {
-          setError("QR 생성에 필요한 XRPL 주소 또는 Credential Offer를 찾을 수 없습니다.");
+        if (!address) {
+          setError("QR 생성에 필요한 XRPL 주소를 찾을 수 없습니다.");
           return;
         }
 
         if (cancelled) return;
         setHolderXrplAddress(address);
-        setExpiresAt(offer?.expiresAt ?? fallbackExpiresAt);
+        setExpiresAt(fallbackExpiresAt);
         setQrValue(JSON.stringify(payload));
       } catch (e) {
         if (cancelled) return;
         setError(
-          e instanceof ApiError
-            ? `VC 조회 실패: ${e.message}`
-            : "VC 조회 중 오류가 발생했습니다.",
+          e instanceof Error
+            ? `지갑 증명서 조회 실패: ${e.message}`
+            : "지갑 증명서 조회 중 오류가 발생했습니다.",
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -153,7 +140,7 @@ function MobileVcQrInner() {
     return () => {
       cancelled = true;
     };
-  }, [id, credentialId]);
+  }, [id]);
 
   useEffect(() => {
     if (!expiresAt) return;
@@ -161,7 +148,7 @@ function MobileVcQrInner() {
     return () => window.clearInterval(t);
   }, [expiresAt]);
 
-  const title = detail?.credentialTypeCode ?? "법인 증명서";
+  const title = detail ? nativeCredentialTitle(detail) : "법인 증명서";
   const remainingText = useMemo(() => {
     void tick;
     return formatRemaining(expiresAt);
@@ -195,7 +182,7 @@ function MobileVcQrInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kyvc-${credentialId ?? "credential"}-qr.svg`;
+    a.download = `kyvc-${id ?? "credential"}-qr.svg`;
     a.click();
     URL.revokeObjectURL(url);
   };

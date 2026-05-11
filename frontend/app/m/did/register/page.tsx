@@ -8,23 +8,32 @@ import { MTopBar } from "@/components/m/parts";
 import {
   bridge,
   isBridgeAvailable,
+  type WalletAssetsResult,
   type WalletInfo,
 } from "@/lib/m/android-bridge";
+import {
+  ensureMobileWallet,
+  formatXrp,
+  readXrpBalance,
+} from "@/lib/m/wallet-bridge";
 
 export default function MobileDidRegisterPage() {
   const router = useRouter();
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [walletAssets, setWalletAssets] = useState<WalletAssetsResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isBridgeAvailable()) return;
-    bridge
-      .getWalletInfo()
-      .then((r) => {
-        if (r.ok) setWalletInfo(r);
+    ensureMobileWallet()
+      .then((state) => {
+        setWalletInfo(state.wallet);
+        setWalletAssets(state.assets);
       })
-      .catch(() => {});
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "지갑 상태 확인에 실패했습니다.");
+      });
   }, []);
 
   const onRegister = async () => {
@@ -48,9 +57,8 @@ export default function MobileDidRegisterPage() {
     }
   };
 
-  const currentBalance =
-    (walletInfo as (WalletInfo & { xrpBalance?: string | number }) | null)
-      ?.xrpBalance ?? "2.48";
+  const currentBalance = formatXrp(readXrpBalance(walletAssets));
+  const depositRequired = Boolean(walletAssets?.depositRequired);
 
   return (
     <section className="view did-register-view">
@@ -69,7 +77,7 @@ export default function MobileDidRegisterPage() {
         <dl className="did-cost-card">
           <div>
             <dt>현재 잔액</dt>
-            <dd>{currentBalance} XRP</dd>
+            <dd>{currentBalance}</dd>
           </div>
           <div>
             <dt>네트워크 수수료</dt>
@@ -102,7 +110,7 @@ export default function MobileDidRegisterPage() {
           type="button"
           className="primary"
           onClick={onRegister}
-          disabled={busy}
+          disabled={busy || !walletInfo || depositRequired}
         >
           {busy ? "등록 중..." : "DID 등록하기"}
         </button>

@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { MCertCard, MTopBar, type CertItem } from "@/components/m/parts";
-import { ApiError, credentials } from "@/lib/api";
 import {
   bridge,
   isBridgeAvailable,
   useBridgeAction,
   type NativeCredentialSummary,
 } from "@/lib/m/android-bridge";
-import { apiSummaryToCert, nativeSummaryToCert } from "@/lib/m/credential-summaries";
+import { nativeSummaryToCert } from "@/lib/m/credential-summaries";
 import { readHiddenCerts } from "@/lib/m/data";
 
 export default function MobileVcListPage() {
@@ -22,32 +21,29 @@ export default function MobileVcListPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Android WebView에서는 네이티브 지갑의 credential summaries를 사용한다.
+  // 증명서 목록은 네이티브 지갑의 credential summaries만 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
     let cancelled = false;
     (async () => {
       try {
-        if (isBridgeAvailable()) {
-          const list = await bridge.getCredentialSummaries();
-          if (cancelled) return;
-          setCerts((list.credentials ?? []).map(nativeSummaryToCert));
-          setError(null);
+        if (!isBridgeAvailable()) {
+          if (!cancelled) {
+            setCerts([]);
+            setError("증명서는 KYvC 앱 지갑에서 확인할 수 있습니다.");
+          }
           return;
         }
-        const list = await credentials.list();
+        const list = await bridge.getCredentialSummaries();
         if (cancelled) return;
-        setCerts(list.credentials.map(apiSummaryToCert));
+        setCerts((list.credentials ?? []).map(nativeSummaryToCert));
+        setError(null);
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError && e.status === 401) {
-          router.replace("/m/login");
-          return;
-        }
         setError(
-          e instanceof ApiError
-            ? `VC 목록 조회 실패: ${e.message}`
-            : "VC 목록 조회 중 네트워크 오류가 발생했습니다.",
+          e instanceof Error
+            ? `지갑 증명서 조회 실패: ${e.message}`
+            : "지갑 증명서 조회 중 오류가 발생했습니다.",
         );
       } finally {
         if (!cancelled) setLoading(false);

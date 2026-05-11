@@ -11,6 +11,7 @@ import {
   isBridgeAvailable,
   onBridgeAction,
 } from "@/lib/m/android-bridge";
+import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 
 type Step = "idle" | "requesting" | "saving" | "submitting" | "checking";
 
@@ -103,10 +104,13 @@ export default function MobileVcIssuePage() {
       return;
     }
     try {
-      // 1) 활성 지갑 확인 (선행조건)
-      const wallet = await bridge.getWalletInfo();
-      if (!wallet.ok) {
-        throw new Error(wallet.error ?? "활성 지갑을 확인할 수 없습니다.");
+      // 1) 활성 지갑 확인/생성 (선행조건)
+      const { wallet, assets } = await ensureMobileWallet();
+      if (!wallet?.account) {
+        throw new Error("활성 지갑을 확인할 수 없습니다. 다시 로그인해 주세요.");
+      }
+      if (assets?.depositRequired) {
+        throw new Error("XRPL 계정 활성화 후 증명서를 발급할 수 있습니다.");
       }
       // 2) Issuer 발급 요청 (응답은 ISSUER_CREDENTIAL_RECEIVED 이벤트로)
       startedRef.current = true;

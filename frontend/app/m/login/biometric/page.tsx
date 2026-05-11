@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 
 export default function MobileBiometricPage() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function MobileBiometricPage() {
     try {
       const r = await bridge.requestNativeAuth("biometric", "wallet-login");
       if (r.ok && r.authenticated) {
+        await ensureMobileWallet().catch(() => null);
         router.replace("/m/home");
         return;
       }
