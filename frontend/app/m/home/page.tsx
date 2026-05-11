@@ -14,24 +14,18 @@ import {
   ApiError,
   corporate,
   credentials,
-  type CredentialSummary,
 } from "@/lib/api";
 import {
   bridge,
   isBridgeAvailable,
   onBridgeAction,
   useBridgeAction,
+  type NativeCredentialSummary,
   type WalletInfo,
 } from "@/lib/m/android-bridge";
+import { apiSummaryToCert, nativeSummaryToCert } from "@/lib/m/credential-summaries";
 import { readHiddenCerts } from "@/lib/m/data";
 import { mSession } from "@/lib/m/session";
-
-const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "유효",
-  ISSUED: "유효",
-  REVOKED: "취소됨",
-  EXPIRED: "만료",
-};
 
 const PALETTES = [
   "linear-gradient(135deg,#111827 0%,#183b8f 48%,#7c3aed 100%)",
@@ -47,29 +41,6 @@ const TEST_CREDENTIAL: CertItem = {
   date: "2026.05.03",
   expiresAt: "2026.05.07",
   gradient: PALETTES[0]!,
-};
-
-function summaryToCert(s: CredentialSummary, i: number): CertItem {
-  return {
-    issuer: s.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-    title: s.credentialTypeCode ?? "법인 증명서",
-    status: STATUS_LABEL[s.credentialStatusCode ?? ""] ?? "발급됨",
-    id: `urn:cred:${s.credentialId}`,
-    date: (s.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-    expiresAt: s.expiresAt
-      ? s.expiresAt.slice(0, 10).replaceAll("-", ".")
-      : undefined,
-    gradient: PALETTES[i % PALETTES.length]!,
-  };
-}
-
-type BridgeCred = {
-  credentialId?: string;
-  issuerAccount?: string;
-  holderAccount?: string;
-  credentialType?: string;
-  acceptedAt?: string;
-  active?: boolean;
 };
 
 type HomeTestState =
@@ -96,15 +67,22 @@ export default function MobileHomePage() {
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
 
-  // 백엔드 API: 발급된 VC 목록
+  // 증명서 목록: Android WebView에서는 네이티브 지갑 브릿지를 우선 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
     let cancelled = false;
     (async () => {
       try {
+        if (isBridgeAvailable()) {
+          const list = await bridge.getCredentialSummaries();
+          if (cancelled) return;
+          setCerts((list.credentials ?? []).map(nativeSummaryToCert));
+          setApiError(null);
+          return;
+        }
         const list = await credentials.list();
         if (cancelled) return;
-        setCerts(list.credentials.map(summaryToCert));
+        setCerts(list.credentials.map(apiSummaryToCert));
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ApiError && e.status === 401) {
@@ -134,6 +112,7 @@ export default function MobileHomePage() {
     let cancelled = false;
     (async () => {
       try {
+        if (mSession.readCorporateProfile()) return;
         const profile = await corporate.me();
         if (cancelled) return;
         mSession.writeCorporateProfile({
@@ -167,7 +146,7 @@ export default function MobileHomePage() {
       }
     })();
     bridge.listWallets().catch(() => {});
-    bridge.listCredentials().catch(() => {});
+    bridge.getCredentialSummaries().catch(() => {});
   }, []);
 
   // 다른 화면에서 활성 지갑이 바뀌어도 반영
@@ -191,26 +170,16 @@ export default function MobileHomePage() {
     }
   });
 
-  useBridgeAction("LIST_CREDENTIALS", (r) => {
+  useBridgeAction("GET_CREDENTIAL_SUMMARIES", (r) => {
     if (!r.ok) return;
-    const list = (r.credentials as BridgeCred[] | undefined) ?? [];
-    if (list.length === 0) return;
-    setCerts(
-      list.map((c, i) => ({
-        issuer: c.issuerAccount ?? "Issuer",
-        title: c.credentialType ?? "법인 증명서",
-        status: c.active ? "유효" : "비활성",
-        id: c.credentialId ?? `bridge-${i}`,
-        date: (c.acceptedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-        gradient: PALETTES[i % PALETTES.length]!,
-      })),
-    );
+    const list = (r.credentials as NativeCredentialSummary[] | undefined) ?? [];
+    setCerts(list.map(nativeSummaryToCert));
   });
 
   useEffect(() => {
     const off = onBridgeAction("ISSUER_CREDENTIAL_RECEIVED", (r) => {
       if (r.ok) {
-        bridge.listCredentials().catch(() => {});
+        bridge.getCredentialSummaries().catch(() => {});
       }
     });
     return off;

@@ -14,7 +14,15 @@ import {
   credentials,
   type CredentialDetailResponse,
 } from "@/lib/api";
-import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import {
+  bridge,
+  isBridgeAvailable,
+  type NativeCredentialSummary,
+} from "@/lib/m/android-bridge";
+import {
+  nativeCredentialIssuer,
+  nativeSummaryToCert,
+} from "@/lib/m/credential-summaries";
 
 const STATUS_LABEL: Record<string, string> = {
   ACTIVE: "검증됨",
@@ -65,6 +73,7 @@ function MobileVcDetailInner() {
 
   const [cert, setCert] = useState<CertItem | null>(null);
   const [detail, setDetail] = useState<CredentialDetailResponse | null>(null);
+  const [nativeDetail, setNativeDetail] = useState<NativeCredentialSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<{
@@ -78,14 +87,27 @@ function MobileVcDetailInner() {
       setLoading(false);
       return;
     }
-    if (credentialId == null) {
-      setCert(FALLBACK_CERT);
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
     (async () => {
       try {
+        if (isBridgeAvailable()) {
+          const list = await bridge.getCredentialSummaries();
+          if (cancelled) return;
+          const found = (list.credentials ?? []).find(
+            (credential) => credential.credentialId === id,
+          );
+          if (found) {
+            setNativeDetail(found);
+            setCert(nativeSummaryToCert(found, 0));
+            setLoading(false);
+            return;
+          }
+        }
+        if (credentialId == null) {
+          setCert(FALLBACK_CERT);
+          setLoading(false);
+          return;
+        }
         const d = await credentials.detail(credentialId);
         if (cancelled) return;
         setDetail(d);
@@ -112,13 +134,24 @@ function MobileVcDetailInner() {
 
   // 브리지로 XRPL 상태 조회 (있을 때만)
   useEffect(() => {
-    if (!detail || !isBridgeAvailable()) return;
+    if ((!detail && !nativeDetail) || !isBridgeAvailable()) return;
     (async () => {
       try {
         const r = await bridge.checkCredentialStatus({
-          credentialId: detail.credentialExternalId ?? `${detail.credentialId}`,
-          ...(detail.holderXrplAddress
-            ? { holderAccount: detail.holderXrplAddress }
+          credentialId:
+            nativeDetail?.credentialId ??
+            detail?.credentialExternalId ??
+            `${detail?.credentialId ?? ""}`,
+          ...(nativeDetail?.holderAccount
+            ? { holderAccount: nativeDetail.holderAccount }
+            : detail?.holderXrplAddress
+              ? { holderAccount: detail.holderXrplAddress }
+            : {}),
+          ...(nativeDetail?.issuerAccount
+            ? { issuerAccount: nativeDetail.issuerAccount }
+            : {}),
+          ...(nativeDetail?.credentialType
+            ? { credentialType: nativeDetail.credentialType }
             : {}),
         });
         if (r.ok) {
@@ -128,7 +161,7 @@ function MobileVcDetailInner() {
         /* 무시 — 상태 영역에만 영향 */
       }
     })();
-  }, [detail]);
+  }, [detail, nativeDetail]);
 
   return (
     <section className="view wash vc-detail-view">
@@ -144,7 +177,7 @@ function MobileVcDetailInner() {
                 <div className="vc-detail-row-icon">발</div>
                 <div className="vc-detail-row-body">
                   <strong>발급기관</strong>
-                  <span>{cert.issuer}</span>
+                  <span>{nativeDetail ? nativeCredentialIssuer(nativeDetail) : cert.issuer}</span>
                 </div>
               </div>
               <div className="vc-detail-row">
@@ -155,9 +188,11 @@ function MobileVcDetailInner() {
                     {(detail?.issuedAt ?? cert.date)
                       .slice(0, 10)
                       .replaceAll("-", ".")}
-                    {detail?.expiresAt
-                      ? ` - ${detail.expiresAt.slice(0, 10).replaceAll("-", ".")}`
-                      : " - 2027.05.06"}
+                    {nativeDetail?.expiresAt
+                      ? ` - ${nativeDetail.expiresAt.slice(0, 10).replaceAll("-", ".")}`
+                      : detail?.expiresAt
+                        ? ` - ${detail.expiresAt.slice(0, 10).replaceAll("-", ".")}`
+                        : " - 2027.05.06"}
                   </span>
                 </div>
               </div>
@@ -168,7 +203,8 @@ function MobileVcDetailInner() {
                 <div className="vc-detail-row-body">
                   <strong>상태</strong>
                   <span>
-                    {status && !status.active ? "비활성 · 검증 불가" : "정상 · 검증 가능"}
+                    {nativeDetail?.statusLabel ??
+                      (status && !status.active ? "비활성 · 검증 불가" : "정상 · 검증 가능")}
                   </span>
                 </div>
               </div>

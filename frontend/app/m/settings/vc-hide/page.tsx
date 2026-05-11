@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MToggle, MTopBar } from "@/components/m/parts";
 import { ApiError, credentials } from "@/lib/api";
+import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { nativeCredentialTitle } from "@/lib/m/credential-summaries";
 import { readHiddenCerts, toggleHiddenCert } from "@/lib/m/data";
 
-type Item = { title: string; id: number };
+type Item = { title: string; id: string };
 
 export default function MobileSettingsVcHidePage() {
   const router = useRouter();
@@ -22,12 +24,23 @@ export default function MobileSettingsVcHidePage() {
     let cancelled = false;
     (async () => {
       try {
+        if (isBridgeAvailable()) {
+          const list = await bridge.getCredentialSummaries();
+          if (cancelled) return;
+          setItems(
+            (list.credentials ?? []).map((c, i) => ({
+              title: nativeCredentialTitle(c),
+              id: c.credentialId || `native-credential-${i}`,
+            })),
+          );
+          return;
+        }
         const list = await credentials.list();
         if (cancelled) return;
         setItems(
           list.credentials.map((c) => ({
             title: c.credentialTypeCode ?? `VC #${c.credentialId}`,
-            id: c.credentialId,
+            id: String(c.credentialId),
           })),
         );
       } catch (e) {

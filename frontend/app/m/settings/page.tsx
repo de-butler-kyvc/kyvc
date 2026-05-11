@@ -47,6 +47,7 @@ export default function MobileSettingsPage() {
     let cancelled = false;
     (async () => {
       try {
+        if (mSession.readCorporateProfile()) return;
         const res = await corporate.me();
         if (!cancelled) {
           setProfile(res);

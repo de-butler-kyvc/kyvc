@@ -11,10 +11,16 @@ import {
   mobileVp,
   type VpRequestResponse,
 } from "@/lib/api";
+import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import {
+  nativeCredentialIssuer,
+  nativeCredentialStatus,
+  nativeCredentialTitle,
+} from "@/lib/m/credential-summaries";
 import { mSession, type ScanResult } from "@/lib/m/session";
 
 type SubmitCredential = {
-  credentialId: number;
+  credentialId: string;
   title: string;
   issuer: string;
   status: string;
@@ -32,7 +38,7 @@ export default function MobileVpSubmitPage() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [request, setRequest] = useState<VpRequestResponse | null>(null);
   const [vcList, setVcList] = useState<SubmitCredential[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +56,7 @@ export default function MobileVpSubmitPage() {
           if (cancelled) return;
           setRequest(req);
           const list = eligible.credentials.map((c, i) => ({
-            credentialId: c.credentialId,
+            credentialId: String(c.credentialId),
             title: c.credentialTypeCode ?? "법인 증명서",
             issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
             status: "유효",
@@ -61,10 +67,25 @@ export default function MobileVpSubmitPage() {
           return;
         }
 
+        if (isBridgeAvailable()) {
+          const list = await bridge.getCredentialSummaries();
+          if (cancelled) return;
+          const mapped = (list.credentials ?? []).map((c, i) => ({
+            credentialId: c.credentialId,
+            title: nativeCredentialTitle(c),
+            issuer: nativeCredentialIssuer(c),
+            status: nativeCredentialStatus(c),
+            gradient: PALETTES[i % PALETTES.length]!,
+          }));
+          setVcList(mapped);
+          setSelected(new Set(mapped.map((c) => c.credentialId)));
+          return;
+        }
+
         const list = await credentials.list();
         if (cancelled) return;
         const mapped = list.credentials.map((c, i) => ({
-          credentialId: c.credentialId,
+          credentialId: String(c.credentialId),
           title: c.credentialTypeCode ?? "법인 증명서",
           issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
           status: c.credentialStatusCode === "REVOKED" ? "폐기" : "유효",
@@ -88,7 +109,7 @@ export default function MobileVpSubmitPage() {
     };
   }, []);
 
-  const toggle = (credentialId: number) =>
+  const toggle = (credentialId: string) =>
     setSelected((p) => {
       const n = new Set(p);
       if (n.has(credentialId)) n.delete(credentialId);
