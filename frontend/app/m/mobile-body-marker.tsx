@@ -39,7 +39,9 @@ export default function MobileBodyMarker() {
 
     const getScrollTarget = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return null;
-      return target.closest<HTMLElement>(".m-shell .view");
+      return target.closest<HTMLElement>(
+        ".m-shell .settings-container, .m-shell .signup-content, .m-shell .content.scroll, .m-shell .scroll, .m-shell .view",
+      );
     };
 
     const onTouchStart = (event: TouchEvent) => {
