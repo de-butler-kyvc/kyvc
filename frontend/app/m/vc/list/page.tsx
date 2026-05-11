@@ -9,22 +9,10 @@ import {
   bridge,
   isBridgeAvailable,
   useBridgeAction,
+  type NativeCredentialSummary,
 } from "@/lib/m/android-bridge";
+import { apiSummaryToCert, nativeSummaryToCert } from "@/lib/m/credential-summaries";
 import { readHiddenCerts } from "@/lib/m/data";
-
-const PALETTES = [
-  "linear-gradient(135deg,#111827 0%,#183b8f 48%,#7c3aed 100%)",
-  "linear-gradient(135deg,#052e2b 0%,#0f766e 48%,#2563eb 100%)",
-  "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
-];
-
-type BridgeCred = {
-  credentialId?: string;
-  issuerAccount?: string;
-  credentialType?: string;
-  acceptedAt?: string;
-  active?: boolean;
-};
 
 export default function MobileVcListPage() {
   const router = useRouter();
@@ -34,25 +22,22 @@ export default function MobileVcListPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // API 측 발급 이력
+  // Android WebView에서는 네이티브 지갑의 credential summaries를 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
     let cancelled = false;
     (async () => {
       try {
+        if (isBridgeAvailable()) {
+          const list = await bridge.getCredentialSummaries();
+          if (cancelled) return;
+          setCerts((list.credentials ?? []).map(nativeSummaryToCert));
+          setError(null);
+          return;
+        }
         const list = await credentials.list();
         if (cancelled) return;
-        setCerts(
-          list.credentials.map((c, i) => ({
-            issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-            title: c.credentialTypeCode ?? "법인 증명서",
-            status: "발급됨",
-            id: `urn:cred:${c.credentialId}`,
-            date:
-              (c.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-            gradient: PALETTES[i % PALETTES.length]!,
-          })),
-        );
+        setCerts(list.credentials.map(apiSummaryToCert));
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ApiError && e.status === 401) {
@@ -68,28 +53,15 @@ export default function MobileVcListPage() {
         if (!cancelled) setLoading(false);
       }
     })();
-    if (isBridgeAvailable()) {
-      bridge.listCredentials().catch(() => {});
-    }
     return () => {
       cancelled = true;
     };
   }, [router]);
 
-  useBridgeAction("LIST_CREDENTIALS", (r) => {
+  useBridgeAction("GET_CREDENTIAL_SUMMARIES", (r) => {
     if (!r.ok) return;
-    const list = (r.credentials as BridgeCred[] | undefined) ?? [];
-    if (!list.length) return;
-    setCerts(
-      list.map((c, i) => ({
-        issuer: c.issuerAccount ?? "Issuer",
-        title: c.credentialType ?? "법인 증명서",
-        status: c.active ? "활성" : "비활성",
-        id: c.credentialId ?? `bridge-${i}`,
-        date: (c.acceptedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-        gradient: PALETTES[i % PALETTES.length]!,
-      })),
-    );
+    const list = (r.credentials as NativeCredentialSummary[] | undefined) ?? [];
+    setCerts(list.map(nativeSummaryToCert));
   });
 
   useBridgeAction("REFRESH_CREDENTIAL_STATUSES", (r) => {
@@ -98,7 +70,7 @@ export default function MobileVcListPage() {
       setError(r.error ?? "상태 갱신에 실패했습니다.");
       return;
     }
-    if (isBridgeAvailable()) bridge.listCredentials().catch(() => {});
+    if (isBridgeAvailable()) bridge.getCredentialSummaries().catch(() => {});
   });
 
   const onRefresh = async () => {

@@ -52,6 +52,7 @@ const METHOD_TO_ACTION_OVERRIDE: Record<string, string> = {
   requestIssuerCredential: "ISSUER_CREDENTIAL_RECEIVED",
   submitPresentationToVerifier: "SUBMIT_TO_VERIFIER",
   refreshAllCredentialStatuses: "REFRESH_CREDENTIAL_STATUSES",
+  getCredentialSummaries: "GET_CREDENTIAL_SUMMARIES",
   listCredentials: "LIST_CREDENTIALS",
   submitToXRPL: "SUBMIT_TO_XRPL",
   getAuthStatus: "GET_AUTH_STATUS",
@@ -342,6 +343,35 @@ export type ListWalletsResult = BridgeResult & {
   wallets?: WalletItem[];
 };
 
+export type NativeCredentialStatus =
+  | "active"
+  | "issued"
+  | "inactive"
+  | "expired"
+  | "notYetValid"
+  | string;
+
+export type NativeCredentialSummary = {
+  credentialId: string;
+  status?: NativeCredentialStatus;
+  statusLabel?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  issuerDid?: string;
+  issuerAccount?: string;
+  holderDid?: string;
+  holderAccount?: string;
+  credentialType?: string;
+  credentialKind?: string;
+  format?: string;
+  accepted?: boolean;
+};
+
+export type CredentialSummariesResult = BridgeResult & {
+  count?: number;
+  credentials?: NativeCredentialSummary[];
+};
+
 export const bridge = {
   // 인증/세션
   getAuthStatus: () => callBridge<AuthStatus>("getAuthStatus", {}),
@@ -456,6 +486,8 @@ export const bridge = {
     >("checkCredentialStatus", params),
   refreshAllCredentialStatuses: () =>
     callBridge("refreshAllCredentialStatuses", {}),
+  getCredentialSummaries: () =>
+    callBridge<CredentialSummariesResult>("getCredentialSummaries", {}),
   submitToXRPL: (params: {
     credentialId: string;
     issuerAccount?: string;
