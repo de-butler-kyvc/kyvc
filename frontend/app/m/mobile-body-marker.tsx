@@ -26,13 +26,18 @@ export default function MobileBodyMarker() {
         const height = vv?.height ?? window.innerHeight;
         const offsetTop = vv?.offsetTop ?? 0;
         const bottomInset = Math.max(0, window.innerHeight - height - offsetTop);
+        const fallbackHeight = Math.max(
+          height,
+          document.documentElement.clientHeight,
+          window.innerHeight,
+        );
         document.documentElement.style.setProperty(
           "--m-visual-bottom",
           `${bottomInset}px`,
         );
         document.documentElement.style.setProperty(
           "--m-visual-height",
-          `${height}px`,
+          `${fallbackHeight}px`,
         );
       });
     };
