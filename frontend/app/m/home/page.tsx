@@ -222,6 +222,56 @@ export default function MobileHomePage() {
     document.body.removeChild(el);
   };
 
+  const startIssueQrScan = async () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 사용할 수 있는 기능입니다");
+      return;
+    }
+    try {
+      const r = await bridge.scanIssueQrCode();
+      if (!r.ok) {
+        showToast(r.error ?? "증명서 발급 QR 스캔에 실패했습니다.");
+        return;
+      }
+      mSession.writeScanResult({
+        qrData: r.qrData,
+        actionType: r.actionType ?? "VC_ISSUE",
+        endpoint: r.endpoint,
+        requestId: r.requestId,
+        receivedAt: Date.now(),
+      });
+      router.push("/m/vc/issue");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "증명서 발급 QR 스캔에 실패했습니다.");
+    }
+  };
+
+  const startPresentationQrScan = async () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 사용할 수 있는 기능입니다");
+      return;
+    }
+    try {
+      const r = await bridge.scanPresentationQrCode();
+      if (!r.ok) {
+        showToast(r.error ?? "증명서 제출 QR 스캔에 실패했습니다.");
+        return;
+      }
+      mSession.writeScanResult({
+        qrData: r.qrData,
+        actionType: r.actionType ?? "VP_REQUEST",
+        requestId: r.requestId,
+        challenge: r.challenge,
+        domain: r.domain,
+        endpoint: r.endpoint,
+        receivedAt: Date.now(),
+      });
+      router.push("/m/vp/submit");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "증명서 제출 QR 스캔에 실패했습니다.");
+    }
+  };
+
   const testWalletInfo =
     testState === "inactive"
       ? null
@@ -401,11 +451,10 @@ export default function MobileHomePage() {
                       return;
                     }
                     if (didRegistered && !hasCredential) {
-                      setQrNoticeKind("needCredential");
-                      setInactiveQrOpen(true);
+                      startIssueQrScan();
                       return;
                     }
-                    router.push("/m/vc/issue");
+                    startIssueQrScan();
                   }}
                 >
                   발급하기
@@ -430,6 +479,10 @@ export default function MobileHomePage() {
       <MBottomNav
         active="home"
         onQrClick={() => {
+          if (inactiveQrOpen) {
+            setInactiveQrOpen(false);
+            return;
+          }
           if (didRegistered && hasCredential) {
             setQrNoticeKind("credential");
             setInactiveQrOpen(true);
@@ -448,8 +501,14 @@ export default function MobileHomePage() {
       {inactiveQrOpen ? (
         <InactiveQrMenu
           kind={qrNoticeKind}
-          onIssue={() => router.push("/m/vc/issue")}
-          onSubmit={() => router.push("/m/vp/scan")}
+          onIssue={() => {
+            setInactiveQrOpen(false);
+            startIssueQrScan();
+          }}
+          onSubmit={() => {
+            setInactiveQrOpen(false);
+            startPresentationQrScan();
+          }}
           onClose={() => setInactiveQrOpen(false)}
         />
       ) : null}
@@ -501,6 +560,14 @@ function InactiveQrMenu({
         aria-label="QR 메뉴 닫기"
         onClick={onClose}
       />
+      <button
+        type="button"
+        className="inactive-qr-fab-close"
+        aria-label="QR 메뉴 닫기"
+        onClick={onClose}
+      >
+        <MIcon.qr />
+      </button>
       {menuReady ? null : (
         <section className="inactive-qr-notice" aria-live="polite">
           <span className="inactive-qr-notice-icon">

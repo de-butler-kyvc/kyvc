@@ -1586,6 +1586,35 @@ html {
   pointer-events: auto;
 }
 
+.inactive-qr-fab-close {
+  position: fixed;
+  left: 50%;
+  bottom: max(39px, calc(39px + env(safe-area-inset-bottom)));
+  z-index: 55;
+  width: 56px;
+  height: 56px;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--m-blue), var(--m-violet));
+  box-shadow: 0 10px 24px rgba(79, 124, 255, .44);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  pointer-events: auto;
+}
+
+.inactive-qr-fab-close:active {
+  transform: translateX(-50%) scale(.95);
+  box-shadow: 0 6px 14px rgba(79, 124, 255, .30);
+}
+
+.inactive-qr-fab-close svg {
+  width: 24px;
+  height: 24px;
+}
+
 .inactive-qr-notice,
 .inactive-qr-menu {
   position: fixed;
@@ -2659,42 +2688,6 @@ html {
   margin-top: 10px !important;
   color: #fff !important;
   font-weight: 800;
-}
-
-.scanner {
-  width: 232px;
-  height: 232px;
-  margin: 56px auto 28px;
-  border-radius: 28px;
-  border: 3px solid var(--m-blue);
-  position: relative;
-  background: transparent;
-}
-
-.scanner::before,
-.scanner::after {
-  content: "";
-  position: absolute;
-  left: 24px;
-  right: 24px;
-  height: 2px;
-  background: var(--m-blue);
-}
-
-.scanner::before { top: 82px; }
-.scanner::after { top: 142px; }
-
-.scan-view {
-  background:
-    radial-gradient(circle at 50% 30%, rgba(79, 124, 255, .24), transparent 34%),
-    #0b1020;
-  color: #fff;
-}
-
-.scan-view .m-topbar { color: #fff; }
-.scan-view .m-icon-btn {
-  background: rgba(255, 255, 255, .12);
-  color: #fff;
 }
 
 /* ── VC detail ───────────────────────────────────────────────── */
