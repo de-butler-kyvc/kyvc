@@ -214,6 +214,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
   const aiKo = detail ? toKo(AI_KO, detail.aiJudgment ?? detail.aiReviewResult ?? detail.aiReviewResultCode) : "-";
   const channelKo = detail ? toKo(CHANNEL_KO, detail.channel) : "-";
   const histories = detail?.recentHistories ?? [];
+  const canManualReview = (detail?.kycStatus ?? detail?.status) === "MANUAL_REVIEW";
 
   const corpFields = corporate
     ? [
@@ -267,13 +268,13 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                 ))}
                 <div>
-                  <p className="text-xs text-slate-400">상태</p>
+                  <p className="text-xs text-slate-400">KYC 상태</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 inline-block ${STATUS_BADGE[statusKo] ?? "bg-slate-100 text-slate-500"}`}>
                     {statusKo}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">AI 판단</p>
+                  <p className="text-xs text-slate-400">AI 판단(참고)</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 inline-block ${AI_BADGE[aiKo] ?? "bg-slate-100 text-slate-500"}`}>
                     {aiKo}
                   </span>
@@ -302,12 +303,19 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
 
           {/* 액션 버튼 */}
           <div className="space-y-2">
-            <Link
-              href={`/kyc/${id}/manual-review`}
-              className="block w-full bg-blue-600 text-white text-center py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              수동심사 처리 →
-            </Link>
+            {canManualReview ? (
+              <Link
+                href={`/kyc/${id}/manual-review`}
+                className="block w-full bg-blue-600 text-white text-center py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                수동심사 처리 →
+              </Link>
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs text-slate-500 space-y-1">
+                <p className="font-medium text-slate-600">수동심사는 현재 KYC 상태가 수동심사필요인 건만 진행할 수 있습니다.</p>
+                <p>현재 상태: <span className="font-semibold text-slate-700">{toKo(STATUS_KO, detail?.kycStatus ?? detail?.status)}</span> · 처리 조건: 수동심사필요</p>
+              </div>
+            )}
             <Link
               href={`/kyc/${id}/ai-result`}
               className="block w-full border border-slate-200 text-slate-600 text-center py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors"
@@ -558,7 +566,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
                   )}
                 </div>
 
-                {statusKo !== "정상" && (
+                {canManualReview && (
                   <div className="flex justify-end">
                     <Link href={`/kyc/${id}/manual-review`} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
                       수동심사 처리 →

@@ -88,8 +88,8 @@ export async function getCommonCodes(filters?: {
   enabled?: boolean;
 }): Promise<CommonCode[]> {
   const params = new URLSearchParams();
-  if (filters?.codeGroupId) params.set("codeGroupId", filters.codeGroupId);
-  if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
+  if (filters?.codeGroupId) params.set("codeGroup", filters.codeGroupId);
+  if (filters?.enabled !== undefined) params.set("enabledYn", filters.enabled ? "Y" : "N");
   const url = params.toString() ? `${CODE_BASE}?${params}` : CODE_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -183,7 +183,7 @@ export async function getCommonCodeGroups(filters?: {
   enabled?: boolean;
 }): Promise<CommonCodeGroup[]> {
   const params = new URLSearchParams();
-  if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
+  if (filters?.enabled !== undefined) params.set("enabledYn", filters.enabled ? "Y" : "N");
   const url = params.toString() ? `${GROUP_BASE}?${params}` : GROUP_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

@@ -112,18 +112,6 @@ return (
               🏢 SSO 로그인 (내부 인증 시스템)
             </button>
 
-            {/* TODO: 배포 전 제거 */}
-            <button
-              type="button"
-              onClick={() => {
-                document.cookie = "auth_token=dev_bypass; path=/; max-age=86400";
-                router.push("/dashboard");
-              }}
-              className="w-full border border-red-200 bg-red-50 text-red-500 py-2 rounded text-xs hover:bg-red-100 transition-colors"
-            >
-              [임시] 로그인 건너뛰기
-            </button>
-
           </form>
         </div>
 

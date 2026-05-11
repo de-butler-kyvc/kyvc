@@ -3,13 +3,20 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clearAuthSession } from "@/lib/auth-session";
+import { logout } from "@/lib/api/auth";
 
 export default function Header() {
   const router = useRouter();
 
-  const handleLogout = () => {
-    clearAuthSession();
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // Continue with local cleanup even if the backend session already expired.
+    } finally {
+      clearAuthSession();
+      router.push("/login");
+    }
   };
 
   return (

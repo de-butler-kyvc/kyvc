@@ -56,9 +56,9 @@ export async function getOperationsReport(filters?: {
   granularity?: "daily" | "weekly" | "monthly";
 }): Promise<OperationsReport> {
   const params = new URLSearchParams();
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
-  if (filters?.granularity) params.set("granularity", filters.granularity);
+  if (filters?.from) params.set("fromDate", filters.from);
+  if (filters?.to) params.set("toDate", filters.to);
+  if (filters?.granularity) params.set("groupBy", filters.granularity);
   const url = params.toString()
     ? `${REPORTS_BASE}/operations?${params}`
     : `${REPORTS_BASE}/operations`;
@@ -75,8 +75,8 @@ export async function exportOperationsReport(filters?: {
   format?: "csv" | "xlsx";
 }): Promise<Blob> {
   const params = new URLSearchParams();
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
+  if (filters?.from) params.set("fromDate", filters.from);
+  if (filters?.to) params.set("toDate", filters.to);
   if (filters?.format) params.set("format", filters.format);
   const url = params.toString()
     ? `${REPORTS_BASE}/operations/export?${params}`

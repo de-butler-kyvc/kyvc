@@ -105,7 +105,7 @@ export async function getVerifierList(filters?: {
   status?: string;
 }): Promise<Verifier[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
   if (filters?.status && filters.status !== "전체 상태") params.set("status", filters.status);
   const url = params.toString() ? `${VERIFIER_BASE}?${params}` : VERIFIER_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
@@ -286,9 +286,9 @@ export async function getVerifierLogs(filters?: {
 }): Promise<VerifierLog[]> {
   const params = new URLSearchParams();
   if (filters?.verifierId) params.set("verifierId", filters.verifierId);
-  if (filters?.result) params.set("result", filters.result);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
+  if (filters?.result) params.set("statusCode", filters.result);
+  if (filters?.from) params.set("fromDate", filters.from);
+  if (filters?.to) params.set("toDate", filters.to);
   const url = params.toString() ? `${VERIFIER_LOGS_URL}?${params}` : VERIFIER_LOGS_URL;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

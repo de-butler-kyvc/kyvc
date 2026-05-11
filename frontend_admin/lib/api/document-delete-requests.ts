@@ -69,8 +69,8 @@ export async function getDocumentDeleteRequests(filters?: {
 }): Promise<DocumentDeleteRequest[]> {
   const params = new URLSearchParams();
   if (filters?.status && filters.status !== "전체 상태") params.set("status", filters.status);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
+  if (filters?.from) params.set("startDate", filters.from);
+  if (filters?.to) params.set("endDate", filters.to);
   const url = params.toString() ? `${DOC_DELETE_BASE}?${params}` : DOC_DELETE_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

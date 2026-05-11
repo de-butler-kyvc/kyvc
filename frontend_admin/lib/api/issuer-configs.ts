@@ -81,7 +81,7 @@ export async function getIssuerConfigs(filters?: {
   enabled?: boolean;
 }): Promise<IssuerConfig[]> {
   const params = new URLSearchParams();
-  if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
+  if (filters?.enabled !== undefined) params.set("status", filters.enabled ? "ACTIVE" : "INACTIVE");
   const url = params.toString() ? `${CONFIG_BASE}?${params}` : CONFIG_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

@@ -80,7 +80,7 @@ export async function getCredentials(filters?: {
   status?: string;
 }): Promise<KycCredential[]> {
   const params = new URLSearchParams();
-  if (filters?.applicationId) params.set("applicationId", filters.applicationId);
+  if (filters?.applicationId) params.set("keyword", filters.applicationId);
   if (filters?.status) params.set("status", filters.status);
   const url = params.toString() ? `${CRED_BASE}?${params}` : CRED_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
