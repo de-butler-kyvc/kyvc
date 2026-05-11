@@ -40,8 +40,9 @@ kyvc:
   core:
     mode: ${KYVC_CORE_MODE:http}
     base-url: ${KYVC_CORE_BASE_URL:https://dev-core-kyvc.khuoo.synology.me}
-    connect-timeout-millis: ${KYVC_CORE_CONNECT_TIMEOUT_MILLIS:5000}
-    read-timeout-millis: ${KYVC_CORE_READ_TIMEOUT_MILLIS:180000}
+    connect-timeout-seconds: ${KYVC_CORE_CONNECT_TIMEOUT_SECONDS:10}
+    read-timeout-seconds: ${KYVC_CORE_READ_TIMEOUT_SECONDS:60}
+    ai-review-read-timeout-seconds: ${KYVC_CORE_AI_REVIEW_READ_TIMEOUT_SECONDS:300}
     dev-seed-enabled: ${KYVC_CORE_DEV_SEED_ENABLED:true}
     failure-fallback-enabled: ${KYVC_CORE_FAILURE_FALLBACK_ENABLED:false}
     api-key: ${KYVC_CORE_API_KEY:}

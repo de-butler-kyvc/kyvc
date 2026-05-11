@@ -25,6 +25,7 @@ import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreXrplTransactionResponse;
+import com.kyvc.backend.domain.core.exception.CoreAiReviewException;
 import com.kyvc.backend.domain.core.infrastructure.dto.CoreHealthApiResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.CredentialStatusApiResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiRequest;
@@ -43,9 +44,10 @@ import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.logging.LogEventLogger;
 import com.kyvc.backend.global.util.KyvcEnums;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -55,6 +57,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -68,7 +71,6 @@ import java.util.Set;
 
 // Core 실제 HTTP Adapter
 @Component
-@RequiredArgsConstructor
 @ConditionalOnExpression("'${kyvc.core.mode:http}'.toLowerCase() == 'http' || '${kyvc.core.mode:http}'.toLowerCase() == 'hybrid'")
 public class CoreHttpAdapter implements CoreAdapter {
 
@@ -143,10 +145,27 @@ public class CoreHttpAdapter implements CoreAdapter {
     );
 
     private final RestClient coreRestClient;
+    private final RestClient coreAiReviewRestClient;
     private final CoreProperties coreProperties;
     private final LogEventLogger logEventLogger;
     private final ObjectMapper objectMapper;
     private final CorePayloadSanitizer corePayloadSanitizer;
+
+    public CoreHttpAdapter(
+            @Qualifier("coreRestClient") RestClient coreRestClient, // 일반 Core HTTP Client
+            @Qualifier("coreAiReviewRestClient") RestClient coreAiReviewRestClient, // AI 심사 Core HTTP Client
+            CoreProperties coreProperties, // Core 설정
+            LogEventLogger logEventLogger, // 업무 로그 컴포넌트
+            ObjectMapper objectMapper, // JSON 변환기
+            CorePayloadSanitizer corePayloadSanitizer // Core payload 마스킹 컴포넌트
+    ) {
+        this.coreRestClient = coreRestClient;
+        this.coreAiReviewRestClient = coreAiReviewRestClient;
+        this.coreProperties = coreProperties;
+        this.logEventLogger = logEventLogger;
+        this.objectMapper = objectMapper;
+        this.corePayloadSanitizer = corePayloadSanitizer;
+    }
 
     @Override
     public CoreHealthResponse checkHealth() {
@@ -184,22 +203,39 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = AI_ASSESSMENT_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), null, null);
         fields.put("kycId", request.kycId());
+        fields.put("corporateId", request.corporateId());
+        fields.put("configuredAiReviewTimeoutSeconds", coreProperties.resolvedAiReviewReadTimeoutSeconds());
         long startedAt = System.currentTimeMillis();
         logEventLogger.info("core.call.started", "Core AI review API call started", fields);
         try {
-            ResponseEntity<LlmPrimaryAssessmentApiResponse> responseEntity = coreRestClient.post()
+            ResponseEntity<String> responseEntity = coreAiReviewRestClient.post()
                     .uri(endpoint)
                     .headers(this::applyApiKeyHeader)
                     .body(apiRequest)
                     .retrieve()
-                    .toEntity(LlmPrimaryAssessmentApiResponse.class);
-            LlmPrimaryAssessmentApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+                    .toEntity(String.class);
             logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
-            CoreAiReviewResponse mapped = mapAiReviewResponse(request, body);
+            LlmPrimaryAssessmentApiResponse body = parseAiReviewResponseBody(
+                    request,
+                    endpoint,
+                    responseEntity,
+                    startedAt,
+                    fields
+            );
+            CoreAiReviewResponse mapped = mapAiReviewResponseSafely(request, endpoint, body, startedAt, fields);
             logEventLogger.info("core.response.mapped", "Core AI review response mapped", fields);
             return mapped;
+        } catch (CoreAiReviewException exception) {
+            throw exception;
+        } catch (RestClientResponseException exception) {
+            throw buildAiReviewCoreErrorException(request, endpoint, startedAt, fields, exception);
+        } catch (ResourceAccessException exception) {
+            if (isTimeoutException(exception)) {
+                throw buildAiReviewTimeoutException(request, endpoint, startedAt, fields, exception);
+            }
+            throw buildAiReviewCoreErrorException(request, endpoint, startedAt, fields, exception);
         } catch (RestClientException exception) {
-            throw mapCoreException(endpoint, exception, fields);
+            throw buildAiReviewCoreErrorException(request, endpoint, startedAt, fields, exception);
         }
     }
 
@@ -718,6 +754,273 @@ public class CoreHttpAdapter implements CoreAdapter {
         );
     }
 
+    private CoreAiReviewResponse mapAiReviewResponseSafely(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            LlmPrimaryAssessmentApiResponse body, // Core AI 심사 응답
+            long startedAt, // 시작 시각
+            Map<String, Object> fields // 로그 필드
+    ) {
+        try {
+            return mapAiReviewResponse(request, body);
+        } catch (ApiException exception) {
+            throw buildAiReviewInvalidResponseException(request, endpoint, startedAt, fields, exception);
+        }
+    }
+
+    private LlmPrimaryAssessmentApiResponse parseAiReviewResponseBody(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            ResponseEntity<String> responseEntity, // Core 문자열 응답
+            long startedAt, // 시작 시각
+            Map<String, Object> fields // 로그 필드
+    ) {
+        String responseBody = responseEntity.getBody();
+        MediaType contentType = responseEntity.getHeaders().getContentType();
+        if (!isJsonContentType(contentType)) {
+            throw buildAiReviewInvalidResponseException(
+                    request,
+                    endpoint,
+                    startedAt,
+                    fields,
+                    null,
+                    mediaTypeValue(contentType),
+                    summarizeResponseBody(responseBody)
+            );
+        }
+        if (!StringUtils.hasText(responseBody)) {
+            throw buildAiReviewInvalidResponseException(
+                    request,
+                    endpoint,
+                    startedAt,
+                    fields,
+                    null,
+                    mediaTypeValue(contentType),
+                    null
+            );
+        }
+        try {
+            return objectMapper.readValue(responseBody, LlmPrimaryAssessmentApiResponse.class);
+        } catch (JsonProcessingException exception) {
+            throw buildAiReviewInvalidResponseException(
+                    request,
+                    endpoint,
+                    startedAt,
+                    fields,
+                    exception,
+                    mediaTypeValue(contentType),
+                    summarizeResponseBody(responseBody)
+            );
+        }
+    }
+
+    private CoreAiReviewException buildAiReviewTimeoutException(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            long startedAt, // 시작 시각
+            Map<String, Object> baseFields, // 로그 필드
+            Exception exception // 원인 예외
+    ) {
+        long durationMs = System.currentTimeMillis() - startedAt;
+        Map<String, Object> fields = aiReviewFailureLogFields(
+                baseFields,
+                CoreAiReviewException.FailureType.TIMEOUT,
+                null,
+                null,
+                null,
+                durationMs,
+                exception
+        );
+        logEventLogger.warn("core.ai_review.timeout", "Core AI review request timed out", fields);
+        return new CoreAiReviewException(
+                ErrorCode.CORE_API_TIMEOUT,
+                "Core AI review request timed out",
+                exception,
+                endpoint,
+                request.coreRequestId(),
+                request.kycId(),
+                request.corporateId(),
+                CoreAiReviewException.FailureType.TIMEOUT,
+                null,
+                null,
+                null,
+                durationMs,
+                coreProperties.resolvedAiReviewReadTimeoutSeconds()
+        );
+    }
+
+    private CoreAiReviewException buildAiReviewInvalidResponseException(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            long startedAt, // 시작 시각
+            Map<String, Object> baseFields, // 로그 필드
+            Exception exception // 원인 예외
+    ) {
+        return buildAiReviewInvalidResponseException(request, endpoint, startedAt, baseFields, exception, null, null);
+    }
+
+    private CoreAiReviewException buildAiReviewInvalidResponseException(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            long startedAt, // 시작 시각
+            Map<String, Object> baseFields, // 로그 필드
+            Exception exception, // 원인 예외
+            String contentType, // 응답 Content-Type
+            String responseBodySummary // 응답 요약
+    ) {
+        long durationMs = System.currentTimeMillis() - startedAt;
+        Map<String, Object> fields = aiReviewFailureLogFields(
+                baseFields,
+                CoreAiReviewException.FailureType.INVALID_RESPONSE,
+                null,
+                contentType,
+                responseBodySummary,
+                durationMs,
+                exception
+        );
+        logEventLogger.warn("core.ai_review.invalid_response", "Core AI review response is not valid JSON", fields);
+        return new CoreAiReviewException(
+                ErrorCode.CORE_API_RESPONSE_INVALID,
+                "Core AI review response is not valid JSON",
+                exception,
+                endpoint,
+                request.coreRequestId(),
+                request.kycId(),
+                request.corporateId(),
+                CoreAiReviewException.FailureType.INVALID_RESPONSE,
+                null,
+                contentType,
+                responseBodySummary,
+                durationMs,
+                coreProperties.resolvedAiReviewReadTimeoutSeconds()
+        );
+    }
+
+    private CoreAiReviewException buildAiReviewCoreErrorException(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            long startedAt, // 시작 시각
+            Map<String, Object> baseFields, // 로그 필드
+            RestClientResponseException exception // Core 응답 예외
+    ) {
+        int statusCode = exception.getStatusCode().value();
+        String contentType = exception.getResponseHeaders() == null
+                ? null
+                : mediaTypeValue(exception.getResponseHeaders().getContentType());
+        String responseBodySummary = summarizeResponseBody(exception.getResponseBodyAsString());
+        long durationMs = System.currentTimeMillis() - startedAt;
+        Map<String, Object> fields = aiReviewFailureLogFields(
+                baseFields,
+                CoreAiReviewException.FailureType.CORE_ERROR,
+                statusCode,
+                contentType,
+                responseBodySummary,
+                durationMs,
+                exception
+        );
+        if (statusCode >= 500) {
+            logEventLogger.error("core.ai_review.failed", "Core AI review request failed", fields, exception);
+        } else {
+            logEventLogger.warn("core.ai_review.failed", "Core AI review request failed", fields);
+        }
+        return new CoreAiReviewException(
+                ErrorCode.CORE_AI_REVIEW_FAILED,
+                "Core AI review request failed",
+                exception,
+                endpoint,
+                request.coreRequestId(),
+                request.kycId(),
+                request.corporateId(),
+                CoreAiReviewException.FailureType.CORE_ERROR,
+                statusCode,
+                contentType,
+                responseBodySummary,
+                durationMs,
+                coreProperties.resolvedAiReviewReadTimeoutSeconds()
+        );
+    }
+
+    private CoreAiReviewException buildAiReviewCoreErrorException(
+            CoreAiReviewRequest request, // AI 심사 요청
+            String endpoint, // 호출 endpoint
+            long startedAt, // 시작 시각
+            Map<String, Object> baseFields, // 로그 필드
+            Exception exception // 원인 예외
+    ) {
+        long durationMs = System.currentTimeMillis() - startedAt;
+        Map<String, Object> fields = aiReviewFailureLogFields(
+                baseFields,
+                CoreAiReviewException.FailureType.CORE_ERROR,
+                null,
+                null,
+                null,
+                durationMs,
+                exception
+        );
+        logEventLogger.error("core.ai_review.failed", "Core AI review request failed", fields, exception);
+        return new CoreAiReviewException(
+                ErrorCode.CORE_AI_REVIEW_FAILED,
+                "Core AI review request failed",
+                exception,
+                endpoint,
+                request.coreRequestId(),
+                request.kycId(),
+                request.corporateId(),
+                CoreAiReviewException.FailureType.CORE_ERROR,
+                null,
+                null,
+                null,
+                durationMs,
+                coreProperties.resolvedAiReviewReadTimeoutSeconds()
+        );
+    }
+
+    private Map<String, Object> aiReviewFailureLogFields(
+            Map<String, Object> baseFields, // 기본 로그 필드
+            CoreAiReviewException.FailureType failureType, // 실패 유형
+            Integer statusCode, // Core 응답 상태 코드
+            String contentType, // Core 응답 Content-Type
+            String responseBodySummary, // Core 응답 요약
+            long durationMs, // 요청 소요 시간
+            Exception exception // 원인 예외
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
+        fields.put("failureType", failureType.name());
+        fields.put("statusCode", statusCode);
+        fields.put("contentType", contentType);
+        fields.put("durationMs", durationMs);
+        fields.put("responseBodySummary", responseBodySummary);
+        fields.put("exceptionClass", exception == null ? null : exception.getClass().getName());
+        fields.put("configuredAiReviewTimeoutSeconds", coreProperties.resolvedAiReviewReadTimeoutSeconds());
+        return fields;
+    }
+
+    private boolean isJsonContentType(
+            MediaType contentType // 응답 Content-Type
+    ) {
+        if (contentType == null) {
+            return false;
+        }
+        return MediaType.APPLICATION_JSON.includes(contentType)
+                || contentType.getSubtype().toLowerCase(Locale.ROOT).endsWith("+json");
+    }
+
+    private String mediaTypeValue(
+            MediaType contentType // 응답 Content-Type
+    ) {
+        return contentType == null ? null : contentType.toString();
+    }
+
+    private String summarizeResponseBody(
+            String responseBody // Core 응답 body
+    ) {
+        String sanitized = corePayloadSanitizer.sanitizeText(responseBody);
+        if (sanitized == null || sanitized.length() <= 500) {
+            return sanitized;
+        }
+        return sanitized.substring(0, 500) + "...[TRUNCATED]";
+    }
+
     private String resolveAiReviewStatus(
             String assessmentStatus // Core 심사 상태
     ) {
@@ -1105,6 +1408,9 @@ public class CoreHttpAdapter implements CoreAdapter {
     ) {
         Throwable current = throwable;
         while (current != null) {
+            if (current instanceof SocketTimeoutException) {
+                return true;
+            }
             String message = current.getMessage();
             if (message != null && message.toLowerCase(Locale.ROOT).contains("timed out")) {
                 return true;
