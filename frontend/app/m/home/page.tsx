@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import {
@@ -63,8 +63,7 @@ export default function MobileHomePage() {
   const [hidden, setHidden] = useState<string[]>([]);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [bridgeError, setBridgeError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [walletSheetOpen, setWalletSheetOpen] = useState(false);
 
   // 백엔드 API: 발급된 VC 목록
   useEffect(() => {
@@ -82,13 +81,16 @@ export default function MobileHomePage() {
           router.replace("/m/login");
           return;
         }
+        if (e instanceof ApiError && e.status === 403) {
+          setCerts([]);
+          setApiError(null);
+          return;
+        }
         setApiError(
           e instanceof ApiError
             ? `VC 목록 조회 실패: ${e.message}`
             : "VC 목록 조회 중 네트워크 오류가 발생했습니다.",
         );
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -99,20 +101,14 @@ export default function MobileHomePage() {
   // 브리지: 활성 지갑 정보 + 단말 저장본
   useEffect(() => {
     if (!isBridgeAvailable()) {
-      setBridgeError(
-        "앱 내부 지갑 모듈에 연결할 수 없습니다. KYvC 앱에서 다시 열어 주세요.",
-      );
       return;
     }
     (async () => {
       try {
         const r = await bridge.getWalletInfo();
         if (r.ok) setWalletInfo(r);
-        else setBridgeError(r.error ?? "지갑 정보를 가져올 수 없습니다.");
-      } catch (e) {
-        setBridgeError(
-          e instanceof Error ? e.message : "브리지 호출에 실패했습니다.",
-        );
+      } catch {
+        // Native-only wallet state is represented as inactive in the web UI.
       }
     })();
     bridge.listWallets().catch(() => {});
@@ -169,11 +165,11 @@ export default function MobileHomePage() {
   const accountShort = walletInfo?.account
     ? `${walletInfo.account.slice(0, 6)}...${walletInfo.account.slice(-4)}`
     : null;
-  const didShort = walletInfo?.did
-    ? `${walletInfo.did.slice(0, 13)}...${walletInfo.did.slice(-4)}`
-    : walletInfo?.account
-      ? `${walletInfo.account.slice(0, 10)}...${walletInfo.account.slice(-4)}`
-      : "did:xrpl:rhod...orpd";
+  const walletLabel = accountShort
+    ? accountShort
+    : walletInfo?.did
+      ? "지갑 활성화됨"
+      : "지갑 활성화 필요";
   const balanceKrw = visible.length > 0 ? "₩ 123,000" : "₩ 0";
 
   return (
@@ -192,14 +188,6 @@ export default function MobileHomePage() {
         }
       />
       <div className="scroll home-scroll">
-        {bridgeError ? (
-          <div
-            className="m-error"
-            style={{ margin: "12px 18px 0", textAlign: "left" }}
-          >
-            {bridgeError}
-          </div>
-        ) : null}
         {apiError ? (
           <div
             className="m-error"
@@ -209,73 +197,155 @@ export default function MobileHomePage() {
           </div>
         ) : null}
 
-        <section className="wallet-hero xrp-home-hero">
-          <h1>{balanceKrw}</h1>
-          <button
-            type="button"
-            className="wallet-did-copy"
-            onClick={() => router.push(walletInfo?.did ? "/m/did/register" : "/m/did/register")}
-          >
-            <span>{accountShort ?? didShort}</span>
-            <MIcon.link />
-          </button>
-        </section>
-
-        <section className="wallet-actions xrp-home-actions">
-          <button type="button" onClick={() => router.push("/m/xrp/receive")}>
-            <MIcon.arrowDown />
-            <b>받기</b>
-          </button>
-          <button type="button" onClick={() => router.push("/m/xrp/send")}>
-            <MIcon.arrowUpRight />
-            <b>보내기</b>
-          </button>
-          <button type="button" onClick={() => router.push("/m/transactions")}>
-            <MIcon.history />
-            <b>내역</b>
-          </button>
-        </section>
-
-        <section className="stack-section">
-          <div className="m-section-title section-title stack-title">
-            <h2>내 증명서</h2>
+        <div className="home-figma-stage">
+          <section className="wallet-hero xrp-home-hero">
+            <h1>{balanceKrw}</h1>
             <button
               type="button"
-              className="text-link"
-              onClick={() => router.push("/m/vc/list")}
+              className={`wallet-did-copy${accountShort ? "" : " needs-wallet"}`}
+              onClick={() => {
+                if (accountShort || walletInfo?.did) {
+                  router.push("/m/did/register");
+                } else {
+                  setWalletSheetOpen(true);
+                }
+              }}
             >
-              전체보기
+              <span>{walletLabel}</span>
+              {accountShort ? <MIcon.link /> : null}
             </button>
-          </div>
-          <div className="credential-stack" aria-label="내 증명서 스택">
-            {loading ? (
-              <p className="m-loading">불러오는 중…</p>
-            ) : visible.length === 0 ? (
-              <p
-                className="subcopy"
-                style={{ padding: "20px 18px", textAlign: "center" }}
-              >
-                {apiError
-                  ? "VC를 불러올 수 없습니다."
-                  : "발급된 증명서가 없습니다."}
-              </p>
-            ) : (
-              visible.map((c, i) => (
-                <MCertCard
-                  key={c.id}
-                  cert={c}
-                  index={i}
-                  extra="stacked"
-                  onClick={() =>
-                    router.push(`/m/vc/detail?id=${encodeURIComponent(c.id)}`)
-                  }
-                />
-              ))
-            )}
-          </div>
-        </section>
+          </section>
+
+          <section className="wallet-actions xrp-home-actions">
+            <button type="button" onClick={() => router.push("/m/xrp/receive")}>
+              <MIcon.arrowDown />
+              <b>받기</b>
+            </button>
+            <button
+              type="button"
+              className={!accountShort ? "inactive" : ""}
+              onClick={() => router.push("/m/xrp/send")}
+            >
+              <MIcon.arrowUpRight />
+              <b>보내기</b>
+            </button>
+            <button
+              type="button"
+              className={!accountShort ? "inactive" : ""}
+              onClick={() => router.push("/m/transactions")}
+            >
+              <MIcon.history />
+              <b>내역</b>
+            </button>
+          </section>
+
+          <section className="stack-section">
+            <div className="m-section-title section-title stack-title">
+              <h2>내 증명서</h2>
+            </div>
+            <div className="credential-stack" aria-label="내 증명서 스택">
+              {visible.length === 0 ? (
+                <button
+                  type="button"
+                  className="empty-credential-card"
+                  onClick={() => router.push("/m/vc/issue")}
+                >
+                  발급하기
+                </button>
+              ) : (
+                visible.map((c, i) => (
+                  <MCertCard
+                    key={c.id}
+                    cert={c}
+                    index={i}
+                    extra="stacked"
+                    onClick={() =>
+                      router.push(`/m/vc/detail?id=${encodeURIComponent(c.id)}`)
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        </div>
       </div>
       <MBottomNav active="home" />
+      {walletSheetOpen ? (
+        <WalletActivationSheet onClose={() => setWalletSheetOpen(false)} />
+      ) : null}
     </section>
+  );
+}
+
+function WalletActivationSheet({ onClose }: { onClose: () => void }) {
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const dragStart = useRef<number | null>(null);
+
+  const closeWithAnimation = () => {
+    setClosing(true);
+    setDragY(window.innerHeight);
+    window.setTimeout(onClose, 180);
+  };
+
+  const onDragStart = (clientY: number) => {
+    dragStart.current = clientY;
+    setDragging(true);
+  };
+
+  const onDragMove = (clientY: number) => {
+    if (dragStart.current == null) return;
+    setDragY(Math.max(0, clientY - dragStart.current));
+  };
+
+  const onDragEnd = () => {
+    if (dragY > 120) closeWithAnimation();
+    else setDragY(0);
+    dragStart.current = null;
+    setDragging(false);
+  };
+
+  return (
+    <div className="wallet-sheet-layer" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        className="wallet-sheet-dim"
+        aria-label="지갑 활성화 안내 닫기"
+        onClick={closeWithAnimation}
+      />
+      <div
+        className={`wallet-activation-sheet${dragging ? " dragging" : ""}${closing ? " closing" : ""}`}
+        style={{ transform: `translateY(${dragY}px)` }}
+      >
+        <div
+          className="wallet-sheet-handle"
+          role="button"
+          aria-label="지갑 활성화 안내 시트 이동"
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            onDragStart(e.clientY);
+          }}
+          onPointerMove={(e) => onDragMove(e.clientY)}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+        />
+        <div className="wallet-sheet-body">
+          <h2>지갑 활성화 필요</h2>
+          <p>지갑을 활성화하려면 1 XRP를 예치해야 합니다.</p>
+          <button type="button" className="wallet-sheet-link">
+            자세히 보기
+          </button>
+        </div>
+        <button
+          type="button"
+          className="wallet-sheet-primary"
+          onClick={closeWithAnimation}
+        >
+          확인
+        </button>
+      </div>
+    </div>
   );
 }
