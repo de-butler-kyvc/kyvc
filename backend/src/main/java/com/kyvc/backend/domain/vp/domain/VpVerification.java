@@ -193,6 +193,18 @@ public class VpVerification {
             String coreRequestId, // Core 요청 ID
             LocalDateTime presentedAt // 제출 일시
     ) {
+        markPresentedForCorporate(this.corporateId, credentialId, vpJwtHash, coreRequestId, presentedAt);
+    }
+
+    // VP 제출 법인 반영 처리
+    public void markPresentedForCorporate(
+            Long corporateId, // 제출 법인 ID
+            Long credentialId, // Credential ID
+            String vpJwtHash, // VP JWT 해시
+            String coreRequestId, // Core 요청 ID
+            LocalDateTime presentedAt // 제출 일시
+    ) {
+        this.corporateId = corporateId;
         this.credentialId = credentialId;
         this.vpJwtHash = vpJwtHash;
         this.coreRequestId = coreRequestId;

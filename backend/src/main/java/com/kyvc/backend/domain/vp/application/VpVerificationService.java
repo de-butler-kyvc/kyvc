@@ -91,7 +91,7 @@ public class VpVerificationService {
             String requestId // VP 요청 ID
     ) {
         AuthContext authContext = resolveAuthContext(userDetails);
-        VpVerification vpVerification = getOwnedVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
+        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
         return toVpRequestResponse(vpVerification);
     }
 
@@ -102,7 +102,7 @@ public class VpVerificationService {
             String requestId // VP 요청 ID
     ) {
         AuthContext authContext = resolveAuthContext(userDetails);
-        VpVerification vpVerification = getOwnedVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
+        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         List<EligibleCredentialResponse> credentials = credentialRepository
                 .findVpEligibleCredentialsByCorporateId(authContext.corporateId())
@@ -121,7 +121,7 @@ public class VpVerificationService {
         AuthContext authContext = resolveAuthContext(userDetails);
         validatePresentationRequest(request);
         ResolvedPresentation resolvedPresentation = resolvePresentation(request);
-        VpVerification vpVerification = getOwnedVpRequest(authContext.corporateId(), request.requestId().trim());
+        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), request.requestId().trim());
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
 
@@ -139,7 +139,7 @@ public class VpVerificationService {
 
         CoreRequest coreRequest = coreRequestService.createVpVerificationRequest(vpVerification.getVpVerificationId(), null);
         LocalDateTime presentedAt = LocalDateTime.now();
-        vpVerification.markPresented(credential.getCredentialId(), vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
+        vpVerification.markPresentedForCorporate(authContext.corporateId(), credential.getCredentialId(), vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
         CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, credential, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestDto));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
@@ -193,6 +193,9 @@ public class VpVerificationService {
         return new VpPresentationResultResponse(
                 vpVerification.getVpVerificationId(),
                 vpVerification.getVpRequestId(),
+                vpVerification.getRequesterName(),
+                vpVerification.getPurpose(),
+                enumName(vpVerification.getVpVerificationStatus()),
                 vpVerification.getCredentialId(),
                 enumName(vpVerification.getVpVerificationStatus()),
                 toNullableVerificationResultResponse(vpVerification, null),
@@ -254,7 +257,7 @@ public class VpVerificationService {
             AuthContext authContext // 인증 컨텍스트
     ) {
         String requestId = extractTextField(rootNode, "requestId");
-        VpVerification vpVerification = getOwnedVpRequest(authContext.corporateId(), requestId);
+        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), requestId);
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
         return new QrResolveResponse(
@@ -531,6 +534,18 @@ public class VpVerificationService {
         return vpVerification;
     }
 
+    private VpVerification getAccessibleVpRequest(
+            Long corporateId, // 법인 ID
+            String requestId // VP 요청 ID
+    ) {
+        VpVerification vpVerification = vpVerificationRepository.getByRequestId(requestId);
+        if (isFinanceVpRequest(vpVerification)) {
+            return vpVerification;
+        }
+        validateVpVerificationOwnership(corporateId, vpVerification);
+        return vpVerification;
+    }
+
     private void validateVpRequestNotExpired(
             VpVerification vpVerification, // VP 검증 요청
             LocalDateTime now // 기준 일시
@@ -562,6 +577,12 @@ public class VpVerificationService {
         if (vpVerification == null || !corporateId.equals(vpVerification.getCorporateId())) {
             throw new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND);
         }
+    }
+
+    private boolean isFinanceVpRequest(
+            VpVerification vpVerification
+    ) {
+        return vpVerification != null && KyvcEnums.VpRequestType.FINANCE_VERIFY == vpVerification.getRequestTypeCode();
     }
 
     private void validateCredentialOwnership(

@@ -11,6 +11,8 @@ import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.finance.application.FinanceContextService;
+import com.kyvc.backend.domain.finance.repository.FinanceCorporateCustomerRepository;
 import com.kyvc.backend.domain.verifier.domain.Verifier;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
@@ -67,6 +69,12 @@ class VerifierVpServiceTest {
     private CorporateRepository corporateRepository;
 
     @Mock
+    private FinanceContextService financeContextService;
+
+    @Mock
+    private FinanceCorporateCustomerRepository financeCorporateCustomerRepository;
+
+    @Mock
     private VerifierRepository verifierRepository;
 
     @Mock
@@ -99,6 +107,8 @@ class VerifierVpServiceTest {
                 vpVerificationQueryRepository,
                 credentialRepository,
                 corporateRepository,
+                financeContextService,
+                financeCorporateCustomerRepository,
                 verifierRepository,
                 coreRequestService,
                 coreAdapter,
@@ -110,10 +120,8 @@ class VerifierVpServiceTest {
     @Test
     void createFinanceVpRequest_createsRequestWithoutCoreCall() {
         Corporate corporate = createCorporate(10L, 1L);
-        Credential credential = createCredential(100L, 10L);
+        mockFinanceContext();
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
-        when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
-        when(credentialRepository.findLatestByCorporateId(10L)).thenReturn(Optional.of(credential));
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(coreAdapter.issuePresentationChallenge(any())).thenReturn(new CorePresentationChallengeResponse(
                 "challenge-core",
@@ -289,10 +297,8 @@ class VerifierVpServiceTest {
     @Test
     void createVpRequest_usesCoreChallenge_whenCoreAvailable() {
         Corporate corporate = createCorporate(10L, 1L);
-        Credential credential = createCredential(100L, 10L);
+        mockFinanceContext();
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
-        when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
-        when(credentialRepository.findLatestByCorporateId(10L)).thenReturn(Optional.of(credential));
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(coreAdapter.issuePresentationChallenge(any())).thenReturn(new CorePresentationChallengeResponse(
                 "challenge-core",
@@ -319,10 +325,8 @@ class VerifierVpServiceTest {
     @Test
     void createVpRequest_fallsBackToLocalChallenge_whenCoreChallengeFails() {
         Corporate corporate = createCorporate(10L, 1L);
-        Credential credential = createCredential(100L, 10L);
+        mockFinanceContext();
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
-        when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
-        when(credentialRepository.findLatestByCorporateId(10L)).thenReturn(Optional.of(credential));
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(coreAdapter.issuePresentationChallenge(any())).thenThrow(new ApiException(ErrorCode.CORE_API_CALL_FAILED));
 
@@ -398,6 +402,18 @@ class VerifierVpServiceTest {
                 List.of("ROLE_CORPORATE_USER"),
                 true
         );
+    }
+
+    private void mockFinanceContext() {
+        when(financeContextService.requireFinanceStaff(any(CustomUserDetails.class))).thenReturn(
+                new FinanceContextService.FinanceContext(
+                        1L,
+                        "FINANCE_USER_1",
+                        null,
+                        List.of("ROLE_FINANCE_STAFF")
+                )
+        );
+        when(financeCorporateCustomerRepository.findLatestByLinkedByUserId(1L)).thenReturn(Optional.empty());
     }
 
     private Corporate createCorporate(Long corporateId, Long userId) {

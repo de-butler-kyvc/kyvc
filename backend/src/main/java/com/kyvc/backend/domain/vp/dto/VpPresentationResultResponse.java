@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
  *
  * @param presentationId VP 제출 ID
  * @param requestId VP 요청 ID
+ * @param verifierName Verifier명
+ * @param purpose 제출 목적
+ * @param verificationStatus 검증 상태 코드
  * @param credentialId 제출 Credential ID
  * @param status VP 검증 상태
  * @param result VP 검증 결과
@@ -23,6 +26,12 @@ public record VpPresentationResultResponse(
         Long presentationId, // VP 제출 ID
         @Schema(description = "VP 요청 ID", example = "vp-req-001")
         String requestId, // VP 요청 ID
+        @Schema(description = "Verifier명", example = "Verifier")
+        String verifierName, // Verifier명
+        @Schema(description = "제출 목적", example = "ACCOUNT_OPENING")
+        String purpose, // 제출 목적
+        @Schema(description = "검증 상태 코드", example = "VALID")
+        String verificationStatus, // 검증 상태 코드
         @Schema(description = "제출 Credential ID", example = "1")
         Long credentialId, // 제출 Credential ID
         @Schema(description = "VP 검증 상태", example = "PRESENTED")
@@ -38,4 +47,17 @@ public record VpPresentationResultResponse(
         @Schema(description = "검증 일시", example = "2026-05-07T16:05:00")
         LocalDateTime verifiedAt // 검증 일시
 ) {
+    public VpPresentationResultResponse(
+            Long presentationId, // VP 제출 ID
+            String requestId, // VP 요청 ID
+            Long credentialId, // 제출 Credential ID
+            String status, // VP 검증 상태
+            VpVerificationResultResponse result, // VP 검증 결과
+            boolean replaySuspected, // Replay 의심 여부
+            String resultSummary, // 검증 결과 요약
+            LocalDateTime presentedAt, // 제출 일시
+            LocalDateTime verifiedAt // 검증 일시
+    ) {
+        this(presentationId, requestId, null, null, status, credentialId, status, result, replaySuspected, resultSummary, presentedAt, verifiedAt);
+    }
 }

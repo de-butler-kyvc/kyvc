@@ -15,11 +15,15 @@ import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.finance.application.FinanceContextService;
+import com.kyvc.backend.domain.finance.domain.FinanceCorporateCustomer;
+import com.kyvc.backend.domain.finance.repository.FinanceCorporateCustomerRepository;
 import com.kyvc.backend.domain.verifier.domain.Verifier;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestDetailResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestListResponse;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestResultResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestSummaryResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateResponse;
@@ -72,6 +76,8 @@ public class VerifierVpService {
     private final VpVerificationQueryRepository vpVerificationQueryRepository;
     private final CredentialRepository credentialRepository;
     private final CorporateRepository corporateRepository;
+    private final FinanceContextService financeContextService;
+    private final FinanceCorporateCustomerRepository financeCorporateCustomerRepository;
     private final VerifierRepository verifierRepository;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
@@ -83,16 +89,15 @@ public class VerifierVpService {
             CustomUserDetails userDetails, // 인증 사용자 정보
             FinanceVpRequestCreateRequest request // 금융사 VP 요청 생성 요청
     ) {
-        AuthContext authContext = resolveAuthContext(userDetails);
+        AuthContext authContext = resolveFinanceAuthContext(userDetails);
         validateFinanceCreateRequest(request);
-        Corporate corporate = getCorporateById(authContext.corporateId());
-        Credential credential = getLatestValidCredential(corporate.getCorporateId());
+        Long placeholderCorporateId = resolveFinancePlaceholderCorporateId(authContext);
         List<String> requestedClaims = normalizeRequiredClaims(request.requestedClaims());
         LocalDateTime fallbackExpiresAt = LocalDateTime.now().plusSeconds(resolveExpiresInSeconds(request.expiresInSeconds()));
         ChallengeContext challengeContext = issuePresentationChallenge(requestedClaims, fallbackExpiresAt);
         VpVerification vpVerification = VpVerification.createRequest(
-                credential.getCredentialId(),
-                corporate.getCorporateId(),
+                null,
+                placeholderCorporateId,
                 createRequestId(),
                 challengeContext.nonce(),
                 challengeContext.challenge(),
@@ -111,7 +116,7 @@ public class VerifierVpService {
         logEventLogger.info(
                 "vp.request.created",
                 "Finance VP request created",
-                createLogFields(authContext.userId(), corporate.getCorporateId(), saved.getVpVerificationId(), saved.getVpRequestId(), null)
+                createLogFields(authContext.userId(), placeholderCorporateId, saved.getVpVerificationId(), saved.getVpRequestId(), null)
         );
         return new FinanceVpRequestCreateResponse(
                 saved.getVpRequestId(),
@@ -131,14 +136,17 @@ public class VerifierVpService {
             Integer page, // 페이지 번호
             Integer size // 페이지 크기
     ) {
-        AuthContext authContext = resolveAuthContext(userDetails);
+        AuthContext authContext = resolveFinanceAuthContext(userDetails);
         KyvcEnums.VpVerificationStatus statusFilter = parseVpStatus(status);
         List<VpVerification> allItems = vpVerificationQueryRepository.findFinanceRequests(
                 authContext.financeInstitutionCode(),
                 statusFilter,
                 from,
                 to
-        );
+        )
+                .stream()
+                .filter(vpVerification -> isFinanceRequesterOwner(userDetails, vpVerification))
+                .toList();
         PageRequest pageRequest = normalizePageRequest(page, size);
         List<FinanceVpRequestSummaryResponse> pageItems = allItems.stream()
                 .skip((long) pageRequest.page() * pageRequest.size())
@@ -160,20 +168,22 @@ public class VerifierVpService {
             CustomUserDetails userDetails, // 인증 사용자 정보
             String requestId // VP 요청 ID
     ) {
-        AuthContext authContext = resolveAuthContext(userDetails);
+        AuthContext authContext = resolveFinanceAuthContext(userDetails);
         VpVerification vpVerification = vpVerificationQueryRepository
                 .findFinanceRequest(authContext.financeInstitutionCode(), normalizeRequiredText(requestId))
                 .orElseThrow(() -> new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND));
+        validateFinanceVpRequestAccess(userDetails, vpVerification);
         Corporate corporate = getCorporateById(vpVerification.getCorporateId());
         return new FinanceVpRequestDetailResponse(
                 vpVerification.getVpRequestId(),
+                enumName(vpVerification.getVpVerificationStatus()),
                 enumName(vpVerification.getVpVerificationStatus()),
                 vpVerification.getPurpose(),
                 parseClaims(vpVerification.getRequiredClaimsJson()),
                 buildQrPayload(vpVerification),
                 vpVerification.getCorporateId(),
                 corporate.getCorporateName(),
-                toNullableVerificationResultResponse(vpVerification),
+                toFinanceResultResponse(vpVerification, corporate),
                 vpVerification.getExpiresAt(),
                 vpVerification.getRequestedAt(),
                 vpVerification.getVerifiedAt()
@@ -332,6 +342,20 @@ public class VerifierVpService {
                 corporate.getCorporateName(),
                 vpVerification.getRequestedAt(),
                 vpVerification.getExpiresAt(),
+                vpVerification.getVerifiedAt()
+        );
+    }
+
+    private FinanceVpRequestResultResponse toFinanceResultResponse(
+            VpVerification vpVerification, // VP 검증 요청
+            Corporate corporate // 법인
+    ) {
+        if (vpVerification == null || !vpVerification.isCompleted()) {
+            return null;
+        }
+        return new FinanceVpRequestResultResponse(
+                corporate.getCorporateName(),
+                corporate.getBusinessRegistrationNo(),
                 vpVerification.getVerifiedAt()
         );
     }
@@ -513,6 +537,46 @@ public class VerifierVpService {
         );
     }
 
+    private AuthContext resolveFinanceAuthContext(
+            CustomUserDetails userDetails // 인증 사용자 정보
+    ) {
+        FinanceContextService.FinanceContext context = financeContextService.requireFinanceStaff(userDetails);
+        return new AuthContext(
+                context.userId(),
+                userDetails == null ? null : userDetails.getEmail(),
+                null,
+                context.financeInstitutionCode()
+        );
+    }
+
+    private Long resolveFinancePlaceholderCorporateId(
+            AuthContext authContext // 금융사 직원 인증 컨텍스트
+    ) {
+        return financeCorporateCustomerRepository.findLatestByLinkedByUserId(authContext.userId())
+                .map(FinanceCorporateCustomer::getCorporateId)
+                .orElseGet(() -> corporateRepository.findByUserId(authContext.userId())
+                        .map(Corporate::getCorporateId)
+                        .orElseThrow(() -> new ApiException(ErrorCode.FINANCE_CONTEXT_NOT_FOUND)));
+    }
+
+    private void validateFinanceVpRequestAccess(
+            CustomUserDetails userDetails, // 인증 사용자 정보
+            VpVerification vpVerification // VP 요청
+    ) {
+        if (!isFinanceRequesterOwner(userDetails, vpVerification)) {
+            throw new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND);
+        }
+    }
+
+    private boolean isFinanceRequesterOwner(
+            CustomUserDetails userDetails, // 인증 사용자 정보
+            VpVerification vpVerification // VP 요청
+    ) {
+        return vpVerification != null
+                && KyvcEnums.VpRequestType.FINANCE_VERIFY == vpVerification.getRequestTypeCode()
+                && resolveFinanceRequesterName(userDetails).equals(vpVerification.getRequesterName());
+    }
+
     private Verifier resolveVerifier(
             CustomUserDetails userDetails // 인증 사용자 정보
     ) {
@@ -552,7 +616,8 @@ public class VerifierVpService {
     private void validateFinanceCreateRequest(
             FinanceVpRequestCreateRequest request // 금융사 VP 요청 생성 요청
     ) {
-        if (request == null || !StringUtils.hasText(request.purpose())) {
+        if (request == null || !StringUtils.hasText(request.purpose())
+                || request.expiresInSeconds() == null || request.expiresInSeconds() < 1) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
         normalizeRequiredClaims(request.requestedClaims());
