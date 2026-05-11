@@ -3731,17 +3731,27 @@ html {
 
 /* ── Signup steps ────────────────────────────────────────────── */
 .signup-view {
-  min-height: 100vh;
-  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   height: 100vh;
+  height: -webkit-fill-available;
   height: 100dvh;
+  height: var(--m-visual-height, 100dvh);
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  min-height: var(--m-visual-height, 100dvh);
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
     #fff;
   color: var(--m-ink);
   visibility: visible;
+  opacity: 1;
   overflow-y: hidden;
   overflow-x: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
 .signup-view .m-topbar {
@@ -3776,14 +3786,18 @@ html {
   display: block;
   width: 100%;
   min-height: 0;
+  height: auto;
+  max-height: none;
   padding: 17px 22px calc(111px + env(safe-area-inset-bottom));
   background: transparent;
   color: var(--m-ink);
   visibility: visible;
+  opacity: 1;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  transform: translateZ(0);
 }
 
 .signup-view .m-auth-title {
@@ -3805,8 +3819,11 @@ html {
 }
 
 .signup-view .input-box {
+  display: flex;
+  align-items: center;
   height: 50px;
   min-height: 50px;
+  width: 100%;
   border: 1px solid var(--m-line);
   border-radius: 14px;
   padding: 0 15px;
@@ -3822,6 +3839,12 @@ html {
 }
 
 .signup-view .input-box input {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
   font-size: 14px;
   color: var(--m-ink);
   background: transparent;
@@ -4126,10 +4149,19 @@ html {
 }
 
 .signup-bottom-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--m-visual-bottom, 0);
+  z-index: 30;
   height: 91px;
+  min-height: 91px;
   padding: 11px 22px max(20px, env(safe-area-inset-bottom));
   background: #fff;
   border-top-color: var(--m-line);
+  color: var(--m-ink);
+  visibility: visible;
+  opacity: 1;
 }
 
 .signup-bottom-action .primary {
