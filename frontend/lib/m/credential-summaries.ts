@@ -1,5 +1,4 @@
 import type { CertItem } from "@/components/m/parts";
-import type { CredentialSummary } from "@/lib/api";
 import type { NativeCredentialSummary } from "@/lib/m/android-bridge";
 
 const PALETTES = [
@@ -7,13 +6,6 @@ const PALETTES = [
   "linear-gradient(135deg,#052e2b 0%,#0f766e 48%,#2563eb 100%)",
   "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
 ];
-
-const API_STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "유효",
-  ISSUED: "유효",
-  REVOKED: "취소됨",
-  EXPIRED: "만료",
-};
 
 const NATIVE_STATUS_LABEL: Record<string, string> = {
   active: "활성",
@@ -63,20 +55,6 @@ export function nativeSummaryToCert(
     title: nativeCredentialTitle(summary),
     status: nativeCredentialStatus(summary),
     id: summary.credentialId || `native-credential-${index}`,
-    date: formatCredentialDate(summary.issuedAt),
-    expiresAt: summary.expiresAt
-      ? formatCredentialDate(summary.expiresAt)
-      : undefined,
-    gradient: credentialPalette(index),
-  };
-}
-
-export function apiSummaryToCert(summary: CredentialSummary, index: number): CertItem {
-  return {
-    issuer: summary.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-    title: summary.credentialTypeCode ?? "법인 증명서",
-    status: API_STATUS_LABEL[summary.credentialStatusCode ?? ""] ?? "발급됨",
-    id: `urn:cred:${summary.credentialId}`,
     date: formatCredentialDate(summary.issuedAt),
     expiresAt: summary.expiresAt
       ? formatCredentialDate(summary.expiresAt)

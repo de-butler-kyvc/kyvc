@@ -11,6 +11,7 @@ import {
   isBridgeAvailable,
   type AuthStatus,
 } from "@/lib/m/android-bridge";
+import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 
 type Tab = "business" | "email";
 
@@ -74,6 +75,9 @@ export default function MobileLoginPage() {
       }
       // 백엔드는 이메일 기준 로그인. 사업자번호 탭일 때도 입력값을 그대로 보낸다.
       await auth.login(id, password);
+      if (isBridgeAvailable()) {
+        await ensureMobileWallet().catch(() => null);
+      }
       router.replace("/m/home");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "로그인에 실패했습니다.");
@@ -94,6 +98,7 @@ export default function MobileLoginPage() {
     try {
       const r = await bridge.requestNativeAuth(method, "wallet-login");
       if (r.ok && r.authenticated) {
+        await ensureMobileWallet().catch(() => null);
         router.replace("/m/home");
       } else if (r.emailVerificationRequired) {
         setError("인증 5회 실패로 이메일 인증이 필요합니다.");

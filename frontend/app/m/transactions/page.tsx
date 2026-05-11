@@ -1,20 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MBottomNav, MTopBar } from "@/components/m/parts";
+import {
+  bridge,
+  isBridgeAvailable,
+  type WalletTransactionSummary,
+} from "@/lib/m/android-bridge";
 
 type ActivityTab = "all" | "vc" | "vp" | "warn" | "tx";
 
 type ActivityItem = {
-  id: number;
+  id: string;
   cat: Exclude<ActivityTab, "all">;
-  icon: "check" | "shield" | "bell" | "cert";
+  icon: "check" | "shield" | "bell" | "cert" | "xrp";
   title: string;
   desc: string;
   time: string;
-  group: "오늘" | "이번 주";
+  group: string;
   unread?: boolean;
 };
 
@@ -28,7 +33,7 @@ const TABS: Array<{ key: ActivityTab; label: string }> = [
 
 const ACTIVITY_ITEMS: ActivityItem[] = [
   {
-    id: 1,
+    id: "vp-1",
     cat: "vp",
     icon: "check",
     title: "법인등록증명서 검증 성공",
@@ -38,7 +43,7 @@ const ACTIVITY_ITEMS: ActivityItem[] = [
     unread: true,
   },
   {
-    id: 2,
+    id: "warn-2",
     cat: "warn",
     icon: "shield",
     title: "새로운 로그인 감지",
@@ -48,7 +53,7 @@ const ACTIVITY_ITEMS: ActivityItem[] = [
     unread: true,
   },
   {
-    id: 3,
+    id: "warn-3",
     cat: "warn",
     icon: "bell",
     title: "사업자등록증 만료 안내",
@@ -57,7 +62,7 @@ const ACTIVITY_ITEMS: ActivityItem[] = [
     group: "이번 주",
   },
   {
-    id: 4,
+    id: "vc-4",
     cat: "vc",
     icon: "cert",
     title: "기업금융 인증서 발급",
@@ -71,17 +76,79 @@ function ActivityIcon({ name }: { name: ActivityItem["icon"] }) {
   if (name === "check") return <MIcon.check />;
   if (name === "shield") return <MIcon.shield />;
   if (name === "bell") return <MIcon.bell />;
+  if (name === "xrp") return <MIcon.xrp />;
   return <MIcon.cert />;
+}
+
+function formatTxTime(dateUtc?: string) {
+  if (!dateUtc) return "";
+  const date = new Date(dateUtc);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("ko-KR", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatTxGroup(dateUtc?: string) {
+  if (!dateUtc) return "최근";
+  const date = new Date(dateUtc);
+  if (Number.isNaN(date.getTime())) return "최근";
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return "오늘";
+  return date.toLocaleDateString("ko-KR", {
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function txToActivity(tx: WalletTransactionSummary, index: number): ActivityItem {
+  const incoming = tx.direction === "incoming";
+  const amount = tx.amountXrp ? `${tx.amountXrp} XRP` : "XRP";
+  const result = tx.result ? ` · ${tx.result}` : "";
+  const fee = tx.feeXrp && !incoming ? ` · 수수료 ${tx.feeXrp} XRP` : "";
+
+  return {
+    id: tx.hash ?? `tx-${index}`,
+    cat: "tx",
+    icon: "xrp",
+    title: incoming ? `${amount} 받음` : `${amount} 보냄`,
+    desc: `${tx.transactionType ?? "Transaction"}${result}${fee}`,
+    time: formatTxTime(tx.dateUtc),
+    group: formatTxGroup(tx.dateUtc),
+  };
 }
 
 export default function MobileTransactionsPage() {
   const [tab, setTab] = useState<ActivityTab>("all");
+  const [nativeTx, setNativeTx] = useState<ActivityItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isBridgeAvailable()) return;
+    bridge
+      .getWalletTransactions(20)
+      .then((r) => {
+        if (!r.ok) {
+          setError(r.error ?? "거래 내역을 가져올 수 없습니다.");
+          return;
+        }
+        setNativeTx((r.transactions ?? []).map(txToActivity));
+        setError(null);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "거래 내역 조회에 실패했습니다.");
+      });
+  }, []);
 
   const visible =
     tab === "all"
-      ? ACTIVITY_ITEMS
-      : ACTIVITY_ITEMS.filter((item) => item.cat === tab);
-  const groups = (["오늘", "이번 주"] as const)
+      ? [...nativeTx, ...ACTIVITY_ITEMS]
+      : tab === "tx"
+        ? nativeTx
+        : ACTIVITY_ITEMS.filter((item) => item.cat === tab);
+  const groupNames = Array.from(new Set(visible.map((item) => item.group)));
+  const groups = groupNames
     .map((group) => ({
       group,
       items: visible.filter((item) => item.group === group),
@@ -106,6 +173,7 @@ export default function MobileTransactionsPage() {
       </div>
 
       <div className="scroll activity-scroll">
+        {error ? <p className="m-error">{error}</p> : null}
         {groups.length === 0 ? (
           <p className="activity-empty">해당하는 활동이 없습니다.</p>
         ) : (

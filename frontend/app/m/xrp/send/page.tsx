@@ -7,6 +7,11 @@ import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
+import {
+  ensureMobileWallet,
+  formatXrp,
+  readXrpBalance,
+} from "@/lib/m/wallet-bridge";
 
 function extractXrpAddress(raw?: string) {
   const value = raw?.trim();
@@ -47,21 +52,19 @@ export default function MobileXrpSendPage() {
       setAvailableXrp("앱에서 확인");
       return;
     }
-    bridge
-      .getWalletAssets()
-      .then((r) => {
-        if (!r.ok) {
-          setAvailableXrp("확인 실패");
+    ensureMobileWallet()
+      .then(({ assets }) => {
+        if (assets?.depositRequired) {
+          setAvailableXrp("입금 필요");
           return;
         }
-        const balance =
-          (r.availableXrp as string | number | undefined) ??
-          (r.balanceXrp as string | number | undefined) ??
-          (r.xrpBalance as string | number | undefined) ??
-          (r.balance as string | number | undefined);
-        setAvailableXrp(balance == null ? "확인 실패" : `${balance} XRP`);
+        const balance = readXrpBalance(assets);
+        setAvailableXrp(balance == null ? "확인 실패" : formatXrp(balance));
       })
-      .catch(() => setAvailableXrp("확인 실패"));
+      .catch((e) => {
+        setAvailableXrp("확인 실패");
+        setError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
+      });
   }, []);
 
   const onScanAddress = async () => {

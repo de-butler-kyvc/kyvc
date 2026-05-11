@@ -7,7 +7,6 @@ import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import {
   ApiError,
-  credentials,
   mobileVp,
   type VpRequestResponse,
 } from "@/lib/api";
@@ -67,28 +66,21 @@ export default function MobileVpSubmitPage() {
           return;
         }
 
-        if (isBridgeAvailable()) {
-          const list = await bridge.getCredentialSummaries();
-          if (cancelled) return;
-          const mapped = (list.credentials ?? []).map((c, i) => ({
-            credentialId: c.credentialId,
-            title: nativeCredentialTitle(c),
-            issuer: nativeCredentialIssuer(c),
-            status: nativeCredentialStatus(c),
-            gradient: PALETTES[i % PALETTES.length]!,
-          }));
-          setVcList(mapped);
-          setSelected(new Set(mapped.map((c) => c.credentialId)));
+        if (!isBridgeAvailable()) {
+          if (!cancelled) {
+            setVcList([]);
+            setError("제출할 증명서는 KYvC 앱 지갑에서 확인할 수 있습니다.");
+          }
           return;
         }
 
-        const list = await credentials.list();
+        const list = await bridge.getCredentialSummaries();
         if (cancelled) return;
-        const mapped = list.credentials.map((c, i) => ({
-          credentialId: String(c.credentialId),
-          title: c.credentialTypeCode ?? "법인 증명서",
-          issuer: c.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-          status: c.credentialStatusCode === "REVOKED" ? "폐기" : "유효",
+        const mapped = (list.credentials ?? []).map((c, i) => ({
+          credentialId: c.credentialId,
+          title: nativeCredentialTitle(c),
+          issuer: nativeCredentialIssuer(c),
+          status: nativeCredentialStatus(c),
           gradient: PALETTES[i % PALETTES.length]!,
         }));
         setVcList(mapped);

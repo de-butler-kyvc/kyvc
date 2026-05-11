@@ -343,6 +343,54 @@ export type ListWalletsResult = BridgeResult & {
   wallets?: WalletItem[];
 };
 
+export type WalletAssetsResult = BridgeResult & {
+  account?: string;
+  accountActivated?: boolean;
+  depositRequired?: boolean;
+  xrpBalanceDrops?: string;
+  xrpBalanceXrp?: string;
+  ownerCount?: number;
+  sequence?: number;
+  trustLineCount?: number;
+  lines?: Array<{
+    currency?: string;
+    issuer?: string;
+    balance?: string;
+    limit?: string;
+    limitPeer?: string;
+  }>;
+  checkedAtUtc?: string;
+  errorCode?: string;
+  errorTitle?: string;
+  errorHint?: string;
+};
+
+export type WalletDepositInfoResult = BridgeResult & {
+  account?: string;
+  did?: string;
+  receiveAddress?: string;
+  qrPayload?: string;
+};
+
+export type WalletTransactionSummary = {
+  hash?: string;
+  transactionType?: string;
+  direction?: "incoming" | "outgoing" | "other" | string;
+  amountDrops?: string;
+  amountXrp?: string;
+  feeDrops?: string;
+  feeXrp?: string;
+  validated?: boolean;
+  result?: string;
+  dateUtc?: string;
+};
+
+export type WalletTransactionsResult = BridgeResult & {
+  account?: string;
+  count?: number;
+  transactions?: WalletTransactionSummary[];
+};
+
 export type NativeCredentialStatus =
   | "active"
   | "issued"
@@ -472,11 +520,12 @@ export const bridge = {
     }),
 
   // 자산/거래
-  getWalletAssets: () => callBridge("getWalletAssets", {}),
-  getWalletDepositInfo: () => callBridge("getWalletDepositInfo", {}),
+  getWalletAssets: () => callBridge<WalletAssetsResult>("getWalletAssets", {}),
+  getWalletDepositInfo: () =>
+    callBridge<WalletDepositInfoResult>("getWalletDepositInfo", {}),
   copyWalletAddress: () => callBridge("copyWalletAddress", {}),
   getWalletTransactions: (limit = 10) =>
-    callBridge("getWalletTransactions", { limit }),
+    callBridge<WalletTransactionsResult>("getWalletTransactions", { limit }),
   submitXrpPayment: (params: {
     destinationAddress: string;
     destinationTag?: string;
@@ -629,6 +678,31 @@ export const bridge = {
       }
     >("scanQRCode", {
       ...(purpose ? { purpose } : {}),
+      requestId: newRequestId(),
+    }),
+  scanIssueQrCode: () =>
+    callBridge<
+      BridgeResult & {
+        mode?: string;
+        actionType?: string;
+        qrData?: string;
+        endpoint?: string;
+      }
+    >("scanIssueQrCode", {
+      requestId: newRequestId(),
+    }),
+  scanPresentationQrCode: () =>
+    callBridge<
+      BridgeResult & {
+        mode?: string;
+        actionType?: string;
+        qrData?: string;
+        coreBaseUrl?: string;
+        challenge?: string;
+        domain?: string;
+        endpoint?: string;
+      }
+    >("scanPresentationQrCode", {
       requestId: newRequestId(),
     }),
 };

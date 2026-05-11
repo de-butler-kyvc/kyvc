@@ -19,7 +19,7 @@ export default function MobileVpScanPage() {
     startedRef.current = true;
     (async () => {
       try {
-        const r = await bridge.scanQRCode("VP_REQUEST");
+        const r = await bridge.scanPresentationQrCode();
         if (!r.ok) {
           setError(r.error ?? "QR 스캔에 실패했습니다.");
           return;

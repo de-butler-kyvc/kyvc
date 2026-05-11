@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 
 export default function MobileXrpChargePage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function MobileXrpChargePage() {
     if (!isBridgeAvailable()) return;
     (async () => {
       try {
+        await ensureMobileWallet();
         const r = await bridge.getWalletDepositInfo();
         if (r.ok) {
           const addr =

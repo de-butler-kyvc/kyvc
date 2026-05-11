@@ -51,6 +51,32 @@ export default function MobileXrpConfirmPage() {
     }
     setBusy(true);
     try {
+      const authStatus = await bridge.getAuthStatus();
+      if (authStatus.emailVerificationRequired) {
+        setError("이메일 인증 후 송금할 수 있습니다.");
+        setBusy(false);
+        return;
+      }
+      const method = authStatus.availableMethods?.includes("biometric")
+        ? "biometric"
+        : authStatus.availableMethods?.includes("pin")
+          ? "pin"
+          : authStatus.availableMethods?.includes("pattern")
+            ? "pattern"
+            : null;
+      if (!method) {
+        setError("송금 재인증에 사용할 인증 수단이 없습니다.");
+        setBusy(false);
+        return;
+      }
+      if (!authStatus.xrpPaymentAuthReady) {
+        const auth = await bridge.requestNativeAuth(method, "xrp-payment");
+        if (!auth.ok || !auth.authenticated) {
+          setError(auth.error ?? "송금 전 재인증이 필요합니다.");
+          setBusy(false);
+          return;
+        }
+      }
       const r = await bridge.submitXrpPayment({
         destinationAddress: draft.destinationAddress,
         ...(draft.destinationTag ? { destinationTag: draft.destinationTag } : {}),

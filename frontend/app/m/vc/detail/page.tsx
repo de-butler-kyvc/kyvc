@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
@@ -9,11 +9,6 @@ import {
   MTopBar,
   type CertItem,
 } from "@/components/m/parts";
-import {
-  ApiError,
-  credentials,
-  type CredentialDetailResponse,
-} from "@/lib/api";
 import {
   bridge,
   isBridgeAvailable,
@@ -24,55 +19,11 @@ import {
   nativeSummaryToCert,
 } from "@/lib/m/credential-summaries";
 
-const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "검증됨",
-  ISSUED: "검증됨",
-  REVOKED: "취소됨",
-  EXPIRED: "만료",
-};
-
-const PALETTES = [
-  "linear-gradient(135deg,#111827 0%,#183b8f 48%,#7c3aed 100%)",
-  "linear-gradient(135deg,#052e2b 0%,#0f766e 48%,#2563eb 100%)",
-  "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
-];
-
-function detailToCert(
-  d: CredentialDetailResponse,
-  palette: string,
-): CertItem {
-  return {
-    issuer: d.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-    title: d.credentialTypeCode ?? "법인 증명서",
-    status: STATUS_LABEL[d.credentialStatusCode ?? ""] ?? "발급됨",
-    id: d.credentialExternalId ?? `DID:kyvc:corp:${d.credentialId}`,
-    date: (d.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
-    gradient: palette,
-  };
-}
-
-const FALLBACK_CERT: CertItem = {
-  issuer: "법원행정처",
-  title: "법인등록증명서",
-  status: "검증됨",
-  id: "DID:kyvc:corp:240315",
-  date: "2026.05.07",
-  gradient: PALETTES[0]!,
-};
-
 function MobileVcDetailInner() {
-  const router = useRouter();
   const sp = useSearchParams();
   const id = sp.get("id");
-  // urn:cred:NN 또는 bridge id 형태 → 백엔드 credentialId 추출
-  const credentialId = (() => {
-    if (!id) return null;
-    const m = id.match(/^urn:cred:(\d+)$/);
-    return m ? Number(m[1]) : null;
-  })();
 
   const [cert, setCert] = useState<CertItem | null>(null);
-  const [detail, setDetail] = useState<CredentialDetailResponse | null>(null);
   const [nativeDetail, setNativeDetail] = useState<NativeCredentialSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,38 +41,29 @@ function MobileVcDetailInner() {
     let cancelled = false;
     (async () => {
       try {
-        if (isBridgeAvailable()) {
-          const list = await bridge.getCredentialSummaries();
-          if (cancelled) return;
-          const found = (list.credentials ?? []).find(
-            (credential) => credential.credentialId === id,
-          );
-          if (found) {
-            setNativeDetail(found);
-            setCert(nativeSummaryToCert(found, 0));
-            setLoading(false);
-            return;
+        if (!isBridgeAvailable()) {
+          if (!cancelled) {
+            setError("증명서 상세는 KYvC 앱 지갑에서 확인할 수 있습니다.");
           }
-        }
-        if (credentialId == null) {
-          setCert(FALLBACK_CERT);
-          setLoading(false);
           return;
         }
-        const d = await credentials.detail(credentialId);
+        const list = await bridge.getCredentialSummaries();
         if (cancelled) return;
-        setDetail(d);
-        setCert(detailToCert(d, PALETTES[0]!));
+        const found = (list.credentials ?? []).find(
+          (credential) => credential.credentialId === id,
+        );
+        if (!found) {
+          setError("지갑에서 해당 증명서를 찾을 수 없습니다.");
+          return;
+        }
+        setNativeDetail(found);
+        setCert(nativeSummaryToCert(found, 0));
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError && e.status === 401) {
-          router.replace("/m/login");
-          return;
-        }
         setError(
-          e instanceof ApiError
-            ? `VC 상세 조회 실패: ${e.message}`
-            : "VC 상세 조회 중 오류가 발생했습니다.",
+          e instanceof Error
+            ? `지갑 증명서 상세 조회 실패: ${e.message}`
+            : "지갑 증명서 상세 조회 중 오류가 발생했습니다.",
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -130,22 +72,17 @@ function MobileVcDetailInner() {
     return () => {
       cancelled = true;
     };
-  }, [id, credentialId, router]);
+  }, [id]);
 
   // 브리지로 XRPL 상태 조회 (있을 때만)
   useEffect(() => {
-    if ((!detail && !nativeDetail) || !isBridgeAvailable()) return;
+    if (!nativeDetail || !isBridgeAvailable()) return;
     (async () => {
       try {
         const r = await bridge.checkCredentialStatus({
-          credentialId:
-            nativeDetail?.credentialId ??
-            detail?.credentialExternalId ??
-            `${detail?.credentialId ?? ""}`,
+          credentialId: nativeDetail.credentialId,
           ...(nativeDetail?.holderAccount
             ? { holderAccount: nativeDetail.holderAccount }
-            : detail?.holderXrplAddress
-              ? { holderAccount: detail.holderXrplAddress }
             : {}),
           ...(nativeDetail?.issuerAccount
             ? { issuerAccount: nativeDetail.issuerAccount }
@@ -161,7 +98,7 @@ function MobileVcDetailInner() {
         /* 무시 — 상태 영역에만 영향 */
       }
     })();
-  }, [detail, nativeDetail]);
+  }, [nativeDetail]);
 
   return (
     <section className="view wash vc-detail-view">
@@ -185,14 +122,12 @@ function MobileVcDetailInner() {
                 <div className="vc-detail-row-body">
                   <strong>유효기간</strong>
                   <span>
-                    {(detail?.issuedAt ?? cert.date)
+                    {(nativeDetail?.issuedAt ?? cert.date)
                       .slice(0, 10)
                       .replaceAll("-", ".")}
                     {nativeDetail?.expiresAt
                       ? ` - ${nativeDetail.expiresAt.slice(0, 10).replaceAll("-", ".")}`
-                      : detail?.expiresAt
-                        ? ` - ${detail.expiresAt.slice(0, 10).replaceAll("-", ".")}`
-                        : " - 2027.05.06"}
+                      : " -"}
                   </span>
                 </div>
               </div>
