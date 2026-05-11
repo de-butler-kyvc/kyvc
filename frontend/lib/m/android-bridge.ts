@@ -359,6 +359,13 @@ export const bridge = {
         ...(backendRequest ? { backendRequest } : {}),
       },
     ),
+  requestPinReset: (reason = "user-request") =>
+    callAndroidVoid("requestPinReset", {
+      action: "REQUEST_PIN_RESET",
+      requestId: newRequestId(),
+      issuedAt: new Date().toISOString(),
+      reason,
+    }),
   completeEmailVerification: () =>
     callBridge("completeEmailVerification", {
       action: "COMPLETE_EMAIL_VERIFICATION",
