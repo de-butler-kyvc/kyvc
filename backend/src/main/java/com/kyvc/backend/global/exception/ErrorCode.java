@@ -46,10 +46,24 @@ public enum ErrorCode {
     USER_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER_ALREADY_EXISTS", "이미 존재하는 사용자입니다."),
     // HTTP 403 - 사용자 비활성
     USER_INACTIVE(HttpStatus.FORBIDDEN, "USER_INACTIVE", "비활성 사용자입니다."),
+    // HTTP 404 - 역할 없음
+    ROLE_NOT_FOUND(HttpStatus.NOT_FOUND, "ROLE_NOT_FOUND", "역할 정보를 찾을 수 없습니다."),
+    // HTTP 403 - 사용자 역할 없음
+    USER_ROLE_NOT_FOUND(HttpStatus.FORBIDDEN, "USER_ROLE_NOT_FOUND", "사용자 역할 정보를 찾을 수 없습니다."),
+    // HTTP 403 - 역할 선택 오류
+    INVALID_ROLE_SELECTION(HttpStatus.FORBIDDEN, "INVALID_ROLE_SELECTION", "선택할 수 없는 역할입니다."),
+    // HTTP 400 - 현재 비밀번호 불일치
+    CURRENT_PASSWORD_NOT_MATCHED(HttpStatus.BAD_REQUEST, "CURRENT_PASSWORD_NOT_MATCHED", "현재 비밀번호가 일치하지 않습니다."),
+    // HTTP 400 - 비밀번호 확인 불일치
+    PASSWORD_CONFIRM_NOT_MATCHED(HttpStatus.BAD_REQUEST, "PASSWORD_CONFIRM_NOT_MATCHED", "새 비밀번호 확인값이 일치하지 않습니다."),
+    // HTTP 400 - MFA 검증 필요
+    MFA_VERIFICATION_REQUIRED(HttpStatus.BAD_REQUEST, "MFA_VERIFICATION_REQUIRED", "MFA 검증이 필요합니다."),
     // HTTP 404 - 법인 없음
     CORPORATE_NOT_FOUND(HttpStatus.NOT_FOUND, "CORPORATE_NOT_FOUND", "법인 정보를 찾을 수 없습니다."),
     // HTTP 403 - 법인 접근 거부
     CORPORATE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CORPORATE_ACCESS_DENIED", "법인 정보 접근 권한이 없습니다."),
+    // HTTP 404 - 대리인 없음
+    AGENT_NOT_FOUND(HttpStatus.NOT_FOUND, "AGENT_NOT_FOUND", "대리인 정보를 찾을 수 없습니다."),
     // HTTP 404 - KYC 없음
     KYC_NOT_FOUND(HttpStatus.NOT_FOUND, "KYC_NOT_FOUND", "KYC 신청을 찾을 수 없습니다."),
     // HTTP 403 - KYC 접근 거부
@@ -82,6 +96,10 @@ public enum ErrorCode {
     DOCUMENT_FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_FILE_NOT_FOUND", "문서 파일을 찾을 수 없습니다."),
     // HTTP 500 - 문서 저장 경로 오류
     DOCUMENT_STORAGE_PATH_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "DOCUMENT_STORAGE_PATH_INVALID", "문서 저장 경로가 올바르지 않습니다."),
+    // HTTP 409 - 문서 삭제 요청 중복
+    DOCUMENT_DELETE_REQUEST_ALREADY_EXISTS(HttpStatus.CONFLICT, "DOCUMENT_DELETE_REQUEST_ALREADY_EXISTS", "진행 중인 문서 삭제 요청이 이미 존재합니다."),
+    // HTTP 404 - 문서 삭제 요청 없음
+    DOCUMENT_DELETE_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_DELETE_REQUEST_NOT_FOUND", "문서 삭제 요청을 찾을 수 없습니다."),
 
     // HTTP 404 - 보완 요청 없음
     SUPPLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SUPPLEMENT_NOT_FOUND", "보완 요청을 찾을 수 없습니다."),

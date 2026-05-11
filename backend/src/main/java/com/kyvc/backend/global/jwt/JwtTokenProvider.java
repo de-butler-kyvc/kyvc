@@ -47,6 +47,19 @@ public class JwtTokenProvider {
         return createToken(user, ACCESS_TOKEN_TYPE, Duration.ofMinutes(jwtProperties.getAccessTokenExpirationMinutes()));
     }
 
+    // Access Token 생성
+    public String createAccessToken(
+            User user, // 토큰 발급 대상 사용자
+            List<String> roles // 권한 목록
+    ) {
+        return createToken(
+                user,
+                roles,
+                ACCESS_TOKEN_TYPE,
+                Duration.ofMinutes(jwtProperties.getAccessTokenExpirationMinutes())
+        );
+    }
+
     // Refresh Token 생성
     public String createRefreshToken(User user // 토큰 발급 대상 사용자
     ) {
@@ -127,9 +140,18 @@ public class JwtTokenProvider {
             String tokenType, // 토큰 유형
             Duration duration // 유효기간
     ) {
+        return createToken(user, resolveRoles(user), tokenType, duration);
+    }
+
+    // JWT 공통 생성
+    private String createToken(
+            User user, // 토큰 발급 대상 사용자
+            List<String> roles, // 권한 목록
+            String tokenType, // 토큰 유형
+            Duration duration // 유효기간
+    ) {
         Instant now = Instant.now(); // 발급 시각
         Instant expiration = now.plus(duration); // 만료 시각
-        List<String> roles = resolveRoles(user); // 권한 목록
 
         return Jwts.builder()
                 .subject(String.valueOf(user.getUserId()))

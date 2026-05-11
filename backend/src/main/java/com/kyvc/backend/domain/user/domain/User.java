@@ -125,5 +125,24 @@ public class User {
             String passwordHash // 신규 비밀번호 해시
     ) {
         this.passwordHash = passwordHash;
+        this.lastPasswordChangedAt = LocalDateTime.now();
+    }
+
+    // 기본 정보 변경
+    public void updateProfile(
+            String userName, // 사용자명
+            String phone, // 사용자 연락처
+            KyvcEnums.Yn notificationEnabledYn // 알림 수신 여부
+    ) {
+        this.userName = userName;
+        this.phone = phone;
+        this.notificationEnabledYn = notificationEnabledYn;
+    }
+
+    // MFA 설정 변경
+    public void updateMfaEnabled(
+            KyvcEnums.Yn mfaEnabledYn // MFA 사용 여부
+    ) {
+        this.mfaEnabledYn = mfaEnabledYn;
     }
 }
