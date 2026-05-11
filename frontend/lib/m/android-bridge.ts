@@ -449,6 +449,23 @@ export const bridge = {
       autoRegisterDidSet: true,
       ...payload,
     }),
+  requestMnemonicBackup: () =>
+    callAndroidVoid("requestMnemonicBackup", {
+      action: "REQUEST_MNEMONIC_BACKUP",
+      requestId: newRequestId(),
+      issuedAt: new Date().toISOString(),
+    }),
+  requestWalletRestore: (params?: {
+    overwrite?: boolean;
+    autoRegisterDidSet?: boolean;
+  }) =>
+    callAndroidVoid("requestWalletRestore", {
+      action: "REQUEST_WALLET_RESTORE",
+      requestId: newRequestId(),
+      issuedAt: new Date().toISOString(),
+      overwrite: params?.overwrite ?? true,
+      autoRegisterDidSet: params?.autoRegisterDidSet ?? true,
+    }),
   submitHolderDidSet: (didDocumentUri?: string) =>
     callBridge("submitHolderDidSet", {
       ...(didDocumentUri ? { didDocumentUri } : {}),
