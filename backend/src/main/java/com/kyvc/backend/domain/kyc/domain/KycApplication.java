@@ -140,6 +140,31 @@ public class KycApplication {
         return kycApplication;
     }
 
+    // 금융사 방문 KYC 초안 생성
+    public static KycApplication createFinanceVisit(
+            Long corporateId, // 법인 ID
+            Long applicantUserId, // 신청 사용자 ID
+            String corporateTypeCode, // 법인 유형 코드
+            String financeInstitutionCode, // 금융기관 코드
+            String financeBranchCode, // 금융사 지점 코드
+            Long financeStaffUserId, // 금융사 직원 사용자 ID
+            String financeCustomerNo, // 금융사 고객번호
+            LocalDateTime visitedAt // 방문 일시
+    ) {
+        KycApplication kycApplication = new KycApplication();
+        kycApplication.corporateId = corporateId;
+        kycApplication.applicantUserId = applicantUserId;
+        kycApplication.corporateTypeCode = corporateTypeCode;
+        kycApplication.applicationChannelCode = KyvcEnums.ApplicationChannel.FINANCE_VISIT;
+        kycApplication.financeInstitutionCode = financeInstitutionCode;
+        kycApplication.financeBranchCode = financeBranchCode;
+        kycApplication.financeStaffUserId = financeStaffUserId;
+        kycApplication.financeCustomerNo = financeCustomerNo;
+        kycApplication.visitedAt = visitedAt;
+        kycApplication.kycStatus = KyvcEnums.KycStatus.DRAFT;
+        return kycApplication;
+    }
+
     public Long getKycId() {
         return kycId;
     }
@@ -338,6 +363,18 @@ public class KycApplication {
     // 초안 상태 여부
     public boolean isDraft() {
         return KyvcEnums.KycStatus.DRAFT == kycStatus;
+    }
+
+    // 금융사 방문 신청 여부
+    public boolean isFinanceVisit() {
+        return KyvcEnums.ApplicationChannel.FINANCE_VISIT == applicationChannelCode;
+    }
+
+    // 금융사 직원 접근 가능 여부
+    public boolean isFinanceVisitByStaff(
+            Long userId // 금융사 직원 사용자 ID
+    ) {
+        return isFinanceVisit() && financeStaffUserId != null && financeStaffUserId.equals(userId);
     }
 
     // 문서 업로드 가능 여부

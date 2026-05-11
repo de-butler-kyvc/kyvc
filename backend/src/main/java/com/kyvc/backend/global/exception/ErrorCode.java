@@ -101,6 +101,21 @@ public enum ErrorCode {
     // HTTP 404 - 문서 삭제 요청 없음
     DOCUMENT_DELETE_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_DELETE_REQUEST_NOT_FOUND", "문서 삭제 요청을 찾을 수 없습니다."),
 
+    // HTTP 403 - 금융사 직원 권한 필요
+    FINANCE_STAFF_ROLE_REQUIRED(HttpStatus.FORBIDDEN, "FINANCE_STAFF_ROLE_REQUIRED", "금융사 직원 권한이 필요합니다."),
+    // HTTP 404 - 금융사 컨텍스트 없음
+    FINANCE_CONTEXT_NOT_FOUND(HttpStatus.NOT_FOUND, "FINANCE_CONTEXT_NOT_FOUND", "금융사 컨텍스트를 찾을 수 없습니다."),
+    // HTTP 404 - 금융사 고객 연결 없음
+    FINANCE_CUSTOMER_LINK_NOT_FOUND(HttpStatus.NOT_FOUND, "FINANCE_CUSTOMER_LINK_NOT_FOUND", "금융사 고객 연결 정보를 찾을 수 없습니다."),
+    // HTTP 409 - 금융사 고객 연결 중복
+    FINANCE_CUSTOMER_LINK_ALREADY_EXISTS(HttpStatus.CONFLICT, "FINANCE_CUSTOMER_LINK_ALREADY_EXISTS", "이미 연결된 금융사 고객번호입니다."),
+    // HTTP 404 - 금융사 KYC 없음
+    FINANCE_KYC_NOT_FOUND(HttpStatus.NOT_FOUND, "FINANCE_KYC_NOT_FOUND", "금융사 KYC 신청을 찾을 수 없습니다."),
+    // HTTP 403 - 금융사 KYC 접근 거부
+    FINANCE_KYC_ACCESS_DENIED(HttpStatus.FORBIDDEN, "FINANCE_KYC_ACCESS_DENIED", "금융사 KYC 접근 권한이 없습니다."),
+    // HTTP 409 - 금융사 KYC 상태 오류
+    INVALID_FINANCE_KYC_STATUS(HttpStatus.CONFLICT, "INVALID_FINANCE_KYC_STATUS", "처리할 수 없는 금융사 KYC 상태입니다."),
+
     // HTTP 404 - 보완 요청 없음
     SUPPLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SUPPLEMENT_NOT_FOUND", "보완 요청을 찾을 수 없습니다."),
     // HTTP 403 - 보완 요청 접근 거부

@@ -381,6 +381,13 @@ public final class KyvcEnums {
         CANCELLED // 취소
     }
 
+    // 금융사 고객 연결 상태
+    public enum FinanceCustomerLinkStatus {
+        ACTIVE, // 활성
+        INACTIVE, // 비활성
+        UNLINKED // 연결 해제
+    }
+
     // 동의 유형
     public enum ConsentType {
         TERMS_OF_SERVICE, // 서비스 이용약관

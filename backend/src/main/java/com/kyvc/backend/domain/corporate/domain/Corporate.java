@@ -183,6 +183,23 @@ public class Corporate {
         this.agentAuthorityScope = agentAuthorityScope;
     }
 
+    // 금융사 방문 KYC 법인정보 변경
+    public void updateFinanceVisitInfo(
+            String corporateName, // 법인명
+            String businessRegistrationNo, // 사업자등록번호
+            String corporateRegistrationNo, // 법인등록번호
+            String representativeName, // 대표자명
+            String corporateTypeCode, // 법인 유형 코드
+            String address // 법인 주소
+    ) {
+        this.corporateName = corporateName;
+        this.businessRegistrationNo = businessRegistrationNo;
+        this.corporateRegistrationNo = corporateRegistrationNo;
+        this.representativeName = representativeName;
+        this.corporateTypeCode = corporateTypeCode;
+        this.address = address;
+    }
+
     // 소유자 여부
     public boolean isOwnedBy(
             Long userId // 사용자 ID
