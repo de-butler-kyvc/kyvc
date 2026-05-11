@@ -237,6 +237,29 @@ public class AuthService {
         return new TokenIssueResult<>(body, accessToken, refreshToken);
     }
 
+    // 검증 완료 사용자 토큰 발급
+    public TokenIssueResult<Void> issueTokensForVerifiedUser(
+            User user // 토큰 발급 대상 사용자
+    ) {
+        if (user == null) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (!user.isActive()) {
+            throw new ApiException(ErrorCode.USER_INACTIVE);
+        }
+        return issueTokens(user, null);
+    }
+
+    // 사용자 권한 목록 조회
+    public List<String> resolveUserRoles(
+            User user // 권한 조회 대상 사용자
+    ) {
+        if (user == null) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+        return resolveRoles(user);
+    }
+
     // Dev 사용자 생성
     private User createDevUser(
             String email, // 생성 대상 이메일

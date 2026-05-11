@@ -114,8 +114,13 @@ public class MobileVpController {
      * @return VP 제출 응답
      */
     @Operation(
-            summary = "모바일 VP 제출",
-            description = "모바일 앱이 VP를 제출하면 backend가 Core에 VP 검증을 동기 요청합니다. Core 응답 수신 후 VP 검증 결과를 저장하고 반환합니다."
+            summary = "모바일 일반 VP 제출",
+            description = """
+                    JWT/Cookie로 인증된 로그인 사용자가 일반 VP 요청에 대해 VP를 제출합니다.
+                    backend가 Core에 VP 검증을 동기 요청하고 검증 결과를 저장합니다.
+                    이 API는 로그인 토큰을 발급하지 않습니다.
+                    이 API는 VP 로그인 API가 아니며 POST /api/mobile/auth/vp-login을 대체하지 않습니다.
+                    """
     )
     @ApiResponse(
             responseCode = "200",
@@ -140,7 +145,11 @@ public class MobileVpController {
      */
     @Operation(
             summary = "모바일 VP 제출 이력 상세 조회",
-            description = "모바일 VP 제출 상세 결과를 조회합니다. Core를 직접 호출하지 않고 저장된 VP 검증 결과만 반환합니다."
+            description = """
+                    JWT/Cookie로 인증된 로그인 사용자의 VP 제출 결과를 조회합니다.
+                    Core를 다시 호출하지 않고 backend DB에 저장된 검증 결과만 반환합니다.
+                    VP 로그인 결과 조회 API가 아닙니다.
+                    """
     )
     @ApiResponse(
             responseCode = "200",

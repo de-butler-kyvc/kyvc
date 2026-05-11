@@ -256,6 +256,44 @@ public enum ErrorCode {
     VP_CHALLENGE_INVALID(HttpStatus.BAD_REQUEST, "VP_CHALLENGE_INVALID", "VP challenge가 올바르지 않습니다."),
     // HTTP 400 - VP JWT 필요
     VP_JWT_REQUIRED(HttpStatus.BAD_REQUEST, "VP_JWT_REQUIRED", "VP JWT가 필요합니다."),
+    // HTTP 404 - 이메일 인증 요청 없음
+    EMAIL_VERIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "EMAIL_VERIFICATION_NOT_FOUND", "이메일 인증 요청을 찾을 수 없습니다."),
+    // HTTP 400 - 이메일 인증 이메일 불일치
+    EMAIL_VERIFICATION_EMAIL_MISMATCH(HttpStatus.BAD_REQUEST, "EMAIL_VERIFICATION_EMAIL_MISMATCH", "이메일 인증 요청 정보가 일치하지 않습니다."),
+    // HTTP 410 - 이메일 인증 만료
+    EMAIL_VERIFICATION_EXPIRED(HttpStatus.GONE, "EMAIL_VERIFICATION_EXPIRED", "이메일 인증번호가 만료되었습니다."),
+    // HTTP 409 - 이메일 인증 완료
+    EMAIL_VERIFICATION_ALREADY_VERIFIED(HttpStatus.CONFLICT, "EMAIL_VERIFICATION_ALREADY_VERIFIED", "이미 검증된 이메일 인증 요청입니다."),
+    // HTTP 429 - 이메일 인증 시도 초과
+    EMAIL_VERIFICATION_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "EMAIL_VERIFICATION_ATTEMPT_EXCEEDED", "이메일 인증 시도 횟수를 초과했습니다."),
+    // HTTP 400 - 이메일 인증번호 오류
+    EMAIL_VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "EMAIL_VERIFICATION_CODE_INVALID", "이메일 인증번호가 올바르지 않습니다."),
+    // HTTP 429 - 이메일 인증 재요청 제한
+    EMAIL_VERIFICATION_RESEND_TOO_FAST(HttpStatus.TOO_MANY_REQUESTS, "EMAIL_VERIFICATION_RESEND_TOO_FAST", "이미 진행 중인 이메일 인증 요청이 있습니다."),
+    // HTTP 400 - 이메일 인증 목적 오류
+    EMAIL_VERIFICATION_PURPOSE_INVALID(HttpStatus.BAD_REQUEST, "EMAIL_VERIFICATION_PURPOSE_INVALID", "이메일 인증 목적이 올바르지 않습니다."),
+    // HTTP 404 - VP 로그인 요청 없음
+    VP_LOGIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "VP_LOGIN_REQUEST_NOT_FOUND", "VP 로그인 요청을 찾을 수 없습니다."),
+    // HTTP 410 - VP 로그인 요청 만료
+    VP_LOGIN_REQUEST_EXPIRED(HttpStatus.GONE, "VP_LOGIN_REQUEST_EXPIRED", "VP 로그인 요청이 만료되었습니다."),
+    // HTTP 409 - VP 로그인 요청 사용 완료
+    VP_LOGIN_REQUEST_ALREADY_USED(HttpStatus.CONFLICT, "VP_LOGIN_REQUEST_ALREADY_USED", "이미 사용된 VP 로그인 요청입니다."),
+    // HTTP 400 - VP 로그인 challenge 불일치
+    VP_LOGIN_CHALLENGE_MISMATCH(HttpStatus.BAD_REQUEST, "VP_LOGIN_CHALLENGE_MISMATCH", "VP 로그인 challenge가 일치하지 않습니다."),
+    // HTTP 400 - VP 로그인 nonce 불일치
+    VP_LOGIN_NONCE_MISMATCH(HttpStatus.BAD_REQUEST, "VP_LOGIN_NONCE_MISMATCH", "VP 로그인 nonce가 일치하지 않습니다."),
+    // HTTP 409 - VP 로그인 Credential 오류
+    VP_LOGIN_CREDENTIAL_INVALID(HttpStatus.CONFLICT, "VP_LOGIN_CREDENTIAL_INVALID", "VP 로그인에 사용할 수 없는 Credential입니다."),
+    // HTTP 409 - VP 로그인 Wallet 저장 필요
+    VP_LOGIN_CREDENTIAL_NOT_WALLET_SAVED(HttpStatus.CONFLICT, "VP_LOGIN_CREDENTIAL_NOT_WALLET_SAVED", "Wallet에 저장된 Credential만 VP 로그인에 사용할 수 있습니다."),
+    // HTTP 404 - VP 로그인 사용자 없음
+    VP_LOGIN_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "VP_LOGIN_USER_NOT_FOUND", "VP 로그인 사용자를 찾을 수 없습니다."),
+    // HTTP 502 - VP 로그인 Core 검증 실패
+    VP_LOGIN_CORE_VERIFY_FAILED(HttpStatus.BAD_GATEWAY, "VP_LOGIN_CORE_VERIFY_FAILED", "VP 로그인 Core 검증에 실패했습니다."),
+    // HTTP 502 - Core VP challenge 실패
+    CORE_VP_CHALLENGE_FAILED(HttpStatus.BAD_GATEWAY, "CORE_VP_CHALLENGE_FAILED", "Core VP challenge 발급에 실패했습니다."),
+    // HTTP 502 - Core VP 검증 실패
+    CORE_VP_VERIFY_FAILED(HttpStatus.BAD_GATEWAY, "CORE_VP_VERIFY_FAILED", "Core VP 검증 호출에 실패했습니다."),
     // HTTP 401 - Verifier API Key 필요
     VERIFIER_API_KEY_REQUIRED(HttpStatus.UNAUTHORIZED, "VERIFIER_API_KEY_REQUIRED", "Verifier API Key가 필요합니다."),
     // HTTP 401 - Verifier API Key 오류

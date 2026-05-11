@@ -58,8 +58,12 @@ public class SecurityConfig {
                                 "/api/auth/token/refresh",
                                 "/api/auth/password-reset/request",
                                 "/api/auth/password-reset/confirm",
+                                "/api/auth/email-verifications/request",
+                                "/api/auth/email-verifications/verify",
                                 "/api/auth/dev/token",
-                                "/api/mobile/auth/login"
+                                "/api/mobile/auth/login",
+                                "/api/mobile/auth/vp-login/challenge",
+                                "/api/mobile/auth/vp-login"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,

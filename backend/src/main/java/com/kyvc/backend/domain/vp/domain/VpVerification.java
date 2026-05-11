@@ -267,6 +267,19 @@ public class VpVerification {
         );
     }
 
+    // 요청 만료 처리
+    public void markExpired(
+            String resultSummary, // 결과 요약
+            LocalDateTime verifiedAt // 처리 일시
+    ) {
+        applyVerificationResult(
+                KyvcEnums.VpVerificationStatus.EXPIRED,
+                resultSummary,
+                verifiedAt,
+                KyvcEnums.Yn.N
+        );
+    }
+
     // 검증 결과 반영
     private void applyVerificationResult(
             KyvcEnums.VpVerificationStatus status, // VP 검증 상태
