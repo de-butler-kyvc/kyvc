@@ -11,6 +11,7 @@ const KEYS = {
   selectedVcId: "kyvc.m.selectedVcId",
   xrpTransfer: "kyvc.m.xrpTransfer",
   xrpTransferResult: "kyvc.m.xrpTransferResult",
+  corporateProfile: "kyvc.m.corporateProfile",
 } as const;
 
 export type ScanResult = {
@@ -49,6 +50,12 @@ export type XrpTransferResult = XrpTransferDraft & {
   completedAt: number;
 };
 
+export type CachedCorporateProfile = {
+  corporateName: string;
+  businessRegistrationNo: string;
+  cachedAt: number;
+};
+
 function read<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
@@ -79,11 +86,16 @@ export const mSession = {
     read<XrpTransferResult>(KEYS.xrpTransferResult),
   writeXrpTransferResult: (v: XrpTransferResult | null) =>
     write(KEYS.xrpTransferResult, v),
+  readCorporateProfile: () =>
+    read<CachedCorporateProfile>(KEYS.corporateProfile),
+  writeCorporateProfile: (v: CachedCorporateProfile | null) =>
+    write(KEYS.corporateProfile, v),
   clearAll: () => {
     write(KEYS.scan, null);
     write(KEYS.vpRequest, null);
     write(KEYS.selectedVcId, null);
     write(KEYS.xrpTransfer, null);
     write(KEYS.xrpTransferResult, null);
+    write(KEYS.corporateProfile, null);
   },
 };

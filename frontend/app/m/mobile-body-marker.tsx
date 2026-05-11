@@ -16,6 +16,26 @@ export default function MobileBodyMarker() {
 
     let startY = 0;
     let scrollTarget: HTMLElement | null = null;
+    let viewportRaf = 0;
+
+    const syncVisualViewport = () => {
+      if (viewportRaf) return;
+      viewportRaf = window.requestAnimationFrame(() => {
+        viewportRaf = 0;
+        const vv = window.visualViewport;
+        const height = vv?.height ?? window.innerHeight;
+        const offsetTop = vv?.offsetTop ?? 0;
+        const bottomInset = Math.max(0, window.innerHeight - height - offsetTop);
+        document.documentElement.style.setProperty(
+          "--m-visual-bottom",
+          `${bottomInset}px`,
+        );
+        document.documentElement.style.setProperty(
+          "--m-visual-height",
+          `${height}px`,
+        );
+      });
+    };
 
     const getScrollTarget = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return null;
@@ -58,8 +78,18 @@ export default function MobileBodyMarker() {
 
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchmove", onTouchMove, { passive: false });
+    syncVisualViewport();
+    window.visualViewport?.addEventListener("resize", syncVisualViewport);
+    window.visualViewport?.addEventListener("scroll", syncVisualViewport);
+    window.addEventListener("resize", syncVisualViewport);
 
     return () => {
+      if (viewportRaf) window.cancelAnimationFrame(viewportRaf);
+      window.visualViewport?.removeEventListener("resize", syncVisualViewport);
+      window.visualViewport?.removeEventListener("scroll", syncVisualViewport);
+      window.removeEventListener("resize", syncVisualViewport);
+      document.documentElement.style.removeProperty("--m-visual-bottom");
+      document.documentElement.style.removeProperty("--m-visual-height");
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
       document.body.removeAttribute("data-mobile");

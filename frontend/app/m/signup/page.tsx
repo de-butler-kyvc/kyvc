@@ -12,6 +12,7 @@ import {
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { ApiError, auth } from "@/lib/api";
+import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { writeSignupDraft } from "@/lib/signup-flow";
 
 type Step = 1 | 2;
@@ -269,7 +270,18 @@ export default function MobileSignupPage() {
 
   const onNext = async () => {
     if (step === 1) {
-      if (canGoNext) setStep(2);
+      if (!canGoNext) return;
+      if (!isBridgeAvailable()) {
+        showToast("앱에서만 PIN을 등록할 수 있어 이 단계는 건너뜁니다.");
+        setStep(2);
+        return;
+      }
+      const requested = bridge.requestPinReset("user-request");
+      if (!requested) {
+        showToast("PIN 등록을 시작할 수 없습니다.");
+        return;
+      }
+      setStep(2);
       return;
     }
     if (submitting) return;

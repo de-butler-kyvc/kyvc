@@ -1,114 +1,143 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
-import { MTopBar } from "@/components/m/parts";
-import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { MBottomNav, MTopBar } from "@/components/m/parts";
 
-type Tab = "all" | "in" | "out";
-type XrpHistoryRow = {
-  type: "in" | "out";
-  address: string;
-  amount: string;
-  date: string;
+type ActivityTab = "all" | "vc" | "vp" | "warn" | "tx";
+
+type ActivityItem = {
+  id: number;
+  cat: Exclude<ActivityTab, "all">;
+  icon: "check" | "shield" | "bell" | "cert";
+  title: string;
+  desc: string;
+  time: string;
+  group: "오늘" | "이번 주";
+  unread?: boolean;
 };
 
-type BridgeTx = {
-  direction?: string;
-  amountXrp?: string;
-  dateUtc?: string;
-  counterparty?: string;
-  account?: string;
-};
-
-const FALLBACK_ROWS: XrpHistoryRow[] = [
-  { type: "in", address: "rHb9CJA...tyTh", amount: "+12.50 XRP", date: "2026.05.08 14:32" },
-  { type: "out", address: "rPT1Sjq...2M5y", amount: "-1.00 XRP", date: "2026.05.07 09:18" },
-  { type: "in", address: "rN7n3ta...Kx8c", amount: "+5.25 XRP", date: "2026.05.06 17:45" },
-  { type: "out", address: "rLHzPsX...9wQd", amount: "-2.50 XRP", date: "2026.05.04 11:03" },
-  { type: "in", address: "rGWrZyR...M3kL", amount: "+30.00 XRP", date: "2026.05.01 08:55" },
-  { type: "out", address: "rBjMVZF...7vNt", amount: "-0.50 XRP", date: "2026.04.29 20:11" },
+const TABS: Array<{ key: ActivityTab; label: string }> = [
+  { key: "all", label: "전체" },
+  { key: "vc", label: "VC 발급" },
+  { key: "vp", label: "VP 제출" },
+  { key: "warn", label: "보안/경고" },
+  { key: "tx", label: "거래 내역" },
 ];
 
-function shorten(value?: string) {
-  if (!value) return "rHb9CJA...tyTh";
-  if (value.length <= 14) return value;
-  return `${value.slice(0, 7)}...${value.slice(-4)}`;
+const ACTIVITY_ITEMS: ActivityItem[] = [
+  {
+    id: 1,
+    cat: "vp",
+    icon: "check",
+    title: "법인등록증명서 검증 성공",
+    desc: "신한은행 기업금융에서 귀하의 증명서를 성공적으로 검증했습니다.",
+    time: "오후 2:32",
+    group: "오늘",
+    unread: true,
+  },
+  {
+    id: 2,
+    cat: "warn",
+    icon: "shield",
+    title: "새로운 로그인 감지",
+    desc: "새로운 기기(MacBook Pro)에서 지갑에 로그인했습니다.",
+    time: "오전 10:15",
+    group: "오늘",
+    unread: true,
+  },
+  {
+    id: 3,
+    cat: "warn",
+    icon: "bell",
+    title: "사업자등록증 만료 안내",
+    desc: "등록된 사업자등록증 VC가 30일 후 만료됩니다.",
+    time: "수요일",
+    group: "이번 주",
+  },
+  {
+    id: 4,
+    cat: "vc",
+    icon: "cert",
+    title: "기업금융 인증서 발급",
+    desc: "신한은행 기관으로부터 새로운 증명서를 발급받았습니다.",
+    time: "월요일",
+    group: "이번 주",
+  },
+];
+
+function ActivityIcon({ name }: { name: ActivityItem["icon"] }) {
+  if (name === "check") return <MIcon.check />;
+  if (name === "shield") return <MIcon.shield />;
+  if (name === "bell") return <MIcon.bell />;
+  return <MIcon.cert />;
 }
 
 export default function MobileTransactionsPage() {
-  const [tab, setTab] = useState<Tab>("all");
-  const [rows, setRows] = useState<XrpHistoryRow[]>(FALLBACK_ROWS);
+  const [tab, setTab] = useState<ActivityTab>("all");
 
-  useEffect(() => {
-    if (!isBridgeAvailable()) return;
-    let cancelled = false;
-    bridge
-      .getWalletTransactions(20)
-      .then((r) => {
-        if (cancelled || !r.ok) return;
-        const txs = (r.transactions as BridgeTx[] | undefined) ?? [];
-        if (txs.length === 0) return;
-        setRows(
-          txs.map((tx) => {
-            const outgoing = tx.direction === "outgoing";
-            const amount = tx.amountXrp ?? "0";
-            return {
-              type: outgoing ? "out" : "in",
-              address: shorten(tx.counterparty ?? tx.account),
-              amount: `${outgoing ? "-" : "+"}${amount} XRP`,
-              date: (tx.dateUtc ?? "").replace("T", " ").slice(0, 16),
-            };
-          }),
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const visible = rows.filter((row) => tab === "all" || row.type === tab);
+  const visible =
+    tab === "all"
+      ? ACTIVITY_ITEMS
+      : ACTIVITY_ITEMS.filter((item) => item.cat === tab);
+  const groups = (["오늘", "이번 주"] as const)
+    .map((group) => ({
+      group,
+      items: visible.filter((item) => item.group === group),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
-    <section className="view xrp-flow-view">
-      <MTopBar title="XRP 거래 내역" back="/m/home" />
-      <div className="xrp-history-tabs">
-        {[
-          ["all", "전체"],
-          ["in", "받기"],
-          ["out", "보내기"],
-        ].map(([key, label]) => (
+    <section className="view wash activity-view">
+      <MTopBar title="활동" back={false} />
+
+      <div className="activity-tabs" aria-label="활동 필터">
+        {TABS.map((item) => (
           <button
-            key={key}
+            key={item.key}
             type="button"
-            className={tab === key ? "active" : ""}
-            onClick={() => setTab(key as Tab)}
+            className={tab === item.key ? "active" : ""}
+            onClick={() => setTab(item.key)}
           >
-            {label}
+            {item.label}
           </button>
         ))}
       </div>
-      <div className="scroll xrp-history-list">
-        {visible.map((row, i) => (
-          <div key={`${row.address}-${i}`} className="xrp-history-item">
-            <div className={`xrp-history-icon ${row.type}`}>
-              {row.type === "in" ? <MIcon.arrowDown /> : <MIcon.arrowUpRight />}
-            </div>
-            <div className="xrp-history-body">
-              <strong>{row.type === "in" ? "받기" : "보내기"}</strong>
-              <span>{row.address}</span>
-            </div>
-            <div className="xrp-history-right">
-              <strong className={row.type === "in" ? "plus" : ""}>
-                {row.amount}
-              </strong>
-              <span>{row.date}</span>
-            </div>
-          </div>
-        ))}
+
+      <div className="scroll activity-scroll">
+        {groups.length === 0 ? (
+          <p className="activity-empty">해당하는 활동이 없습니다.</p>
+        ) : (
+          groups.map((group) => (
+            <section key={group.group} className="activity-group">
+              <h2>{group.group}</h2>
+              <div className="activity-list">
+                {group.items.map((item) => (
+                  <article
+                    key={item.id}
+                    className={`activity-item${item.unread ? " unread" : ""}`}
+                  >
+                    <div className="activity-icon">
+                      <ActivityIcon name={item.icon} />
+                    </div>
+                    <div className="activity-body">
+                      <div className="activity-title-row">
+                        <strong>{item.title}</strong>
+                        <time>{item.time}</time>
+                      </div>
+                      <p>{item.desc}</p>
+                    </div>
+                    {item.unread ? <span className="activity-dot" /> : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))
+        )}
       </div>
+
+      <MBottomNav active="transactions" />
     </section>
   );
 }

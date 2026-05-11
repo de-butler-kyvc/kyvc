@@ -12,6 +12,7 @@ import {
 } from "@/components/m/parts";
 import {
   ApiError,
+  corporate,
   credentials,
   type CredentialSummary,
 } from "@/lib/api";
@@ -23,10 +24,11 @@ import {
   type WalletInfo,
 } from "@/lib/m/android-bridge";
 import { readHiddenCerts } from "@/lib/m/data";
+import { mSession } from "@/lib/m/session";
 
 const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "활성",
-  ISSUED: "발급됨",
+  ACTIVE: "유효",
+  ISSUED: "유효",
   REVOKED: "취소됨",
   EXPIRED: "만료",
 };
@@ -37,6 +39,16 @@ const PALETTES = [
   "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
 ];
 
+const TEST_CREDENTIAL: CertItem = {
+  issuer: "우리은행",
+  title: "법인 KYC 증명서",
+  status: "유효",
+  id: "DID:kyvc:corp:240315",
+  date: "2026.05.03",
+  expiresAt: "2026.05.07",
+  gradient: PALETTES[0]!,
+};
+
 function summaryToCert(s: CredentialSummary, i: number): CertItem {
   return {
     issuer: s.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
@@ -44,6 +56,9 @@ function summaryToCert(s: CredentialSummary, i: number): CertItem {
     status: STATUS_LABEL[s.credentialStatusCode ?? ""] ?? "발급됨",
     id: `urn:cred:${s.credentialId}`,
     date: (s.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
+    expiresAt: s.expiresAt
+      ? s.expiresAt.slice(0, 10).replaceAll("-", ".")
+      : undefined,
     gradient: PALETTES[i % PALETTES.length]!,
   };
 }
@@ -57,6 +72,13 @@ type BridgeCred = {
   active?: boolean;
 };
 
+type HomeTestState =
+  | "bridge"
+  | "inactive"
+  | "walletOnly"
+  | "did"
+  | "credential";
+
 export default function MobileHomePage() {
   const router = useRouter();
   const [certs, setCerts] = useState<CertItem[]>([]);
@@ -64,7 +86,15 @@ export default function MobileHomePage() {
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
+  const [didSheetOpen, setDidSheetOpen] = useState(false);
   const [inactiveQrOpen, setInactiveQrOpen] = useState(false);
+  const [qrNoticeKind, setQrNoticeKind] = useState<
+    "account" | "did" | "needCredential" | "credential"
+  >("account");
+  const [testPanelOpen, setTestPanelOpen] = useState(false);
+  const [testState, setTestState] = useState<HomeTestState>("bridge");
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
 
   // 백엔드 API: 발급된 VC 목록
   useEffect(() => {
@@ -92,6 +122,30 @@ export default function MobileHomePage() {
             ? `VC 목록 조회 실패: ${e.message}`
             : "VC 목록 조회 중 네트워크 오류가 발생했습니다.",
         );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  // 설정 화면 진입 전에 법인 기본정보를 미리 캐시한다.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const profile = await corporate.me();
+        if (cancelled) return;
+        mSession.writeCorporateProfile({
+          corporateName: profile.corporateName,
+          businessRegistrationNo: profile.businessRegistrationNo,
+          cachedAt: Date.now(),
+        });
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 401) {
+          router.replace("/m/login");
+        }
       }
     })();
     return () => {
@@ -145,7 +199,7 @@ export default function MobileHomePage() {
       list.map((c, i) => ({
         issuer: c.issuerAccount ?? "Issuer",
         title: c.credentialType ?? "법인 증명서",
-        status: c.active ? "활성" : "비활성",
+        status: c.active ? "유효" : "비활성",
         id: c.credentialId ?? `bridge-${i}`,
         date: (c.acceptedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
         gradient: PALETTES[i % PALETTES.length]!,
@@ -162,22 +216,73 @@ export default function MobileHomePage() {
     return off;
   }, []);
 
-  const visible = certs.filter((c) => !hidden.includes(c.title));
-  const accountShort = walletInfo?.account
-    ? `${walletInfo.account.slice(0, 6)}...${walletInfo.account.slice(-4)}`
+  const showToast = (message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  };
+
+  const copyText = async (value: string) => {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+
+    const el = document.createElement("textarea");
+    el.value = value;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  };
+
+  const testWalletInfo =
+    testState === "inactive"
+      ? null
+      : testState === "walletOnly"
+        ? {
+            ok: true,
+            account: "rKYvC1234567890TestWallet",
+          }
+        : testState === "did" || testState === "credential"
+          ? {
+              ok: true,
+              account: "rKYvC1234567890TestWallet",
+              did: "did:xrpl:rKYvC1234567890TestWallet",
+          }
+          : walletInfo;
+  const visible =
+    testState === "did"
+      ? []
+      : testState === "credential"
+        ? [TEST_CREDENTIAL]
+        : certs.filter((c) => !hidden.includes(c.title));
+  const accountShort = testWalletInfo?.account
+    ? `${testWalletInfo.account.slice(0, 6)}...${testWalletInfo.account.slice(-4)}`
     : null;
-  const walletLabel = accountShort
-    ? accountShort
-    : walletInfo?.did
-      ? "지갑 활성화됨"
+  const didShort = testWalletInfo?.did
+    ? `${testWalletInfo.did.slice(0, 13)}...${testWalletInfo.did.slice(-4)}`
+    : null;
+  const didRegistered = Boolean(testWalletInfo?.did);
+  const walletActivated = Boolean(accountShort);
+  const hasCredential = visible.length > 0;
+  const walletLabel = didRegistered
+    ? (didShort ?? "DID 등록됨")
+    : walletActivated
+      ? "DID 등록하기"
       : "지갑 활성화 필요";
-  const walletActive = Boolean(accountShort || walletInfo?.did);
-  const balanceKrw = visible.length > 0 ? "₩ 123,000" : "₩ 0";
+  const balanceKrw =
+    walletActivated || visible.length > 0 ? "₩ 123,000" : "₩ 0";
 
   return (
     <section className="view wash home-view">
       <MTopBar
         logo
+        onLogoLongPress={() => setTestPanelOpen(true)}
         right={
           <button
             type="button"
@@ -204,9 +309,22 @@ export default function MobileHomePage() {
             <h1>{balanceKrw}</h1>
             <button
               type="button"
-              className={`wallet-did-copy${accountShort ? "" : " needs-wallet"}`}
-              onClick={() => {
-                if (walletActive) {
+              className={`wallet-did-copy${
+                didRegistered
+                  ? " did-registered"
+                  : walletActivated
+                    ? " needs-did"
+                    : " needs-wallet"
+              }`}
+              onClick={async () => {
+                if (didRegistered) {
+                  try {
+                    await copyText(testWalletInfo?.did ?? "");
+                    showToast("DID가 복사되었습니다.");
+                  } catch {
+                    showToast("DID를 복사할 수 없습니다.");
+                  }
+                } else if (walletActivated) {
                   router.push("/m/did/register");
                 } else {
                   setWalletSheetOpen(true);
@@ -214,7 +332,29 @@ export default function MobileHomePage() {
               }}
             >
               <span>{walletLabel}</span>
-              {accountShort ? <MIcon.link /> : null}
+              {didRegistered ? (
+                <svg
+                  className="wallet-did-copy-icon"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M11.6667 4.66667H5.83333C5.189 4.66667 4.66667 5.189 4.66667 5.83333V11.6667C4.66667 12.311 5.189 12.8333 5.83333 12.8333H11.6667C12.311 12.8333 12.8333 12.311 12.8333 11.6667V5.83333C12.8333 5.189 12.311 4.66667 11.6667 4.66667Z"
+                    stroke="currentColor"
+                    strokeWidth="1.16667"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M2.33333 9.33333C1.69167 9.33333 1.16667 8.80833 1.16667 8.16667V2.33333C1.16667 1.69167 1.69167 1.16667 2.33333 1.16667H8.16667C8.80833 1.16667 9.33333 1.69167 9.33333 2.33333"
+                    stroke="currentColor"
+                    strokeWidth="1.16667"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : null}
             </button>
           </section>
 
@@ -225,7 +365,7 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={!accountShort ? "inactive" : ""}
+              className={!hasCredential ? "inactive" : ""}
               onClick={() => router.push("/m/xrp/send")}
             >
               <MIcon.arrowUpRight />
@@ -233,7 +373,7 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={!accountShort ? "inactive" : ""}
+              className={!hasCredential ? "inactive" : ""}
               onClick={() => router.push("/m/transactions")}
             >
               <MIcon.history />
@@ -250,7 +390,22 @@ export default function MobileHomePage() {
                 <button
                   type="button"
                   className="empty-credential-card"
-                  onClick={() => router.push("/m/vc/issue")}
+                  onClick={() => {
+                    if (!walletActivated) {
+                      setWalletSheetOpen(true);
+                      return;
+                    }
+                    if (walletActivated && !didRegistered) {
+                      setDidSheetOpen(true);
+                      return;
+                    }
+                    if (didRegistered && !hasCredential) {
+                      setQrNoticeKind("needCredential");
+                      setInactiveQrOpen(true);
+                      return;
+                    }
+                    router.push("/m/vc/issue");
+                  }}
                 >
                   발급하기
                 </button>
@@ -274,24 +429,69 @@ export default function MobileHomePage() {
       <MBottomNav
         active="home"
         onQrClick={() => {
-          if (walletActive) {
-            router.push("/m/vp/scan");
+          if (didRegistered && hasCredential) {
+            setQrNoticeKind("credential");
+            setInactiveQrOpen(true);
             return;
           }
+          setQrNoticeKind(
+            didRegistered
+              ? "needCredential"
+              : walletActivated
+                ? "did"
+                : "account",
+          );
           setInactiveQrOpen(true);
         }}
       />
       {inactiveQrOpen ? (
-        <InactiveQrMenu onClose={() => setInactiveQrOpen(false)} />
+        <InactiveQrMenu
+          kind={qrNoticeKind}
+          onIssue={() => router.push("/m/vc/issue")}
+          onSubmit={() => router.push("/m/vp/scan")}
+          onClose={() => setInactiveQrOpen(false)}
+        />
+      ) : null}
+      {testPanelOpen ? (
+        <HomeStateTestPanel
+          value={testState}
+          onChange={setTestState}
+          onClose={() => setTestPanelOpen(false)}
+        />
+      ) : null}
+      {didSheetOpen ? (
+        <DidRequiredSheet
+          onClose={() => setDidSheetOpen(false)}
+          onRegister={() => router.push("/m/did/register")}
+        />
       ) : null}
       {walletSheetOpen ? (
         <WalletActivationSheet onClose={() => setWalletSheetOpen(false)} />
+      ) : null}
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
       ) : null}
     </section>
   );
 }
 
-function InactiveQrMenu({ onClose }: { onClose: () => void }) {
+function InactiveQrMenu({
+  kind,
+  onIssue,
+  onSubmit,
+  onClose,
+}: {
+  kind: "account" | "did" | "needCredential" | "credential";
+  onIssue: () => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const issueReady = kind === "needCredential" || kind === "credential";
+  const submitReady = kind === "credential";
+  const menuReady = issueReady;
+
   return (
     <div className="inactive-qr-layer" role="dialog" aria-modal="true">
       <button
@@ -300,26 +500,46 @@ function InactiveQrMenu({ onClose }: { onClose: () => void }) {
         aria-label="QR 메뉴 닫기"
         onClick={onClose}
       />
-      <section className="inactive-qr-notice" aria-live="polite">
-        <span className="inactive-qr-notice-icon">
-          <MIcon.help />
-        </span>
-        <div>
-          <strong>안내</strong>
-          <p>계정 활성화를 완료해주세요.</p>
-        </div>
-      </section>
-      <section className="inactive-qr-menu" aria-label="비활성화된 QR 메뉴">
-        <button type="button" aria-disabled="true">
-          <MIcon.lockSlash />
-          <span>
+      {menuReady ? null : (
+        <section className="inactive-qr-notice" aria-live="polite">
+          <span className="inactive-qr-notice-icon">
+            <MIcon.help />
+          </span>
+          <div>
+            <strong>안내</strong>
+            <p>
+              {kind === "did"
+                ? "DID를 등록해주세요."
+                : "지갑 활성화를 완료해주세요."}
+            </p>
+          </div>
+        </section>
+      )}
+      <section className="inactive-qr-menu" aria-label="QR 메뉴">
+        <button
+          type="button"
+          className={issueReady ? "active" : ""}
+          aria-disabled={issueReady ? undefined : "true"}
+          onClick={issueReady ? onIssue : undefined}
+        >
+          <span className="inactive-qr-icon issue">
+            {issueReady ? <MIcon.cert /> : <MIcon.lockSlash />}
+          </span>
+          <span className="inactive-qr-text">
             <strong>증명서 발급</strong>
             <small>법인 KYC 증명서를 발급받아 지갑에 저장</small>
           </span>
         </button>
-        <button type="button" aria-disabled="true">
-          <MIcon.lockSlash />
-          <span>
+        <button
+          type="button"
+          className={submitReady ? "active submit" : ""}
+          aria-disabled={submitReady ? undefined : "true"}
+          onClick={submitReady ? onSubmit : undefined}
+        >
+          <span className="inactive-qr-icon submit">
+            {submitReady ? <MIcon.qr /> : <MIcon.lockSlash />}
+          </span>
+          <span className="inactive-qr-text">
             <strong>증명서 제출</strong>
             <small>기관 QR을 스캔하여 증명서 제출</small>
           </span>
@@ -329,7 +549,111 @@ function InactiveQrMenu({ onClose }: { onClose: () => void }) {
   );
 }
 
+function HomeStateTestPanel({
+  value,
+  onChange,
+  onClose,
+}: {
+  value: HomeTestState;
+  onChange: (value: HomeTestState) => void;
+  onClose: () => void;
+}) {
+  const options: Array<{ value: HomeTestState; label: string }> = [
+    { value: "bridge", label: "실제 상태" },
+    { value: "inactive", label: "지갑 비활성" },
+    { value: "walletOnly", label: "지갑 활성 / DID 없음" },
+    { value: "did", label: "DID 등록 / 증명서 없음" },
+    { value: "credential", label: "증명서 있음" },
+  ];
+
+  return (
+    <div className="home-test-layer" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        className="home-test-dim"
+        aria-label="상태 선택 닫기"
+        onClick={onClose}
+      />
+      <section className="home-test-panel">
+        <h2>홈 상태 테스트</h2>
+        <div className="home-test-options">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={value === option.value ? "selected" : ""}
+              onClick={() => onChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="home-test-close" onClick={onClose}>
+          닫기
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function DidRequiredSheet({
+  onClose,
+  onRegister,
+}: {
+  onClose: () => void;
+  onRegister: () => void;
+}) {
+  return (
+    <WalletGuideSheet
+      title="DID 등록 필요"
+      description="증명서를 발급받으려면 DID를 먼저 등록해주세요."
+      linkLabel="DID 등록하기"
+      primaryLabel="확인"
+      onClose={onClose}
+      onPrimary={onClose}
+      onLink={onRegister}
+      ariaLabel="DID 등록 안내 닫기"
+      handleLabel="DID 등록 안내 시트 이동"
+    />
+  );
+}
+
 function WalletActivationSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <WalletGuideSheet
+      title="지갑 활성화 필요"
+      description="지갑을 활성화하려면 1 XRP를 예치해야 합니다."
+      linkLabel="자세히 보기"
+      primaryLabel="확인"
+      onClose={onClose}
+      onPrimary={onClose}
+      ariaLabel="지갑 활성화 안내 닫기"
+      handleLabel="지갑 활성화 안내 시트 이동"
+    />
+  );
+}
+
+function WalletGuideSheet({
+  title,
+  description,
+  linkLabel,
+  primaryLabel,
+  onClose,
+  onPrimary,
+  onLink,
+  ariaLabel,
+  handleLabel,
+}: {
+  title: string;
+  description: string;
+  linkLabel: string;
+  primaryLabel: string;
+  onClose: () => void;
+  onPrimary: () => void;
+  onLink?: () => void;
+  ariaLabel: string;
+  handleLabel: string;
+}) {
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -363,7 +687,7 @@ function WalletActivationSheet({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         className="wallet-sheet-dim"
-        aria-label="지갑 활성화 안내 닫기"
+        aria-label={ariaLabel}
         onClick={closeWithAnimation}
       />
       <div
@@ -373,7 +697,7 @@ function WalletActivationSheet({ onClose }: { onClose: () => void }) {
         <div
           className="wallet-sheet-handle"
           role="button"
-          aria-label="지갑 활성화 안내 시트 이동"
+          aria-label={handleLabel}
           tabIndex={0}
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -384,18 +708,25 @@ function WalletActivationSheet({ onClose }: { onClose: () => void }) {
           onPointerCancel={onDragEnd}
         />
         <div className="wallet-sheet-body">
-          <h2>지갑 활성화 필요</h2>
-          <p>지갑을 활성화하려면 1 XRP를 예치해야 합니다.</p>
-          <button type="button" className="wallet-sheet-link">
-            자세히 보기
+          <h2>{title}</h2>
+          <p>{description}</p>
+          <button
+            type="button"
+            className="wallet-sheet-link"
+            onClick={onLink}
+          >
+            {linkLabel}
           </button>
         </div>
         <button
           type="button"
           className="wallet-sheet-primary"
-          onClick={closeWithAnimation}
+          onClick={() => {
+            if (onPrimary === onClose) closeWithAnimation();
+            else onPrimary();
+          }}
         >
-          확인
+          {primaryLabel}
         </button>
       </div>
     </div>

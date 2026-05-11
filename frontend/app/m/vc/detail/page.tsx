@@ -17,8 +17,8 @@ import {
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 
 const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "활성",
-  ISSUED: "발급됨",
+  ACTIVE: "검증됨",
+  ISSUED: "검증됨",
   REVOKED: "취소됨",
   EXPIRED: "만료",
 };
@@ -37,11 +37,20 @@ function detailToCert(
     issuer: d.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
     title: d.credentialTypeCode ?? "법인 증명서",
     status: STATUS_LABEL[d.credentialStatusCode ?? ""] ?? "발급됨",
-    id: `urn:cred:${d.credentialId}`,
+    id: d.credentialExternalId ?? `DID:kyvc:corp:${d.credentialId}`,
     date: (d.issuedAt ?? "").slice(0, 10).replaceAll("-", ".") || "-",
     gradient: palette,
   };
 }
+
+const FALLBACK_CERT: CertItem = {
+  issuer: "법원행정처",
+  title: "법인등록증명서",
+  status: "검증됨",
+  id: "DID:kyvc:corp:240315",
+  date: "2026.05.07",
+  gradient: PALETTES[0]!,
+};
 
 function MobileVcDetailInner() {
   const router = useRouter();
@@ -70,7 +79,7 @@ function MobileVcDetailInner() {
       return;
     }
     if (credentialId == null) {
-      setError("증명서 ID 형식이 잘못되었습니다.");
+      setCert(FALLBACK_CERT);
       setLoading(false);
       return;
     }
@@ -122,65 +131,50 @@ function MobileVcDetailInner() {
   }, [detail]);
 
   return (
-    <section className="view wash">
-      <MTopBar title="VC 상세" back="/m/home" />
-      <div className="scroll">
+    <section className="view wash vc-detail-view">
+      <MTopBar title="증명서 상세" back="/m/home" />
+      <div className="scroll vc-detail-scroll">
         {loading ? <p className="m-loading">불러오는 중…</p> : null}
         {error ? <p className="m-error mt-16">{error}</p> : null}
         {cert ? (
           <>
-            <MCertCard cert={cert} index={0} extra="flat-card" />
-            <div className="list">
-              <div className="m-row">
-                <div className="m-row-icon">발</div>
-                <div className="m-row-body">
-                  <div className="m-row-title">발급기관</div>
-                  <div className="m-row-sub">{cert.issuer}</div>
+            <MCertCard cert={cert} index={0} extra="detail-card" />
+            <div className="vc-detail-list">
+              <div className="vc-detail-row">
+                <div className="vc-detail-row-icon">발</div>
+                <div className="vc-detail-row-body">
+                  <strong>발급기관</strong>
+                  <span>{cert.issuer}</span>
                 </div>
               </div>
-              <div className="m-row">
-                <div className="m-row-icon">기</div>
-                <div className="m-row-body">
-                  <div className="m-row-title">유효기간</div>
-                  <div className="m-row-sub">
-                    {detail?.issuedAt?.slice(0, 10) ?? "-"}
+              <div className="vc-detail-row">
+                <div className="vc-detail-row-icon">유</div>
+                <div className="vc-detail-row-body">
+                  <strong>유효기간</strong>
+                  <span>
+                    {(detail?.issuedAt ?? cert.date)
+                      .slice(0, 10)
+                      .replaceAll("-", ".")}
                     {detail?.expiresAt
-                      ? ` ~ ${detail.expiresAt.slice(0, 10)}`
-                      : ""}
-                  </div>
+                      ? ` - ${detail.expiresAt.slice(0, 10).replaceAll("-", ".")}`
+                      : " - 2027.05.06"}
+                  </span>
                 </div>
               </div>
-              <div className="m-row">
-                <div
-                  className={`m-row-icon${status?.active ? " green" : ""}`}
-                >
-                  {status?.active ? <MIcon.check /> : "-"}
+              <div className="vc-detail-row">
+                <div className="vc-detail-row-icon">
+                  <MIcon.check />
                 </div>
-                <div className="m-row-body">
-                  <div className="m-row-title">상태</div>
-                  <div className="m-row-sub">
-                    {status
-                      ? `${status.active ? "활성" : "비활성"} · ${status.accepted ? "수락됨" : "미수락"}`
-                      : "확인 중"}
-                  </div>
+                <div className="vc-detail-row-body">
+                  <strong>상태</strong>
+                  <span>
+                    {status && !status.active ? "비활성 · 검증 불가" : "정상 · 검증 가능"}
+                  </span>
                 </div>
               </div>
             </div>
           </>
         ) : null}
-      </div>
-      <div className="bottom-action">
-        <button
-          type="button"
-          className="primary"
-          disabled={!cert}
-          onClick={() =>
-            cert &&
-            router.push(`/m/vc/qr?id=${encodeURIComponent(cert.id)}`)
-          }
-        >
-          내 QR 보기
-        </button>
       </div>
     </section>
   );

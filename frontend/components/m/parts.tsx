@@ -38,10 +38,21 @@ type TopBarProps = {
   logo?: boolean;
   right?: React.ReactNode;
   glass?: boolean;
+  onLogoLongPress?: () => void;
+  logoLongPressMs?: number;
 };
 
-export function MTopBar({ title, back, logo, right, glass }: TopBarProps) {
+export function MTopBar({
+  title,
+  back,
+  logo,
+  right,
+  glass,
+  onLogoLongPress,
+  logoLongPressMs = 3000,
+}: TopBarProps) {
   const router = useRouter();
+  const logoTimer = React.useRef<number | null>(null);
   const onBack = () => {
     if (back === false) return;
     if (typeof back === "function") return back();
@@ -49,11 +60,36 @@ export function MTopBar({ title, back, logo, right, glass }: TopBarProps) {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/m");
   };
+  const clearLogoTimer = () => {
+    if (!logoTimer.current) return;
+    window.clearTimeout(logoTimer.current);
+    logoTimer.current = null;
+  };
+  const startLogoTimer = () => {
+    if (!onLogoLongPress) return;
+    clearLogoTimer();
+    logoTimer.current = window.setTimeout(() => {
+      logoTimer.current = null;
+      onLogoLongPress();
+    }, logoLongPressMs);
+  };
 
   return (
     <header className="m-topbar">
       <div className="top-left">
-        {logo ? (
+        {logo && onLogoLongPress ? (
+          <button
+            type="button"
+            className="logo-longpress"
+            aria-label="KYvC"
+            onPointerDown={startLogoTimer}
+            onPointerUp={clearLogoTimer}
+            onPointerCancel={clearLogoTimer}
+            onPointerLeave={clearLogoTimer}
+          >
+            <MLogo className="small" />
+          </button>
+        ) : logo ? (
           <MLogo className="small" />
         ) : back === false ? null : (
           <button
@@ -115,6 +151,7 @@ export type CertItem = {
   status: string;
   id: string;
   date: string;
+  expiresAt?: string;
   gradient: string;
 };
 
@@ -129,6 +166,7 @@ export function MCertCard({
   extra?: string;
   onClick?: () => void;
 }) {
+  const showDateLabels = extra.split(" ").includes("stacked");
   const style = {
     "--card-bg": cert.gradient,
     "--i": index,
@@ -153,7 +191,14 @@ export function MCertCard({
       </div>
       <div className="card-bottom">
         <span>{cert.id}</span>
-        <span>{cert.date}</span>
+        {showDateLabels ? (
+          <span className="card-dates">
+            <em>발급일 {cert.date}</em>
+            {cert.expiresAt ? <em>만료일 {cert.expiresAt}</em> : null}
+          </span>
+        ) : (
+          <span>{cert.date}</span>
+        )}
       </div>
     </article>
   );
