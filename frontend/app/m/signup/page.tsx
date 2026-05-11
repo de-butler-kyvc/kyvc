@@ -1,10 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
+import { ApiError, auth } from "@/lib/api";
 import { writeSignupDraft } from "@/lib/signup-flow";
 
 type Step = 1 | 2;
@@ -15,7 +22,27 @@ type FormState = {
   bizNo: string;
   userName: string;
   email: string;
+  password: string;
+  passwordConfirm: string;
   terms: { all: boolean } & Record<TermKey, boolean>;
+};
+
+type EmailVerificationProps = {
+  challengeId: string | null;
+  maskedTarget: string;
+  secondsLeft: number;
+  digits: string[];
+  emailVerified: boolean;
+  sendingCode: boolean;
+  verifyingCode: boolean;
+  canRequestEmailCode: boolean;
+  allDigitsFilled: boolean;
+  cells: { current: Array<HTMLInputElement | null> };
+  sendEmailCode: () => void;
+  verifyEmailCode: () => void;
+  onOtpChange: (i: number, value: string) => void;
+  onOtpKeyDown: (i: number, e: KeyboardEvent<HTMLInputElement>) => void;
+  onOtpPaste: (e: ClipboardEvent<HTMLInputElement>) => void;
 };
 
 const TERMS_LABELS: Record<TermKey, string> = {
@@ -24,21 +51,57 @@ const TERMS_LABELS: Record<TermKey, string> = {
   marketing: "(선택) 마케팅 정보 수신 동의",
 };
 
+const TERMS_DESCRIPTIONS: Record<TermKey, string> = {
+  service:
+    "지갑을 활성화하려면 1 XRP를 예치해야 합니다.",
+  privacy:
+    "회원가입 및 서비스 제공을 위해 담당자 정보, 회사 정보, 인증 이력 등 개인정보 처리 항목과 보관 기준을 확인합니다.",
+  marketing:
+    "서비스 안내, 업데이트, 이벤트 등 선택적 정보 수신에 대한 동의 내용을 확인합니다. 동의하지 않아도 서비스 이용은 가능합니다.",
+};
+
 const STEP_LABELS = ["기본 정보", "PIN 등록"] as const;
+const SIGNUP_EMAIL_CHALLENGE_KEY = "kyvc.signupEmailChallenge";
+const OTP_LEN = 6;
 
 export default function MobileSignupPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
+  const [activeTerm, setActiveTerm] = useState<TermKey | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [maskedTarget, setMaskedTarget] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [digits, setDigits] = useState<string[]>(() => Array(OTP_LEN).fill(""));
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
+  const otpCells = useRef<Array<HTMLInputElement | null>>([]);
   const [form, setForm] = useState<FormState>({
-    corporateName: "테크노바 주식회사",
-    bizNo: "123-45-67890",
-    userName: "홍길동",
-    email: "hong@technova.co.kr",
+    corporateName: "",
+    bizNo: "",
+    userName: "",
+    email: "",
+    password: "",
+    passwordConfirm: "",
     terms: { all: false, service: false, privacy: false, marketing: false },
   });
 
-  const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
+  const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => {
+    if (k === "email" || k === "password" || k === "userName" || k === "corporateName") {
+      setEmailVerified(false);
+      setAccountCreated(false);
+      setChallengeId(null);
+      setMaskedTarget("");
+      setSecondsLeft(0);
+      setDigits(Array(OTP_LEN).fill(""));
+      window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+    }
     setForm((p) => ({ ...p, [k]: v }));
+  };
 
   const toggleTerm = (key: TermKey | "all") => {
     setForm((p) => {
@@ -65,25 +128,154 @@ export default function MobileSignupPage() {
     !!form.bizNo.trim() &&
     !!form.userName.trim() &&
     /\S+@\S+\.\S+/.test(form.email) &&
+    form.password.length >= 8 &&
+    !!form.passwordConfirm &&
+    form.password === form.passwordConfirm &&
+    emailVerified &&
     form.terms.service &&
     form.terms.privacy;
+  const canRequestEmailCode =
+    !!form.corporateName.trim() &&
+    !!form.userName.trim() &&
+    /\S+@\S+\.\S+/.test(form.email) &&
+    form.password.length >= 8 &&
+    form.password === form.passwordConfirm;
+  const allDigitsFilled = digits.every((d) => d !== "");
 
-  const onNext = () => {
-    if (step === 1) {
-      if (canGoNext) setStep(2);
-      return;
-    }
+  const showToast = (message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  };
 
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const timer = window.setInterval(
+      () => setSecondsLeft((s) => Math.max(0, s - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [secondsLeft]);
+
+  const writeDraft = (signedUpAt?: string) =>
     writeSignupDraft({
       corporateName: form.corporateName.trim(),
       userName: form.userName.trim(),
       email: form.email.trim(),
-      password: "Kyvc1234!",
+      password: form.password,
       phone: "",
       termsAcceptedAt: new Date().toISOString(),
       marketingAccepted: form.terms.marketing,
+      signedUpAt,
     });
-    router.push("/m/signup/verify");
+
+  const sendEmailCode = async () => {
+    if (!canRequestEmailCode) {
+      showToast("회사명, 담당자, 이메일, 비밀번호를 먼저 입력해주세요.");
+      return;
+    }
+    if (emailVerified) return;
+    setSendingCode(true);
+    try {
+      window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+      writeDraft(accountCreated ? new Date().toISOString() : undefined);
+      if (!accountCreated) {
+        await auth.signup({
+          email: form.email.trim(),
+          password: form.password,
+          userName: form.userName.trim(),
+          phone: "",
+          corporateName: form.corporateName.trim(),
+        });
+        setAccountCreated(true);
+        writeSignupDraft({ signedUpAt: new Date().toISOString() });
+      }
+      try {
+        await auth.login(form.email.trim(), form.password);
+      } catch (loginErr) {
+        if (!(loginErr instanceof ApiError)) throw loginErr;
+      }
+      const challenge = await auth.mfaChallenge("EMAIL", "LOGIN");
+      setChallengeId(challenge.challengeId);
+      setMaskedTarget(challenge.maskedTarget);
+      const ms = new Date(challenge.expiresAt).getTime() - Date.now();
+      setSecondsLeft(Math.max(0, Math.round(ms / 1000)));
+      setDigits(Array(OTP_LEN).fill(""));
+      window.sessionStorage.setItem(
+        SIGNUP_EMAIL_CHALLENGE_KEY,
+        JSON.stringify({ email: form.email.trim(), ...challenge }),
+      );
+      window.setTimeout(() => otpCells.current[0]?.focus(), 0);
+      showToast("인증코드를 발송했습니다.");
+    } catch (err) {
+      showToast(
+        err instanceof ApiError
+          ? err.message
+          : "이메일 인증코드 발송에 실패했습니다.",
+      );
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const onOtpChange = (i: number, value: string) => {
+    if (!/^\d?$/.test(value)) return;
+    setDigits((prev) => {
+      const next = [...prev];
+      next[i] = value;
+      return next;
+    });
+    if (value && i < OTP_LEN - 1) otpCells.current[i + 1]?.focus();
+  };
+
+  const onOtpKeyDown = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !digits[i] && i > 0) {
+      otpCells.current[i - 1]?.focus();
+    }
+  };
+
+  const onOtpPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const value = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LEN);
+    if (!value) return;
+    e.preventDefault();
+    const next = Array(OTP_LEN).fill("");
+    for (let i = 0; i < value.length; i++) next[i] = value[i]!;
+    setDigits(next);
+    otpCells.current[Math.min(value.length, OTP_LEN - 1)]?.focus();
+  };
+
+  const verifyEmailCode = async () => {
+    if (!challengeId || !allDigitsFilled) return;
+    setVerifyingCode(true);
+    try {
+      const res = await auth.mfaVerify(challengeId, digits.join(""));
+      if (!res.verified) {
+        showToast("인증번호가 올바르지 않습니다.");
+        return;
+      }
+      setEmailVerified(true);
+      window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+      showToast("이메일 인증이 완료되었습니다.");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "인증에 실패했습니다.");
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const onNext = async () => {
+    if (step === 1) {
+      if (canGoNext) setStep(2);
+      return;
+    }
+    if (submitting) return;
+    setSubmitting(true);
+    writeDraft(new Date().toISOString());
+    router.push("/m/home");
   };
 
   return (
@@ -113,6 +305,24 @@ export default function MobileSignupPage() {
             form={form}
             setField={setField}
             toggleTerm={toggleTerm}
+            openTerm={setActiveTerm}
+            emailVerification={{
+              challengeId,
+              maskedTarget,
+              secondsLeft,
+              digits,
+              emailVerified,
+              sendingCode,
+              verifyingCode,
+              canRequestEmailCode,
+              allDigitsFilled,
+              cells: otpCells,
+              sendEmailCode,
+              verifyEmailCode,
+              onOtpChange,
+              onOtpKeyDown,
+              onOtpPaste,
+            }}
           />
         ) : (
           <PinStep />
@@ -124,11 +334,27 @@ export default function MobileSignupPage() {
           type="button"
           className="primary"
           onClick={onNext}
-          disabled={step === 1 && !canGoNext}
+          disabled={(step === 1 && !canGoNext) || submitting}
         >
-          {step === 1 ? "다음 단계" : "가입 완료"}
+          {step === 1 ? "다음 단계" : submitting ? "처리 중..." : "가입 완료"}
         </button>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
+      {activeTerm ? (
+        <TermsBottomSheet
+          termKey={activeTerm}
+          checked={form.terms[activeTerm]}
+          onClose={() => setActiveTerm(null)}
+          onAgree={() => {
+            if (!form.terms[activeTerm]) toggleTerm(activeTerm);
+            setActiveTerm(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -137,12 +363,27 @@ function BasicInfoStep({
   form,
   setField,
   toggleTerm,
+  openTerm,
+  emailVerification,
 }: {
   form: FormState;
   setField: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
   toggleTerm: (k: TermKey | "all") => void;
+  openTerm: (k: TermKey) => void;
+  emailVerification: EmailVerificationProps;
 }) {
   const t = form.terms;
+  const emailAuth = emailVerification;
+  const mm = String(Math.floor(emailAuth.secondsLeft / 60));
+  const ss = String(emailAuth.secondsLeft % 60).padStart(2, "0");
+  const basicFilled =
+    !!form.corporateName.trim() &&
+    !!form.bizNo.trim() &&
+    !!form.userName.trim();
+  const passwordFilled =
+    form.password.length >= 8 &&
+    !!form.passwordConfirm &&
+    form.password === form.passwordConfirm;
 
   return (
     <>
@@ -152,74 +393,289 @@ function BasicInfoStep({
       <label className="m-field-label">회사명</label>
       <div className="input-box">
         <input
+          placeholder="회사명을 입력하세요"
           value={form.corporateName}
           onChange={(e) => setField("corporateName", e.target.value)}
         />
       </div>
 
       <label className="m-field-label">사업자번호</label>
-      <div className="input-box focus">
+      <div className={`input-box${form.bizNo ? " focus" : ""}`}>
         <input
           inputMode="numeric"
+          placeholder="123-45-67890"
           value={form.bizNo}
           onChange={(e) => setField("bizNo", e.target.value)}
         />
-        <span className="ok">
-          <MIcon.check />
-        </span>
+        {form.bizNo ? (
+          <span className="ok">
+            <MIcon.check />
+          </span>
+        ) : null}
       </div>
 
       <label className="m-field-label">담당자 이름</label>
       <div className="input-box">
         <input
+          placeholder="담당자 이름을 입력하세요"
           value={form.userName}
           onChange={(e) => setField("userName", e.target.value)}
         />
       </div>
 
-      <label className="m-field-label">담당자 이메일</label>
-      <div className="input-box">
-        <input
-          type="email"
-          inputMode="email"
-          value={form.email}
-          onChange={(e) => setField("email", e.target.value)}
-        />
-      </div>
+      {basicFilled ? (
+        <div className="signup-progressive-group">
+          <PasswordFields form={form} setField={setField} />
+        </div>
+      ) : null}
 
-      <p className="signup-terms-guide">
-        서비스 이용을 위해 약관 동의가 필요합니다.
-      </p>
-
-      <div className="terms-box">
-        <label
-          className="m-terms-row terms-all"
-          onClick={() => toggleTerm("all")}
-        >
-          <div className={`chk${t.all ? " on" : ""}`}>
-            {t.all ? <MIcon.check /> : null}
-          </div>
-          <span className="terms-all-label">전체 동의</span>
-        </label>
-
-        <div className="terms-divider" />
-
-        {(Object.keys(TERMS_LABELS) as TermKey[]).map((k) => (
-          <div key={k} className="checkbox-item">
-            <label className="m-terms-row" onClick={() => toggleTerm(k)}>
-              <div className={`chk${t[k] ? " on" : ""}`}>
-                {t[k] ? <MIcon.check /> : null}
-              </div>
-              <div className="terms-text">
-                <span>{TERMS_LABELS[k]}</span>
-              </div>
-            </label>
-            <button type="button" className="terms-link">
-              보기
+      {passwordFilled ? (
+        <div className="signup-progressive-group">
+          <label className="m-field-label">담당자 이메일</label>
+          <div
+            className={`input-box signup-email-input${emailAuth.emailVerified ? " verified" : ""}`}
+          >
+            <input
+              type="email"
+              inputMode="email"
+              placeholder="example@company.com"
+              value={form.email}
+              onChange={(e) => setField("email", e.target.value)}
+              disabled={emailAuth.emailVerified}
+            />
+            <button
+              type="button"
+              className="signup-email-code-btn"
+              onClick={emailAuth.sendEmailCode}
+              disabled={emailAuth.emailVerified || emailAuth.sendingCode}
+            >
+              {emailAuth.emailVerified
+                ? "인증완료"
+                : emailAuth.sendingCode
+                  ? "발송중"
+                  : emailAuth.challengeId
+                    ? "재전송"
+                    : "코드받기"}
             </button>
           </div>
-        ))}
+        </div>
+      ) : null}
+
+      {emailAuth.challengeId && !emailAuth.emailVerified ? (
+        <div className="signup-progressive-group signup-email-verify">
+          <p>
+            {(emailAuth.maskedTarget || form.email) +
+              "로 발송된 인증코드를 입력하세요."}
+          </p>
+          <div className="signup-otp-row">
+            {emailAuth.digits.map((digit, i) => (
+              <div key={i} className={`otp-box${digit ? " filled" : ""}`}>
+                <input
+                  ref={(el) => {
+                    emailAuth.cells.current[i] = el;
+                  }}
+                  value={digit}
+                  inputMode="numeric"
+                  maxLength={1}
+                  onChange={(e) => emailAuth.onOtpChange(i, e.target.value)}
+                  onKeyDown={(e) => emailAuth.onOtpKeyDown(i, e)}
+                  onPaste={emailAuth.onOtpPaste}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="signup-email-verify-actions">
+            {emailAuth.secondsLeft > 0 ? (
+              <span>
+                남은 시간 <b>{mm}:{ss}</b>
+              </span>
+            ) : (
+              <span>인증 시간이 만료되었습니다.</span>
+            )}
+            <button
+              type="button"
+              onClick={emailAuth.verifyEmailCode}
+              disabled={
+                emailAuth.verifyingCode ||
+                !emailAuth.allDigitsFilled ||
+                emailAuth.secondsLeft <= 0
+              }
+            >
+              {emailAuth.verifyingCode ? "확인 중" : "인증하기"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {emailAuth.emailVerified ? (
+        <div className="signup-progressive-group">
+          <p className="signup-field-hint ok-text">
+            이메일 인증이 완료되었습니다.
+          </p>
+          <p className="signup-terms-guide">
+            서비스 이용을 위해 약관 동의가 필요합니다.
+          </p>
+
+          <div className="terms-box">
+            <label
+              className="m-terms-row terms-all"
+              onClick={() => toggleTerm("all")}
+            >
+              <div className={`chk${t.all ? " on" : ""}`}>
+                {t.all ? <MIcon.check /> : null}
+              </div>
+              <span className="terms-all-label">전체 동의</span>
+            </label>
+
+            <div className="terms-divider" />
+
+            {(Object.keys(TERMS_LABELS) as TermKey[]).map((k) => (
+              <div key={k} className="checkbox-item">
+                <label className="m-terms-row" onClick={() => toggleTerm(k)}>
+                  <div className={`chk${t[k] ? " on" : ""}`}>
+                    {t[k] ? <MIcon.check /> : null}
+                  </div>
+                  <div className="terms-text">
+                    <span>{TERMS_LABELS[k]}</span>
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  className="terms-link"
+                  onClick={() => openTerm(k)}
+                >
+                  보기
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function TermsBottomSheet({
+  termKey,
+  checked,
+  onClose,
+  onAgree,
+}: {
+  termKey: TermKey;
+  checked: boolean;
+  onClose: () => void;
+  onAgree: () => void;
+}) {
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const dragStart = useRef<number | null>(null);
+  const title = TERMS_LABELS[termKey].replace(/^\([^)]+\)\s*/, "");
+
+  const closeWithAnimation = () => {
+    setClosing(true);
+    setDragY(window.innerHeight);
+    window.setTimeout(onClose, 180);
+  };
+
+  const onDragStart = (clientY: number) => {
+    dragStart.current = clientY;
+    setDragging(true);
+  };
+
+  const onDragMove = (clientY: number) => {
+    if (dragStart.current == null) return;
+    setDragY(Math.max(0, clientY - dragStart.current));
+  };
+
+  const onDragEnd = () => {
+    if (dragY > 120) closeWithAnimation();
+    else setDragY(0);
+    dragStart.current = null;
+    setDragging(false);
+  };
+
+  return (
+    <div className="terms-sheet-layer" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        className="terms-sheet-dim"
+        aria-label="약관 닫기"
+        onClick={closeWithAnimation}
+      />
+      <div
+        className={`terms-sheet${dragging ? " dragging" : ""}${closing ? " closing" : ""}`}
+        style={{ transform: `translateY(${dragY}px)` }}
+      >
+        <div
+          className="terms-sheet-handle"
+          role="button"
+          aria-label="약관 시트 이동"
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            onDragStart(e.clientY);
+          }}
+          onPointerMove={(e) => onDragMove(e.clientY)}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+        />
+        <div className="terms-sheet-body">
+          <h2>{title}</h2>
+          <p>{TERMS_DESCRIPTIONS[termKey]}</p>
+        </div>
+        <button type="button" className="terms-sheet-agree" onClick={onAgree}>
+          {checked ? "확인" : "동의"}
+        </button>
       </div>
+    </div>
+  );
+}
+
+function PasswordFields({
+  form,
+  setField,
+}: {
+  form: FormState;
+  setField: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  const passwordValid = form.password.length >= 8;
+  const passwordMatches =
+    !!form.passwordConfirm && form.password === form.passwordConfirm;
+
+  return (
+    <>
+      <label className="m-field-label">비밀번호</label>
+      <div className={`input-box${form.password ? " focus" : ""}`}>
+        <input
+          type="password"
+          placeholder="8자 이상 입력"
+          value={form.password}
+          autoComplete="new-password"
+          onChange={(e) => setField("password", e.target.value)}
+        />
+      </div>
+      {form.password ? (
+        <p className={`signup-field-hint${passwordValid ? " ok-text" : ""}`}>
+          {passwordValid ? "사용 가능한 비밀번호입니다." : "8자 이상 입력해주세요."}
+        </p>
+      ) : null}
+
+      <label className="m-field-label">비밀번호 확인</label>
+      <div className={`input-box${form.passwordConfirm ? " focus" : ""}`}>
+        <input
+          type="password"
+          placeholder="비밀번호를 다시 입력"
+          value={form.passwordConfirm}
+          autoComplete="new-password"
+          onChange={(e) => setField("passwordConfirm", e.target.value)}
+        />
+      </div>
+      {form.passwordConfirm ? (
+        <p className={`signup-field-hint${passwordMatches ? " ok-text" : ""}`}>
+          {passwordMatches ? "비밀번호가 일치합니다." : "비밀번호가 일치하지 않습니다."}
+        </p>
+      ) : null}
     </>
   );
 }

@@ -14,6 +14,8 @@ export default function MobileFindAccountPage() {
   const [tab, setTab] = useState<Tab>("business");
   const [value, setValue] = useState("");
   const [done, setDone] = useState(false);
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
 
   // 계정 찾기 = 이메일 인증으로 잠금 해제도 겸함.
   // 성공 시 Android 측 5회 실패 카운터를 초기화.
@@ -26,6 +28,13 @@ export default function MobileFindAccountPage() {
       }
     }
     router.push("/m/login");
+  };
+
+  const showComingSoon = () => {
+    setToastClosing(false);
+    setToast("준비중입니다");
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
   };
 
   if (done) {
@@ -86,9 +95,7 @@ export default function MobileFindAccountPage() {
       <MTopBar title="계정 찾기" back="/m/login" />
       <div className="content find-content scroll">
         <h1 className="find-title">
-          계정 정보를
-          <br />
-          확인해드릴게요
+          계정 정보를 확인해드릴게요
         </h1>
         <p className="find-desc">가입 시 입력한 정보로 계정을 찾을 수 있습니다.</p>
 
@@ -136,12 +143,17 @@ export default function MobileFindAccountPage() {
       <div className="bottom-action">
         <button
           type="button"
-          className="primary dark"
-          onClick={() => setDone(true)}
+          className="primary"
+          onClick={showComingSoon}
         >
           계정 찾기
         </button>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }

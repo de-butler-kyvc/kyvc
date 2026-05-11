@@ -9,6 +9,34 @@ import { ApiError, auth } from "@/lib/api";
 import { readSignupDraft, writeSignupDraft } from "@/lib/signup-flow";
 
 const OTP_LEN = 6;
+const SIGNUP_EMAIL_CHALLENGE_KEY = "kyvc.signupEmailChallenge";
+
+type StoredSignupChallenge = {
+  email: string;
+  challengeId: string;
+  expiresAt: string;
+  maskedTarget: string;
+};
+
+function readStoredSignupChallenge(email: string): StoredSignupChallenge | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredSignupChallenge>;
+    if (
+      parsed.email !== email ||
+      !parsed.challengeId ||
+      !parsed.expiresAt ||
+      !parsed.maskedTarget
+    ) {
+      return null;
+    }
+    return parsed as StoredSignupChallenge;
+  } catch {
+    return null;
+  }
+}
 
 export default function MobileSignupVerifyPage() {
   const router = useRouter();
@@ -38,6 +66,21 @@ export default function MobileSignupVerifyPage() {
       }
       setEmail(draft.email);
       try {
+        const storedChallenge = readStoredSignupChallenge(draft.email);
+        if (storedChallenge) {
+          const ms = new Date(storedChallenge.expiresAt).getTime() - Date.now();
+          if (ms <= 0) {
+            window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+          } else {
+            setChallengeId(storedChallenge.challengeId);
+            setMaskedTarget(storedChallenge.maskedTarget);
+            setSecondsLeft(Math.max(0, Math.round(ms / 1000)));
+            setDigits(Array(OTP_LEN).fill(""));
+            setBootstrapping(false);
+            window.setTimeout(() => cells.current[0]?.focus(), 0);
+            return;
+          }
+        }
         if (!draft.signedUpAt) {
           await auth.signup({
             email: draft.email,
@@ -53,7 +96,7 @@ export default function MobileSignupVerifyPage() {
         } catch (loginErr) {
           if (!(loginErr instanceof ApiError)) throw loginErr;
         }
-        await sendChallenge();
+        await sendChallenge(draft.email);
       } catch (err) {
         setError(
           err instanceof ApiError
@@ -77,11 +120,15 @@ export default function MobileSignupVerifyPage() {
   const ss = String(secondsLeft % 60).padStart(2, "0");
   const allFilled = digits.every((d) => d !== "");
 
-  const sendChallenge = async () => {
+  const sendChallenge = async (targetEmail = email) => {
     setError(null);
     const res = await auth.mfaChallenge("EMAIL", "LOGIN");
     setChallengeId(res.challengeId);
     setMaskedTarget(res.maskedTarget);
+    window.sessionStorage.setItem(
+      SIGNUP_EMAIL_CHALLENGE_KEY,
+      JSON.stringify({ email: targetEmail, ...res }),
+    );
     const ms = new Date(res.expiresAt).getTime() - Date.now();
     setSecondsLeft(Math.max(0, Math.round(ms / 1000)));
     setDigits(Array(OTP_LEN).fill(""));
@@ -128,6 +175,7 @@ export default function MobileSignupVerifyPage() {
         setError("인증번호가 올바르지 않습니다.");
         return;
       }
+      window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
       router.replace("/m/home");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "인증에 실패했습니다.");

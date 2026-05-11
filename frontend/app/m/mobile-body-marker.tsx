@@ -13,7 +13,55 @@ export default function MobileBodyMarker() {
   useEffect(() => {
     document.body.setAttribute("data-mobile", "true");
     setupBridge();
+
+    let startY = 0;
+    let scrollTarget: HTMLElement | null = null;
+
+    const getScrollTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return null;
+      return target.closest<HTMLElement>(".m-shell .view");
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      startY = event.touches[0]?.clientY ?? 0;
+      scrollTarget = getScrollTarget(event.target);
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest(".m-shell")) return;
+      if (target.closest(".terms-sheet-handle")) return;
+
+      const currentY = event.touches[0]?.clientY ?? startY;
+      const deltaY = currentY - startY;
+      const scroller = scrollTarget ?? getScrollTarget(target);
+
+      if (!scroller) {
+        event.preventDefault();
+        return;
+      }
+
+      const canScroll = scroller.scrollHeight > scroller.clientHeight + 1;
+      if (!canScroll) {
+        event.preventDefault();
+        return;
+      }
+
+      const atTop = scroller.scrollTop <= 0;
+      const atBottom =
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+
+      if ((atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+
     return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
       document.body.removeAttribute("data-mobile");
     };
   }, []);

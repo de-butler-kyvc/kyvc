@@ -13,6 +13,25 @@ export default function MobileSettingsPage() {
   const [bio, setBio] = useState(true);
   const [push, setPush] = useState(true);
   const [expiryNotice, setExpiryNotice] = useState(true);
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
+
+  const showToast = (message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  };
+
+  const openNativePinSettings = async () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 사용할 수 있는 기능입니다");
+      return;
+    }
+    await bridge
+      .requestNativeAuth("pin", "wallet-login")
+      .catch(() => showToast("앱 인증을 시작할 수 없습니다"));
+  };
 
   const onLogout = async () => {
     // 동시 호출: 백엔드 세션 종료 + 네이티브 인증 세션 무효화
@@ -48,7 +67,7 @@ export default function MobileSettingsPage() {
           <div className="sg-card">
             <div
               className="sg-item"
-              onClick={() => router.push("/m/login/pin")}
+              onClick={openNativePinSettings}
             >
               <div className="sg-icon blue">
                 <MIcon.lock />
@@ -172,6 +191,11 @@ export default function MobileSettingsPage() {
         <p className="settings-version">KYvC Wallet v1.0.4</p>
       </div>
       <MBottomNav active="settings" />
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }

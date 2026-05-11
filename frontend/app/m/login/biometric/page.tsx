@@ -10,15 +10,30 @@ import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 export default function MobileBiometricPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [bridgeReady, setBridgeReady] = useState<boolean | null>(null);
   const autoTriedRef = useRef(false);
 
   useEffect(() => {
-    setBridgeReady(isBridgeAvailable());
+    const ready = isBridgeAvailable();
+    setBridgeReady(ready);
+    if (!ready) showToast("앱에서만 사용할 수 있는 기능입니다");
   }, []);
 
+  const showToast = (message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  };
+
   const onAuth = async () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 사용할 수 있는 기능입니다");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
@@ -57,20 +72,12 @@ export default function MobileBiometricPage() {
         <h1 className="headline m-auth-title">지문을 인식해주세요</h1>
         <p className="subcopy">등록한 생체정보로 로그인합니다.</p>
 
-        {bridgeReady === false ? (
-          <p className="m-error">
-            앱 내부 인증 모듈에 연결할 수 없습니다.
-            <br />
-            KYvC 앱에서 다시 열어 주세요.
-          </p>
-        ) : null}
-
         <button
           type="button"
           className="bio-circle"
           aria-label="생체인증 시작"
           onClick={onAuth}
-          disabled={busy || bridgeReady !== true}
+          disabled={busy}
         >
           <MIcon.fingerprint />
         </button>
@@ -78,14 +85,12 @@ export default function MobileBiometricPage() {
           {busy ? "인증 중..." : "Touch ID 대기 중"}
         </span>
         {error && <p className="m-error">{error}</p>}
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => router.push("/m/login/pin")}
-        >
-          PIN으로 로그인
-        </button>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }
