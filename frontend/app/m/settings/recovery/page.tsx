@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
+import { bridge, isBridgeAvailable, useBridgeAction } from "@/lib/m/android-bridge";
 
 function ShieldSearchIcon() {
   return (
@@ -38,7 +39,48 @@ function NoticeIcon() {
 }
 
 export default function MobileSettingsRecoveryPage() {
-  const router = useRouter();
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
+
+  const showToast = (message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  };
+
+  useBridgeAction("REQUEST_MNEMONIC_BACKUP", (result) => {
+    if (!result.ok) showToast(result.error ?? "복구 문구 백업을 시작할 수 없습니다.");
+  });
+
+  useBridgeAction("REQUEST_WALLET_RESTORE", (result) => {
+    if (result.ok) {
+      showToast("지갑 복구가 완료되었습니다.");
+      return;
+    }
+    showToast(result.error ?? "지갑 복구를 시작할 수 없습니다.");
+  });
+
+  const requestBackup = () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 복구 문구를 백업할 수 있습니다.");
+      return;
+    }
+    if (!bridge.requestMnemonicBackup()) {
+      showToast("복구 문구 백업을 시작할 수 없습니다.");
+    }
+  };
+
+  const requestRestore = () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 지갑을 복구할 수 있습니다.");
+      return;
+    }
+    if (!bridge.requestWalletRestore({ overwrite: true, autoRegisterDidSet: true })) {
+      showToast("지갑 복구를 시작할 수 없습니다.");
+    }
+  };
+
   return (
     <section className="view wash settings-recovery-view">
       <MTopBar title="기기 변경 및 복구" back="/m/settings" />
@@ -56,7 +98,7 @@ export default function MobileSettingsRecoveryPage() {
           <button
             type="button"
             className="recovery-row"
-            onClick={() => router.push("/m/settings/seed-backup")}
+            onClick={requestBackup}
           >
             <span className="recovery-row-icon plain">
               <ShieldSearchIcon />
@@ -69,7 +111,7 @@ export default function MobileSettingsRecoveryPage() {
           <button
             type="button"
             className="recovery-row"
-            onClick={() => router.push("/m/settings/seed-test")}
+            onClick={requestRestore}
           >
             <span className="recovery-row-icon plain">
               <WalletRecoveryIcon />
@@ -94,6 +136,11 @@ export default function MobileSettingsRecoveryPage() {
           </div>
         </div>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }
