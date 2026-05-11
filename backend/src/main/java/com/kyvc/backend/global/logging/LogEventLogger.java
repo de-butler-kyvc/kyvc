@@ -87,7 +87,12 @@ public class LogEventLogger {
             Map<String, Object> fields, // 추가 로그 필드
             Throwable throwable // 원인 예외
     ) {
-        log.error(buildLogMessage("ERROR", event, message, fields, throwable));
+        String logMessage = buildLogMessage("ERROR", event, message, fields, throwable); // 오류 로그 메시지
+        if (throwable == null) {
+            log.error(logMessage);
+            return;
+        }
+        log.error(logMessage, throwable);
     }
 
     // 공통 로그 메시지 생성
@@ -127,7 +132,7 @@ public class LogEventLogger {
             if (fieldValue == null || isReservedField(fieldName) || isSensitiveField(fieldName)) {
                 continue;
             }
-            safeFields.put(fieldName, fieldValue);
+            safeFields.put(fieldName, LogMaskingUtil.maskValue(fieldValue));
         }
         return safeFields;
     }
@@ -142,22 +147,7 @@ public class LogEventLogger {
     // 민감정보 필드명 판별
     private boolean isSensitiveField(String fieldName // 로그 필드명
     ) {
-        String normalized = normalizeFieldName(fieldName);
-        if (normalized == null) {
-            return true;
-        }
-
-        return normalized.contains("password")
-                || normalized.contains("token")
-                || normalized.contains("authorization")
-                || normalized.contains("cookie")
-                || normalized.contains("jwt")
-                || normalized.contains("secret")
-                || normalized.contains("privatekey")
-                || normalized.equals("vc")
-                || normalized.equals("vp")
-                || normalized.contains("documentcontent")
-                || normalized.contains("rawdocument");
+        return LogMaskingUtil.isSensitiveField(fieldName);
     }
 
     // 필드명 비교용 정규화

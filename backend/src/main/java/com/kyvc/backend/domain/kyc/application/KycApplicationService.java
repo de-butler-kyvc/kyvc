@@ -44,9 +44,6 @@ public class KycApplicationService {
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
 
         Corporate corporate = findMyCorporate(userId);
-        if (kycApplicationRepository.existsInProgressByApplicantUserId(userId)) {
-            throw new ApiException(ErrorCode.KYC_ALREADY_IN_PROGRESS);
-        }
 
         KycApplication kycApplication = KycApplication.createDraft(
                 corporate.getCorporateId(),

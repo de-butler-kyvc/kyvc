@@ -5,6 +5,7 @@
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
+            <charset>UTF-8</charset>
             <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
@@ -26,6 +27,7 @@
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
+            <charset>UTF-8</charset>
             <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
@@ -42,6 +44,7 @@
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
+            <charset>UTF-8</charset>
             <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
