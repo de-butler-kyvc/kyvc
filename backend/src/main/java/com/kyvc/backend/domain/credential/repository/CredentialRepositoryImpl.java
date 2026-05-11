@@ -91,4 +91,13 @@ public class CredentialRepositoryImpl implements CredentialRepository {
                         LocalDateTime.now()
                 );
     }
+    // 테스트 검증용 유효 Credential 최신 조회
+    @Override
+    public Optional<Credential> findLatestValid() {
+        return credentialJpaRepository
+                .findFirstByCredentialStatusAndExpiresAtGreaterThanEqualOrderByIssuedAtDesc(
+                        KyvcEnums.CredentialStatus.VALID,
+                        LocalDateTime.now()
+                );
+    }
 }

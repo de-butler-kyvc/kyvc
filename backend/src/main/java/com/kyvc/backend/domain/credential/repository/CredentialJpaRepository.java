@@ -92,4 +92,16 @@ public interface CredentialJpaRepository extends JpaRepository<Credential, Long>
             KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
             LocalDateTime expiresAt // 만료 기준 일시
     );
+
+    /**
+     * 유효 Credential 최신 조회
+     *
+     * @param credentialStatus Credential 상태
+     * @param expiresAt 만료 기준 일시
+     * @return Credential 조회 결과
+     */
+    Optional<Credential> findFirstByCredentialStatusAndExpiresAtGreaterThanEqualOrderByIssuedAtDesc(
+            KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
+            LocalDateTime expiresAt // 만료 기준 일시
+    );
 }

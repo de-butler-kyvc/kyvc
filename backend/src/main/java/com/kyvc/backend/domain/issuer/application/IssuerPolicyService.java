@@ -25,14 +25,24 @@ public class IssuerPolicyService {
     ) {
         String normalizedCredentialTypeCode = normalizeCredentialTypeCode(credentialTypeCode);
 
-        List<IssuerPolicyResponse> policies = getPolicies(normalizedCredentialTypeCode).stream()
+        List<IssuerPolicy> effectivePolicies = getPolicies(normalizedCredentialTypeCode);
+        List<IssuerPolicyResponse> policies = effectivePolicies.stream()
                 .sorted(buildPolicyComparator())
                 .map(this::toResponse)
                 .toList();
+        LocalDateTime evaluatedAt = LocalDateTime.now();
 
         return new EffectiveIssuerPolicyResponse(
+                normalizedCredentialTypeCode,
+                effectivePolicies.stream()
+                        .filter(IssuerPolicy::isWhitelist)
+                        .map(IssuerPolicy::getIssuerDid)
+                        .distinct()
+                        .toList(),
+                "v1",
+                evaluatedAt,
                 policies,
-                LocalDateTime.now()
+                evaluatedAt
         );
     }
 

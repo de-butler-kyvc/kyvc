@@ -256,12 +256,36 @@ public enum ErrorCode {
     VP_CHALLENGE_INVALID(HttpStatus.BAD_REQUEST, "VP_CHALLENGE_INVALID", "VP challenge가 올바르지 않습니다."),
     // HTTP 400 - VP JWT 필요
     VP_JWT_REQUIRED(HttpStatus.BAD_REQUEST, "VP_JWT_REQUIRED", "VP JWT가 필요합니다."),
+    // HTTP 401 - Verifier API Key 필요
+    VERIFIER_API_KEY_REQUIRED(HttpStatus.UNAUTHORIZED, "VERIFIER_API_KEY_REQUIRED", "Verifier API Key가 필요합니다."),
+    // HTTP 401 - Verifier API Key 오류
+    VERIFIER_API_KEY_INVALID(HttpStatus.UNAUTHORIZED, "VERIFIER_API_KEY_INVALID", "Verifier API Key가 올바르지 않습니다."),
+    // HTTP 401 - Verifier API Key 만료
+    VERIFIER_API_KEY_EXPIRED(HttpStatus.UNAUTHORIZED, "VERIFIER_API_KEY_EXPIRED", "Verifier API Key가 만료되었습니다."),
+    // HTTP 403 - Verifier API Key 비활성
+    VERIFIER_API_KEY_INACTIVE(HttpStatus.FORBIDDEN, "VERIFIER_API_KEY_INACTIVE", "Verifier API Key가 활성 상태가 아닙니다."),
     // HTTP 404 - Verifier 없음
     VERIFIER_NOT_FOUND(HttpStatus.NOT_FOUND, "VERIFIER_NOT_FOUND", "Verifier를 찾을 수 없습니다."),
+    // HTTP 403 - Verifier 비활성
+    VERIFIER_INACTIVE(HttpStatus.FORBIDDEN, "VERIFIER_INACTIVE", "Verifier가 활성 상태가 아닙니다."),
     // HTTP 403 - Verifier 접근 거부
     VERIFIER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "VERIFIER_ACCESS_DENIED", "Verifier 접근 권한이 없습니다."),
     // HTTP 404 - Verifier 테스트 검증 없음
     VERIFIER_TEST_NOT_FOUND(HttpStatus.NOT_FOUND, "VERIFIER_TEST_NOT_FOUND", "Verifier 테스트 검증 이력을 찾을 수 없습니다."),
+    // HTTP 404 - Verifier 테스트 검증 결과 없음
+    VERIFIER_TEST_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "VERIFIER_TEST_RESULT_NOT_FOUND", "Verifier 테스트 검증 결과를 찾을 수 없습니다."),
+    // HTTP 400 - Verifier 사용량 기간 오류
+    VERIFIER_USAGE_STATS_INVALID_RANGE(HttpStatus.BAD_REQUEST, "VERIFIER_USAGE_STATS_INVALID_RANGE", "Verifier 사용량 조회 기간이 올바르지 않습니다."),
+    // HTTP 401 - 내부 API Key 필요
+    INTERNAL_API_KEY_REQUIRED(HttpStatus.UNAUTHORIZED, "INTERNAL_API_KEY_REQUIRED", "내부 API Key가 필요합니다."),
+    // HTTP 401 - 내부 API Key 오류
+    INTERNAL_API_KEY_INVALID(HttpStatus.UNAUTHORIZED, "INTERNAL_API_KEY_INVALID", "내부 API Key가 올바르지 않습니다."),
+    // HTTP 404 - 알림 템플릿 없음
+    NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_TEMPLATE_NOT_FOUND", "알림 템플릿을 찾을 수 없습니다."),
+    // HTTP 400 - 대량 알림 대상 오류
+    NOTIFICATION_BULK_TARGET_INVALID(HttpStatus.BAD_REQUEST, "NOTIFICATION_BULK_TARGET_INVALID", "대량 알림 대상 유형이 올바르지 않습니다."),
+    // HTTP 400 - 대량 알림 사용자 목록 없음
+    NOTIFICATION_BULK_USER_EMPTY(HttpStatus.BAD_REQUEST, "NOTIFICATION_BULK_USER_EMPTY", "대량 알림 사용자 목록이 필요합니다."),
     // HTTP 400 - 결과 통지 URL 오류
     INVALID_NOTIFY_URL(HttpStatus.BAD_REQUEST, "INVALID_NOTIFY_URL", "결과 통지 URL이 올바르지 않습니다."),
 

@@ -40,6 +40,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/api/auth/password-reset/confirm".equals(path)
                 || "/api/auth/dev/token".equals(path)
                 || "/api/mobile/auth/login".equals(path)
+                || path.startsWith("/api/verifier/")
+                || path.startsWith("/api/internal/")
                 || "/health".equals(path)
                 || path.startsWith("/actuator/health")
                 || "/actuator/info".equals(path)
