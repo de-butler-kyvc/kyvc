@@ -245,6 +245,18 @@ export type MfaVerifyResponse = {
   mfaToken?: string;
 };
 
+export type SignupEmailVerificationRequestResponse = {
+  verificationId: number;
+  maskedEmail: string;
+  expiresAt: string;
+  requested: boolean;
+};
+
+export type SignupEmailVerificationVerifyResponse = {
+  verified: boolean;
+  email: string;
+};
+
 export const auth = {
   signup: (body: CorporateSignupBody) =>
     api<SignupResponse>("/api/auth/signup/corporate", {
@@ -271,6 +283,26 @@ export const auth = {
       method: "POST",
       body: { challengeId, verificationCode },
     }),
+  requestSignupEmailVerification: (email: string) =>
+    api<SignupEmailVerificationRequestResponse>(
+      "/api/auth/email-verifications/request",
+      {
+        method: "POST",
+        body: { email, purpose: "SIGNUP" },
+      },
+    ),
+  verifySignupEmail: (
+    verificationId: number,
+    email: string,
+    verificationCode: string,
+  ) =>
+    api<SignupEmailVerificationVerifyResponse>(
+      "/api/auth/email-verifications/verify",
+      {
+        method: "POST",
+        body: { verificationId, email, verificationCode },
+      },
+    ),
 };
 
 // ── Corporate ────────────────────────────────────────────────────────

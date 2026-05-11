@@ -1,13 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ClipboardEvent,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
@@ -29,21 +23,18 @@ type FormState = {
 };
 
 type EmailVerificationProps = {
-  challengeId: string | null;
+  verificationId: number | null;
   maskedTarget: string;
   secondsLeft: number;
-  digits: string[];
+  verificationCode: string;
   emailVerified: boolean;
   sendingCode: boolean;
   verifyingCode: boolean;
   canRequestEmailCode: boolean;
-  allDigitsFilled: boolean;
-  cells: { current: Array<HTMLInputElement | null> };
+  canVerifyEmailCode: boolean;
   sendEmailCode: () => void;
   verifyEmailCode: () => void;
-  onOtpChange: (i: number, value: string) => void;
-  onOtpKeyDown: (i: number, e: KeyboardEvent<HTMLInputElement>) => void;
-  onOtpPaste: (e: ClipboardEvent<HTMLInputElement>) => void;
+  setVerificationCode: (value: string) => void;
 };
 
 const TERMS_LABELS: Record<TermKey, string> = {
@@ -64,6 +55,14 @@ const TERMS_DESCRIPTIONS: Record<TermKey, string> = {
 const STEP_LABELS = ["기본 정보", "PIN 등록"] as const;
 const SIGNUP_EMAIL_CHALLENGE_KEY = "kyvc.signupEmailChallenge";
 const OTP_LEN = 6;
+const DEFAULT_EMAIL_CODE_SECONDS = 300;
+
+function secondsUntil(expiresAt: string) {
+  const expires = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expires)) return DEFAULT_EMAIL_CODE_SECONDS;
+  const seconds = Math.round((expires - Date.now()) / 1000);
+  return seconds > 0 ? seconds : DEFAULT_EMAIL_CODE_SECONDS;
+}
 
 export default function MobileSignupPage() {
   const router = useRouter();
@@ -74,13 +73,12 @@ export default function MobileSignupPage() {
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const [accountCreated, setAccountCreated] = useState(false);
-  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [verificationId, setVerificationId] = useState<number | null>(null);
   const [maskedTarget, setMaskedTarget] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const [digits, setDigits] = useState<string[]>(() => Array(OTP_LEN).fill(""));
+  const [verificationCode, setVerificationCodeState] = useState("");
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
-  const otpCells = useRef<Array<HTMLInputElement | null>>([]);
   const [form, setForm] = useState<FormState>({
     corporateName: "",
     bizNo: "",
@@ -92,13 +90,20 @@ export default function MobileSignupPage() {
   });
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => {
-    if (k === "email" || k === "password" || k === "userName" || k === "corporateName") {
+    if (
+      k === "email" ||
+      k === "password" ||
+      k === "passwordConfirm" ||
+      k === "userName" ||
+      k === "corporateName" ||
+      k === "bizNo"
+    ) {
       setEmailVerified(false);
       setAccountCreated(false);
-      setChallengeId(null);
+      setVerificationId(null);
       setMaskedTarget("");
       setSecondsLeft(0);
-      setDigits(Array(OTP_LEN).fill(""));
+      setVerificationCodeState("");
       window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
     }
     setForm((p) => ({ ...p, [k]: v }));
@@ -137,11 +142,13 @@ export default function MobileSignupPage() {
     form.terms.privacy;
   const canRequestEmailCode =
     !!form.corporateName.trim() &&
+    !!form.bizNo.trim() &&
     !!form.userName.trim() &&
     /\S+@\S+\.\S+/.test(form.email) &&
     form.password.length >= 8 &&
     form.password === form.passwordConfirm;
-  const allDigitsFilled = digits.every((d) => d !== "");
+  const canVerifyEmailCode =
+    verificationCode.replace(/\D/g, "").length === OTP_LEN && secondsLeft > 0;
 
   const showToast = (message: string) => {
     setToastClosing(false);
@@ -173,7 +180,7 @@ export default function MobileSignupPage() {
 
   const sendEmailCode = async () => {
     if (!canRequestEmailCode) {
-      showToast("회사명, 담당자, 이메일, 비밀번호를 먼저 입력해주세요.");
+      showToast("사업자 정보, 이메일, 비밀번호를 먼저 입력해주세요.");
       return;
     }
     if (emailVerified) return;
@@ -181,33 +188,17 @@ export default function MobileSignupPage() {
     try {
       window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
       writeDraft(accountCreated ? new Date().toISOString() : undefined);
-      if (!accountCreated) {
-        await auth.signup({
-          email: form.email.trim(),
-          password: form.password,
-          userName: form.userName.trim(),
-          phone: "",
-          corporateName: form.corporateName.trim(),
-        });
-        setAccountCreated(true);
-        writeSignupDraft({ signedUpAt: new Date().toISOString() });
-      }
-      try {
-        await auth.login(form.email.trim(), form.password);
-      } catch (loginErr) {
-        if (!(loginErr instanceof ApiError)) throw loginErr;
-      }
-      const challenge = await auth.mfaChallenge("EMAIL", "LOGIN");
-      setChallengeId(challenge.challengeId);
-      setMaskedTarget(challenge.maskedTarget);
-      const ms = new Date(challenge.expiresAt).getTime() - Date.now();
-      setSecondsLeft(Math.max(0, Math.round(ms / 1000)));
-      setDigits(Array(OTP_LEN).fill(""));
+      const challenge = await auth.requestSignupEmailVerification(
+        form.email.trim(),
+      );
+      setVerificationId(challenge.verificationId);
+      setMaskedTarget(challenge.maskedEmail);
+      setSecondsLeft(secondsUntil(challenge.expiresAt));
+      setVerificationCodeState("");
       window.sessionStorage.setItem(
         SIGNUP_EMAIL_CHALLENGE_KEY,
         JSON.stringify({ email: form.email.trim(), ...challenge }),
       );
-      window.setTimeout(() => otpCells.current[0]?.focus(), 0);
       showToast("인증코드를 발송했습니다.");
     } catch (err) {
       showToast(
@@ -220,40 +211,19 @@ export default function MobileSignupPage() {
     }
   };
 
-  const onOtpChange = (i: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
-    setDigits((prev) => {
-      const next = [...prev];
-      next[i] = value;
-      return next;
-    });
-    if (value && i < OTP_LEN - 1) otpCells.current[i + 1]?.focus();
-  };
-
-  const onOtpKeyDown = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !digits[i] && i > 0) {
-      otpCells.current[i - 1]?.focus();
-    }
-  };
-
-  const onOtpPaste = (e: ClipboardEvent<HTMLInputElement>) => {
-    const value = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, OTP_LEN);
-    if (!value) return;
-    e.preventDefault();
-    const next = Array(OTP_LEN).fill("");
-    for (let i = 0; i < value.length; i++) next[i] = value[i]!;
-    setDigits(next);
-    otpCells.current[Math.min(value.length, OTP_LEN - 1)]?.focus();
+  const setVerificationCode = (value: string) => {
+    setVerificationCodeState(value.replace(/\D/g, "").slice(0, OTP_LEN));
   };
 
   const verifyEmailCode = async () => {
-    if (!challengeId || !allDigitsFilled) return;
+    if (!verificationId || !canVerifyEmailCode) return;
     setVerifyingCode(true);
     try {
-      const res = await auth.mfaVerify(challengeId, digits.join(""));
+      const res = await auth.verifySignupEmail(
+        verificationId,
+        form.email.trim(),
+        verificationCode,
+      );
       if (!res.verified) {
         showToast("인증번호가 올바르지 않습니다.");
         return;
@@ -286,8 +256,24 @@ export default function MobileSignupPage() {
     }
     if (submitting) return;
     setSubmitting(true);
-    writeDraft(new Date().toISOString());
-    router.push("/m/home");
+    try {
+      const signedUpAt = new Date().toISOString();
+      if (!accountCreated) {
+        await auth.signup({
+          email: form.email.trim(),
+          password: form.password,
+          userName: form.userName.trim(),
+          phone: "",
+          corporateName: form.corporateName.trim(),
+        });
+        setAccountCreated(true);
+      }
+      writeDraft(signedUpAt);
+      router.push("/m/home");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "회원가입에 실패했습니다.");
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -319,21 +305,18 @@ export default function MobileSignupPage() {
             toggleTerm={toggleTerm}
             openTerm={setActiveTerm}
             emailVerification={{
-              challengeId,
+              verificationId,
               maskedTarget,
               secondsLeft,
-              digits,
+              verificationCode,
               emailVerified,
               sendingCode,
               verifyingCode,
               canRequestEmailCode,
-              allDigitsFilled,
-              cells: otpCells,
+              canVerifyEmailCode,
               sendEmailCode,
               verifyEmailCode,
-              onOtpChange,
-              onOtpKeyDown,
-              onOtpPaste,
+              setVerificationCode,
             }}
           />
         ) : (
@@ -465,7 +448,7 @@ function BasicInfoStep({
                 ? "인증완료"
                 : emailAuth.sendingCode
                   ? "발송중"
-                  : emailAuth.challengeId
+                  : emailAuth.verificationId
                     ? "재전송"
                     : "코드받기"}
             </button>
@@ -473,28 +456,30 @@ function BasicInfoStep({
         </div>
       ) : null}
 
-      {emailAuth.challengeId && !emailAuth.emailVerified ? (
+      {emailAuth.verificationId && !emailAuth.emailVerified ? (
         <div className="signup-progressive-group signup-email-verify">
           <p>
             {(emailAuth.maskedTarget || form.email) +
               "로 발송된 인증코드를 입력하세요."}
           </p>
-          <div className="signup-otp-row">
-            {emailAuth.digits.map((digit, i) => (
-              <div key={i} className={`otp-box${digit ? " filled" : ""}`}>
-                <input
-                  ref={(el) => {
-                    emailAuth.cells.current[i] = el;
-                  }}
-                  value={digit}
-                  inputMode="numeric"
-                  maxLength={1}
-                  onChange={(e) => emailAuth.onOtpChange(i, e.target.value)}
-                  onKeyDown={(e) => emailAuth.onOtpKeyDown(i, e)}
-                  onPaste={emailAuth.onOtpPaste}
-                />
-              </div>
-            ))}
+          <div
+            className={`input-box signup-code-input${emailAuth.verificationCode ? " focus" : ""}`}
+          >
+            <input
+              value={emailAuth.verificationCode}
+              inputMode="numeric"
+              maxLength={OTP_LEN}
+              placeholder="인증코드 6자리"
+              onChange={(e) => emailAuth.setVerificationCode(e.target.value)}
+            />
+            <button
+              type="button"
+              className="signup-code-verify-btn"
+              onClick={emailAuth.verifyEmailCode}
+              disabled={emailAuth.verifyingCode || !emailAuth.canVerifyEmailCode}
+            >
+              {emailAuth.verifyingCode ? "확인 중" : "인증하기"}
+            </button>
           </div>
           <div className="signup-email-verify-actions">
             {emailAuth.secondsLeft > 0 ? (
@@ -504,17 +489,6 @@ function BasicInfoStep({
             ) : (
               <span>인증 시간이 만료되었습니다.</span>
             )}
-            <button
-              type="button"
-              onClick={emailAuth.verifyEmailCode}
-              disabled={
-                emailAuth.verifyingCode ||
-                !emailAuth.allDigitsFilled ||
-                emailAuth.secondsLeft <= 0
-              }
-            >
-              {emailAuth.verifyingCode ? "확인 중" : "인증하기"}
-            </button>
           </div>
         </div>
       ) : null}

@@ -3733,13 +3733,14 @@ html {
 .signup-view {
   min-height: 100vh;
   min-height: 100dvh;
-  height: auto;
+  height: 100vh;
+  height: 100dvh;
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
     #fff;
   color: var(--m-ink);
   visibility: visible;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: hidden;
 }
 
@@ -3771,16 +3772,18 @@ html {
 }
 
 .signup-content {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   display: block;
   width: 100%;
-  min-height: calc(100vh - 218px);
-  min-height: calc(100dvh - 218px);
-  padding: 17px 22px 111px;
+  min-height: 0;
+  padding: 17px 22px calc(111px + env(safe-area-inset-bottom));
   background: transparent;
   color: var(--m-ink);
   visibility: visible;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .signup-view .m-auth-title {
@@ -4205,10 +4208,10 @@ html {
 
 .signup-email-verify {
   margin-top: 10px;
-  padding: 14px;
-  border: 1px solid var(--m-line);
-  border-radius: 14px;
-  background: #fafaf7;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .signup-email-verify p {
@@ -4218,43 +4221,17 @@ html {
   line-height: 1.45;
 }
 
-.signup-otp-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  margin: 13px 0 12px;
+.signup-code-input {
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  padding-right: 8px;
 }
 
-.signup-otp-row .otp-box {
-  width: 38px;
-  height: 46px;
-  border-radius: 12px;
-}
-
-.signup-otp-row .otp-box input {
-  font-size: 20px;
-}
-
-.signup-email-verify-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.signup-email-verify-actions span {
-  color: var(--m-muted);
-  font-size: 12px;
-}
-
-.signup-email-verify-actions b {
-  color: var(--m-blue);
-}
-
-.signup-email-verify-actions button {
+.signup-code-verify-btn {
   flex: 0 0 auto;
-  height: 32px;
-  padding: 0 12px;
+  min-width: 70px;
+  height: 34px;
   border: 0;
   border-radius: 10px;
   background: var(--m-blue);
@@ -4264,8 +4241,24 @@ html {
   font-weight: 800;
 }
 
-.signup-email-verify-actions button:disabled {
+.signup-code-verify-btn:disabled {
   background: #d8d8d3;
+  color: #fff;
+}
+
+.signup-email-verify-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.signup-email-verify-actions span {
+  color: var(--m-muted);
+  font-size: 12px;
+}
+
+.signup-email-verify-actions b {
+  color: var(--m-blue);
 }
 
 /* ── Password strength ──────────────────────────────────────── */
@@ -4467,14 +4460,22 @@ html {
 
 /* ── Settings ────────────────────────────────────────────────── */
 .view.wash.settings-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   height: 100vh;
   height: 100dvh;
+  height: var(--m-visual-height, 100dvh);
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: var(--m-visual-height, 100dvh);
   overflow: hidden;
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
     #fff;
+  color: var(--m-ink);
+  visibility: visible;
+  opacity: 1;
 }
 
 .settings-view .m-topbar {
@@ -4504,11 +4505,18 @@ html {
 .settings-container {
   flex: 1 1 auto;
   min-height: 0;
+  height: auto;
+  max-height: none;
+  display: block;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 18px 30px;
   background: transparent;
+  color: var(--m-ink);
+  visibility: visible;
+  opacity: 1;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .settings-profile {
@@ -4521,6 +4529,9 @@ html {
   border-radius: 16px;
   margin-bottom: 24px;
   box-shadow: none;
+  color: var(--m-ink);
+  visibility: visible;
+  opacity: 1;
 }
 
 .sp-avatar {
@@ -4566,6 +4577,9 @@ html {
   border: 1px solid var(--m-line);
   overflow: hidden;
   box-shadow: none;
+  color: var(--m-ink);
+  visibility: visible;
+  opacity: 1;
 }
 
 .sg-item {
