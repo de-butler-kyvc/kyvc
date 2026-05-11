@@ -114,14 +114,20 @@ type BottomNavProps = {
 };
 
 export function MBottomNav({ active, onQrClick }: BottomNavProps) {
+  const router = useRouter();
   const qrControl = onQrClick ? (
     <button type="button" className="fab" aria-label="QR 스캔" onClick={onQrClick}>
       <MIcon.qr />
     </button>
   ) : (
-    <Link href="/m/vp/scan" className="fab" aria-label="QR 스캔">
+    <button
+      type="button"
+      className="fab"
+      aria-label="QR 스캔"
+      onClick={() => router.push("/m/vp/scan")}
+    >
       <MIcon.qr />
-    </Link>
+    </button>
   );
 
   return (

@@ -138,7 +138,7 @@ export default function MobileVpSubmitPage() {
 
   return (
     <section className="view wash">
-      <MTopBar title="증명서 제출" back="/m/vp/scan" />
+      <MTopBar title="증명서 제출" back="/m/home" />
       <div className="content scroll">
         <div className="submit-box mt-16">
           <div className="sb-label">요청 기관</div>
