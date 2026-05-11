@@ -23,6 +23,8 @@ public class InternalApiKeyFilter extends OncePerRequestFilter {
 
     private static final String INTERNAL_CORE_PATH_PREFIX = "/api/internal/core";
     private static final String INTERNAL_DEV_PATH_PREFIX = "/api/internal/dev";
+    private static final String INTERNAL_ISSUER_POLICY_PATH_PREFIX = "/api/internal/issuer-policies";
+    private static final String INTERNAL_NOTIFICATION_PATH_PREFIX = "/api/internal/notifications";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
 
     private final CoreProperties coreProperties;
@@ -45,7 +47,11 @@ public class InternalApiKeyFilter extends OncePerRequestFilter {
         return INTERNAL_CORE_PATH_PREFIX.equals(requestPath)
                 || requestPath.startsWith(INTERNAL_CORE_PATH_PREFIX + "/")
                 || INTERNAL_DEV_PATH_PREFIX.equals(requestPath)
-                || requestPath.startsWith(INTERNAL_DEV_PATH_PREFIX + "/");
+                || requestPath.startsWith(INTERNAL_DEV_PATH_PREFIX + "/")
+                || INTERNAL_ISSUER_POLICY_PATH_PREFIX.equals(requestPath)
+                || requestPath.startsWith(INTERNAL_ISSUER_POLICY_PATH_PREFIX + "/")
+                || INTERNAL_NOTIFICATION_PATH_PREFIX.equals(requestPath)
+                || requestPath.startsWith(INTERNAL_NOTIFICATION_PATH_PREFIX + "/");
     }
 
     @Override
@@ -57,14 +63,30 @@ public class InternalApiKeyFilter extends OncePerRequestFilter {
         String expectedInternalApiKey = coreProperties.resolveApiKey(); // 설정 API Key
         String requestInternalApiKey = request.getHeader(INTERNAL_API_KEY_HEADER); // 요청 API Key
 
-        if (!StringUtils.hasText(expectedInternalApiKey)
-                || !StringUtils.hasText(requestInternalApiKey)
-                || !expectedInternalApiKey.equals(requestInternalApiKey)) {
-            writeUnauthorizedResponse(response);
+        if (!StringUtils.hasText(expectedInternalApiKey) || !StringUtils.hasText(requestInternalApiKey)) {
+            writeUnauthorizedResponse(response, ErrorCode.INTERNAL_API_KEY_REQUIRED);
+            return;
+        }
+
+        if (!expectedInternalApiKey.equals(requestInternalApiKey)) {
+            writeUnauthorizedResponse(response, ErrorCode.INTERNAL_API_KEY_INVALID);
             return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void writeUnauthorizedResponse(
+            HttpServletResponse response, // 응답 정보
+            ErrorCode errorCode // 오류 코드
+    ) throws IOException {
+        response.setStatus(errorCode.getStatus().value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        objectMapper.writeValue(
+                response.getWriter(),
+                CommonResponseFactory.fail(errorCode)
+        );
     }
 
     // 내부 API Key 인증 실패 응답 작성

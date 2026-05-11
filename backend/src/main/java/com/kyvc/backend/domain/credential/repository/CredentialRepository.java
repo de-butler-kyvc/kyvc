@@ -76,6 +76,13 @@ public interface CredentialRepository {
      * @param credentialId Credential ID
      * @return Credential 조회 결과
      */
+    /**
+     * 테스트 검증용 유효 Credential 최신 조회
+     *
+     * @return Credential 조회 결과
+     */
+    Optional<Credential> findLatestValid();
+
     Credential getById(
             Long credentialId // Credential ID
     );

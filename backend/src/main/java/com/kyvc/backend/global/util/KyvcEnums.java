@@ -169,6 +169,7 @@ public final class KyvcEnums {
         RE_AUTH, // 재인증
         TEST_VERIFY, // 테스트 검증
         FINANCE_VERIFY, // 금융 검증
+        VP_LOGIN, // 모바일 VP 로그인
         CORPORATE_PERMISSION_CHECK // 법인 권한 확인
     }
 
@@ -381,6 +382,22 @@ public final class KyvcEnums {
         CANCELLED // 취소
     }
 
+    // 금융사 고객 연결 상태
+    public enum FinanceCustomerLinkStatus {
+        ACTIVE, // 활성
+        INACTIVE, // 비활성
+        UNLINKED // 연결 해제
+    }
+
+    // 금융사 KYC QR 상태
+    public enum FinanceKycQrStatus {
+        NOT_ISSUED, // 미발급
+        ACTIVE, // 활성
+        EXPIRED, // 만료
+        USED, // 사용 완료
+        WALLET_SAVED // Wallet 저장 완료
+    }
+
     // 동의 유형
     public enum ConsentType {
         TERMS_OF_SERVICE, // 서비스 이용약관
@@ -430,6 +447,8 @@ public final class KyvcEnums {
         LOGIN, // 로그인
         IMPORTANT_ACTION, // 중요 작업
         PASSWORD_RESET, // 비밀번호 재설정
+        SIGNUP, // 회원가입 이메일 인증
+        SIGNUP_EMAIL_VERIFICATION, // 회원가입 이메일 인증
         KYC_APPROVE, // KYC 승인
         KYC_REJECT, // KYC 반려
         VC_ISSUE, // VC 발급

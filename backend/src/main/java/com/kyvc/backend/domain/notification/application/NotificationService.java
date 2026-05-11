@@ -4,12 +4,17 @@ import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
 import com.kyvc.backend.domain.notification.config.NotificationProperties;
 import com.kyvc.backend.domain.notification.domain.Notification;
+import com.kyvc.backend.domain.notification.domain.NotificationTemplate;
+import com.kyvc.backend.domain.notification.dto.InternalNotificationBulkSendRequest;
+import com.kyvc.backend.domain.notification.dto.InternalNotificationBulkSendResponse;
 import com.kyvc.backend.domain.notification.dto.InternalNotificationSendRequest;
 import com.kyvc.backend.domain.notification.dto.InternalNotificationSendResponse;
 import com.kyvc.backend.domain.notification.dto.NotificationPageResponse;
 import com.kyvc.backend.domain.notification.dto.NotificationResponse;
 import com.kyvc.backend.domain.notification.dto.NotificationUnreadCountResponse;
 import com.kyvc.backend.domain.notification.repository.NotificationRepository;
+import com.kyvc.backend.domain.notification.repository.NotificationTemplateRepository;
+import com.kyvc.backend.domain.user.repository.UserRepository;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.util.KyvcEnums;
@@ -24,6 +29,8 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 
 // 알림 서비스
 @Service
@@ -36,6 +43,8 @@ public class NotificationService {
     private static final String INTERNAL_NOTIFICATION_SEND_STATUS = "SAVED"; // 내부 알림 발송 상태
 
     private final NotificationRepository notificationRepository;
+    private final NotificationTemplateRepository notificationTemplateRepository;
+    private final UserRepository userRepository;
     private final AuditLogService auditLogService;
     private final NotificationProperties notificationProperties;
 
@@ -166,6 +175,117 @@ public class NotificationService {
                 savedNotification.getNotificationId(),
                 INTERNAL_NOTIFICATION_SEND_STATUS
         );
+    }
+
+    // 내부 대량 알림 발송 저장
+    public InternalNotificationBulkSendResponse sendBulkInternalNotifications(
+            InternalNotificationBulkSendRequest request // 내부 대량 알림 발송 요청
+    ) {
+        validateBulkRequest(request);
+        NotificationTemplate template = notificationTemplateRepository.findEnabledByTemplateCode(request.templateCode().trim())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOTIFICATION_TEMPLATE_NOT_FOUND));
+        List<Long> requestedUserIds = request.userIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (requestedUserIds.isEmpty()) {
+            throw new ApiException(ErrorCode.NOTIFICATION_BULK_USER_EMPTY);
+        }
+
+        List<Long> failedUserIds = requestedUserIds.stream()
+                .filter(userId -> userRepository.findById(userId).isEmpty())
+                .toList();
+        List<Notification> notifications = requestedUserIds.stream()
+                .filter(userId -> !failedUserIds.contains(userId))
+                .map(userId -> Notification.createFromTemplate(
+                        userId,
+                        template.getTemplateCode(),
+                        renderTemplate(template.getTitleTemplate(), request.payload()),
+                        renderTemplate(template.getMessageTemplate(), request.payload()),
+                        template.getChannelCode(),
+                        request.targetType().trim(),
+                        resolveTargetId(request.payload()),
+                        template.getTemplateCode()
+                ))
+                .toList();
+
+        try {
+            notificationRepository.saveAll(notifications);
+        } catch (Exception exception) {
+            throw new ApiException(ErrorCode.INTERNAL_NOTIFICATION_SAVE_FAILED);
+        }
+
+        auditLogService.saveSafely(new AuditLogCreateCommand(
+                KyvcEnums.ActorType.SYSTEM.name(),
+                0L,
+                "INTERNAL_NOTIFICATION_BULK_SEND",
+                KyvcEnums.AuditTargetType.NOTIFICATION.name(),
+                0L,
+                "내부 대량 알림 발송 요청 저장",
+                null
+        ));
+
+        return new InternalNotificationBulkSendResponse(
+                requestedUserIds.size(),
+                notifications.size(),
+                failedUserIds.size(),
+                failedUserIds
+        );
+    }
+
+    // 내부 대량 알림 발송 요청 검증
+    private void validateBulkRequest(
+            InternalNotificationBulkSendRequest request // 내부 대량 알림 발송 요청
+    ) {
+        if (request == null || !StringUtils.hasText(request.targetType())) {
+            throw new ApiException(ErrorCode.NOTIFICATION_BULK_TARGET_INVALID);
+        }
+        if (!"USER_IDS".equalsIgnoreCase(request.targetType().trim())) {
+            throw new ApiException(ErrorCode.NOTIFICATION_BULK_TARGET_INVALID);
+        }
+        if (!StringUtils.hasText(request.templateCode())) {
+            throw new ApiException(ErrorCode.NOTIFICATION_TEMPLATE_NOT_FOUND);
+        }
+        if (request.userIds() == null || request.userIds().isEmpty()) {
+            throw new ApiException(ErrorCode.NOTIFICATION_BULK_USER_EMPTY);
+        }
+    }
+
+    // 템플릿 문자열 치환
+    private String renderTemplate(
+            String template, // 템플릿 문자열
+            Map<String, Object> payload // 치환 payload
+    ) {
+        String rendered = template == null ? "" : template;
+        if (payload == null || payload.isEmpty()) {
+            return rendered;
+        }
+        for (Map.Entry<String, Object> entry : payload.entrySet()) {
+            String placeholder = "{" + entry.getKey() + "}"; // 치환 키
+            rendered = rendered.replace(placeholder, String.valueOf(entry.getValue()));
+        }
+        return rendered;
+    }
+
+    // 알림 대상 ID 산정
+    private Long resolveTargetId(
+            Map<String, Object> payload // 알림 payload
+    ) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+        Object kycId = payload.get("kycId");
+        if (kycId instanceof Number number) {
+            return number.longValue();
+        }
+        if (kycId instanceof String value && StringUtils.hasText(value)) {
+            try {
+                return Long.parseLong(value.trim());
+            } catch (NumberFormatException exception) {
+                return null;
+            }
+        }
+        return null;
     }
 
     // 사용자 ID 검증

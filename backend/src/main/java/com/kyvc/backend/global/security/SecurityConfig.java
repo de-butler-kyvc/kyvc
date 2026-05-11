@@ -30,6 +30,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final VerifierApiKeyAuthenticationFilter verifierApiKeyAuthenticationFilter;
     private final InternalApiKeyFilter internalApiKeyFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
@@ -57,8 +58,12 @@ public class SecurityConfig {
                                 "/api/auth/token/refresh",
                                 "/api/auth/password-reset/request",
                                 "/api/auth/password-reset/confirm",
+                                "/api/auth/email-verifications/request",
+                                "/api/auth/email-verifications/verify",
                                 "/api/auth/dev/token",
-                                "/api/mobile/auth/login"
+                                "/api/mobile/auth/login",
+                                "/api/mobile/auth/vp-login/challenge",
+                                "/api/mobile/auth/vp-login"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
@@ -75,6 +80,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/internal/core/health").permitAll()
                         .requestMatchers("/api/internal/dev/**").permitAll()
                         .requestMatchers("/api/admin/**").denyAll()
+                        .requestMatchers("/api/verifier/**").authenticated()
                         .requestMatchers(
                                 "/api/auth/logout",
                                 "/api/user/**",
@@ -82,6 +88,7 @@ public class SecurityConfig {
                                 "/api/mobile/**"
                         ).authenticated()
                         .anyRequest().authenticated())
+                .addFilterBefore(verifierApiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(internalApiKeyFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

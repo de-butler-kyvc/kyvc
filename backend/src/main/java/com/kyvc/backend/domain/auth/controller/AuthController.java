@@ -51,7 +51,12 @@ public class AuthController {
      */
     @Operation(
             summary = "법인 사용자 회원가입",
-            description = "법인 사용자를 가입 처리합니다. 입력값은 로그인 이메일과 비밀번호입니다."
+            description = """
+                    법인 사용자 회원가입 API입니다.
+                    입력값은 로그인 이메일과 비밀번호입니다.
+                    PART 6의 이메일 인증 API는 프론트 화면에서 회원가입 버튼 활성화 여부를 제어하기 위한 별도 본인인증 Flow입니다.
+                    현재 회원가입 API에서는 emailVerificationToken을 강제 검증하지 않습니다.
+                    """
     )
     @ApiResponse(
             responseCode = "201",

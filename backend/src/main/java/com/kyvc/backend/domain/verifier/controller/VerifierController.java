@@ -1,14 +1,24 @@
 package com.kyvc.backend.domain.verifier.controller;
 
-import com.kyvc.backend.domain.verifier.application.VerifierVpService;
+import com.kyvc.backend.domain.verifier.application.VerifierAppService;
+import com.kyvc.backend.domain.verifier.application.VerifierCorporatePermissionService;
+import com.kyvc.backend.domain.verifier.application.VerifierIntegrationLogService;
+import com.kyvc.backend.domain.verifier.application.VerifierPolicySyncHistoryService;
+import com.kyvc.backend.domain.verifier.application.VerifierRuntimeService;
+import com.kyvc.backend.domain.verifier.application.VerifierUsageStatsService;
+import com.kyvc.backend.domain.verifier.dto.VerifierAppMeResponse;
+import com.kyvc.backend.domain.verifier.dto.VerifierCorporatePermissionListResponse;
+import com.kyvc.backend.domain.verifier.dto.VerifierIntegrationLogListResponse;
+import com.kyvc.backend.domain.verifier.dto.VerifierPolicySyncHistoryListResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationDetailResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationResponse;
+import com.kyvc.backend.domain.verifier.dto.VerifierUsageStatsResponse;
 import com.kyvc.backend.global.response.CommonResponse;
 import com.kyvc.backend.global.response.CommonResponseFactory;
-import com.kyvc.backend.global.security.CustomUserDetails;
+import com.kyvc.backend.global.security.VerifierPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -17,97 +27,249 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+
 /**
- * Verifier API Controller
+ * 외부 Verifier Runtime API Controller
  */
 @RestController
 @RequestMapping("/api/verifier")
 @RequiredArgsConstructor
-@Tag(name = "Verifier", description = "Verifier 테스트 검증과 기업 재인증 요청 API")
+@Tag(name = "Verifier Runtime", description = "외부 Verifier API Key 기반 Runtime API")
 public class VerifierController {
 
-    private final VerifierVpService verifierVpService;
+    private final VerifierRuntimeService verifierRuntimeService;
+    private final VerifierCorporatePermissionService verifierCorporatePermissionService;
+    private final VerifierAppService verifierAppService;
+    private final VerifierIntegrationLogService verifierIntegrationLogService;
+    private final VerifierUsageStatsService verifierUsageStatsService;
+    private final VerifierPolicySyncHistoryService verifierPolicySyncHistoryService;
 
     /**
-     * Verifier 테스트 VP 검증을 실행
+     * 외부 Verifier 재인증 VP 요청 생성
      *
-     * @param userDetails 인증 사용자 정보
+     * @param principal 인증된 Verifier 주체
+     * @param request 재인증 요청
+     * @return 재인증 요청 생성 응답
+     */
+    @Operation(summary = "외부 Verifier 재인증 VP 요청 생성")
+    @ApiResponse(responseCode = "201", description = "재인증 요청 생성 응답",
+            content = @Content(schema = @Schema(implementation = VerifierReAuthRequestCreateResponse.class)))
+    @PostMapping("/re-auth-requests")
+    public ResponseEntity<CommonResponse<VerifierReAuthRequestCreateResponse>> createReAuthRequest(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
+            @Valid @RequestBody VerifierReAuthRequestCreateRequest request // 재인증 요청
+    ) {
+        return ResponseEntity.status(201).body(CommonResponseFactory.success(
+                verifierRuntimeService.createReAuthRequest(principal, request)
+        ));
+    }
+
+    /**
+     * 외부 Verifier 기업 권한 확인 결과 목록 조회
+     *
+     * @param principal 인증된 Verifier 주체
+     * @param page 페이지 번호
+     * @param size 페이지 크기
+     * @param corporateId 법인 ID
+     * @param permissionCode 권한 코드
+     * @return 기업 권한 확인 결과 목록 응답
+     */
+    @Operation(summary = "외부 Verifier 기업 권한 확인 결과 목록 조회")
+    @GetMapping("/corporate-permissions")
+    public CommonResponse<VerifierCorporatePermissionListResponse> getCorporatePermissions(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
+            @RequestParam(required = false) Integer page, // 페이지 번호
+            @RequestParam(required = false) Integer size, // 페이지 크기
+            @RequestParam(required = false) Long corporateId, // 법인 ID
+            @RequestParam(required = false) String permissionCode // 권한 코드
+    ) {
+        return CommonResponseFactory.success(verifierCorporatePermissionService.getPermissions(
+                principal,
+                page,
+                size,
+                corporateId,
+                permissionCode
+        ));
+    }
+
+    /**
+     * 외부 Verifier 테스트 VP 검증 실행
+     *
+     * @param principal 인증된 Verifier 주체
      * @param request 테스트 VP 검증 요청
      * @return 테스트 VP 검증 응답
      */
-    @Operation(
-            summary = "Verifier 테스트 VP 검증 실행",
-            description = "Verifier 테스트 VP 검증을 실행합니다. CoreAdapter를 통해 Core VP 검증 API를 동기 호출하고, Core 응답 수신 후 검증 결과를 저장하고 반환합니다. Core callback은 사용하지 않습니다."
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "Verifier 테스트 VP 검증 응답",
-            content = @Content(schema = @Schema(implementation = VerifierTestVpVerificationResponse.class))
-    )
+    @Operation(summary = "외부 Verifier 테스트 VP 검증 실행")
+    @ApiResponse(responseCode = "201", description = "테스트 VP 검증 응답",
+            content = @Content(schema = @Schema(implementation = VerifierTestVpVerificationResponse.class)))
     @PostMapping("/test-vp-verifications")
-    public CommonResponse<VerifierTestVpVerificationResponse> testVpVerification(
+    public ResponseEntity<CommonResponse<VerifierTestVpVerificationResponse>> testVpVerification(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
             @Valid @RequestBody VerifierTestVpVerificationRequest request // 테스트 VP 검증 요청
     ) {
-        return CommonResponseFactory.success(verifierVpService.testVpVerification(userDetails, request));
+        return ResponseEntity.status(201).body(CommonResponseFactory.success(
+                verifierRuntimeService.testVpVerification(principal, request)
+        ));
     }
 
     /**
-     * Verifier 테스트 VP 검증 이력 상세를 조회
+     * 외부 Verifier 테스트 VP 검증 결과 조회
      *
-     * @param userDetails 인증 사용자 정보
+     * @param principal 인증된 Verifier 주체
      * @param testId 테스트 검증 ID
      * @return 테스트 VP 검증 상세 응답
      */
-    @Operation(
-            summary = "Verifier 테스트 VP 검증 이력 상세 조회",
-            description = "저장된 테스트 VP 검증 이력 상세를 조회합니다. 검증 실행은 POST API에서 동기 처리되며, 본 API는 Core를 직접 호출하지 않습니다."
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "Verifier 테스트 VP 검증 상세 응답",
-            content = @Content(schema = @Schema(implementation = VerifierTestVpVerificationDetailResponse.class))
-    )
+    @Operation(summary = "외부 Verifier 테스트 VP 검증 결과 조회")
     @GetMapping("/test-vp-verifications/{testId}")
     public CommonResponse<VerifierTestVpVerificationDetailResponse> getTestVpVerification(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
             @PathVariable Long testId // 테스트 검증 ID
     ) {
-        return CommonResponseFactory.success(verifierVpService.getTestVpVerification(userDetails, testId));
+        return CommonResponseFactory.success(verifierRuntimeService.getTestVpVerification(principal, testId));
     }
 
     /**
-     * Verifier 기업 재인증 요청을 생성
+     * 외부 Verifier 앱 정보 조회
      *
-     * @param userDetails 인증 사용자 정보
-     * @param request 재인증 요청 생성 요청
-     * @return 재인증 요청 생성 응답
+     * @param principal 인증된 Verifier 주체
+     * @return Verifier 앱 정보 응답
      */
-    @Operation(
-            summary = "Verifier 기업 재인증 요청 생성",
-            description = "Verifier 기업 재인증 요청을 생성합니다. Core를 호출하지 않으며, 실제 VP 검증은 모바일 VP 제출 API에서 처리됩니다. resultNotifyUrl은 외부 Verifier 결과 통지 URL이며 Core 내부 수신 URL 용도가 아닙니다."
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "Verifier 기업 재인증 요청 생성 응답",
-            content = @Content(schema = @Schema(implementation = VerifierReAuthRequestCreateResponse.class))
-    )
-    @PostMapping("/re-auth-requests")
-    public CommonResponse<VerifierReAuthRequestCreateResponse> createReAuthRequest(
+    @Operation(summary = "외부 Verifier 앱 정보 조회")
+    @GetMapping("/app/me")
+    public CommonResponse<VerifierAppMeResponse> getMe(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
-            @Valid @RequestBody VerifierReAuthRequestCreateRequest request // 재인증 요청 생성 요청
+            @AuthenticationPrincipal VerifierPrincipal principal // 인증된 Verifier 주체
     ) {
-        return CommonResponseFactory.success(verifierVpService.createReAuthRequest(userDetails, request));
+        return CommonResponseFactory.success(verifierAppService.getMe(principal));
+    }
+
+    /**
+     * 외부 Verifier 연동 로그 조회
+     *
+     * @param principal 인증된 Verifier 주체
+     * @param page 페이지 번호
+     * @param size 페이지 크기
+     * @param actionTypeCode 작업 유형 코드
+     * @param from 시작 일자
+     * @param to 종료 일자
+     * @return 연동 로그 목록 응답
+     */
+    @Operation(summary = "외부 Verifier 연동 로그 조회")
+    @GetMapping("/integration-logs")
+    public CommonResponse<VerifierIntegrationLogListResponse> getIntegrationLogs(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
+            @RequestParam(required = false) Integer page, // 페이지 번호
+            @RequestParam(required = false) Integer size, // 페이지 크기
+            @RequestParam(required = false) String actionTypeCode, // 작업 유형 코드
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from, // 시작 일자
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to // 종료 일자
+    ) {
+        return CommonResponseFactory.success(verifierIntegrationLogService.getLogs(
+                principal,
+                page,
+                size,
+                actionTypeCode,
+                from,
+                to
+        ));
+    }
+
+    /**
+     * 외부 Verifier 사용량 통계 조회
+     *
+     * @param principal 인증된 Verifier 주체
+     * @param from 시작 일자
+     * @param to 종료 일자
+     * @param unit 집계 단위
+     * @return 사용량 통계 응답
+     */
+    @Operation(summary = "외부 Verifier 사용량 통계 조회")
+    @GetMapping("/usage-stats")
+    public CommonResponse<VerifierUsageStatsResponse> getUsageStats(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from, // 시작 일자
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to, // 종료 일자
+            @RequestParam(required = false) String unit // 집계 단위
+    ) {
+        return CommonResponseFactory.success(verifierUsageStatsService.getStats(principal, from, to, unit));
+    }
+
+    /**
+     * 외부 Verifier 사용량 통계 CSV 다운로드
+     *
+     * @param principal 인증된 Verifier 주체
+     * @param from 시작 일자
+     * @param to 종료 일자
+     * @param format 파일 형식
+     * @return CSV 파일 응답
+     */
+    @Operation(summary = "외부 Verifier 사용량 통계 CSV 다운로드")
+    @GetMapping("/usage-stats/export")
+    public ResponseEntity<byte[]> exportUsageStats(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from, // 시작 일자
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to, // 종료 일자
+            @RequestParam String format // 파일 형식
+    ) {
+        byte[] csv = verifierUsageStatsService.exportCsv(principal, from, to, format);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("verifier-usage-stats.csv", StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(csv);
+    }
+
+    /**
+     * 외부 Verifier 정책 동기화 이력 조회
+     *
+     * @param principal 인증된 Verifier 주체
+     * @param page 페이지 번호
+     * @param size 페이지 크기
+     * @param from 시작 일자
+     * @param to 종료 일자
+     * @return 정책 동기화 이력 목록 응답
+     */
+    @Operation(summary = "외부 Verifier 정책 동기화 이력 조회")
+    @GetMapping("/policy-sync-histories")
+    public CommonResponse<VerifierPolicySyncHistoryListResponse> getPolicySyncHistories(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal VerifierPrincipal principal, // 인증된 Verifier 주체
+            @RequestParam(required = false) Integer page, // 페이지 번호
+            @RequestParam(required = false) Integer size, // 페이지 크기
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from, // 시작 일자
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to // 종료 일자
+    ) {
+        return CommonResponseFactory.success(verifierPolicySyncHistoryService.getHistories(
+                principal,
+                page,
+                size,
+                from,
+                to
+        ));
     }
 }

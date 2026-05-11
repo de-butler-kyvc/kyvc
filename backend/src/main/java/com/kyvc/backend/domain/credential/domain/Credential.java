@@ -212,6 +212,18 @@ public class Credential {
         return qrExpiresAt;
     }
 
+    public String getOfferTokenHash() {
+        return offerTokenHash;
+    }
+
+    public LocalDateTime getOfferExpiresAt() {
+        return offerExpiresAt;
+    }
+
+    public KyvcEnums.Yn getOfferUsedYn() {
+        return offerUsedYn;
+    }
+
     public LocalDateTime getIssuedAt() {
         return issuedAt;
     }
@@ -310,8 +322,20 @@ public class Credential {
             String qrToken, // QR 토큰
             LocalDateTime qrExpiresAt // QR 만료 일시
     ) {
+        issueOffer(qrToken, null, qrExpiresAt);
+    }
+
+    // Credential Offer 발급
+    public void issueOffer(
+            String qrToken, // QR 토큰
+            String offerTokenHash, // Offer 토큰 해시
+            LocalDateTime qrExpiresAt // QR 만료 일시
+    ) {
         this.qrToken = qrToken;
         this.qrExpiresAt = qrExpiresAt;
+        this.offerTokenHash = offerTokenHash;
+        this.offerExpiresAt = qrExpiresAt;
+        this.offerUsedYn = KyvcEnums.Yn.N;
     }
 
     // Wallet 저장 처리
@@ -326,6 +350,7 @@ public class Credential {
         this.walletDeviceId = walletDeviceId;
         this.holderDid = holderDid;
         this.holderXrplAddress = holderXrplAddress;
+        this.offerUsedYn = KyvcEnums.Yn.Y;
     }
 
     // 상태 갱신

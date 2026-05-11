@@ -140,6 +140,31 @@ public class KycApplication {
         return kycApplication;
     }
 
+    // 금융사 방문 KYC 초안 생성
+    public static KycApplication createFinanceVisit(
+            Long corporateId, // 법인 ID
+            Long applicantUserId, // 신청 사용자 ID
+            String corporateTypeCode, // 법인 유형 코드
+            String financeInstitutionCode, // 금융기관 코드
+            String financeBranchCode, // 금융사 지점 코드
+            Long financeStaffUserId, // 금융사 직원 사용자 ID
+            String financeCustomerNo, // 금융사 고객번호
+            LocalDateTime visitedAt // 방문 일시
+    ) {
+        KycApplication kycApplication = new KycApplication();
+        kycApplication.corporateId = corporateId;
+        kycApplication.applicantUserId = applicantUserId;
+        kycApplication.corporateTypeCode = corporateTypeCode;
+        kycApplication.applicationChannelCode = KyvcEnums.ApplicationChannel.FINANCE_VISIT;
+        kycApplication.financeInstitutionCode = financeInstitutionCode;
+        kycApplication.financeBranchCode = financeBranchCode;
+        kycApplication.financeStaffUserId = financeStaffUserId;
+        kycApplication.financeCustomerNo = financeCustomerNo;
+        kycApplication.visitedAt = visitedAt;
+        kycApplication.kycStatus = KyvcEnums.KycStatus.DRAFT;
+        return kycApplication;
+    }
+
     public Long getKycId() {
         return kycId;
     }
@@ -271,6 +296,56 @@ public class KycApplication {
         this.manualReviewReason = manualReviewReason;
     }
 
+    // AI 심사 승인 완료 처리
+    public void completeAiReviewAsApproved(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            LocalDateTime approvedAt // 승인 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.APPROVED;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.SUCCESS;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.PASS;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.approvedAt = approvedAt;
+    }
+
+    // AI 심사 보완 필요 처리
+    public void completeAiReviewAsNeedSupplement(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            String manualReviewReason // 보완 판단 사유
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.NEED_SUPPLEMENT;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.LOW_CONFIDENCE;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.NEED_MANUAL_REVIEW;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.manualReviewReason = manualReviewReason;
+    }
+
+    // AI 심사 반려 처리
+    public void completeAiReviewAsRejected(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            String rejectReason, // 반려 사유
+            LocalDateTime rejectedAt // 반려 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.REJECTED;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.SUCCESS;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.FAIL;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.rejectReason = rejectReason;
+        this.rejectedAt = rejectedAt;
+    }
+
     // AI 심사 낮은 신뢰도 후 수동심사 전환
     public void completeAiReviewAsLowConfidenceManualReview(
             BigDecimal confidenceScore, // AI 신뢰도 점수
@@ -338,6 +413,18 @@ public class KycApplication {
     // 초안 상태 여부
     public boolean isDraft() {
         return KyvcEnums.KycStatus.DRAFT == kycStatus;
+    }
+
+    // 금융사 방문 신청 여부
+    public boolean isFinanceVisit() {
+        return KyvcEnums.ApplicationChannel.FINANCE_VISIT == applicationChannelCode;
+    }
+
+    // 금융사 직원 접근 가능 여부
+    public boolean isFinanceVisitByStaff(
+            Long userId // 금융사 직원 사용자 ID
+    ) {
+        return isFinanceVisit() && financeStaffUserId != null && financeStaffUserId.equals(userId);
     }
 
     // 문서 업로드 가능 여부

@@ -1,6 +1,8 @@
 package com.kyvc.backend.domain.corporate.controller;
 
 import com.kyvc.backend.domain.corporate.application.CorporateAgentService;
+import com.kyvc.backend.domain.corporate.dto.AgentAuthorityResponse;
+import com.kyvc.backend.domain.corporate.dto.AgentAuthorityUpdateRequest;
 import com.kyvc.backend.domain.corporate.dto.AgentRequest;
 import com.kyvc.backend.domain.corporate.dto.AgentResponse;
 import com.kyvc.backend.global.exception.ApiException;
@@ -22,9 +24,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -143,6 +147,49 @@ public class CorporateAgentController {
     ) {
         return ResponseEntity.ok(
                 CommonResponseFactory.success(agentService.updateAgent(
+                        getAuthenticatedUserId(userDetails),
+                        corporateId,
+                        agentId,
+                        request
+                ))
+        );
+    }
+
+    /**
+     * 대리인 권한 수정
+     *
+     * @param userDetails 인증 사용자 정보
+     * @param corporateId 법인 ID
+     * @param agentId 대리인 ID
+     * @param request 대리인 권한 수정 요청
+     * @return 대리인 권한 응답
+     */
+    @Operation(
+            summary = "대리인 권한 수정",
+            description = "로그인 사용자가 소유한 법인의 대리인 권한 범위와 권한 상태를 수정합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "수정된 대리인 권한 반환",
+            content = @Content(schema = @Schema(implementation = AgentAuthorityResponse.class))
+    )
+    @PatchMapping("/{agentId}/authority")
+    public ResponseEntity<CommonResponse<AgentAuthorityResponse>> updateAuthority(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
+            @Parameter(description = "법인 ID", example = "1")
+            @PathVariable Long corporateId, // 법인 ID
+            @Parameter(description = "대리인 ID", example = "1")
+            @PathVariable Long agentId, // 대리인 ID
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "대리인 권한 수정 요청 데이터",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = AgentAuthorityUpdateRequest.class))
+            )
+            @Valid @RequestBody AgentAuthorityUpdateRequest request // 대리인 권한 수정 요청
+    ) {
+        return ResponseEntity.ok(
+                CommonResponseFactory.success(agentService.updateAuthority(
                         getAuthenticatedUserId(userDetails),
                         corporateId,
                         agentId,

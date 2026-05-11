@@ -114,4 +114,17 @@ public class CorporateAgent {
     ) {
         return this.corporateId != null && this.corporateId.equals(corporateId);
     }
+
+    // 권한 정보 변경
+    public void updateAuthority(
+            String authorityScope, // 권한 범위
+            KyvcEnums.AgentAuthorityStatus authorityStatusCode, // 권한 상태 코드
+            LocalDate validFrom, // 권한 시작일
+            LocalDate validTo // 권한 종료일
+    ) {
+        this.authorityScope = authorityScope;
+        this.authorityStatusCode = authorityStatusCode;
+        this.validFrom = validFrom;
+        this.validTo = validTo;
+    }
 }

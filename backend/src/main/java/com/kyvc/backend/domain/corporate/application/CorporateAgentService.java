@@ -1,14 +1,20 @@
 package com.kyvc.backend.domain.corporate.application;
 
-import com.kyvc.backend.domain.corporate.domain.CorporateAgent;
+import com.kyvc.backend.domain.audit.application.AuditLogService;
+import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
+import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
+import com.kyvc.backend.domain.corporate.domain.CorporateAgent;
 import com.kyvc.backend.domain.corporate.domain.CorporateDocument;
+import com.kyvc.backend.domain.corporate.dto.AgentAuthorityResponse;
+import com.kyvc.backend.domain.corporate.dto.AgentAuthorityUpdateRequest;
 import com.kyvc.backend.domain.corporate.dto.AgentRequest;
 import com.kyvc.backend.domain.corporate.dto.AgentResponse;
 import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
+import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -17,6 +23,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Locale;
 
 // 대리인 정보 서비스
 @Service
@@ -25,10 +32,13 @@ import java.util.List;
 public class CorporateAgentService {
 
     private static final String POWER_OF_ATTORNEY_DOCUMENT_TYPE = "POWER_OF_ATTORNEY"; // 위임장 문서 유형 코드
+    private static final String AGENT_AUTHORITY_STATUS_GROUP = "AGENT_AUTHORITY_STATUS"; // 대리인 권한 상태 공통코드 그룹
 
     private final CorporateRepository corporateRepository;
     private final CorporateAgentRepository corporateAgentRepository;
     private final CorporateDocumentService corporateDocumentService;
+    private final CommonCodeProvider commonCodeProvider;
+    private final AuditLogService auditLogService;
 
     // 대리인 정보 저장
     public AgentResponse saveAgent(
@@ -58,6 +68,44 @@ public class CorporateAgentService {
         CorporateAgent savedAgent = saveAgentEntity(agent); // 저장된 대리인
         syncLegacyCorporateAgent(corporate, savedAgent);
         return toResponse(savedAgent);
+    }
+
+    // 대리인 권한 정보 수정
+    public AgentAuthorityResponse updateAuthority(
+            Long userId, // 사용자 ID
+            Long corporateId, // 법인 ID
+            Long agentId, // 대리인 ID
+            AgentAuthorityUpdateRequest request // 대리인 권한 수정 요청
+    ) {
+        validateUserId(userId);
+        validateCorporateId(corporateId);
+        validateAgentId(agentId);
+        validateAuthorityRequest(request);
+
+        Corporate corporate = getOwnedCorporate(userId, corporateId);
+        CorporateAgent agent = corporateAgentRepository.findById(agentId)
+                .orElseThrow(() -> new ApiException(ErrorCode.AGENT_NOT_FOUND));
+        validateAgentRelation(corporateId, agent);
+
+        KyvcEnums.AgentAuthorityStatus authorityStatus = parseAuthorityStatus(request.authorityStatusCode());
+        agent.updateAuthority(
+                resolveAuthorityScope(request.authorityScope(), agent.getAuthorityScope()),
+                authorityStatus,
+                request.validFrom(),
+                request.validTo()
+        );
+        CorporateAgent savedAgent = saveAgentEntity(agent);
+        syncLegacyCorporateAgent(corporate, savedAgent);
+        auditLogService.saveSafely(new AuditLogCreateCommand(
+                KyvcEnums.ActorType.USER.name(),
+                userId,
+                "CORPORATE_AGENT_AUTHORITY_UPDATE",
+                KyvcEnums.AuditTargetType.CORPORATE.name(),
+                corporateId,
+                "대리인 권한 수정",
+                null
+        ));
+        return toAuthorityResponse(savedAgent);
     }
 
     // 대리인 정보 목록 조회
@@ -125,6 +173,18 @@ public class CorporateAgentService {
         }
     }
 
+    // 대리인 권한 수정 요청 검증
+    private void validateAuthorityRequest(
+            AgentAuthorityUpdateRequest request // 대리인 권한 수정 요청
+    ) {
+        if (request == null || !StringUtils.hasText(request.authorityStatusCode())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        if (request.validFrom() != null && request.validTo() != null && request.validFrom().isAfter(request.validTo())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
     // 대리인과 법인 관계 검증
     private void validateAgentRelation(
             Long corporateId, // 법인 ID
@@ -160,6 +220,20 @@ public class CorporateAgentService {
                 agent.getAgentPhone(),
                 agent.getAgentEmail(),
                 agent.getDelegationDocumentId()
+        );
+    }
+
+    // 대리인 권한 응답 변환
+    private AgentAuthorityResponse toAuthorityResponse(
+            CorporateAgent agent // 대리인 엔티티
+    ) {
+        return new AgentAuthorityResponse(
+                agent.getAgentId(),
+                agent.getCorporateId(),
+                agent.getAuthorityScope(),
+                agent.getAuthorityStatusCode().name(),
+                agent.getValidFrom(),
+                agent.getValidTo()
         );
     }
 
@@ -248,6 +322,30 @@ public class CorporateAgentService {
             String value // 원본 문자열
     ) {
         return value.trim();
+    }
+
+    // 권한 범위 산정
+    private String resolveAuthorityScope(
+            String requestValue, // 요청 권한 범위
+            String currentValue // 현재 권한 범위
+    ) {
+        if (requestValue == null) {
+            return currentValue;
+        }
+        return normalizeOptional(requestValue);
+    }
+
+    // 권한 상태 코드 변환
+    private KyvcEnums.AgentAuthorityStatus parseAuthorityStatus(
+            String authorityStatusCode // 권한 상태 코드
+    ) {
+        String normalizedStatus = authorityStatusCode.trim().toUpperCase(Locale.ROOT); // 정규화 권한 상태 코드
+        commonCodeProvider.validateEnabledCode(AGENT_AUTHORITY_STATUS_GROUP, normalizedStatus);
+        try {
+            return KyvcEnums.AgentAuthorityStatus.valueOf(normalizedStatus);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
     }
 
     // 선택 문자열 정규화

@@ -1,6 +1,5 @@
 package com.kyvc.backend.domain.verifier.dto;
 
-import com.kyvc.backend.domain.vp.dto.VpVerificationResultResponse;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -11,6 +10,7 @@ import java.util.List;
  *
  * @param requestId VP 요청 ID
  * @param status VP 검증 상태
+ * @param verificationStatus 검증 상태 코드
  * @param purpose VP 요청 목적
  * @param requestedClaims 요청 Claim 목록
  * @param qrPayload QR Payload
@@ -27,6 +27,8 @@ public record FinanceVpRequestDetailResponse(
         String requestId, // VP 요청 ID
         @Schema(description = "VP 검증 상태", example = "REQUESTED")
         String status, // VP 검증 상태
+        @Schema(description = "검증 상태 코드", example = "VALID")
+        String verificationStatus, // 검증 상태 코드
         @Schema(description = "VP 요청 목적", example = "ACCOUNT_OPENING")
         String purpose, // VP 요청 목적
         @Schema(description = "요청 Claim 목록")
@@ -38,7 +40,7 @@ public record FinanceVpRequestDetailResponse(
         @Schema(description = "법인명", example = "테스트 법인")
         String corporateName, // 법인명
         @Schema(description = "검증 결과 요약")
-        VpVerificationResultResponse result, // 검증 결과 요약
+        FinanceVpRequestResultResponse result, // 검증 결과 요약
         @Schema(description = "만료 일시", example = "2026-05-10T10:10:00")
         LocalDateTime expiresAt, // 만료 일시
         @Schema(description = "생성 일시", example = "2026-05-10T10:00:00")
@@ -46,4 +48,19 @@ public record FinanceVpRequestDetailResponse(
         @Schema(description = "검증 일시", example = "2026-05-10T10:05:00")
         LocalDateTime verifiedAt // 검증 일시
 ) {
+    public FinanceVpRequestDetailResponse(
+            String requestId, // VP 요청 ID
+            String status, // VP 검증 상태
+            String purpose, // VP 요청 목적
+            List<String> requestedClaims, // 요청 Claim 목록
+            String qrPayload, // QR Payload
+            Long corporateId, // 법인 ID
+            String corporateName, // 법인명
+            FinanceVpRequestResultResponse result, // 검증 결과 요약
+            LocalDateTime expiresAt, // 만료 일시
+            LocalDateTime createdAt, // 생성 일시
+            LocalDateTime verifiedAt // 검증 일시
+    ) {
+        this(requestId, status, status, purpose, requestedClaims, qrPayload, corporateId, corporateName, result, expiresAt, createdAt, verifiedAt);
+    }
 }

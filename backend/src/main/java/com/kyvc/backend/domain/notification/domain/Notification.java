@@ -104,6 +104,27 @@ public class Notification {
     }
 
     // 소유자 여부
+    // 템플릿 기반 내부 알림 생성
+    public static Notification createFromTemplate(
+            Long userId, // 수신 사용자 ID
+            String notificationType, // 알림 유형 코드
+            String title, // 알림 제목
+            String message, // 알림 메시지
+            KyvcEnums.NotificationChannel channelCode, // 알림 채널
+            String targetTypeCode, // 대상 유형 코드
+            Long targetId, // 대상 ID
+            String templateCode // 템플릿 코드
+    ) {
+        Notification notification = new Notification(userId, notificationType, title, message, READ_NO);
+        notification.channelCode = channelCode;
+        notification.targetTypeCode = targetTypeCode;
+        notification.targetId = targetId;
+        notification.templateCode = templateCode;
+        notification.sentStatusCode = KyvcEnums.NotificationSendStatus.SENT;
+        notification.sentAt = LocalDateTime.now();
+        return notification;
+    }
+
     public boolean isOwner(
             Long userId // 사용자 ID
     ) {

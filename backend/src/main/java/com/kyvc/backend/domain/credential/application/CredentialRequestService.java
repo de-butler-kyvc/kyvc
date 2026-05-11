@@ -644,6 +644,8 @@ public class CredentialRequestService {
         return new CredentialOperationResponse(
                 credentialRequest.getCredentialRequestId(),
                 credentialId,
+                enumName(credentialRequest.getRequestType()),
+                enumName(credentialRequest.getRequestStatus()),
                 enumName(credentialRequest.getRequestStatus()),
                 enumName(credentialStatus),
                 enumName(resolveTxStatus(credentialRequest)),
@@ -654,12 +656,16 @@ public class CredentialRequestService {
     private CredentialRequestHistoryResponse toHistoryResponse(
             CredentialRequest credentialRequest // Credential 요청
     ) {
+        RequestReasonParts reasonParts = splitReason(credentialRequest.getReason());
         return new CredentialRequestHistoryResponse(
                 credentialRequest.getCredentialRequestId(),
                 credentialRequest.getCredentialId(),
                 enumName(credentialRequest.getRequestType()),
                 enumName(credentialRequest.getRequestStatus()),
-                credentialRequest.getReason(),
+                enumName(credentialRequest.getRequestType()),
+                enumName(credentialRequest.getRequestStatus()),
+                reasonParts.reason(),
+                reasonParts.requestMessage(),
                 credentialRequest.getRequestedAt(),
                 credentialRequest.getCompletedAt()
         );
@@ -694,6 +700,19 @@ public class CredentialRequestService {
             return normalizedReason;
         }
         return normalizedReason + " / " + requestMessage.trim();
+    }
+
+    private RequestReasonParts splitReason(
+            String reason // 저장된 요청 사유
+    ) {
+        if (!StringUtils.hasText(reason)) {
+            return new RequestReasonParts(null, null);
+        }
+        String[] parts = reason.split(" / ", 2);
+        if (parts.length < 2) {
+            return new RequestReasonParts(reason.trim(), null);
+        }
+        return new RequestReasonParts(parts[0].trim(), parts[1].trim());
     }
 
     private String resolveFailureReason(
@@ -757,6 +776,12 @@ public class CredentialRequestService {
             String issuerVerificationMethodId, // Issuer Verification Method ID
             String holderAccount, // Holder XRPL Account
             String holderDid // Holder DID
+    ) {
+    }
+
+    private record RequestReasonParts(
+            String reason, // 요청 사유
+            String requestMessage // 요청 메시지
     ) {
     }
 }

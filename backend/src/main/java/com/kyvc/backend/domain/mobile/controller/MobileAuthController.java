@@ -38,8 +38,14 @@ public class MobileAuthController {
      * @return 모바일 로그인 응답
      */
     @Operation(
-            summary = "모바일 로그인",
-            description = "모바일 앱 로그인 후 기존 JWT Cookie 정책에 따라 인증 토큰을 발급합니다."
+            summary = "모바일 이메일/비밀번호 로그인",
+            description = """
+                    비로그인 모바일 앱이 email, password, deviceId, os 등 사용자 입력값으로 로그인합니다.
+                    JWT/Cookie 인증이 필요하지 않습니다.
+                    로그인 성공 시 기존 JWT Cookie 정책에 따라 Access Token과 Refresh Token을 발급합니다.
+                    이 API는 VP 로그인 API가 아닙니다.
+                    VP 로그인은 POST /api/mobile/auth/vp-login/challenge 이후 POST /api/mobile/auth/vp-login을 사용합니다.
+                    """
     )
     @ApiResponse(
             responseCode = "200",

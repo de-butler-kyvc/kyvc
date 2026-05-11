@@ -38,8 +38,13 @@ public class PasswordResetController {
      * @return 비밀번호 재설정 요청 생성 응답
      */
     @Operation(
-            summary = "비밀번호 재설정 요청 생성",
-            description = "이메일 기준 비밀번호 재설정 토큰 요청 생성"
+            summary = "비밀번호 재설정 메일 요청",
+            description = """
+                    비로그인 사용자가 입력한 이메일 기준으로 비밀번호 재설정 메일 또는 토큰을 요청합니다.
+                    JWT/Cookie 인증이 필요하지 않습니다.
+                    이 API는 회원가입 이메일 인증번호 발송 API가 아닙니다.
+                    회원가입 화면 이메일 인증번호 발송은 POST /api/auth/email-verifications/request를 사용합니다.
+                    """
     )
     @ApiResponse(
             responseCode = "200",
@@ -61,7 +66,11 @@ public class PasswordResetController {
      */
     @Operation(
             summary = "비밀번호 재설정 확정",
-            description = "비밀번호 재설정 토큰 기준 비밀번호 변경"
+            description = """
+                    비로그인 사용자가 비밀번호 재설정 토큰과 새 비밀번호를 제출해 비밀번호를 변경합니다.
+                    JWT/Cookie 인증이 필요하지 않습니다.
+                    이 API는 MFA 인증번호 검증이나 회원가입 이메일 인증번호 검증 API가 아닙니다.
+                    """
     )
     @ApiResponse(
             responseCode = "200",

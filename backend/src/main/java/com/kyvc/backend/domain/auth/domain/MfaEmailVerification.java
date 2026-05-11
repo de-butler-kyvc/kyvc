@@ -92,11 +92,39 @@ public class MfaEmailVerification {
         return verification;
     }
 
+    // 회원가입 이메일 인증 생성
+    public static MfaEmailVerification createSignupEmailVerification(
+            String email, // 정규화 이메일
+            KyvcEnums.MfaPurpose purpose, // 인증 목적
+            String verificationCodeHash, // 인증번호 해시
+            LocalDateTime requestedAt, // 요청 일시
+            LocalDateTime expiresAt // 만료 일시
+    ) {
+        MfaEmailVerification verification = new MfaEmailVerification();
+        verification.actorTypeCode = KyvcEnums.ActorType.SYSTEM;
+        verification.actorId = 0L;
+        verification.email = email;
+        verification.mfaPurposeCode = purpose;
+        verification.verificationCodeHash = verificationCodeHash;
+        verification.mfaStatusCode = KyvcEnums.MfaStatus.REQUESTED;
+        verification.failedAttemptCount = 0;
+        verification.requestedAt = requestedAt;
+        verification.expiresAt = expiresAt;
+        return verification;
+    }
+
     // 본인 MFA 인증 여부
     public boolean isOwnedBy(
             Long actorId // 사용자 ID
     ) {
         return actorTypeCode == KyvcEnums.ActorType.USER && this.actorId != null && this.actorId.equals(actorId);
+    }
+
+    // 회원가입 이메일 인증 여부
+    public boolean isSignupVerification() {
+        return actorTypeCode == KyvcEnums.ActorType.SYSTEM
+                && (mfaPurposeCode == KyvcEnums.MfaPurpose.SIGNUP
+                || mfaPurposeCode == KyvcEnums.MfaPurpose.SIGNUP_EMAIL_VERIFICATION);
     }
 
     // 검증 가능 상태 여부
