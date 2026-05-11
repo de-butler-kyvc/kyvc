@@ -208,9 +208,10 @@ export async function getKycList(filters?: {
   if (filters?.status && filters.status !== "전체 상태") {
     params.set("status", STATUS_KO_TO_API[filters.status] ?? filters.status);
   }
-  if (filters?.channel && filters.channel !== "전체 채널") {
-    params.set("channel", CHANNEL_KO_TO_API[filters.channel] ?? filters.channel);
-  }
+  const channelFilter =
+    filters?.channel && filters.channel !== "전체 채널"
+      ? CHANNEL_KO_TO_API[filters.channel] ?? filters.channel
+      : "";
   params.set("size", "50");
 
   const url = params.toString() ? `${KYC_BASE}?${params}` : KYC_BASE;
@@ -236,7 +237,7 @@ export async function getKycList(filters?: {
       ai: AI_JUDGMENT_KO[aiCode] ?? aiCode ?? "-",
       reviewer: row.reviewerName ?? "-",
     };
-  });
+  }).filter((row) => !channelFilter || CHANNEL_KO_TO_API[row.channel] === channelFilter || row.channel === channelFilter);
 }
 
 /** GET /api/admin/backend/kyc/applications/{kycId} — KYC 신청 상세 조회 */
@@ -281,7 +282,7 @@ export async function getDocumentRequirements(filters?: {
   corporationType?: string;
 }): Promise<DocumentRequirement[]> {
   const params = new URLSearchParams();
-  if (filters?.corporationType) params.set("corporationType", filters.corporationType);
+  if (filters?.corporationType) params.set("corporateType", filters.corporationType);
   const url = params.toString()
     ? `${API_BASE}/api/admin/backend/document-requirements?${params}`
     : `${API_BASE}/api/admin/backend/document-requirements`;

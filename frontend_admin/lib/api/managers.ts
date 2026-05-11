@@ -135,8 +135,8 @@ export async function getAdminUsers(filters?: {
   status?: string;
 }): Promise<AdminUser[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.role && filters.role !== "전체 역할") params.set("role", filters.role);
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
+  if (filters?.role && filters.role !== "전체 역할") params.set("roleCode", filters.role);
   if (filters?.status && filters.status !== "전체 상태") params.set("status", filters.status);
   const url = params.toString() ? `${ADMIN_USERS_URL}?${params}` : ADMIN_USERS_URL;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });

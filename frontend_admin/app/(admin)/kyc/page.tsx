@@ -121,8 +121,8 @@ export default function KycPage() {
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">법인 유형</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">신청일시</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">채널</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">상태</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">AI 판단</th>
+                <th className="text-left px-4 py-3 text-slate-500 font-medium">KYC 상태</th>
+                <th className="text-left px-4 py-3 text-slate-500 font-medium">AI 판단(참고)</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">심사자</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">상세</th>
               </tr>

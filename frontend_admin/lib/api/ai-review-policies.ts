@@ -101,8 +101,8 @@ export async function getAiReviewPolicies(filters?: {
   corporationType?: string;
 }): Promise<AiReviewPolicy[]> {
   const params = new URLSearchParams();
-  if (filters?.enabled !== undefined) params.set("enabled", String(filters.enabled));
-  if (filters?.corporationType) params.set("corporationType", filters.corporationType);
+  if (filters?.enabled !== undefined) params.set("enabledYn", filters.enabled ? "Y" : "N");
+  if (filters?.corporationType) params.set("corporateType", filters.corporationType);
   const url = params.toString() ? `${POLICY_BASE}?${params}` : POLICY_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

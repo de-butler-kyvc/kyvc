@@ -83,8 +83,8 @@ export async function getNotificationTemplates(filters?: {
   channel?: string;
 }): Promise<NotificationTemplate[]> {
   const params = new URLSearchParams();
-  if (filters?.eventType) params.set("eventType", filters.eventType);
-  if (filters?.channel) params.set("channel", filters.channel);
+  if (filters?.eventType) params.set("keyword", filters.eventType);
+  if (filters?.channel) params.set("channelCode", filters.channel);
   const url = params.toString() ? `${NOTIF_BASE}?${params}` : NOTIF_BASE;
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

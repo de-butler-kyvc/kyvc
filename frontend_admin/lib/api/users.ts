@@ -126,7 +126,7 @@ export async function getUserList(filters?: {
   status?: string;
 }): Promise<UserItem[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
   if (filters?.status && filters.status !== "전체 상태") {
     params.set("status", STATUS_KO_TO_API[filters.status] ?? filters.status);
   }

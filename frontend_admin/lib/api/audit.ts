@@ -99,7 +99,7 @@ export async function getAuditLogs(filters?: {
   result: string;
 }[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
   if (filters?.action && filters.action !== "전체 액션 유형") params.set("actionType", filters.action);
   if (filters?.actorId) params.set("actorId", filters.actorId);
   if (filters?.from) params.set("from", filters.from);

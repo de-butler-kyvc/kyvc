@@ -92,11 +92,11 @@ export async function getVpList(filters?: {
   date: string;
 }[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.result && filters.result !== "전체 결과") params.set("result", filters.result);
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
+  if (filters?.result && filters.result !== "전체 결과") params.set("status", filters.result);
   if (filters?.verifierId) params.set("verifierId", filters.verifierId);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
+  if (filters?.from) params.set("fromDate", filters.from);
+  if (filters?.to) params.set("toDate", filters.to);
   const url = params.toString() ? `${VP_BASE}?${params}` : VP_BASE;
 
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });

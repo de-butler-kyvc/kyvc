@@ -52,7 +52,7 @@ function apiRowToIssuerItem(row: IssuerPolicyDetail): IssuerItem {
 
 export async function getIssuerList(filters?: { search?: string; type?: string; status?: string }): Promise<IssuerItem[]> {
   const params = new URLSearchParams();
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
   if (filters?.type && filters.type !== "전체 정책 유형") {
     params.set("policyType", filters.type === "블랙리스트" ? "BLACKLIST" : "WHITELIST");
   }

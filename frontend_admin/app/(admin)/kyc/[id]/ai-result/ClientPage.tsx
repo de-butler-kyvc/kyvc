@@ -1,54 +1,87 @@
 "use client";
-import { use, useState, useEffect } from "react";
+
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   getAiReview,
-  getAiReviewMismatches,
-  getAiReviewBeneficialOwners,
   getAiReviewAgentAuthority,
-  type AiReviewResult,
-  type AiMismatch,
-  type BeneficialOwner,
+  getAiReviewBeneficialOwners,
+  getAiReviewMismatches,
   type AgentAuthority,
+  type AiMismatch,
+  type AiReviewResult,
+  type BeneficialOwner,
 } from "@/lib/api/kyc";
 
-// ── 표시값 매핑 ──────────────────────────────────────────────
-
 const JUDGMENT_KO: Record<string, string> = {
-  NORMAL: "정상", NEEDS_SUPPLEMENT: "보완필요", UNSATISFACTORY: "불충족",
+  NORMAL: "정상",
+  PASS: "정상",
+  QUEUED: "심사중",
+  PROCESSING: "심사중",
+  LOW_CONFIDENCE: "수동심사필요",
+  NEEDS_SUPPLEMENT: "보완필요",
+  NEED_SUPPLEMENT: "보완필요",
+  UNSATISFACTORY: "불충족",
+  FAIL: "불충족",
+  FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
-};
-const MISMATCH_KO: Record<string, string> = {
-  MATCH: "일치", MISMATCH: "불일치", NEEDS_REVIEW: "검토 필요",
+  NEED_MANUAL_REVIEW: "수동심사필요",
 };
 
-function toKo(map: Record<string, string>, v: string) {
-  return map[v] ?? v;
-}
+const MISMATCH_KO: Record<string, string> = {
+  MATCH: "일치",
+  MISMATCH: "불일치",
+  NEEDS_REVIEW: "검토필요",
+  NEED_REVIEW: "검토필요",
+};
+
+const AGENT_JUDGMENT_KO: Record<string, string> = {
+  VALID: "유효",
+  INVALID: "불일치",
+  NEEDS_REVIEW: "검토필요",
+  NEED_REVIEW: "검토필요",
+  ...JUDGMENT_KO,
+};
 
 const judgmentBadge: Record<string, string> = {
   정상: "bg-green-100 text-green-600",
-  보완필요: "bg-orange-100 text-orange-600",
-  불충족: "bg-red-100 text-red-600",
-  수동심사필요: "bg-red-100 text-red-600",
-};
-
-const mismatchBadge: Record<string, string> = {
+  유효: "bg-green-100 text-green-600",
   일치: "bg-green-100 text-green-600",
+  보완필요: "bg-orange-100 text-orange-600",
+  검토필요: "bg-orange-100 text-orange-600",
+  불충족: "bg-red-100 text-red-600",
   불일치: "bg-red-100 text-red-600",
-  "검토 필요": "bg-orange-100 text-orange-600",
+  수동심사필요: "bg-red-100 text-red-600",
+  심사중: "bg-blue-100 text-blue-600",
 };
 
-const ownerJudgeBadge: Record<string, string> = {
-  정상: "bg-green-100 text-green-600",
-  "검토 필요": "bg-orange-100 text-orange-600",
-  NORMAL: "bg-green-100 text-green-600",
-  NEEDS_REVIEW: "bg-orange-100 text-orange-600",
-};
+function toKo(map: Record<string, string>, value?: string) {
+  if (!value) return "-";
+  return map[value] ?? value;
+}
+
+function badgeClass(label: string) {
+  return judgmentBadge[label] ?? "bg-slate-100 text-slate-500";
+}
 
 function fmtDt(iso?: string) {
   if (!iso) return "-";
   return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
+}
+
+function formatPercent(value?: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  const normalized = value <= 1 ? value * 100 : value;
+  return `${normalized.toFixed(1)}%`;
+}
+
+function formatDetailJson(raw?: string) {
+  if (!raw?.trim()) return "";
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
 }
 
 export default function AiResultPage({ params }: { params: Promise<{ id: string }> }) {
@@ -62,33 +95,62 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setErrors({});
+
     Promise.allSettled([
       getAiReview(id),
       getAiReviewMismatches(id),
       getAiReviewBeneficialOwners(id),
       getAiReviewAgentAuthority(id),
-    ]).then(([r, m, o, a]) => {
-      const errs: Record<string, string> = {};
-      if (r.status === "fulfilled") setReview(r.value);
-      else errs.review = r.reason instanceof Error ? r.reason.message : "AI 결과 로드 실패";
-      if (m.status === "fulfilled") setMismatches(m.value);
-      else errs.mismatches = m.reason instanceof Error ? m.reason.message : "불일치 항목 로드 실패";
-      if (o.status === "fulfilled") setOwners(o.value);
-      else errs.owners = o.reason instanceof Error ? o.reason.message : "실제소유자 로드 실패";
-      if (a.status === "fulfilled") setAgents(a.value);
-      else errs.agents = a.reason instanceof Error ? a.reason.message : "대리권 로드 실패";
-      setErrors(errs);
-    }).finally(() => setLoading(false));
+    ])
+      .then(([reviewResult, mismatchResult, ownerResult, agentResult]) => {
+        if (!alive) return;
+
+        const nextErrors: Record<string, string> = {};
+        if (reviewResult.status === "fulfilled") setReview(reviewResult.value);
+        else nextErrors.review = reviewResult.reason instanceof Error ? reviewResult.reason.message : "AI 결과 로드 실패";
+
+        if (mismatchResult.status === "fulfilled") setMismatches(mismatchResult.value);
+        else nextErrors.mismatches = mismatchResult.reason instanceof Error ? mismatchResult.reason.message : "불일치 항목 로드 실패";
+
+        if (ownerResult.status === "fulfilled") setOwners(ownerResult.value);
+        else nextErrors.owners = ownerResult.reason instanceof Error ? ownerResult.reason.message : "실소유자 로드 실패";
+
+        if (agentResult.status === "fulfilled") setAgents(agentResult.value);
+        else nextErrors.agents = agentResult.reason instanceof Error ? agentResult.reason.message : "대리권 로드 실패";
+
+        setErrors(nextErrors);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, [id]);
 
-  const judgmentKo = review ? toKo(JUDGMENT_KO, review.overallJudgment) : "-";
+  const summary = useMemo(() => {
+    const judgment = toKo(JUDGMENT_KO, review?.overallJudgment);
+    return {
+      judgment,
+      confidence: formatPercent(review?.confidenceScore),
+      modelVersion: review?.modelVersion ?? "-",
+      reviewedAt: fmtDt(review?.reviewedAt),
+      summaryReason: review?.summaryReason,
+      manualReviewReason: review?.manualReviewReason,
+      detailJson: formatDetailJson(review?.detailJson),
+    };
+  }, [review]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
+            백엔드어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">AI 심사 결과 상세</h1>
         </div>
@@ -98,7 +160,6 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
         <div className="flex items-center justify-center py-24 text-slate-500 text-sm">불러오는 중...</div>
       ) : (
         <div className="flex gap-4">
-          {/* ── 좌측 요약 ── */}
           <div className="w-56 shrink-0 bg-white rounded-lg border border-slate-200 p-4 space-y-3 h-fit">
             <h2 className="text-xs font-semibold text-slate-500">AI 심사 결과</h2>
             {errors.review ? (
@@ -107,21 +168,21 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
               <>
                 <div>
                   <p className="text-xs text-slate-400">AI 판단</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${judgmentBadge[judgmentKo] ?? "bg-slate-100 text-slate-500"}`}>
-                    {judgmentKo}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeClass(summary.judgment)}`}>
+                    {summary.judgment}
                   </span>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">신뢰도</p>
-                  <p className="text-slate-700 font-bold text-lg">{review.confidenceScore}%</p>
+                  <p className="text-slate-700 font-bold text-lg">{summary.confidence}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">처리 모델</p>
-                  <p className="text-slate-700 text-xs">{review.modelVersion ?? "-"}</p>
+                  <p className="text-slate-700 text-xs">{summary.modelVersion}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">처리 시각</p>
-                  <p className="text-slate-700 text-xs">{fmtDt(review.reviewedAt)}</p>
+                  <p className="text-slate-700 text-xs">{summary.reviewedAt}</p>
                 </div>
               </>
             ) : (
@@ -129,9 +190,7 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
             )}
           </div>
 
-          {/* ── 우측 콘텐츠 ── */}
           <div className="flex-1 space-y-4">
-            {/* 불일치 항목 테이블 */}
             <div className="bg-white rounded-lg border border-slate-200">
               <div className="px-5 py-4 border-b border-slate-100">
                 <h2 className="text-sm font-semibold text-slate-700">AI 불일치 항목</h2>
@@ -144,31 +203,24 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <th className="text-left px-5 py-3 text-slate-500 font-medium">검토 항목</th>
+                      <th className="text-left px-5 py-3 text-slate-500 font-medium">검증 항목</th>
                       <th className="text-left px-5 py-3 text-slate-500 font-medium">추출값</th>
                       <th className="text-left px-5 py-3 text-slate-500 font-medium">신뢰도</th>
                       <th className="text-left px-5 py-3 text-slate-500 font-medium">판단</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mismatches.map((item, i) => {
-                      const judgeKo = toKo(MISMATCH_KO, item.judgment);
+                    {mismatches.map((item, index) => {
+                      const judgment = toKo(MISMATCH_KO, item.judgment);
                       const score = item.confidenceScore;
-                      const scoreColor = score == null ? "text-slate-500"
-                        : score >= 90 ? "text-green-600"
-                        : score >= 70 ? "text-orange-500"
-                        : "text-red-500";
+                      const scoreColor = score == null ? "text-slate-500" : score >= 90 ? "text-green-600" : score >= 70 ? "text-orange-500" : "text-red-500";
                       return (
-                        <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                        <tr key={`${item.fieldName}-${index}`} className="border-b border-slate-50 hover:bg-slate-50">
                           <td className="px-5 py-3.5 text-slate-700 font-medium">{item.fieldName}</td>
                           <td className="px-5 py-3.5 text-slate-500">{item.extractedValue ?? "-"}</td>
-                          <td className={`px-5 py-3.5 font-medium ${scoreColor}`}>
-                            {score != null ? `${score}%` : "-"}
-                          </td>
+                          <td className={`px-5 py-3.5 font-medium ${scoreColor}`}>{formatPercent(score)}</td>
                           <td className="px-5 py-3.5">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${mismatchBadge[judgeKo] ?? "bg-slate-100 text-slate-500"}`}>
-                              {judgeKo}
-                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass(judgment)}`}>{judgment}</span>
                           </td>
                         </tr>
                       );
@@ -178,46 +230,43 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
               )}
             </div>
 
-            {/* 실제소유자 */}
             <div className="bg-white rounded-lg border border-slate-200">
               <div className="px-5 py-4 border-b border-slate-100">
-                <h2 className="text-sm font-semibold text-slate-700">실제소유자 분석</h2>
+                <h2 className="text-sm font-semibold text-slate-700">실소유자 분석</h2>
               </div>
               {errors.owners ? (
                 <p className="px-5 py-4 text-sm text-red-500">{errors.owners}</p>
               ) : owners.length === 0 ? (
-                <p className="px-5 py-4 text-sm text-slate-400">실제소유자 데이터가 없습니다.</p>
+                <p className="px-5 py-4 text-sm text-slate-400">실소유자 데이터가 없습니다.</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50">
                       <th className="text-left px-5 py-3 text-slate-500 font-medium">소유자명</th>
-                      <th className="text-left px-5 py-3 text-slate-500 font-medium">주주 비율</th>
+                      <th className="text-left px-5 py-3 text-slate-500 font-medium">지분율</th>
                       <th className="text-left px-5 py-3 text-slate-500 font-medium">판단</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {owners.map((o, i) => (
-                      <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                        <td className="px-5 py-3.5 text-slate-700 font-medium">{o.ownerName}</td>
-                        <td className="px-5 py-3.5 text-slate-500">
-                          {o.shareRatio != null ? `${o.shareRatio}%` : "-"}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {o.judgment ? (
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ownerJudgeBadge[o.judgment] ?? "bg-slate-100 text-slate-500"}`}>
-                              {toKo(JUDGMENT_KO, o.judgment)}
-                            </span>
-                          ) : "-"}
-                        </td>
-                      </tr>
-                    ))}
+                    {owners.map((owner, index) => {
+                      const judgment = toKo(JUDGMENT_KO, owner.judgment);
+                      return (
+                        <tr key={`${owner.ownerName}-${index}`} className="border-b border-slate-50 hover:bg-slate-50">
+                          <td className="px-5 py-3.5 text-slate-700 font-medium">{owner.ownerName}</td>
+                          <td className="px-5 py-3.5 text-slate-500">{formatPercent(owner.shareRatio)}</td>
+                          <td className="px-5 py-3.5">
+                            {owner.judgment ? (
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass(judgment)}`}>{judgment}</span>
+                            ) : "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </div>
 
-            {/* 대리권 */}
             <div className="bg-white rounded-lg border border-slate-200">
               <div className="px-5 py-4 border-b border-slate-100">
                 <h2 className="text-sm font-semibold text-slate-700">대리권 분석</h2>
@@ -237,40 +286,57 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
                     </tr>
                   </thead>
                   <tbody>
-                    {agents.map((a, i) => (
-                      <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                        <td className="px-5 py-3.5 text-slate-700 font-medium">{a.agentName}</td>
-                        <td className="px-5 py-3.5 text-slate-500">{a.authorityType ?? "-"}</td>
-                        <td className="px-5 py-3.5 text-slate-400 text-xs">
-                          {a.validFrom ? `${fmtDt(a.validFrom)} ~ ${fmtDt(a.validTo)}` : "-"}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {a.judgment ? (
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ownerJudgeBadge[a.judgment] ?? "bg-green-100 text-green-600"}`}>
-                              {toKo({ VALID: "정상", INVALID: "불일치", NEEDS_REVIEW: "검토 필요", ...JUDGMENT_KO }, a.judgment)}
-                            </span>
-                          ) : "-"}
-                        </td>
-                      </tr>
-                    ))}
+                    {agents.map((agent, index) => {
+                      const judgment = toKo(AGENT_JUDGMENT_KO, agent.judgment);
+                      return (
+                        <tr key={`${agent.agentName}-${index}`} className="border-b border-slate-50 hover:bg-slate-50">
+                          <td className="px-5 py-3.5 text-slate-700 font-medium">{agent.agentName}</td>
+                          <td className="px-5 py-3.5 text-slate-500">{agent.authorityType ?? "-"}</td>
+                          <td className="px-5 py-3.5 text-slate-400 text-xs">
+                            {agent.validFrom ? `${fmtDt(agent.validFrom)} ~ ${fmtDt(agent.validTo)}` : "-"}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {agent.judgment ? (
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass(judgment)}`}>{judgment}</span>
+                            ) : "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </div>
 
-            {/* AI 판단 근거 */}
-            {review?.summaryReason && (
-              <div className="bg-white rounded-lg border border-slate-200 p-5">
-                <h2 className="text-sm font-semibold text-slate-700 mb-3">AI 판단 근거</h2>
-                <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-100">
-                  {review.summaryReason}
-                </p>
+            {(summary.summaryReason || summary.manualReviewReason || summary.detailJson) && (
+              <div className="bg-white rounded-lg border border-slate-200 p-5 space-y-4">
+                <h2 className="text-sm font-semibold text-slate-700">AI 판단 근거</h2>
+                {summary.summaryReason && (
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">요약 사유</p>
+                    <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-100">{summary.summaryReason}</p>
+                  </div>
+                )}
+                {summary.manualReviewReason && (
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">수동심사 사유</p>
+                    <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-100">{summary.manualReviewReason}</p>
+                  </div>
+                )}
+                {summary.detailJson && (
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">상세 원문</p>
+                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">
+                      {summary.detailJson}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
 
             <div className="flex justify-end">
               <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
-                ← 신청 상세로 돌아가기
+                신청 상세로 돌아가기
               </Link>
             </div>
           </div>
