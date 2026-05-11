@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation";
 
-import { MCertCard, MLogo } from "@/components/m/parts";
+import { MCertCard } from "@/components/m/parts";
+
+const FIGMA_KYVC_LOGO =
+  "https://www.figma.com/api/mcp/asset/c6fbedff-e5eb-4d29-9815-ca33494f9a9e";
 
 const INTRO_CERTS = [
   {
@@ -11,7 +14,7 @@ const INTRO_CERTS = [
     status: "검증됨",
     id: "DID:kyvc:corp:240315",
     date: "2026.05.07",
-    gradient: "linear-gradient(135deg,#31206e 0%,#7a43c7 100%)",
+    gradient: "linear-gradient(143.34deg,#472187 0%,#472187 100%)",
   },
   {
     issuer: "법원행정처",
@@ -19,7 +22,7 @@ const INTRO_CERTS = [
     status: "검증됨",
     id: "did:xrpl:rholder",
     date: "2026.05.07",
-    gradient: "linear-gradient(135deg,#293f96 0%,#6964f3 100%)",
+    gradient: "linear-gradient(143.34deg,#183b8f 0%,#7c3aed 100%)",
   },
   {
     issuer: "KYvC",
@@ -27,7 +30,7 @@ const INTRO_CERTS = [
     status: "검증됨",
     id: "did:xrpl:rholder",
     date: "2026.04.28",
-    gradient: "linear-gradient(135deg,#1167ff 0%,#3488ff 58%,#3f7cff 100%)",
+    gradient: "linear-gradient(141.57deg,#2563eb 0%,#2563eb 100%)",
   },
 ];
 
@@ -42,7 +45,7 @@ export default function MobileOnboardingPage() {
         <MCertCard cert={INTRO_CERTS[2]} index={2} extra="float-c" />
       </div>
       <div className="content intro-copy">
-        <MLogo className="intro-logo" />
+        <img className="intro-figma-logo" src={FIGMA_KYVC_LOGO} alt="KYvC" />
         <h1 className="headline light">
           기업 디지털 신원,
           <br />

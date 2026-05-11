@@ -14,6 +14,11 @@ import {
 
 type Tab = "business" | "email";
 
+const FIGMA_PIN_ICON =
+  "https://www.figma.com/api/mcp/asset/97ea3c8d-9277-424d-9bed-37c4631674f5";
+const FIGMA_BIOMETRIC_ICON =
+  "https://www.figma.com/api/mcp/asset/915135d4-9f0a-4722-a5d4-44424d45817b";
+
 export default function MobileLoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("business");
@@ -22,6 +27,8 @@ export default function MobileLoginPage() {
   const [password, setPassword] = useState("");
   const [keep, setKeep] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
 
@@ -44,8 +51,17 @@ export default function MobileLoginPage() {
   }, []);
 
   const methods = authStatus?.availableMethods ?? ["pin", "biometric"];
+  const canUsePin = methods.includes("pin");
+  const canUseBiometric = methods.includes("biometric");
   const remaining = authStatus?.remainingAttempts;
   const blocked = !!authStatus?.emailVerificationRequired;
+
+  const showToast = (message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  };
 
   const onLogin = async () => {
     setError(null);
@@ -71,23 +87,18 @@ export default function MobileLoginPage() {
       setError("이메일 인증 후 다시 시도해 주세요.");
       return;
     }
-    if (method === "pin") {
-      router.push("/m/login/pin");
-      return;
-    }
-    // 생체인증: 브리지 가능하면 즉시 시도, 아니면 폴백 페이지
     if (!isBridgeAvailable()) {
-      router.push("/m/login/biometric");
+      showToast("앱에서만 사용할 수 있는 기능입니다");
       return;
     }
     try {
-      const r = await bridge.requestNativeAuth("biometric", "wallet-login");
+      const r = await bridge.requestNativeAuth(method, "wallet-login");
       if (r.ok && r.authenticated) {
         router.replace("/m/home");
       } else if (r.emailVerificationRequired) {
         setError("인증 5회 실패로 이메일 인증이 필요합니다.");
       } else {
-        setError(r.error ?? "생체 인증에 실패했습니다.");
+        setError(r.error ?? "인증에 실패했습니다.");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "브리지 호출 실패");
@@ -184,30 +195,34 @@ export default function MobileLoginPage() {
 
         <div className="divider">
           <i />
-          <span>빠른 인증</span>
+          <span>간편 인증</span>
           <i />
         </div>
 
         <div className="quick-auth">
-          {methods.includes("pin") ? (
+          {canUsePin ? (
             <button
               type="button"
               className="quick-card"
               onClick={() => onQuickAuth("pin")}
               disabled={blocked}
             >
-              <MIcon.lock />
+              <img className="quick-auth-icon pin" src={FIGMA_PIN_ICON} alt="" />
               <span>PIN 로그인</span>
             </button>
           ) : null}
-          {methods.includes("biometric") ? (
+          {canUseBiometric ? (
             <button
               type="button"
               className="quick-card"
               onClick={() => onQuickAuth("biometric")}
               disabled={blocked}
             >
-              <MIcon.fingerprint />
+              <img
+                className="quick-auth-icon biometric"
+                src={FIGMA_BIOMETRIC_ICON}
+                alt=""
+              />
               <span>생체인증</span>
             </button>
           ) : null}
@@ -231,6 +246,11 @@ export default function MobileLoginPage() {
           계정이 없나요? 회원가입
         </button>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }
