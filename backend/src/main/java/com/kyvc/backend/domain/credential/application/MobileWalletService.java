@@ -21,6 +21,7 @@ import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.mobile.application.MobileDeviceService;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
+import com.kyvc.backend.global.jwt.TokenHashUtil;
 import com.kyvc.backend.global.logging.LogEventLogger;
 import com.kyvc.backend.global.security.CustomUserDetails;
 import com.kyvc.backend.global.util.KyvcEnums;
@@ -108,10 +109,10 @@ public class MobileWalletService {
                 createWalletLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), offerId)
         );
 
-        if (!StringUtils.hasText(credential.getQrToken())) {
+        if (!hasOfferToken(credential)) {
             throw new ApiException(ErrorCode.CREDENTIAL_OFFER_NOT_FOUND);
         }
-        if (!credential.getQrToken().equals(request.qrToken().trim())) {
+        if (!isValidOfferToken(credential, request.qrToken().trim())) {
             throw new ApiException(ErrorCode.CREDENTIAL_OFFER_INVALID_TOKEN);
         }
 
@@ -297,7 +298,7 @@ public class MobileWalletService {
             Credential credential, // Credential 엔티티
             LocalDateTime now // 기준 시각
     ) {
-        if (!StringUtils.hasText(credential.getQrToken())) {
+        if (!hasOfferToken(credential)) {
             throw new ApiException(ErrorCode.CREDENTIAL_OFFER_NOT_FOUND);
         }
         if (credential.isOfferExpired(now)) {
@@ -322,6 +323,24 @@ public class MobileWalletService {
                 credential.getWalletSavedAt(),
                 credential.getHolderDid()
         );
+    }
+
+    // Offer 토큰 존재 여부
+    private boolean hasOfferToken(
+            Credential credential // Credential 엔티티
+    ) {
+        return StringUtils.hasText(credential.getOfferTokenHash()) || StringUtils.hasText(credential.getQrToken());
+    }
+
+    // Offer 토큰 검증
+    private boolean isValidOfferToken(
+            Credential credential, // Credential 엔티티
+            String rawToken // 원본 QR 토큰
+    ) {
+        if (StringUtils.hasText(credential.getOfferTokenHash())) {
+            return credential.getOfferTokenHash().equals(TokenHashUtil.sha256(rawToken));
+        }
+        return credential.getQrToken().equals(rawToken);
     }
 
     // Wallet Credential 상세 응답 변환

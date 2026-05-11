@@ -388,6 +388,15 @@ public final class KyvcEnums {
         UNLINKED // 연결 해제
     }
 
+    // 금융사 KYC QR 상태
+    public enum FinanceKycQrStatus {
+        NOT_ISSUED, // 미발급
+        ACTIVE, // 활성
+        EXPIRED, // 만료
+        USED, // 사용 완료
+        WALLET_SAVED // Wallet 저장 완료
+    }
+
     // 동의 유형
     public enum ConsentType {
         TERMS_OF_SERVICE, // 서비스 이용약관

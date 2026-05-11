@@ -296,6 +296,56 @@ public class KycApplication {
         this.manualReviewReason = manualReviewReason;
     }
 
+    // AI 심사 승인 완료 처리
+    public void completeAiReviewAsApproved(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            LocalDateTime approvedAt // 승인 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.APPROVED;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.SUCCESS;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.PASS;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.approvedAt = approvedAt;
+    }
+
+    // AI 심사 보완 필요 처리
+    public void completeAiReviewAsNeedSupplement(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            String manualReviewReason // 보완 판단 사유
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.NEED_SUPPLEMENT;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.LOW_CONFIDENCE;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.NEED_MANUAL_REVIEW;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.manualReviewReason = manualReviewReason;
+    }
+
+    // AI 심사 반려 처리
+    public void completeAiReviewAsRejected(
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String summary, // AI 심사 요약
+            String detailJson, // AI 심사 상세 JSON
+            String rejectReason, // 반려 사유
+            LocalDateTime rejectedAt // 반려 일시
+    ) {
+        this.kycStatus = KyvcEnums.KycStatus.REJECTED;
+        this.aiReviewStatus = KyvcEnums.AiReviewStatus.SUCCESS;
+        this.aiReviewResult = KyvcEnums.AiReviewResult.FAIL;
+        this.aiConfidenceScore = confidenceScore;
+        this.aiReviewSummary = summary;
+        this.aiReviewDetailJson = detailJson;
+        this.rejectReason = rejectReason;
+        this.rejectedAt = rejectedAt;
+    }
+
     // AI 심사 낮은 신뢰도 후 수동심사 전환
     public void completeAiReviewAsLowConfidenceManualReview(
             BigDecimal confidenceScore, // AI 신뢰도 점수

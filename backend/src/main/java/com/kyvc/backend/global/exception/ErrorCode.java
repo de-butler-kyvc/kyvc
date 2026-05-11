@@ -115,6 +115,34 @@ public enum ErrorCode {
     FINANCE_KYC_ACCESS_DENIED(HttpStatus.FORBIDDEN, "FINANCE_KYC_ACCESS_DENIED", "금융사 KYC 접근 권한이 없습니다."),
     // HTTP 409 - 금융사 KYC 상태 오류
     INVALID_FINANCE_KYC_STATUS(HttpStatus.CONFLICT, "INVALID_FINANCE_KYC_STATUS", "처리할 수 없는 금융사 KYC 상태입니다."),
+    // HTTP 404 - 금융사 KYC 문서 없음
+    FINANCE_KYC_DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "FINANCE_KYC_DOCUMENT_NOT_FOUND", "금융사 KYC 문서를 찾을 수 없습니다."),
+    // HTTP 403 - 금융사 KYC 문서 접근 거부
+    FINANCE_KYC_DOCUMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "FINANCE_KYC_DOCUMENT_ACCESS_DENIED", "금융사 KYC 문서 접근 권한이 없습니다."),
+    // HTTP 409 - 금융사 KYC 문서 업로드 불가
+    FINANCE_KYC_DOCUMENT_UPLOAD_NOT_ALLOWED(HttpStatus.CONFLICT, "FINANCE_KYC_DOCUMENT_UPLOAD_NOT_ALLOWED", "현재 상태에서는 금융사 KYC 문서를 업로드할 수 없습니다."),
+    // HTTP 409 - 금융사 KYC 제출 불가
+    FINANCE_KYC_SUBMIT_NOT_ALLOWED(HttpStatus.CONFLICT, "FINANCE_KYC_SUBMIT_NOT_ALLOWED", "현재 상태에서는 금융사 KYC를 제출할 수 없습니다."),
+    // HTTP 400 - 금융사 KYC 필수 정보 누락
+    FINANCE_KYC_REQUIRED_INFO_MISSING(HttpStatus.BAD_REQUEST, "FINANCE_KYC_REQUIRED_INFO_MISSING", "금융사 KYC 필수 정보가 누락되었습니다."),
+    // HTTP 400 - 금융사 KYC 필수 문서 누락
+    FINANCE_KYC_REQUIRED_DOCUMENT_MISSING(HttpStatus.BAD_REQUEST, "FINANCE_KYC_REQUIRED_DOCUMENT_MISSING", "금융사 KYC 필수 문서가 누락되었습니다."),
+    // HTTP 502 - 금융사 KYC AI 심사 실패
+    FINANCE_KYC_AI_REVIEW_FAILED(HttpStatus.BAD_GATEWAY, "FINANCE_KYC_AI_REVIEW_FAILED", "금융사 KYC AI 심사에 실패했습니다."),
+    // HTTP 404 - 금융사 KYC 결과 없음
+    FINANCE_KYC_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "FINANCE_KYC_RESULT_NOT_FOUND", "금융사 KYC 심사 결과를 찾을 수 없습니다."),
+    // HTTP 409 - 금융사 KYC QR 발급 불가
+    FINANCE_KYC_QR_ISSUE_NOT_ALLOWED(HttpStatus.CONFLICT, "FINANCE_KYC_QR_ISSUE_NOT_ALLOWED", "현재 상태에서는 금융사 KYC QR을 발급할 수 없습니다."),
+    // HTTP 404 - 금융사 KYC QR 없음
+    FINANCE_KYC_QR_NOT_FOUND(HttpStatus.NOT_FOUND, "FINANCE_KYC_QR_NOT_FOUND", "금융사 KYC QR 정보를 찾을 수 없습니다."),
+    // HTTP 409 - Credential 발급 진행 중
+    CREDENTIAL_ALREADY_ISSUING(HttpStatus.CONFLICT, "CREDENTIAL_ALREADY_ISSUING", "Credential 발급이 이미 진행 중입니다."),
+    // HTTP 409 - Credential 발급 완료
+    CREDENTIAL_ALREADY_VALID(HttpStatus.CONFLICT, "CREDENTIAL_ALREADY_VALID", "유효한 Credential이 이미 존재합니다."),
+    // HTTP 502 - Core AI 심사 실패
+    CORE_AI_REVIEW_FAILED(HttpStatus.BAD_GATEWAY, "CORE_AI_REVIEW_FAILED", "Core AI 심사 호출에 실패했습니다."),
+    // HTTP 502 - Core VC 발급 실패
+    CORE_VC_ISSUANCE_FAILED(HttpStatus.BAD_GATEWAY, "CORE_VC_ISSUANCE_FAILED", "Core VC 발급 호출에 실패했습니다."),
 
     // HTTP 404 - 보완 요청 없음
     SUPPLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SUPPLEMENT_NOT_FOUND", "보완 요청을 찾을 수 없습니다."),
