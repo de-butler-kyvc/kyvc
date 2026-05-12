@@ -12,6 +12,7 @@ const KEYS = {
   xrpTransfer: "kyvc.m.xrpTransfer",
   xrpTransferResult: "kyvc.m.xrpTransferResult",
   corporateProfile: "kyvc.m.corporateProfile",
+  vcIssueResult: "kyvc.m.vcIssueResult",
 } as const;
 
 export type ScanResult = {
@@ -56,6 +57,20 @@ export type CachedCorporateProfile = {
   cachedAt: number;
 };
 
+export type VcIssueResult = {
+  credentialId: number | string;
+  offerId?: number;
+  issuerName?: string;
+  issuerDid?: string;
+  credentialType?: string;
+  credentialTitle?: string;
+  issuedAt?: string;
+  txHash?: string;
+  credentialStatus?: string;
+  savedAt?: string;
+  receivedAt: number;
+};
+
 function read<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
@@ -90,6 +105,9 @@ export const mSession = {
     read<CachedCorporateProfile>(KEYS.corporateProfile),
   writeCorporateProfile: (v: CachedCorporateProfile | null) =>
     write(KEYS.corporateProfile, v),
+  readVcIssueResult: () => read<VcIssueResult>(KEYS.vcIssueResult),
+  writeVcIssueResult: (v: VcIssueResult | null) =>
+    write(KEYS.vcIssueResult, v),
   clearAll: () => {
     write(KEYS.scan, null);
     write(KEYS.vpRequest, null);
@@ -97,5 +115,6 @@ export const mSession = {
     write(KEYS.xrpTransfer, null);
     write(KEYS.xrpTransferResult, null);
     write(KEYS.corporateProfile, null);
+    write(KEYS.vcIssueResult, null);
   },
 };

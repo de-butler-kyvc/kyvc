@@ -3,203 +3,305 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import {
-  bridge,
-  CORE_BASE_URL,
-  isBridgeAvailable,
-  onBridgeAction,
-} from "@/lib/m/android-bridge";
-import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+  ApiError,
+  mobileVp,
+  mobileWallet,
+  type WalletCredentialOfferResponse,
+  type WalletCredentialPayload,
+} from "@/lib/api";
+import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { mSession } from "@/lib/m/session";
 
-type Step = "idle" | "requesting" | "saving" | "submitting" | "checking";
+const QR_TYPE = {
+  CREDENTIAL_OFFER: "CREDENTIAL_OFFER",
+} as const;
 
-const STEP_LABEL: Record<Step, string> = {
-  idle: "대기",
-  requesting: "Issuer 응답 대기 중...",
-  saving: "VC 저장 중...",
-  submitting: "XRPL CredentialAccept 제출 중...",
-  checking: "상태 확인 중...",
+type IssueStep =
+  | "qr"
+  | "offer"
+  | "wallet"
+  | "prepare"
+  | "save"
+  | "xrpl"
+  | "status"
+  | "confirm";
+
+const STEP_TEXT: Record<IssueStep, string> = {
+  qr: "QR 정보를 확인하고 있어요",
+  offer: "발급 정보를 불러오고 있어요",
+  wallet: "Wallet 정보를 확인하고 있어요",
+  prepare: "증명서를 발급하고 있어요",
+  save: "지갑에 저장하고 있어요",
+  xrpl: "블록체인에 기록하고 있어요",
+  status: "기록 상태를 확인하고 있어요",
+  confirm: "완료 처리 중이에요",
 };
+
+type ParsedCredentialOfferQr = {
+  qrToken: string;
+};
+
+function parseCredentialOfferQr(qrPayloadText: string): ParsedCredentialOfferQr {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(qrPayloadText);
+  } catch {
+    throw new Error("지원하지 않는 QR입니다.");
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("지원하지 않는 QR입니다.");
+  }
+
+  const payload = parsed as Record<string, unknown>;
+  if (
+    payload.type !== QR_TYPE.CREDENTIAL_OFFER ||
+    typeof payload.qrToken !== "string" ||
+    !payload.qrToken
+  ) {
+    throw new Error("지원하지 않는 QR입니다.");
+  }
+
+  return { qrToken: payload.qrToken };
+}
+
+function resolveOfferId(offerId?: number, targetId?: string) {
+  if (typeof offerId === "number" && Number.isFinite(offerId)) return offerId;
+  if (!targetId) return null;
+  const parsed = Number(targetId);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function apiErrorMessage(error: ApiError) {
+  if (error.code === "CREDENTIAL_OFFER_EXPIRED") {
+    return "만료된 발급 QR입니다. PC 화면에서 QR을 다시 생성해주세요.";
+  }
+  if (error.code === "CREDENTIAL_OFFER_ALREADY_USED") {
+    return "이미 사용된 발급 QR입니다.";
+  }
+  if (error.code === "CREDENTIAL_OFFER_INVALID_TOKEN") {
+    return "지원하지 않는 QR입니다.";
+  }
+  return error.message;
+}
+
+function requiredString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function buildSavePayload(
+  credentialId: number,
+  credentialPayload: WalletCredentialPayload,
+) {
+  const metadata = credentialPayload.metadata ?? {};
+  const credentialJson = credentialPayload.credential
+    ? JSON.stringify(credentialPayload.credential)
+    : undefined;
+
+  return {
+    credentialId: String(credentialId),
+    credential: credentialPayload.credentialJwt ?? credentialPayload.credential,
+    sdJwt: credentialPayload.credentialJwt,
+    vcJwt: credentialPayload.credentialJwt,
+    vcJson: credentialJson,
+    metadata,
+  };
+}
 
 export default function MobileVcIssuePage() {
   const router = useRouter();
-  const [selected, setSelected] = useState<"corp" | "seal">("corp");
-  const [step, setStep] = useState<Step>("idle");
+  const [step, setStep] = useState<IssueStep>("qr");
   const [error, setError] = useState<string | null>(null);
+  const [runKey, setRunKey] = useState(0);
   const startedRef = useRef(false);
 
-  // ISSUER_CREDENTIAL_RECEIVED는 비동기. 호출과 별도로 구독.
   useEffect(() => {
-    const off = onBridgeAction("ISSUER_CREDENTIAL_RECEIVED", async (r) => {
-      if (!startedRef.current) return; // 이 화면에서 트리거한 경우만
-      if (!r.ok) {
-        setError(r.error ?? "Issuer 발급에 실패했습니다.");
-        setStep("idle");
-        return;
-      }
-      const credentialId = (r.credentialId as string | undefined) ?? "";
-      const issuerAccount = (r.issuerAccount as string | undefined) ?? "";
-      const holderAccount = (r.holderAccount as string | undefined) ?? "";
-      const credentialType = (r.credentialType as string | undefined) ?? "";
-      const sdJwt = (r.sdJwt as string | undefined) ?? "";
-      const vcJson = (r.vcJson as string | undefined) ?? "";
+    if (startedRef.current) return;
+    startedRef.current = true;
 
+    const run = async () => {
       try {
-        // 2) VC 저장
-        setStep("saving");
-        await bridge.saveVC({
-          credentialId,
-          ...(sdJwt ? { sdJwt, credential: sdJwt } : {}),
-          ...(vcJson ? { vcJson } : {}),
+        if (!isBridgeAvailable()) {
+          throw new Error("앱 내부 발급 모듈에 연결할 수 없습니다.");
+        }
+
+        const scan = mSession.readScanResult();
+        if (!scan?.qrData) {
+          throw new Error("스캔한 QR 정보가 없습니다. 다시 스캔해주세요.");
+        }
+
+        setStep("qr");
+        const parsedQr = parseCredentialOfferQr(scan.qrData);
+        const resolved = await mobileVp.resolveQr(scan.qrData);
+        if (resolved.type !== QR_TYPE.CREDENTIAL_OFFER) {
+          throw new Error("지원하지 않는 QR입니다.");
+        }
+
+        const offerId = resolveOfferId(resolved.offerId, resolved.targetId);
+        if (!offerId) {
+          throw new Error("지원하지 않는 QR입니다.");
+        }
+
+        setStep("offer");
+        const offer = await mobileWallet.offer(offerId);
+        if (offer.alreadySaved) {
+          throw new Error("이미 지갑에 저장된 증명서입니다.");
+        }
+
+        setStep("wallet");
+        const wallet = await bridge.getWalletInfo();
+        const holderDid = requiredString(wallet.did);
+        const holderXrplAddress = requiredString(wallet.account);
+        if (!wallet.ok || !holderDid || !holderXrplAddress) {
+          throw new Error("활성화된 지갑을 찾을 수 없습니다. 지갑을 먼저 생성해주세요.");
+        }
+
+        const device = await bridge.getDeviceInfo();
+        const deviceId = requiredString(device.deviceId);
+        if (!device.ok || !deviceId) {
+          throw new Error("기기 정보를 확인할 수 없습니다. 앱을 업데이트한 뒤 다시 시도해주세요.");
+        }
+
+        setStep("prepare");
+        const prepared = await mobileWallet.prepare(offerId, {
+          qrToken: parsedQr.qrToken,
+          deviceId,
+          holderDid,
+          holderXrplAddress,
+          accepted: true,
         });
-
-        // 3) XRPL CredentialAccept 제출
-        if (credentialId) {
-          setStep("submitting");
-          await bridge.submitToXRPL({
-            credentialId,
-            issuerAccount,
-            holderAccount,
-            credentialType,
-          });
+        if (!prepared.prepared || !prepared.credentialPayload) {
+          throw new Error("증명서 발급 준비에 실패했습니다.");
         }
 
-        // 4) 상태 조회 (active && accepted)
-        if (credentialId) {
-          setStep("checking");
-          const status = await bridge.checkCredentialStatus({
-            credentialId,
-            issuerAccount,
-            holderAccount,
-            credentialType,
-          });
-          if (!status.ok || !status.accepted) {
-            setError("XRPL 수락 상태 확인에 실패했습니다. 잠시 후 다시 시도해주세요.");
-            setStep("idle");
-            return;
-          }
+        const metadata = prepared.credentialPayload.metadata ?? {};
+        const issuerAccount = requiredString(metadata.issuerAccount);
+        const credentialType = requiredString(metadata.credentialType) ?? "KYC_CREDENTIAL";
+        const holderAccount =
+          requiredString(metadata.holderXrplAddress) ?? holderXrplAddress;
+        if (!issuerAccount) {
+          throw new Error("블록체인 기록에 필요한 발급자 정보가 없습니다.");
         }
 
-        // 완료 → 축하 화면
-        setStep("idle");
+        setStep("save");
+        const saveResult = await bridge.saveVC(
+          buildSavePayload(prepared.credentialId, prepared.credentialPayload),
+        );
+        if (!saveResult.ok) {
+          throw new Error(saveResult.error ?? "증명서를 지갑에 저장하지 못했습니다.");
+        }
+
+        setStep("xrpl");
+        const submitResult = await bridge.submitToXRPL({
+          credentialId: String(prepared.credentialId),
+          issuerAccount,
+          holderAccount,
+          credentialType,
+        });
+        if (!submitResult.ok) {
+          throw new Error(submitResult.error ?? "블록체인 기록에 실패했습니다.");
+        }
+
+        setStep("status");
+        const statusResult = await bridge.checkCredentialStatus({
+          credentialId: String(prepared.credentialId),
+          issuerAccount,
+          holderAccount,
+          credentialType,
+        });
+        if (!statusResult.ok || statusResult.accepted === false) {
+          throw new Error("블록체인 기록 상태를 확인하지 못했습니다.");
+        }
+
+        const walletSavedAt = new Date().toISOString();
+        const txHash =
+          submitResult.txHash ??
+          submitResult.credentialAcceptHash ??
+          statusResult.txHash ??
+          statusResult.credentialAcceptHash;
+
+        setStep("confirm");
+        const confirmed = await mobileWallet.confirm(offerId, {
+          credentialId: prepared.credentialId,
+          deviceId,
+          walletSaved: true,
+          walletSavedAt,
+          ...(txHash ? { credentialAcceptHash: txHash } : {}),
+        });
+        if (!confirmed.walletSaved) {
+          throw new Error("저장 완료 처리에 실패했습니다.");
+        }
+
+        void bridge.getCredentialSummaries().catch(() => null);
+
+        mSession.writeVcIssueResult({
+          credentialId: prepared.credentialId,
+          offerId,
+          issuerName: "KYvC 인증기관",
+          issuerDid: metadata.issuerDid ?? offer.issuerDid ?? undefined,
+          credentialType,
+          credentialTitle: credentialTitle(offer),
+          issuedAt: metadata.issuedAt ?? confirmed.walletSavedAt ?? walletSavedAt,
+          txHash,
+          credentialStatus: confirmed.credentialStatus,
+          savedAt: confirmed.walletSavedAt ?? walletSavedAt,
+          receivedAt: Date.now(),
+        });
+        mSession.writeScanResult(null);
         router.replace("/m/vc/celebration");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "발급 처리 중 오류");
-        setStep("idle");
-      } finally {
-        startedRef.current = false;
+        if (e instanceof ApiError) {
+          setError(apiErrorMessage(e));
+          return;
+        }
+        setError(e instanceof Error ? e.message : "증명서 발급에 실패했습니다.");
       }
-    });
-    return off;
-  }, [router]);
+    };
 
-  const onIssue = async () => {
+    run();
+  }, [router, runKey]);
+
+  const retry = () => {
+    startedRef.current = false;
     setError(null);
-    if (!isBridgeAvailable()) {
-      setError(
-        "앱 내부 발급 모듈에 연결할 수 없습니다. KYvC 앱에서 다시 열어 주세요.",
-      );
-      return;
-    }
-    try {
-      // 1) 활성 지갑 확인/생성 (선행조건)
-      const { wallet, assets } = await ensureMobileWallet();
-      if (!wallet?.account) {
-        throw new Error("활성 지갑을 확인할 수 없습니다. 다시 로그인해 주세요.");
-      }
-      if (assets?.depositRequired) {
-        throw new Error("XRPL 계정 활성화 후 증명서를 발급할 수 있습니다.");
-      }
-      // 2) Issuer 발급 요청 (응답은 ISSUER_CREDENTIAL_RECEIVED 이벤트로)
-      startedRef.current = true;
-      setStep("requesting");
-      const ack = await bridge.requestIssuerCredential({
-        coreBaseUrl: CORE_BASE_URL,
-        format: "dc+sd-jwt",
-        jurisdiction: "KR",
-        assuranceLevel: "STANDARD",
-      });
-      // 일부 구현은 즉시 ok=false ack를 반환할 수 있음 — 그 경우 즉시 실패 처리
-      if (!ack.ok && !ack.credentialId) {
-        throw new Error(ack.error ?? "발급 요청이 거절되었습니다.");
-      }
-      // 응답이 ack로 오는지 늦게 오는지에 따라 결과 처리는 onBridgeAction에 위임
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "발급 요청 실패");
-      setStep("idle");
-      startedRef.current = false;
-    }
+    setStep("qr");
+    setRunKey((value) => value + 1);
   };
-
-  const busy = step !== "idle";
-  const bridgeMissing = typeof window !== "undefined" && !isBridgeAvailable();
 
   return (
     <section className="view wash">
-      <MTopBar title="증명서 발급 신청" back="/m/home" />
-      <div className="content scroll">
-        <h1 className="headline m-auth-title">발급 신청</h1>
-        <p className="subcopy">발급기관에서 증명서를 받아오세요.</p>
-
-        <div className="issuer-card">
-          <span>발급기관</span>
-          <h2>법원행정처</h2>
-          <em>인증됨</em>
-        </div>
-
-        <div className="list no-pad">
-          <div
-            className={`m-row${selected === "corp" ? " selected" : ""}`}
-            onClick={() => setSelected("corp")}
-          >
-            <div className="m-row-icon">
-              {selected === "corp" ? <MIcon.check /> : "○"}
-            </div>
-            <div className="m-row-body">
-              <div className="m-row-title">법인등록증명서</div>
-              <div className="m-row-sub">최근 3개월 이내 발급본</div>
-            </div>
-          </div>
-          <div
-            className={`m-row${selected === "seal" ? " selected" : ""}`}
-            onClick={() => setSelected("seal")}
-          >
-            <div className="m-row-icon">
-              {selected === "seal" ? <MIcon.check /> : "○"}
-            </div>
-            <div className="m-row-body">
-              <div className="m-row-title">인감증명서</div>
-              <div className="m-row-sub">선택 발급</div>
-            </div>
-          </div>
-        </div>
-
-        {busy ? (
-          <p className="subcopy" style={{ marginTop: 16 }}>
-            {STEP_LABEL[step]}
-          </p>
-        ) : null}
-        {bridgeMissing ? (
-          <p className="m-error">
-            앱 내부 발급 모듈에 연결할 수 없습니다.
-            <br />
-            KYvC 앱에서 다시 열어 주세요.
-          </p>
-        ) : null}
-        {error ? <p className="m-error">{error}</p> : null}
+      <MTopBar title="증명서 발급" back="/m/home" />
+      <div className="content scroll center">
+        {error ? (
+          <>
+            <h1 className="headline m-auth-title mt-24">증명서 발급에 실패했습니다.</h1>
+            <p className="m-error mt-16">{error}</p>
+          </>
+        ) : (
+          <>
+            <div className="m-loading mt-24">{STEP_TEXT[step]}</div>
+            <h1 className="headline m-auth-title mt-24">증명서를 발급하고 있어요...</h1>
+            <p className="subcopy">잠시만 기다려주세요.</p>
+          </>
+        )}
       </div>
-      <div className="bottom-action">
-        <button
-          type="button"
-          className="primary"
-          onClick={onIssue}
-          disabled={busy || bridgeMissing}
-        >
-          {busy ? STEP_LABEL[step] : "발급 신청하기"}
-        </button>
-      </div>
+      {error ? (
+        <div className="bottom-action">
+          <button type="button" className="primary" onClick={() => router.replace("/m/home")}>
+            홈으로
+          </button>
+          <button type="button" className="ghost" onClick={retry}>
+            다시 시도
+          </button>
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function credentialTitle(offer: WalletCredentialOfferResponse) {
+  if (offer.credentialTypeCode === "KYC_CREDENTIAL") return "법인등록증명서";
+  return offer.credentialTypeCode ?? "법인등록증명서";
 }

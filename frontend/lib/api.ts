@@ -610,6 +610,32 @@ export type CredentialIssueResponse = {
   failureReason?: string;
 };
 
+export type CredentialOfferQrPayload = {
+  type: "CREDENTIAL_OFFER" | string;
+  offerId: number;
+  qrToken: string;
+  expiresAt: string;
+};
+
+export type CredentialOfferCreateResponse = {
+  offerId: number;
+  kycId: number;
+  qrPayload: CredentialOfferQrPayload;
+  expiresAt: string;
+  offerStatus: string;
+};
+
+export type CredentialOfferStatusResponse = {
+  offerId: number;
+  kycId: number;
+  offerStatus: string;
+  credentialId?: number | null;
+  credentialStatus?: string | null;
+  walletSaved: boolean;
+  usedAt?: string | null;
+  expiresAt: string;
+};
+
 export type DocumentPreviewResponse = {
   previewUrl: string;
   expiresAt?: string;
@@ -783,6 +809,18 @@ export const credentials = {
     api<CredentialIssueGuideResponse>("/api/corporate/credentials/issue-guide"),
 };
 
+export const credentialOffers = {
+  createForKyc: (kycId: number) =>
+    api<CredentialOfferCreateResponse>(
+      `/api/user/kyc/applications/${kycId}/credential-offers`,
+      { method: "POST" },
+    ),
+  status: (offerId: number) =>
+    api<CredentialOfferStatusResponse>(
+      `/api/user/credential-offers/${offerId}/status`,
+    ),
+};
+
 // ── Mobile VP / QR ───────────────────────────────────────────────────
 export type QrResolveResponse = {
   type: string;
@@ -791,6 +829,72 @@ export type QrResolveResponse = {
   requestId?: string;
   nextAction?: string;
   message?: string;
+};
+
+export type WalletCredentialOfferResponse = {
+  offerId: number;
+  kycId: number;
+  credentialId?: number | null;
+  credentialTypeCode?: string | null;
+  issuerDid?: string | null;
+  corporateName?: string | null;
+  businessNumber?: string | null;
+  expiresAt?: string | null;
+  alreadySaved: boolean;
+};
+
+export type WalletCredentialPrepareRequest = {
+  qrToken: string;
+  deviceId: string;
+  holderDid: string;
+  holderXrplAddress: string;
+  accepted: true;
+};
+
+export type WalletCredentialPayload = {
+  format?: string;
+  credentialJwt?: string;
+  credential?: Record<string, unknown>;
+  metadata?: {
+    credentialId?: number;
+    credentialType?: string;
+    issuerDid?: string;
+    issuerAccount?: string;
+    holderDid?: string;
+    holderXrplAddress?: string;
+    vcHash?: string;
+    xrplTxHash?: string;
+    credentialStatusId?: string;
+    issuedAt?: string;
+    expiresAt?: string;
+    format?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+export type WalletCredentialPrepareResponse = {
+  offerId: number;
+  credentialId: number;
+  prepared: boolean;
+  credentialPayload: WalletCredentialPayload;
+};
+
+export type WalletCredentialConfirmRequest = {
+  credentialId: number;
+  deviceId: string;
+  walletSaved: true;
+  walletSavedAt?: string;
+  credentialAcceptHash?: string;
+};
+
+export type WalletCredentialConfirmResponse = {
+  offerId: number;
+  credentialId: number;
+  walletSaved: boolean;
+  offerStatus: string;
+  credentialStatus: string;
+  walletSavedAt?: string | null;
 };
 
 export type VpRequestResponse = {
@@ -857,6 +961,23 @@ export const mobileVp = {
       method: "POST",
       body,
     }),
+};
+
+export const mobileWallet = {
+  offer: (offerId: number) =>
+    api<WalletCredentialOfferResponse>(
+      `/api/mobile/wallet/credential-offers/${offerId}`,
+    ),
+  prepare: (offerId: number, body: WalletCredentialPrepareRequest) =>
+    api<WalletCredentialPrepareResponse>(
+      `/api/mobile/wallet/credential-offers/${offerId}/prepare`,
+      { method: "POST", body },
+    ),
+  confirm: (offerId: number, body: WalletCredentialConfirmRequest) =>
+    api<WalletCredentialConfirmResponse>(
+      `/api/mobile/wallet/credential-offers/${offerId}/confirm`,
+      { method: "POST", body },
+    ),
 };
 
 // ── Notifications ────────────────────────────────────────────────────

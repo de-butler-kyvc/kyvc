@@ -56,6 +56,7 @@ const METHOD_TO_ACTION_OVERRIDE: Record<string, string> = {
   listCredentials: "LIST_CREDENTIALS",
   submitToXRPL: "SUBMIT_TO_XRPL",
   getAuthStatus: "GET_AUTH_STATUS",
+  getDeviceInfo: "GET_DEVICE_INFO",
   copyTextToClipboard: "COPY_TEXT_TO_CLIPBOARD",
 };
 
@@ -328,6 +329,14 @@ export type WalletInfo = BridgeResult & {
   didDocument?: string;
 };
 
+export type DeviceInfoResult = BridgeResult & {
+  deviceId?: string;
+  deviceName?: string;
+  os?: string;
+  appVersion?: string;
+  publicKey?: string;
+};
+
 export type WalletItem = {
   account: string;
   did?: string;
@@ -454,6 +463,10 @@ export const bridge = {
   createWallet: (overwrite = false) =>
     callBridge<WalletInfo>("createWallet", { overwrite }),
   getWalletInfo: () => callBridge<WalletInfo>("getWalletInfo", {}),
+  getDeviceInfo: () =>
+    callBridge<DeviceInfoResult>("getDeviceInfo", {
+      action: "GET_DEVICE_INFO",
+    }),
   listWallets: () => callBridge<ListWalletsResult>("listWallets", {}),
   switchWallet: (account: string) =>
     callBridge("switchWallet", { account }),
@@ -548,6 +561,8 @@ export const bridge = {
         found?: boolean;
         active?: boolean;
         accepted?: boolean;
+        txHash?: string;
+        credentialAcceptHash?: string;
       }
     >("checkCredentialStatus", params),
   refreshAllCredentialStatuses: () =>
@@ -560,7 +575,12 @@ export const bridge = {
     holderAccount?: string;
     credentialType?: string;
   }) =>
-    callBridge("submitToXRPL", {
+    callBridge<
+      BridgeResult & {
+        txHash?: string;
+        credentialAcceptHash?: string;
+      }
+    >("submitToXRPL", {
       ...params,
       type: "CredentialAccept",
       network: NETWORK,
