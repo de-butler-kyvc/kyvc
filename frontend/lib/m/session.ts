@@ -65,6 +65,7 @@ export type VcIssueResult = {
   credentialType?: string;
   credentialTitle?: string;
   issuedAt?: string;
+  expiresAt?: string;
   txHash?: string;
   credentialStatus?: string;
   savedAt?: string;

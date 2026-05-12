@@ -166,6 +166,31 @@ function buildSavePayload(
   };
 }
 
+function buildIssueDisplayPayload(
+  offer: WalletCredentialOfferResponse,
+  extras?: Record<string, unknown>,
+) {
+  const profile = mSession.readCorporateProfile();
+  return {
+    issuerName: "KYvC 인증기관",
+    issuerDid: offer.issuerDid,
+    credentialTitle: credentialTitle(offer),
+    holderName: offer.corporateName ?? profile?.corporateName,
+    registrationNumber:
+      offer.businessNumber ?? profile?.businessRegistrationNo,
+    expiresAt: offer.expiresAt,
+    ...extras,
+  };
+}
+
+function isNativeReject(result: unknown) {
+  return result === "reject";
+}
+
+function isNativeCancel(result: unknown, ok?: boolean) {
+  return ok === false || result === "cancel";
+}
+
 export default function MobileVcIssuePage() {
   const router = useRouter();
   const [step, setStep] = useState<IssueStep>("qr");
@@ -229,6 +254,22 @@ export default function MobileVcIssuePage() {
           appVersion: device.appVersion,
           publicKey: device.publicKey,
         });
+
+        const confirm = await bridge.requestCredentialIssueConfirm(
+          buildIssueDisplayPayload(offer, {
+            offerId,
+            did: holderDid,
+            holderXrplAddress,
+          }),
+        );
+        if (isNativeReject(confirm.result) || isNativeCancel(confirm.result, confirm.ok)) {
+          mSession.writeScanResult(null);
+          router.replace("/m/home");
+          return;
+        }
+        if (confirm.result !== "confirm") {
+          throw new Error(confirm.error ?? "증명서 발급 확인이 취소되었습니다.");
+        }
 
         setStep("prepare");
         const prepared = await mobileWallet.prepare(offerId, {
@@ -310,6 +351,7 @@ export default function MobileVcIssuePage() {
           credentialType,
           credentialTitle: credentialTitle(offer),
           issuedAt: metadata.issuedAt ?? confirmed.walletSavedAt ?? walletSavedAt,
+          expiresAt: metadata.expiresAt ?? offer.expiresAt ?? undefined,
           txHash,
           credentialStatus: confirmed.credentialStatus,
           savedAt: confirmed.walletSavedAt ?? walletSavedAt,
