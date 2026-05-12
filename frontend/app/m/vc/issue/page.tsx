@@ -98,6 +98,32 @@ function requiredString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function credentialStringFromPayload(payload: WalletCredentialPayload) {
+  const record = payload as Record<string, unknown>;
+  return (
+    requiredString(record.credential) ??
+    requiredString(record.sdJwt) ??
+    requiredString(record.credentialJwt) ??
+    ""
+  );
+}
+
+function logSdJwtShape(label: string, credential: string, source?: Record<string, unknown>) {
+  const tildeCount = (credential.match(/~/g) || []).length;
+  const firstSegmentStarts = credential.split("~")[0]?.slice(0, 20) ?? "";
+
+  // eslint-disable-next-line no-console
+  console.log(`${label} keys`, source ? Object.keys(source) : []);
+  // eslint-disable-next-line no-console
+  console.log(`${label} format`, source?.format);
+  // eslint-disable-next-line no-console
+  console.log(`${label} credential length`, credential.length);
+  // eslint-disable-next-line no-console
+  console.log(`${label} tilde count`, tildeCount);
+  // eslint-disable-next-line no-console
+  console.log(`${label} first segment starts`, firstSegmentStarts);
+}
+
 async function registerMobileDevice(device: {
   deviceId: string;
   deviceName?: string;
@@ -152,15 +178,16 @@ function buildSavePayload(
   credentialPayload: WalletCredentialPayload,
 ) {
   const metadata = credentialPayload.metadata ?? {};
+  const credential = credentialStringFromPayload(credentialPayload);
   const credentialJson = credentialPayload.credential
     ? JSON.stringify(credentialPayload.credential)
     : undefined;
 
   return {
     credentialId: String(credentialId),
-    credential: credentialPayload.credentialJwt ?? credentialPayload.credential,
-    sdJwt: credentialPayload.credentialJwt,
-    vcJwt: credentialPayload.credentialJwt,
+    credential: credential || credentialPayload.credential,
+    sdJwt: credential || undefined,
+    vcJwt: requiredString(credentialPayload.credentialJwt) ?? undefined,
     vcJson: credentialJson,
     metadata,
   };
@@ -285,6 +312,13 @@ export default function MobileVcIssuePage() {
           throw new Error("증명서 발급 준비에 실패했습니다.");
         }
 
+        const issuerCredential = credentialStringFromPayload(prepared.credentialPayload);
+        logSdJwtShape(
+          "issuer response",
+          issuerCredential,
+          prepared.credentialPayload as Record<string, unknown>,
+        );
+
         const metadata = prepared.credentialPayload.metadata ?? {};
         const issuerAccount = requiredString(metadata.issuerAccount);
         const credentialType = requiredString(metadata.credentialType) ?? "KYC_CREDENTIAL";
@@ -295,9 +329,12 @@ export default function MobileVcIssuePage() {
         }
 
         setStep("save");
-        const saveResult = await bridge.saveVC(
-          buildSavePayload(prepared.credentialId, prepared.credentialPayload),
+        const savePayload = buildSavePayload(
+          prepared.credentialId,
+          prepared.credentialPayload,
         );
+        logSdJwtShape("saveVC", requiredString(savePayload.credential) ?? "");
+        const saveResult = await bridge.saveVC(savePayload);
         if (!saveResult.ok) {
           throw new Error(saveResult.error ?? "증명서를 지갑에 저장하지 못했습니다.");
         }
