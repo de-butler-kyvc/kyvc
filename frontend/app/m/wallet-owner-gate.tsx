@@ -11,6 +11,8 @@ import {
   WalletOwnerMismatchError,
 } from "@/lib/m/wallet-owner";
 import {
+  clearWalletOwnerDialog,
+  readWalletOwnerDialog,
   showWalletOwnerDialog,
   WALLET_OWNER_DIALOG_EVENT,
   type WalletOwnerDialogDetail,
@@ -21,12 +23,13 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [blockingDialog, setBlockingDialog] =
-    useState<WalletOwnerDialogDetail | null>(null);
+    useState<WalletOwnerDialogDetail | null>(() => readWalletOwnerDialog());
 
   useEffect(() => {
     let cancelled = false;
 
     const blockAndLogout = async (error: WalletOwnerMismatchError) => {
+      showWalletOwnerDialog({ title: error.title, hint: error.hint });
       if (!cancelled) {
         setReady(true);
         setBlockingDialog({ title: error.title, hint: error.hint });
@@ -98,6 +101,7 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
           title={blockingDialog.title}
           hint={blockingDialog.hint}
           onConfirm={() => {
+            clearWalletOwnerDialog();
             setBlockingDialog(null);
             router.replace("/m/login");
           }}

@@ -70,7 +70,6 @@ export default function MobileBiometricPage() {
       if (e instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
         showWalletOwnerDialog({ title: e.title, hint: e.hint });
-        router.replace("/m/login");
         return;
       }
       setError(

@@ -93,7 +93,6 @@ export default function MobileLoginPage() {
       if (err instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
         showWalletOwnerDialog({ title: err.title, hint: err.hint });
-        router.replace("/m/login");
         return;
       }
       setError(err instanceof ApiError || err instanceof Error ? err.message : "로그인에 실패했습니다.");
@@ -135,7 +134,6 @@ export default function MobileLoginPage() {
       if (e instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
         showWalletOwnerDialog({ title: e.title, hint: e.hint });
-        router.replace("/m/login");
         return;
       }
       setError(e instanceof Error ? e.message : "브리지 호출 실패");
