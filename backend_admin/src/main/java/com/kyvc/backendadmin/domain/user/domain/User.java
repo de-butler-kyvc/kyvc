@@ -90,6 +90,36 @@ public class User {
         return user;
     }
 
+    /**
+     * 관리자 등록 API에서 사용할 법인 사용자 계정을 생성합니다.
+     *
+     * @param email 로그인 이메일
+     * @param passwordHash BCrypt 비밀번호 해시
+     * @param userName 사용자 이름
+     * @param phone 전화번호
+     * @param status 사용자 계정 상태
+     * @return 법인 사용자 엔티티
+     */
+    public static User createCorporateUser(
+            String email,
+            String passwordHash,
+            String userName,
+            String phone,
+            KyvcEnums.UserStatus status
+    ) {
+        User user = new User();
+        user.email = email;
+        user.passwordHash = passwordHash;
+        user.userName = userName;
+        user.phone = phone;
+        user.notificationEnabledYn = KyvcEnums.Yn.Y;
+        user.mfaEnabledYn = KyvcEnums.Yn.N;
+        user.lastPasswordChangedAt = LocalDateTime.now();
+        user.userTypeCode = KyvcEnums.UserType.CORPORATE_USER;
+        user.userStatusCode = status;
+        return user;
+    }
+
     // 로그인 가능 상태 여부
     public boolean isActive() {
         return KyvcEnums.UserStatus.ACTIVE == userStatusCode;

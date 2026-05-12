@@ -45,6 +45,7 @@ public class SecurityConfig {
     private static final String BACKEND_ADMIN_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.BACKEND_ADMIN.name();
     private static final String SYSTEM_ADMIN_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.SYSTEM_ADMIN.name();
     private static final String OPERATOR_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.OPERATOR.name();
+    private static final String AUDITOR_ROLE = ROLE_PREFIX + KyvcEnums.RoleCode.AUDITOR.name();
     private static final Set<String> BACKEND_ADMIN_ACTION_ROLES = Set.of(
             BACKEND_ADMIN_ROLE,
             SYSTEM_ADMIN_ROLE,
@@ -57,6 +58,10 @@ public class SecurityConfig {
     );
     private static final Set<String> SYSTEM_ADMIN_ROLES = Set.of(
             SYSTEM_ADMIN_ROLE
+    );
+    private static final Set<String> REPORT_AUDIT_ROLES = Set.of(
+            SYSTEM_ADMIN_ROLE,
+            AUDITOR_ROLE
     );
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -91,6 +96,9 @@ public class SecurityConfig {
                                 AdminSecurityPatterns.FORBIDDEN_PATTERNS
                         ).denyAll()
                         .requestMatchers(
+                                AdminSecurityPatterns.REPORT_AUDIT_PATTERNS
+                        ).access(adminRoleAuthorizationManager(REPORT_AUDIT_ROLES))
+                        .requestMatchers(
                                 AdminSecurityPatterns.SYSTEM_ADMIN_ONLY_PATTERNS
                         ).access(adminRoleAuthorizationManager(SYSTEM_ADMIN_ROLES))
                         .requestMatchers(
@@ -104,6 +112,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 AdminSecurityPatterns.ADMIN_WORK_POST_PATTERNS
+                        ).access(adminRoleAuthorizationManager(BACKEND_ADMIN_ACTION_ROLES))
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                AdminSecurityPatterns.ADMIN_WORK_DELETE_PATTERNS
                         ).access(adminRoleAuthorizationManager(BACKEND_ADMIN_ACTION_ROLES))
                         .requestMatchers(
                                 AdminSecurityPatterns.ADMIN_COMMON_PATTERNS

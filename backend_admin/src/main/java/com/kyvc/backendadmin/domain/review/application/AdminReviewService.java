@@ -12,6 +12,8 @@ import com.kyvc.backendadmin.domain.review.dto.AdminReviewActionResponse;
 import com.kyvc.backendadmin.domain.review.dto.AdminReviewApproveRequest;
 import com.kyvc.backendadmin.domain.review.dto.AdminReviewRejectRequest;
 import com.kyvc.backendadmin.domain.review.dto.AdminSupplementRequest;
+import com.kyvc.backendadmin.domain.review.dto.KycSupplementCompleteRequest;
+import com.kyvc.backendadmin.domain.review.dto.KycSupplementCompleteResponse;
 import com.kyvc.backendadmin.domain.review.policy.KycStatusTransitionPolicy;
 import com.kyvc.backendadmin.domain.review.repository.AdminReviewRepository;
 import com.kyvc.backendadmin.global.exception.ApiException;
@@ -182,6 +184,66 @@ public class AdminReviewService {
         return toResponse(kycId, beforeStatus, targetStatus, history.getReviewHistoryId(), supplement.getSupplementId());
     }
 
+    /**
+     * KYC 보완 제출분을 처리 완료합니다.
+     *
+     * <p>보완요청이 해당 KYC에 속하는지 확인하고, 보완요청 상태가 SUBMITTED이며 제출 문서가 존재할 때만
+     * 보완요청을 COMPLETED로 변경합니다. 이후 KYC 상태를 MANUAL_REVIEW로 되돌리고 심사 이력과 감사로그를 기록합니다.</p>
+     *
+     * @param kycId KYC 신청 ID
+     * @param supplementId 보완요청 ID
+     * @param request 보완 제출분 처리 완료 요청
+     * @return 처리 완료 응답
+     */
+    @Transactional
+    public KycSupplementCompleteResponse completeSupplement(
+            Long kycId,
+            Long supplementId,
+            KycSupplementCompleteRequest request
+    ) {
+        validateReviewPermission();
+        adminKycAccessChecker.validateActionAccess(kycId, "KYC_SUPPLEMENT_COMPLETE");
+        Long adminId = SecurityUtil.getCurrentAdminId();
+        KycApplication application = getKycApplication(kycId);
+        KycSupplement supplement = adminReviewRepository.findSupplementById(supplementId)
+                .orElseThrow(() -> new ApiException(ErrorCode.KYC_SUPPLEMENT_NOT_FOUND));
+        validateSupplementBelongsToKyc(supplement, kycId);
+        validateSupplementStatus(supplement);
+        if (!adminReviewRepository.existsSupplementDocument(supplementId)) {
+            throw new ApiException(ErrorCode.KYC_SUPPLEMENT_DOCUMENT_NOT_FOUND);
+        }
+
+        KyvcEnums.KycStatus beforeStatus = application.getKycStatusCode();
+        KyvcEnums.KycStatus targetStatus = parseCompleteTargetStatus(request);
+        kycStatusTransitionPolicy.validateTransition(beforeStatus, targetStatus);
+
+        supplement.complete(LocalDateTime.now(), request == null ? null : request.comment());
+        updateKycStatus(kycId, beforeStatus, targetStatus, null, request == null ? null : request.comment());
+        saveHistory(kycId, adminId, KyvcEnums.ReviewActionType.SUPPLEMENT_COMPLETE,
+                beforeStatus, targetStatus, request == null ? null : request.comment());
+        adminReviewRepository.saveAuditLog(AuditLog.kycSupplement(
+                adminId,
+                supplementId,
+                "KYC_SUPPLEMENT_COMPLETE",
+                "KYC 보완 제출분을 처리 완료했습니다. kycId=%d, beforeKycStatus=%s, afterKycStatus=%s"
+                        .formatted(kycId, beforeStatus, targetStatus)
+        ));
+        adminReviewRepository.saveAuditLog(AuditLog.kycApplication(
+                adminId,
+                kycId,
+                "KYC_MANUAL_REVIEW_RESUME",
+                "보완 제출분 처리 완료 후 KYC를 수동심사 상태로 전환했습니다. supplementId=%d"
+                        .formatted(supplementId)
+        ));
+        return new KycSupplementCompleteResponse(
+                kycId,
+                supplementId,
+                true,
+                targetStatus.name(),
+                KyvcEnums.SupplementStatus.COMPLETED.name()
+        );
+    }
+
     private void validateReviewPermission() {
         if (!SecurityUtil.hasRole(KyvcEnums.RoleCode.BACKEND_ADMIN.name())
                 && !SecurityUtil.hasRole(KyvcEnums.RoleCode.SYSTEM_ADMIN.name())
@@ -224,6 +286,41 @@ public class AdminReviewService {
         }
         if (!StringUtils.hasText(request.rejectReasonCode()) || !StringUtils.hasText(request.comment())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private void validateSupplementBelongsToKyc(KycSupplement supplement, Long kycId) {
+        if (!kycId.equals(supplement.getKycId())) {
+            throw new ApiException(ErrorCode.KYC_SUPPLEMENT_NOT_FOUND);
+        }
+    }
+
+    private void validateSupplementStatus(KycSupplement supplement) {
+        KyvcEnums.SupplementStatus status = supplement.getSupplementStatus();
+        if (KyvcEnums.SupplementStatus.SUBMITTED == status) {
+            return;
+        }
+        if (KyvcEnums.SupplementStatus.COMPLETED == status) {
+            throw new ApiException(ErrorCode.KYC_SUPPLEMENT_ALREADY_COMPLETED);
+        }
+        if (KyvcEnums.SupplementStatus.EXPIRED == status) {
+            throw new ApiException(ErrorCode.KYC_SUPPLEMENT_EXPIRED);
+        }
+        throw new ApiException(ErrorCode.KYC_SUPPLEMENT_NOT_SUBMITTED);
+    }
+
+    private KyvcEnums.KycStatus parseCompleteTargetStatus(KycSupplementCompleteRequest request) {
+        if (request == null || !StringUtils.hasText(request.nextKycStatus())) {
+            return KyvcEnums.KycStatus.MANUAL_REVIEW;
+        }
+        try {
+            KyvcEnums.KycStatus targetStatus = KyvcEnums.KycStatus.valueOf(request.nextKycStatus().trim());
+            if (KyvcEnums.KycStatus.MANUAL_REVIEW != targetStatus) {
+                throw new ApiException(ErrorCode.INVALID_KYC_STATUS_TRANSITION);
+            }
+            return targetStatus;
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(ErrorCode.INVALID_KYC_STATUS_TRANSITION);
         }
     }
 

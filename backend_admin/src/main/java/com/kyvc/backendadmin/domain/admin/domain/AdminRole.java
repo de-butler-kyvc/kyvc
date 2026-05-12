@@ -12,6 +12,10 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
 
 // Backend Admin 권한 마스터 엔티티
 /**
@@ -40,9 +44,63 @@ public class AdminRole {
     @Column(name = "role_name", length = 100)
     private String roleName;
 
+    // 권한 그룹 설명
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
     // 권한 사용 상태, ACTIVE인 권한만 부여 가능
     @Column(name = "status", length = 50)
     private String status;
+
+    // 권한 그룹 생성 시각
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    // 권한 그룹 수정 시각
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    /**
+     * 신규 관리자 권한 그룹 엔티티를 생성합니다.
+     *
+     * @param roleCode 권한 그룹 코드
+     * @param roleName 권한 그룹명
+     * @param description 권한 설명
+     * @param status 권한 상태
+     * @return 신규 관리자 권한 그룹 엔티티
+     */
+    public static AdminRole create(
+            KyvcEnums.RoleCode roleCode,
+            String roleName,
+            String description,
+            String status
+    ) {
+        AdminRole adminRole = new AdminRole();
+        adminRole.roleCode = roleCode;
+        adminRole.roleName = roleName;
+        adminRole.description = description;
+        adminRole.status = status;
+        return adminRole;
+    }
+
+    /**
+     * 관리자 권한 그룹 정보를 수정합니다.
+     *
+     * @param roleName 권한 그룹명
+     * @param description 권한 설명
+     * @param status 권한 상태
+     */
+    public void update(
+            String roleName,
+            String description,
+            String status
+    ) {
+        this.roleName = roleName;
+        this.description = description;
+        this.status = status;
+    }
 
     /**
      * 권한이 부여 가능한 활성 상태인지 확인합니다.

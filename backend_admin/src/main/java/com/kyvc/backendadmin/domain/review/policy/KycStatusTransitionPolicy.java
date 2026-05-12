@@ -19,6 +19,9 @@ public class KycStatusTransitionPolicy {
                     KyvcEnums.KycStatus.APPROVED,
                     KyvcEnums.KycStatus.REJECTED,
                     KyvcEnums.KycStatus.NEED_SUPPLEMENT
+            ),
+            KyvcEnums.KycStatus.NEED_SUPPLEMENT, Set.of(
+                    KyvcEnums.KycStatus.MANUAL_REVIEW
             )
     );
 
@@ -34,7 +37,7 @@ public class KycStatusTransitionPolicy {
     public void validateTransition(KyvcEnums.KycStatus currentStatus, KyvcEnums.KycStatus targetStatus) {
         if (!ALLOWED_TRANSITIONS.getOrDefault(currentStatus, Set.of()).contains(targetStatus)) {
             throw new ApiException(
-                    ErrorCode.INVALID_REQUEST,
+                    ErrorCode.INVALID_KYC_STATUS_TRANSITION,
                     "현재 상태 %s에서는 %s 상태로 변경할 수 없습니다.".formatted(currentStatus, targetStatus)
             );
         }

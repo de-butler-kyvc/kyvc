@@ -5,7 +5,12 @@ import com.kyvc.backendadmin.domain.admin.domain.AdminUser;
 import com.kyvc.backendadmin.domain.admin.domain.AdminUserRole;
 import com.kyvc.backendadmin.domain.admin.domain.AuditLog;
 import com.kyvc.backendadmin.domain.admin.dto.AdminRoleAssignRequest;
+import com.kyvc.backendadmin.domain.admin.dto.AdminRoleCreateRequest;
+import com.kyvc.backendadmin.domain.admin.dto.AdminRoleCreateResponse;
 import com.kyvc.backendadmin.domain.admin.dto.AdminRoleResponse;
+import com.kyvc.backendadmin.domain.admin.dto.AdminRoleUpdateRequest;
+import com.kyvc.backendadmin.domain.admin.dto.AdminRoleUpdateResponse;
+import com.kyvc.backendadmin.domain.audit.application.AuditLogWriter;
 import com.kyvc.backendadmin.domain.admin.repository.AdminRoleRepository;
 import com.kyvc.backendadmin.domain.admin.repository.AdminUserRepository;
 import com.kyvc.backendadmin.domain.admin.repository.AdminUserRoleRepository;
@@ -14,8 +19,11 @@ import com.kyvc.backendadmin.global.exception.ErrorCode;
 import com.kyvc.backendadmin.global.security.SecurityUtil;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -31,6 +39,9 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AdminRoleService {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminRoleService.class);
+    private static final Set<String> ROLE_STATUSES = Set.of("ACTIVE", "INACTIVE");
+
     // 자기 자신의 필수 권한으로 간주해 제거를 막는 권한 코드
     private static final Set<KyvcEnums.RoleCode> SELF_REQUIRED_ROLES = Set.of(
             KyvcEnums.RoleCode.SYSTEM_ADMIN,
@@ -43,6 +54,8 @@ public class AdminRoleService {
     private final AdminUserRepository adminUserRepository;
     // 관리자-권한 매핑 저장소
     private final AdminUserRoleRepository adminUserRoleRepository;
+    // 공통 감사 로그 작성기
+    private final AuditLogWriter auditLogWriter;
 
     /**
      * 관리자 권한 목록을 조회합니다.
@@ -57,6 +70,88 @@ public class AdminRoleService {
         return adminRoleRepository.findAll().stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    /**
+     * 관리자 권한 그룹을 생성합니다.
+     *
+     * <p>SYSTEM_ADMIN 권한을 확인한 뒤 권한 코드, 권한 그룹명, 상태값을 검증합니다.
+     * 권한 코드는 {@link KyvcEnums.AdminRoleCode}에 정의된 값만 허용하고, 중복되지 않을 때
+     * admin_roles에 저장한 뒤 audit_logs에 생성 이력을 기록합니다.</p>
+     *
+     * @param request 관리자 권한 그룹 생성 요청
+     * @return 생성된 권한 그룹 ID와 생성 여부
+     */
+    @Transactional
+    public AdminRoleCreateResponse createRole(AdminRoleCreateRequest request) {
+        validateSystemAdminPermission();
+        validateCreateRequest(request);
+
+        KyvcEnums.RoleCode roleCode = parseRoleCode(request.roleCode());
+        if (adminRoleRepository.existsByRoleCode(roleCode)) {
+            log.warn("관리자 권한 그룹 생성 실패: 중복 roleCode={}", roleCode);
+            throw new ApiException(ErrorCode.ADMIN_ROLE_DUPLICATED);
+        }
+
+        AdminRole adminRole = AdminRole.create(
+                roleCode,
+                request.roleName().trim(),
+                normalizeDescription(request.description()),
+                normalizeStatus(request.status())
+        );
+        adminRoleRepository.save(adminRole);
+        auditLogWriter.write(
+                KyvcEnums.ActorType.ADMIN,
+                SecurityUtil.getCurrentAdminId(),
+                "ADMIN_ROLE_CREATE",
+                KyvcEnums.AuditTargetType.ADMIN_ROLE,
+                adminRole.getRoleId(),
+                "관리자 권한 그룹을 생성했습니다. roleCode=%s, roleName=%s"
+                        .formatted(roleCode.name(), adminRole.getRoleName()),
+                null,
+                "roleCode=%s,status=%s".formatted(roleCode.name(), adminRole.getStatus())
+        );
+        log.info("관리자 권한 그룹 생성 완료: roleId={}, roleCode={}", adminRole.getRoleId(), roleCode);
+        return new AdminRoleCreateResponse(adminRole.getRoleId(), true);
+    }
+
+    /**
+     * 관리자 권한 그룹을 수정합니다.
+     *
+     * <p>SYSTEM_ADMIN 권한을 확인한 뒤 권한 그룹 존재 여부, 권한 그룹명, 상태값을 검증합니다.
+     * role_code는 변경하지 않고 roleName, description, status만 수정하며 audit_logs에 수정 이력을 기록합니다.</p>
+     *
+     * @param roleId 수정할 권한 그룹 ID
+     * @param request 관리자 권한 그룹 수정 요청
+     * @return 수정된 권한 그룹 ID와 수정 여부
+     */
+    @Transactional
+    public AdminRoleUpdateResponse updateRole(Long roleId, AdminRoleUpdateRequest request) {
+        validateSystemAdminPermission();
+        validateUpdateRequest(request);
+
+        AdminRole adminRole = getRole(roleId);
+        String beforeValue = "roleName=%s,status=%s,description=%s"
+                .formatted(adminRole.getRoleName(), adminRole.getStatus(), adminRole.getDescription());
+        adminRole.update(
+                request.roleName().trim(),
+                normalizeDescription(request.description()),
+                normalizeStatus(request.status())
+        );
+        auditLogWriter.write(
+                KyvcEnums.ActorType.ADMIN,
+                SecurityUtil.getCurrentAdminId(),
+                "ADMIN_ROLE_UPDATE",
+                KyvcEnums.AuditTargetType.ADMIN_ROLE,
+                adminRole.getRoleId(),
+                "관리자 권한 그룹을 수정했습니다. roleCode=%s, roleName=%s"
+                        .formatted(adminRole.getRoleCode().name(), adminRole.getRoleName()),
+                beforeValue,
+                "roleName=%s,status=%s,description=%s"
+                        .formatted(adminRole.getRoleName(), adminRole.getStatus(), adminRole.getDescription())
+        );
+        log.info("관리자 권한 그룹 수정 완료: roleId={}, roleCode={}", adminRole.getRoleId(), adminRole.getRoleCode());
+        return new AdminRoleUpdateResponse(adminRole.getRoleId(), true);
     }
 
     /**
@@ -112,6 +207,58 @@ public class AdminRoleService {
     private AdminRole getRole(Long roleId) {
         return adminRoleRepository.findById(roleId)
                 .orElseThrow(() -> new ApiException(ErrorCode.ADMIN_ROLE_NOT_FOUND));
+    }
+
+    private void validateSystemAdminPermission() {
+        if (!SecurityUtil.hasRole(KyvcEnums.RoleCode.SYSTEM_ADMIN.name())) {
+            log.warn("관리자 권한 그룹 변경 권한 부족: adminId={}", SecurityUtil.getCurrentAdminId());
+            throw new ApiException(ErrorCode.ADMIN_PERMISSION_DENIED);
+        }
+    }
+
+    private void validateCreateRequest(AdminRoleCreateRequest request) {
+        if (request == null
+                || !StringUtils.hasText(request.roleCode())
+                || !StringUtils.hasText(request.roleName())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        validateStatus(request.status());
+    }
+
+    private void validateUpdateRequest(AdminRoleUpdateRequest request) {
+        if (request == null || !StringUtils.hasText(request.roleName())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        validateStatus(request.status());
+    }
+
+    private KyvcEnums.RoleCode parseRoleCode(String roleCode) {
+        try {
+            KyvcEnums.AdminRoleCode.valueOf(roleCode.trim());
+            return KyvcEnums.RoleCode.valueOf(roleCode.trim());
+        } catch (IllegalArgumentException exception) {
+            log.warn("유효하지 않은 관리자 권한 코드: roleCode={}", roleCode);
+            throw new ApiException(ErrorCode.INVALID_ADMIN_ROLE_CODE);
+        }
+    }
+
+    private void validateStatus(String status) {
+        String normalizedStatus = normalizeStatus(status);
+        if (!ROLE_STATUSES.contains(normalizedStatus)) {
+            log.warn("유효하지 않은 관리자 권한 상태: status={}", status);
+            throw new ApiException(ErrorCode.INVALID_ADMIN_ROLE_STATUS);
+        }
+    }
+
+    private String normalizeStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            throw new ApiException(ErrorCode.INVALID_ADMIN_ROLE_STATUS);
+        }
+        return status.trim().toUpperCase();
+    }
+
+    private String normalizeDescription(String description) {
+        return StringUtils.hasText(description) ? description.trim() : null;
     }
 
     private AdminRole getActiveRole(Long roleId) {

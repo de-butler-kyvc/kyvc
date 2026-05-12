@@ -75,6 +75,25 @@ public class AuthTokenRepositoryImpl implements AuthTokenRepository {
                 .executeUpdate();
     }
 
+    @Override
+    public void revokeActiveTokens(KyvcEnums.ActorType actorType, Long actorId) {
+        entityManager()
+                .createQuery("""
+                        update AuthToken authToken
+                        set authToken.status = :revoked,
+                            authToken.revokedAt = :revokedAt
+                        where authToken.actorType = :actorType
+                          and authToken.actorId = :actorId
+                          and authToken.status = :active
+                        """)
+                .setParameter("revoked", KyvcEnums.TokenStatus.REVOKED)
+                .setParameter("revokedAt", LocalDateTime.now())
+                .setParameter("actorType", actorType)
+                .setParameter("actorId", actorId)
+                .setParameter("active", KyvcEnums.TokenStatus.ACTIVE)
+                .executeUpdate();
+    }
+
     // 실제 DB 접근 시점에 EntityManager를 가져옴
     private EntityManager entityManager() {
         return entityManagerProvider.getObject();

@@ -42,4 +42,12 @@ public interface AuthTokenRepository {
      * @param tokenType 폐기할 토큰 타입
      */
     void revokeActiveTokens(KyvcEnums.ActorType actorType, Long actorId, KyvcEnums.TokenType tokenType);
+
+    /**
+     * 특정 행위자의 모든 활성 토큰을 일괄 폐기합니다.
+     *
+     * @param actorType 폐기 대상 행위자 유형
+     * @param actorId 폐기 대상 행위자 ID
+     */
+    void revokeActiveTokens(KyvcEnums.ActorType actorType, Long actorId);
 }

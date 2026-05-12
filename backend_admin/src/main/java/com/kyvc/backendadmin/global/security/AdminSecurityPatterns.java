@@ -33,8 +33,11 @@ public final class AdminSecurityPatterns {
             "/api/admin/core/**"
     };
 
+    public static final String[] REPORT_AUDIT_PATTERNS = {
+            "/api/admin/backend/reports/operations/**"
+    };
+
     public static final String[] SYSTEM_ADMIN_ONLY_PATTERNS = {
-            "/api/admin/backend/reports/operations/**",
             "/api/admin/backend/audit-logs/**",
             "/api/admin/backend/security-events",
             "/api/admin/backend/data-access-logs",
@@ -64,11 +67,17 @@ public final class AdminSecurityPatterns {
     };
 
     public static final String[] ADMIN_WORK_POST_PATTERNS = {
+            "/api/admin/backend/users",
             "/api/admin/backend/kyc/applications/*/ai-review/retry",
             "/api/admin/backend/kyc/applications/*/manual-review/approve",
             "/api/admin/backend/kyc/applications/*/manual-review/reject",
             "/api/admin/backend/kyc/applications/*/supplements",
+            "/api/admin/backend/kyc/applications/*/supplements/*/complete",
             "/api/admin/backend/kyc/applications/*/credentials/issue"
+    };
+
+    public static final String[] ADMIN_WORK_DELETE_PATTERNS = {
+            "/api/admin/backend/users/*"
     };
 
     public static final String[] ADMIN_COMMON_PATTERNS = {

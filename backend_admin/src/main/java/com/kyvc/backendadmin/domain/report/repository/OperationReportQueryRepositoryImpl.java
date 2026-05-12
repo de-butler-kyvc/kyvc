@@ -74,10 +74,74 @@ public class OperationReportQueryRepositoryImpl implements OperationReportQueryR
         return rows.stream().map(r -> new AdminOperationReportDtos.Row(str(r[0]), l(r[1]), l(r[2]), l(r[3]), l(r[4]), l(r[5]), l(r[6]), l(r[7]), l(r[8]), l(r[9]), l(r[10]), l(r[11]), l(r[12]), l(r[13]), l(r[14]))).toList();
     }
 
+    @Override
+    public List<AdminOperationReportDtos.StatusCount> kycStatusCounts(LocalDate fromDate, LocalDate toDate) {
+        return statusCounts("kyc_applications", "kyc_status_code", "created_at", fromDate, toDate);
+    }
+
+    @Override
+    public List<AdminOperationReportDtos.StatusCount> credentialStatusCounts(LocalDate fromDate, LocalDate toDate) {
+        return statusCounts("credentials", "credential_status_code", "created_at", fromDate, toDate);
+    }
+
+    @Override
+    public List<AdminOperationReportDtos.StatusCount> vpStatusCounts(LocalDate fromDate, LocalDate toDate) {
+        return statusCounts("vp_verifications", "vp_verification_status_code", "requested_at", fromDate, toDate);
+    }
+
+    @Override
+    public List<AdminOperationReportDtos.StatusCount> aiReviewStatusCounts(LocalDate fromDate, LocalDate toDate) {
+        return statusCounts("kyc_applications", "ai_review_status_code", "created_at", fromDate, toDate);
+    }
+
+    @Override
+    public List<AdminOperationReportDtos.AuditActionCount> auditActionCounts(LocalDate fromDate, LocalDate toDate) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em().createNativeQuery("""
+                        select audit_target_type_code, action_type, count(*)
+                        from audit_logs
+                        where created_at >= :from
+                          and created_at < :to
+                        group by audit_target_type_code, action_type
+                        order by audit_target_type_code, action_type
+                        """)
+                .setParameter("from", fromDate.atStartOfDay())
+                .setParameter("to", toDate.plusDays(1).atStartOfDay())
+                .getResultList();
+        return rows.stream()
+                .map(row -> new AdminOperationReportDtos.AuditActionCount(str(row[0]), str(row[1]), l(row[2])))
+                .toList();
+    }
+
     private long count(String table, String dateColumn, String condition, LocalDate from, LocalDate to) {
         String sql = "select count(*) from " + table + " where " + dateColumn + " >= :from and " + dateColumn + " < :to";
         if (condition != null) sql += " and " + condition;
         return ((Number) em().createNativeQuery(sql).setParameter("from", from.atStartOfDay()).setParameter("to", to.plusDays(1).atStartOfDay()).getSingleResult()).longValue();
+    }
+
+    private List<AdminOperationReportDtos.StatusCount> statusCounts(
+            String table,
+            String statusColumn,
+            String dateColumn,
+            LocalDate from,
+            LocalDate to
+    ) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em().createNativeQuery("""
+                        select %s, count(*)
+                        from %s
+                        where %s is not null
+                          and %s >= :from
+                          and %s < :to
+                        group by %s
+                        order by %s
+                        """.formatted(statusColumn, table, statusColumn, dateColumn, dateColumn, statusColumn, statusColumn))
+                .setParameter("from", from.atStartOfDay())
+                .setParameter("to", to.plusDays(1).atStartOfDay())
+                .getResultList();
+        return rows.stream()
+                .map(row -> new AdminOperationReportDtos.StatusCount(str(row[0]), l(row[1])))
+                .toList();
     }
     private String str(Object v) { return v == null ? null : v.toString(); }
     private long l(Object v) { return v == null ? 0L : ((Number) v).longValue(); }

@@ -97,4 +97,45 @@ public class Corporate {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /**
+     * 관리자 등록 API에서 사용할 법인 엔티티를 생성합니다.
+     *
+     * @param userId 연결할 사용자 ID
+     * @param corporateName 법인명
+     * @param businessRegistrationNo 사업자등록번호
+     * @param corporateRegistrationNo 법인등록번호
+     * @param representativeName 대표자명
+     * @param representativePhone 대표자 전화번호
+     * @param representativeEmail 대표자 이메일
+     * @param address 주소
+     * @param businessType 업종
+     * @param status 법인 상태
+     * @return 법인 엔티티
+     */
+    public static Corporate create(
+            Long userId,
+            String corporateName,
+            String businessRegistrationNo,
+            String corporateRegistrationNo,
+            String representativeName,
+            String representativePhone,
+            String representativeEmail,
+            String address,
+            String businessType,
+            KyvcEnums.CorporateStatus status
+    ) {
+        Corporate corporate = new Corporate();
+        corporate.userId = userId;
+        corporate.corporateName = corporateName;
+        corporate.businessRegistrationNo = businessRegistrationNo;
+        corporate.corporateRegistrationNo = corporateRegistrationNo;
+        corporate.representativeName = representativeName;
+        corporate.representativePhone = representativePhone;
+        corporate.representativeEmail = representativeEmail;
+        corporate.address = address;
+        corporate.businessType = businessType;
+        corporate.corporateStatusCode = status;
+        return corporate;
+    }
 }
