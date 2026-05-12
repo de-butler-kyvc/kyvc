@@ -10,6 +10,7 @@ import { ApiError, kyc as kycApi } from "@/lib/api";
 import { refreshCurrentKycStorage } from "@/lib/kyc-flow";
 
 type StoreOption = "STORE" | "DELETE";
+const PREPARING_MESSAGE = "준비중 입니다";
 
 const OPTIONS: {
   value: StoreOption;
@@ -17,6 +18,7 @@ const OPTIONS: {
   name: string;
   desc: string;
   retention?: string;
+  unavailable?: boolean;
 }[] = [
   {
     value: "STORE",
@@ -29,7 +31,8 @@ const OPTIONS: {
     value: "DELETE",
     icon: <Icon.Trash />,
     name: "AI 검토 후 삭제",
-    desc: "AI 심사 완료 후 원본을 삭제합니다. 재심사 시 서류를 다시 제출해야 합니다."
+    desc: "AI 심사 완료 후 원본을 삭제합니다. 재심사 시 서류를 다시 제출해야 합니다.",
+    unavailable: true
   }
 ];
 
@@ -42,24 +45,22 @@ export default function KycApplyStoragePage() {
   useEffect(() => {
     let cancelled = false;
     refreshCurrentKycStorage(kycApi.current).then((id) => {
-    if (!id) {
-      router.push("/corporate/kyc/apply");
-      return;
-    }
-    if (cancelled) return;
-    kycApi
-      .detail(id)
-      .then((detail) => {
-        if (cancelled) return;
-        if (detail.originalDocumentStoreOption === "DELETE") {
-          setSelected("DELETE");
-        } else if (detail.originalDocumentStoreOption === "STORE") {
-          setSelected("STORE");
-        }
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
-      );
+      if (!id) {
+        router.push("/corporate/kyc/apply");
+        return;
+      }
+      if (cancelled) return;
+      kycApi
+        .detail(id)
+        .then((detail) => {
+          if (cancelled) return;
+          if (detail.originalDocumentStoreOption === "STORE") {
+            setSelected("STORE");
+          }
+        })
+        .catch((err: unknown) =>
+          setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
+        );
     });
     return () => {
       cancelled = true;
@@ -67,6 +68,10 @@ export default function KycApplyStoragePage() {
   }, [router]);
 
   const onNext = async () => {
+    if (selected === "DELETE") {
+      window.alert(PREPARING_MESSAGE);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -103,8 +108,17 @@ export default function KycApplyStoragePage() {
               <button
                 key={option.value}
                 type="button"
-                className={`type-radio-card ${active ? "selected" : ""}`}
-                onClick={() => setSelected(option.value)}
+                className={`type-radio-card ${active ? "selected" : ""} ${
+                  option.unavailable ? "opacity-60" : ""
+                }`}
+                aria-disabled={option.unavailable}
+                onClick={() => {
+                  if (option.unavailable) {
+                    window.alert(PREPARING_MESSAGE);
+                    return;
+                  }
+                  setSelected(option.value);
+                }}
               >
                 <span className="type-radio-icon">{option.icon}</span>
                 <span className="type-radio-info">
