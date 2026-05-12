@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { MTopBar } from "@/components/m/parts";
 import {
   ApiError,
+  mobileDevice,
   mobileVp,
   mobileWallet,
   type WalletCredentialOfferResponse,
@@ -23,6 +24,7 @@ type IssueStep =
   | "qr"
   | "offer"
   | "wallet"
+  | "device"
   | "prepare"
   | "save"
   | "xrpl"
@@ -33,6 +35,7 @@ const STEP_TEXT: Record<IssueStep, string> = {
   qr: "QR 정보를 확인하고 있어요",
   offer: "발급 정보를 불러오고 있어요",
   wallet: "Wallet 정보를 확인하고 있어요",
+  device: "기기를 등록하고 있어요",
   prepare: "증명서를 발급하고 있어요",
   save: "지갑에 저장하고 있어요",
   xrpl: "블록체인에 기록하고 있어요",
@@ -85,11 +88,35 @@ function apiErrorMessage(error: ApiError) {
   if (error.code === "CREDENTIAL_OFFER_INVALID_TOKEN") {
     return "지원하지 않는 QR입니다.";
   }
+  if (error.code === "WALLET_DEVICE_NOT_REGISTERED") {
+    return "Wallet 기기 등록 정보를 찾을 수 없습니다. 앱을 다시 실행한 뒤 재시도해주세요.";
+  }
   return error.message;
 }
 
 function requiredString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function registerMobileDevice(device: {
+  deviceId: string;
+  deviceName?: string;
+  os?: string;
+  appVersion?: string;
+  publicKey?: string;
+}) {
+  const publicKey = requiredString(device.publicKey);
+  try {
+    await mobileDevice.register({
+      deviceId: device.deviceId,
+      deviceName: requiredString(device.deviceName) ?? "Android Device",
+      os: requiredString(device.os) ?? "Android",
+      appVersion: requiredString(device.appVersion) ?? "1.0",
+      ...(publicKey ? { publicKey } : {}),
+    });
+  } catch {
+    throw new Error("Wallet 기기 등록에 실패했습니다. 앱을 다시 실행한 뒤 재시도해주세요.");
+  }
 }
 
 function debugMissingScanResult() {
@@ -193,6 +220,15 @@ export default function MobileVcIssuePage() {
         if (!device.ok || !deviceId) {
           throw new Error("기기 정보를 확인할 수 없습니다. 앱을 업데이트한 뒤 다시 시도해주세요.");
         }
+
+        setStep("device");
+        await registerMobileDevice({
+          deviceId,
+          deviceName: device.deviceName,
+          os: device.os,
+          appVersion: device.appVersion,
+          publicKey: device.publicKey,
+        });
 
         setStep("prepare");
         const prepared = await mobileWallet.prepare(offerId, {
