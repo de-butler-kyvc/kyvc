@@ -12,6 +12,11 @@ import {
   type AuthStatus,
 } from "@/lib/m/android-bridge";
 import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+import {
+  bindCurrentWebUserWithPrompt,
+  logoutForWalletOwnerMismatch,
+  WalletOwnerMismatchError,
+} from "@/lib/m/wallet-owner";
 
 type Tab = "business" | "email";
 
@@ -74,13 +79,23 @@ export default function MobileLoginPage() {
         return;
       }
       // 백엔드는 이메일 기준 로그인. 사업자번호 탭일 때도 입력값을 그대로 보낸다.
-      await auth.login(id, password);
+      const loginUser = await auth.login(id, password);
       if (isBridgeAvailable()) {
+        await bindCurrentWebUserWithPrompt({
+          userId: loginUser.userId,
+          email: loginUser.email,
+        });
         await ensureMobileWallet().catch(() => null);
       }
       router.replace("/m/home");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "로그인에 실패했습니다.");
+      if (err instanceof WalletOwnerMismatchError) {
+        await logoutForWalletOwnerMismatch();
+        window.alert(`${err.title}\n${err.hint}`);
+        router.replace("/m/login");
+        return;
+      }
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "로그인에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -98,6 +113,16 @@ export default function MobileLoginPage() {
     try {
       const r = await bridge.requestNativeAuth(method, "wallet-login");
       if (r.ok && r.authenticated) {
+        const session = await auth.session().catch(() => null);
+        if (session?.authenticated && typeof session.userId === "number") {
+          await bindCurrentWebUserWithPrompt({
+            userId: session.userId,
+            email: session.email,
+          });
+        } else {
+          setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
+          return;
+        }
         await ensureMobileWallet().catch(() => null);
         router.replace("/m/home");
       } else if (r.emailVerificationRequired) {
@@ -106,6 +131,12 @@ export default function MobileLoginPage() {
         setError(r.error ?? "인증에 실패했습니다.");
       }
     } catch (e) {
+      if (e instanceof WalletOwnerMismatchError) {
+        await logoutForWalletOwnerMismatch();
+        window.alert(`${e.title}\n${e.hint}`);
+        router.replace("/m/login");
+        return;
+      }
       setError(e instanceof Error ? e.message : "브리지 호출 실패");
     }
   };

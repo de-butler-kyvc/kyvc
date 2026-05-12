@@ -6,6 +6,12 @@ import { useEffect, useRef, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { ApiError, auth } from "@/lib/api";
+import { isBridgeAvailable } from "@/lib/m/android-bridge";
+import {
+  bindCurrentWebUserWithPrompt,
+  logoutForWalletOwnerMismatch,
+  WalletOwnerMismatchError,
+} from "@/lib/m/wallet-owner";
 import { readSignupDraft, writeSignupDraft } from "@/lib/signup-flow";
 
 const OTP_LEN = 6;
@@ -176,8 +182,23 @@ export default function MobileSignupVerifyPage() {
         return;
       }
       window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+      if (isBridgeAvailable()) {
+        const session = await auth.session().catch(() => null);
+        if (session?.authenticated && typeof session.userId === "number") {
+          await bindCurrentWebUserWithPrompt({
+            userId: session.userId,
+            email: session.email,
+          });
+        }
+      }
       router.replace("/m/home");
     } catch (err) {
+      if (err instanceof WalletOwnerMismatchError) {
+        await logoutForWalletOwnerMismatch();
+        window.alert(`${err.title}\n${err.hint}`);
+        router.replace("/m/login");
+        return;
+      }
       setError(err instanceof ApiError ? err.message : "인증에 실패했습니다.");
     } finally {
       setVerifying(false);

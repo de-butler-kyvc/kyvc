@@ -5,8 +5,14 @@ import { useEffect, useRef, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
+import { auth } from "@/lib/api";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+import {
+  bindCurrentWebUserWithPrompt,
+  logoutForWalletOwnerMismatch,
+  WalletOwnerMismatchError,
+} from "@/lib/m/wallet-owner";
 
 export default function MobileBiometricPage() {
   const router = useRouter();
@@ -40,6 +46,16 @@ export default function MobileBiometricPage() {
     try {
       const r = await bridge.requestNativeAuth("biometric", "wallet-login");
       if (r.ok && r.authenticated) {
+        const session = await auth.session().catch(() => null);
+        if (session?.authenticated && typeof session.userId === "number") {
+          await bindCurrentWebUserWithPrompt({
+            userId: session.userId,
+            email: session.email,
+          });
+        } else {
+          setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
+          return;
+        }
         await ensureMobileWallet().catch(() => null);
         router.replace("/m/home");
         return;
@@ -50,6 +66,12 @@ export default function MobileBiometricPage() {
       }
       setError(r.error ?? "생체 인증에 실패했습니다.");
     } catch (e) {
+      if (e instanceof WalletOwnerMismatchError) {
+        await logoutForWalletOwnerMismatch();
+        window.alert(`${e.title}\n${e.hint}`);
+        router.replace("/m/login");
+        return;
+      }
       setError(
         e instanceof Error ? e.message : "생체 인증 호출에 실패했습니다.",
       );
