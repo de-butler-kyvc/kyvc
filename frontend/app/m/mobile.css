@@ -1224,6 +1224,11 @@ html {
   width: 100%;
 }
 
+.home-wallet-state.ready,
+.home-ready-fade {
+  animation: riseIn .35s ease both;
+}
+
 .wallet-hero {
   margin: 4px 18px 16px;
   min-height: 138px;
