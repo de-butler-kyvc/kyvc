@@ -65,29 +65,6 @@ export default function MobileXrpReceivePage() {
           <br />
           받으세요
         </h1>
-        <p className="subcopy xrp-receive-copy">
-          아래 주소나 QR 코드를 공유하면 XRP를 받을 수 있습니다.
-        </p>
-
-        <div className="m-info-box xrp-info-box">
-          <div className="info-icon">
-            <MIcon.x />
-          </div>
-          <div className="info-text">
-            <strong>데스티네이션 태그 불필요</strong>
-            <p>개인 지갑 주소로, 별도의 태그 없이 받을 수 있습니다.</p>
-          </div>
-        </div>
-
-        <div className="m-info-box xrp-info-box">
-          <div className="info-icon">
-            <MIcon.shield />
-          </div>
-          <div className="info-text">
-            <strong>주의사항</strong>
-            <p>XRP Ledger 네트워크의 XRP만 이 주소로 받을 수 있습니다.</p>
-          </div>
-        </div>
 
         <div className="xrp-address-card">
           <h2>내 XRP 주소</h2>
@@ -112,6 +89,29 @@ export default function MobileXrpReceivePage() {
           >
             <MIcon.link /> {copied ? "복사 완료" : "주소 복사"}
           </button>
+        </div>
+        <p className="subcopy xrp-receive-copy">
+          아래 주소나 QR 코드를 공유하면 XRP를 받을 수 있습니다.
+        </p>
+
+        <div className="m-info-box xrp-info-box">
+          <div className="info-icon">
+            <MIcon.x />
+          </div>
+          <div className="info-text">
+            <strong>데스티네이션 태그 불필요</strong>
+            <p>개인 지갑 주소로, 별도의 태그 없이 받을 수 있습니다.</p>
+          </div>
+        </div>
+
+        <div className="m-info-box xrp-info-box">
+          <div className="info-icon">
+            <MIcon.shield />
+          </div>
+          <div className="info-text">
+            <strong>주의사항</strong>
+            <p>XRP Ledger 네트워크의 XRP만 이 주소로 받을 수 있습니다.</p>
+          </div>
         </div>
         {error ? <p className="m-error">{error}</p> : null}
       </div>

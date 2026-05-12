@@ -8,19 +8,20 @@ import {
   type SetCurrentWebUserResult,
 } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
-import { showWalletOwnerDialog } from "@/lib/m/wallet-owner-dialog";
 
 export class WalletOwnerMismatchError extends Error {
   title: string;
   hint: string;
 
   constructor(result?: Partial<SetCurrentWebUserResult>) {
+    const forceOwnerMismatchMessage =
+      result?.walletAccess === "previous_wallet_deleted";
     const title =
-      typeof result?.errorTitle === "string"
+      !forceOwnerMismatchMessage && typeof result?.errorTitle === "string"
         ? result.errorTitle
         : "다른 사용자의 지갑이 있습니다.";
     const hint =
-      typeof result?.errorHint === "string"
+      !forceOwnerMismatchMessage && typeof result?.errorHint === "string"
         ? result.errorHint
         : "해당 사용자로 로그인해 지갑을 삭제한 뒤 다시 시도하세요.";
     super(`${title} ${hint}`);
@@ -74,20 +75,8 @@ export async function bindCurrentWebUser(params: {
 
   if (
     result.ok &&
-    (result.walletAccess === "allowed" ||
-      result.walletAccess === "no_wallet" ||
-      result.walletAccess === "previous_wallet_deleted")
+    (result.walletAccess === "allowed" || result.walletAccess === "no_wallet")
   ) {
-    if (result.walletAccess === "previous_wallet_deleted") {
-      clearWalletUiState();
-      showWalletOwnerDialog({
-        title: "기존 로컬 지갑을 삭제했습니다.",
-        hint:
-          typeof result.errorHint === "string"
-            ? result.errorHint
-            : "현재 계정으로 새 지갑을 생성하거나 기존 지갑을 복구하세요.",
-      });
-    }
     return result;
   }
 
