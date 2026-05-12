@@ -445,7 +445,7 @@ export default function MobileHomePage() {
                   return;
                 }
                 if (!walletXrplActivated) {
-                  router.push("/m/xrp/receive");
+                  setWalletSheetOpen(true);
                   return;
                 }
                 if (didRegistered && !didRegistrationRequired) {
@@ -622,7 +622,13 @@ export default function MobileHomePage() {
         />
       ) : null}
       {walletSheetOpen ? (
-        <WalletActivationSheet onClose={() => setWalletSheetOpen(false)} />
+        <WalletActivationSheet
+          onClose={() => setWalletSheetOpen(false)}
+          onReceive={() => {
+            setWalletSheetOpen(false);
+            router.push("/m/xrp/receive");
+          }}
+        />
       ) : null}
       {toast ? (
         <div className={`m-toast${toastClosing ? " closing" : ""}`}>
@@ -782,15 +788,22 @@ function DidRequiredSheet({
   );
 }
 
-function WalletActivationSheet({ onClose }: { onClose: () => void }) {
+function WalletActivationSheet({
+  onClose,
+  onReceive,
+}: {
+  onClose: () => void;
+  onReceive: () => void;
+}) {
   return (
     <WalletGuideSheet
       title="지갑 활성화 필요"
       description="지갑을 활성화하려면 1 XRP를 예치해야 합니다."
-      linkLabel="자세히 보기"
+      linkLabel="입금 주소 보기"
       primaryLabel="확인"
       onClose={onClose}
       onPrimary={onClose}
+      onLink={onReceive}
       ariaLabel="지갑 활성화 안내 닫기"
       handleLabel="지갑 활성화 안내 시트 이동"
     />
