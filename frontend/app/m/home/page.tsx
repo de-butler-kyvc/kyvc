@@ -662,14 +662,6 @@ function InactiveQrMenu({
         aria-label="QR 메뉴 닫기"
         onClick={onClose}
       />
-      <button
-        type="button"
-        className="inactive-qr-fab-close"
-        aria-label="QR 메뉴 닫기"
-        onClick={onClose}
-      >
-        <MIcon.qr />
-      </button>
       {menuReady ? null : (
         <section className="inactive-qr-notice" aria-live="polite">
           <span className="inactive-qr-notice-icon">

@@ -134,23 +134,15 @@ export function isWalletOwnerMismatch(result: BridgeResult) {
   return (
     result.errorCode === "WALLET_OWNER_MISMATCH" ||
     result.walletAccess === "wallet_owner_mismatch" ||
+    result.walletAccess === "previous_wallet_deleted" ||
     result.shouldLogout === true
   );
-}
-
-export function isPreviousWalletDeleted(result: BridgeResult) {
-  return result.walletAccess === "previous_wallet_deleted";
 }
 
 function dispatchResult(result: BridgeResult) {
   if (typeof window !== "undefined" && isWalletOwnerMismatch(result)) {
     window.dispatchEvent(
       new CustomEvent("kyvc-wallet-owner-mismatch", { detail: result }),
-    );
-  }
-  if (typeof window !== "undefined" && isPreviousWalletDeleted(result)) {
-    window.dispatchEvent(
-      new CustomEvent("kyvc-previous-wallet-deleted", { detail: result }),
     );
   }
 

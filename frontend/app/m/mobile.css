@@ -1586,35 +1586,6 @@ html {
   pointer-events: auto;
 }
 
-.inactive-qr-fab-close {
-  position: fixed;
-  left: 50%;
-  bottom: max(39px, calc(39px + env(safe-area-inset-bottom)));
-  z-index: 55;
-  width: 56px;
-  height: 56px;
-  transform: translateX(-50%);
-  border: 0;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--m-blue), var(--m-violet));
-  box-shadow: 0 10px 24px rgba(79, 124, 255, .44);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  pointer-events: auto;
-}
-
-.inactive-qr-fab-close:active {
-  transform: translateX(-50%) scale(.95);
-  box-shadow: 0 6px 14px rgba(79, 124, 255, .30);
-}
-
-.inactive-qr-fab-close svg {
-  width: 24px;
-  height: 24px;
-}
-
 .inactive-qr-notice,
 .inactive-qr-menu {
   position: fixed;
@@ -3327,7 +3298,8 @@ html {
 }
 
 .xrp-receive-copy {
-  margin-top: 184px;
+  margin-top: 14px;
+  margin-bottom: 18px;
 }
 
 .xrp-info-box {
@@ -3353,9 +3325,9 @@ html {
 }
 
 .xrp-address-card {
-  margin-top: 12px;
-  min-height: 186px;
-  padding: 24px 18px;
+  margin-top: 22px;
+  min-height: 0;
+  padding: 20px 18px;
   border: 1px solid var(--m-line);
   border-radius: 22px;
   background: #fff;
@@ -3363,7 +3335,7 @@ html {
 }
 
 .xrp-address-card h2 {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: #000;
   font-size: 18.8px;
   font-weight: 900;
@@ -3373,7 +3345,7 @@ html {
 .xrp-address-qr {
   width: 172px;
   height: 172px;
-  margin: 0 auto 18px;
+  margin: 0 auto 20px;
   border: 12px solid #fff;
   border-radius: 22px;
   display: grid;
