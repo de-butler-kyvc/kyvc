@@ -1,7 +1,7 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
 import type { KycItem, KycStatus, KycChannel, DashboardStats, SupplementRequest } from "@/types/kyc";
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const KYC_BASE = `${API_BASE}/api/admin/backend/kyc/applications`;
 
 // ── 상태/채널 코드 매핑 ──────────────────────────────────────

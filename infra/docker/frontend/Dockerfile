@@ -36,6 +36,7 @@ RUN set -e; \
 FROM node:20-alpine AS frontend_admin_build
 WORKDIR /workspace
 ARG KYVC_ENV=dev
+ARG FRONTEND_ADMIN_API_BASE_URL
 
 COPY frontend_admin ./frontend_admin
 
@@ -44,7 +45,9 @@ RUN set -e; \
       cd frontend_admin; \
       if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
       echo "Building frontend_admin with KYVC_ENV=${KYVC_ENV:-dev}"; \
-      NEXT_PUBLIC_KYVC_ENV="${KYVC_ENV:-dev}" npm run build; \
+      ADMIN_API_BASE="${FRONTEND_ADMIN_API_BASE_URL:-}"; \
+      if [ -z "$ADMIN_API_BASE" ] && [ "${KYVC_ENV:-dev}" = "dev" ]; then ADMIN_API_BASE="https://dev-admin-api-kyvc.khuoo.synology.me"; fi; \
+      NEXT_PUBLIC_KYVC_ENV="${KYVC_ENV:-dev}" NEXT_PUBLIC_ADMIN_API_BASE_URL="$ADMIN_API_BASE" npm run build; \
       if [ -d out ]; then \
         echo "frontend_admin build output found: out"; \
         cp -a out /workspace/frontend-admin-build; \

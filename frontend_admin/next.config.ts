@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
-const BACK_ADMIN_API = process.env.BACK_ADMIN_API_URL ?? "https://dev-admin-api-kyvc.khuoo.synology.me";
+const BACK_ADMIN_API =
+  process.env.BACK_ADMIN_API_URL ??
+  process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ??
+  "https://dev-admin-api-kyvc.khuoo.synology.me";
 
 const baseConfig: NextConfig = {
   trailingSlash: true,

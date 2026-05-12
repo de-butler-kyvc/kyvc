@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const VP_BASE = `${API_BASE}/api/admin/backend/vp-verifications`;
 
 // ── 타입 ──────────────────────────────────────────────────────
