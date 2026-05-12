@@ -4,8 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Checkbox, Logo, SignupStepper } from "@/components/design/primitives";
+import { ApiError, auth } from "@/lib/api";
 import { SessionGateSplash, useGuestSessionGate } from "@/lib/session-gate";
-import { readSignupDraft, writeSignupDraft } from "@/lib/signup-flow";
+import {
+  isValidSignupEmailChallenge,
+  loadSignupEmailChallenge,
+  readSignupDraft,
+  saveSignupEmailChallenge,
+  writeSignupDraft
+} from "@/lib/signup-flow";
 
 type TermKey = "terms" | "privacy" | "third" | "storage" | "marketing";
 
@@ -201,6 +208,8 @@ export default function SignupTermsPage() {
   const checking = useGuestSessionGate();
   const [checked, setChecked] = useState<CheckedMap>(ZERO);
   const [activeTerm, setActiveTerm] = useState<TermKey | null>(null);
+  const [isRequestingCode, setIsRequestingCode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const draft = readSignupDraft();
@@ -227,13 +236,42 @@ export default function SignupTermsPage() {
     });
   };
 
-  const onNext = () => {
-    if (!allRequired) return;
+  const onNext = async () => {
+    if (!allRequired || isRequestingCode) return;
+    const draft = readSignupDraft();
+    if (!draft.entityTypeId) {
+      router.replace("/signup");
+      return;
+    }
+    if (!draft.email) {
+      router.replace("/signup/info");
+      return;
+    }
     writeSignupDraft({
       termsAcceptedAt: new Date().toISOString(),
       marketingAccepted: checked.marketing
     });
-    router.push("/signup/email-verify");
+    const storedChallenge = loadSignupEmailChallenge();
+    if (isValidSignupEmailChallenge(storedChallenge, draft.email)) {
+      router.push("/signup/email-verify");
+      return;
+    }
+    setError(null);
+    setIsRequestingCode(true);
+    try {
+      const challenge = await auth.requestSignupEmailVerification(draft.email);
+      saveSignupEmailChallenge({
+        verificationId: challenge.verificationId,
+        email: draft.email,
+        maskedEmail: challenge.maskedEmail,
+        expiresAt: challenge.expiresAt
+      });
+      router.push("/signup/email-verify");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "이메일 인증번호 요청에 실패했습니다.");
+    } finally {
+      setIsRequestingCode(false);
+    }
   };
 
   return (
@@ -256,7 +294,7 @@ export default function SignupTermsPage() {
           <p className="auth-subtitle">서비스 이용을 위해 아래 약관에 동의해 주세요.</p>
 
           <div className="terms-all-row" style={{ cursor: "pointer" }} onClick={toggleAll}>
-            <Checkbox checked={allChecked} onChange={toggleAll}>
+            <Checkbox checked={allChecked} onChange={() => undefined}>
               <span style={{ fontWeight: 600, fontSize: 14 }}>전체 동의</span>
             </Checkbox>
           </div>
@@ -286,10 +324,15 @@ export default function SignupTermsPage() {
             className="btn btn-primary btn-block btn-lg"
             style={{ marginTop: 20 }}
             onClick={onNext}
-            disabled={!allRequired}
+            disabled={!allRequired || isRequestingCode}
           >
             다음 — 이메일 인증
           </button>
+          {error && (
+            <div className="field-error" style={{ fontSize: 13, marginTop: 12 }}>
+              {error}
+            </div>
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-block"
