@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import "./mobile.css";
 import MobileBodyMarker from "./mobile-body-marker";
+import WalletOwnerGate from "./wallet-owner-gate";
 
 export const metadata: Metadata = {
   title: "KYvC Wallet",
@@ -24,7 +25,9 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
     <>
       <script dangerouslySetInnerHTML={{ __html: BODY_MARK_SCRIPT }} />
       <MobileBodyMarker />
-      <div className="m-shell">{children}</div>
+      <WalletOwnerGate>
+        <div className="m-shell">{children}</div>
+      </WalletOwnerGate>
     </>
   );
 }

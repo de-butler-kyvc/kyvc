@@ -49,6 +49,7 @@ export const NETWORK = "testnet";
 // 대부분 camelCase → SNAKE_CASE로 자동 변환되지만
 // 일부 비대칭 매핑은 명시 오버라이드.
 const METHOD_TO_ACTION_OVERRIDE: Record<string, string> = {
+  setCurrentWebUser: "SET_CURRENT_WEB_USER",
   requestIssuerCredential: "ISSUER_CREDENTIAL_RECEIVED",
   submitPresentationToVerifier: "SUBMIT_TO_VERIFIER",
   refreshAllCredentialStatuses: "REFRESH_CREDENTIAL_STATUSES",
@@ -129,7 +130,21 @@ function shouldResolvePending(pending: Pending, result: BridgeResult) {
   return pending.shouldResolve ? pending.shouldResolve(result) : true;
 }
 
+export function isWalletOwnerMismatch(result: BridgeResult) {
+  return (
+    result.errorCode === "WALLET_OWNER_MISMATCH" ||
+    result.walletAccess === "wallet_owner_mismatch" ||
+    result.shouldLogout === true
+  );
+}
+
 function dispatchResult(result: BridgeResult) {
+  if (typeof window !== "undefined" && isWalletOwnerMismatch(result)) {
+    window.dispatchEvent(
+      new CustomEvent("kyvc-wallet-owner-mismatch", { detail: result }),
+    );
+  }
+
   const reqId =
     typeof result.requestId === "string" ? result.requestId : undefined;
 
@@ -340,6 +355,21 @@ export type AuthStatus = BridgeResult & {
   xrpPaymentAuthRemainingMs?: number;
 };
 
+export type WalletAccess =
+  | "allowed"
+  | "no_wallet"
+  | "binding_required"
+  | "wallet_owner_mismatch"
+  | string;
+
+export type SetCurrentWebUserResult = BridgeResult & {
+  walletAccess?: WalletAccess;
+  errorCode?: string;
+  errorTitle?: string;
+  errorHint?: string;
+  shouldLogout?: boolean;
+};
+
 export type WalletInfo = BridgeResult & {
   account?: string;
   holderAccount?: string;
@@ -540,6 +570,18 @@ function toIssueQrScanResult(result: BridgeResult): IssueQrScanResult {
 
 export const bridge = {
   // 인증/세션
+  setCurrentWebUser: (params: {
+    userId: string | number;
+    displayHint?: string;
+    bindIfUnbound?: boolean;
+  }) =>
+    callBridge<SetCurrentWebUserResult>("setCurrentWebUser", {
+      action: "SET_CURRENT_WEB_USER",
+      userId: String(params.userId),
+      displayHint: params.displayHint,
+      environment: NETWORK,
+      bindIfUnbound: params.bindIfUnbound ?? false,
+    }),
   getAuthStatus: () => callBridge<AuthStatus>("getAuthStatus", {}),
   requestNativeAuth: (
     method: "pin" | "pattern" | "biometric",
@@ -635,6 +677,10 @@ export const bridge = {
       issuedAt: new Date().toISOString(),
       overwrite: params?.overwrite ?? true,
       autoRegisterDidSet: params?.autoRegisterDidSet ?? true,
+    }),
+  deleteLocalWalletData: () =>
+    callBridge("deleteLocalWalletData", {
+      action: "DELETE_LOCAL_WALLET_DATA",
     }),
   submitHolderDidSet: (didDocumentUri?: string) =>
     callBridge("submitHolderDidSet", {
