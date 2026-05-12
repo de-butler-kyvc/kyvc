@@ -65,9 +65,7 @@ export default function MobileHomePage() {
   const [certs, setCerts] = useState<CertItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
-  const [walletAssets, setWalletAssets] = useState<WalletAssetsResult | null>(
-    () => mSession.readWalletAssets()?.assets ?? null,
-  );
+  const [walletAssets, setWalletAssets] = useState<WalletAssetsResult | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
   const [didSheetOpen, setDidSheetOpen] = useState(false);
@@ -201,6 +199,7 @@ export default function MobileHomePage() {
           setWalletAssets(state.assets);
           mSession.writeWalletAssets({ assets: state.assets, cachedAt: Date.now() });
         }
+        void refreshWalletAssets();
         if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
         setApiError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
@@ -222,13 +221,20 @@ export default function MobileHomePage() {
 
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
+    void refreshWalletAssets();
+    const warmupTimers = [800, 1800, 3200, 5000].map((delay) =>
+      window.setTimeout(() => {
+        if (document.visibilityState === "visible") void refreshWalletAssets();
+      }, delay),
+    );
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void refreshWalletAssets();
-    }, 15000);
+    }, 5000);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
+      warmupTimers.forEach((id) => window.clearTimeout(id));
       window.clearInterval(timer);
     };
   }, [refreshWalletAssets]);
@@ -438,9 +444,8 @@ export default function MobileHomePage() {
       : didRegistered && registeredDid
         ? shortDid(registeredDid)
         : "DID 등록하기";
-  const balanceXrp = walletExists
-    ? formatXrp(readXrpBalance(testWalletAssets))
-    : "0 XRP";
+  const balanceValue = walletExists && testWalletAssets ? readXrpBalance(testWalletAssets) : null;
+  const balanceXrp = balanceValue == null ? null : formatXrp(balanceValue);
 
   return (
     <section className="view wash home-view">
@@ -470,7 +475,7 @@ export default function MobileHomePage() {
 
         <div className="home-figma-stage">
           <section className="wallet-hero xrp-home-hero">
-            <h1>{balanceXrp}</h1>
+            {balanceXrp ? <h1>{balanceXrp}</h1> : null}
             <button
               type="button"
               className={`wallet-did-copy${
