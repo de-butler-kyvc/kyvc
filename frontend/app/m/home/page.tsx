@@ -323,9 +323,7 @@ export default function MobileHomePage() {
       ? "DID 등록하기"
       : "지갑 활성화 필요";
   const balanceXrp = walletActivated
-    ? depositRequired
-      ? "입금 필요"
-      : formatXrp(readXrpBalance(testWalletAssets))
+    ? formatXrp(readXrpBalance(testWalletAssets))
     : "0 XRP";
 
   return (
