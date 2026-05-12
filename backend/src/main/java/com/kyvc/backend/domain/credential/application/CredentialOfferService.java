@@ -300,6 +300,7 @@ public class CredentialOfferService {
                     userId,
                     normalizeRequiredText(request.holderDid()),
                     normalizeRequiredText(request.holderXrplAddress()),
+                    resolveHolderKeyId(request),
                     claims,
                     issuer
             );
@@ -499,6 +500,18 @@ public class CredentialOfferService {
                 || !Boolean.TRUE.equals(request.accepted())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    private String resolveHolderKeyId(
+            WalletCredentialPrepareRequest request // 준비 요청
+    ) {
+        if (StringUtils.hasText(request.holderKeyId())) {
+            return request.holderKeyId().trim();
+        }
+        if (StringUtils.hasText(request.holderDid())) {
+            return request.holderDid().trim() + "#holder-key-1";
+        }
+        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 Holder 키 식별자가 없습니다.");
     }
 
     private void validateConfirmRequest(

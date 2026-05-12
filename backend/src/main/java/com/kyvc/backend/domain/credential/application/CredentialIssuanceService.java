@@ -83,10 +83,11 @@ public class CredentialIssuanceService {
             Long requestedByUserId, // 요청 사용자 ID
             String holderDid, // Holder DID
             String holderXrplAddress, // Holder XRPL 주소
+            String holderKeyId, // Holder 키 ID
             Map<String, Object> claims, // VC claims
             ResolvedIssuer issuer // 발급 Issuer
     ) {
-        validateHolderIssuanceInput(kycApplication, holderDid, holderXrplAddress, claims, issuer);
+        validateHolderIssuanceInput(kycApplication, holderDid, holderXrplAddress, holderKeyId, claims, issuer);
         Credential credential = createIssuingCredentialForHolder(
                 kycApplication,
                 requestedByUserId,
@@ -100,7 +101,8 @@ public class CredentialIssuanceService {
                 KyvcEnums.ActorType.USER,
                 requestedByUserId,
                 claims,
-                issuer
+                issuer,
+                holderKeyId
         );
     }
 
@@ -211,6 +213,18 @@ public class CredentialIssuanceService {
             Map<String, Object> claims, // VC claims
             ResolvedIssuer issuer // 발급 Issuer
     ) {
+        return requestVcIssuance(kycApplication, credential, actorType, actorId, claims, issuer, null);
+    }
+
+    private Credential requestVcIssuance(
+            KycApplication kycApplication, // KYC 신청
+            Credential credential, // 발급 대상 Credential
+            KyvcEnums.ActorType actorType, // 요청자 유형
+            Long actorId, // 요청자 ID
+            Map<String, Object> claims, // VC claims
+            ResolvedIssuer issuer, // 발급 Issuer
+            String holderKeyId // Holder 키 ID
+    ) {
         CredentialRequest credentialRequest = credentialRequestRepository.save(CredentialRequest.create(
                 credential.getCredentialId(),
                 KyvcEnums.CredentialRequestType.ISSUE,
@@ -227,7 +241,8 @@ public class CredentialIssuanceService {
                 credential,
                 coreRequest.getCoreRequestId(),
                 claims,
-                issuer
+                issuer,
+                holderKeyId
         );
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(request));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
@@ -358,7 +373,8 @@ public class CredentialIssuanceService {
             Credential credential, // 발급 대상 Credential
             String coreRequestId, // Core 요청 ID
             Map<String, Object> claims, // VC claims
-            ResolvedIssuer issuer // 발급 Issuer
+            ResolvedIssuer issuer, // 발급 Issuer
+            String holderKeyId // Holder 키 ID
     ) {
         IssuanceSeed seed = issuer == null
                 ? resolveIssuanceSeed(credential)
@@ -398,7 +414,7 @@ public class CredentialIssuanceService {
                 CORE_STATUS_MODE_XRPL,
                 CORE_CREDENTIAL_FORMAT_JWT,
                 CORE_VC_FORMAT_JWT,
-                issuer == null && coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
+                resolveHolderKeyId(holderKeyId, credential, issuer),
                 credentialType,
                 validFrom
         );
@@ -469,6 +485,7 @@ public class CredentialIssuanceService {
             KycApplication kycApplication, // KYC 신청
             String holderDid, // Holder DID
             String holderXrplAddress, // Holder XRPL 주소
+            String holderKeyId, // Holder 키 ID
             Map<String, Object> claims, // VC claims
             ResolvedIssuer issuer // 발급 Issuer
     ) {
@@ -480,6 +497,7 @@ public class CredentialIssuanceService {
         }
         if (!StringUtils.hasText(holderDid)
                 || !StringUtils.hasText(holderXrplAddress)
+                || !StringUtils.hasText(holderKeyId)
                 || claims == null
                 || claims.isEmpty()
                 || issuer == null
@@ -489,6 +507,23 @@ public class CredentialIssuanceService {
                 || !StringUtils.hasText(issuer.credentialType())) {
             throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
         }
+    }
+
+    private String resolveHolderKeyId(
+            String holderKeyId, // Holder 키 ID
+            Credential credential, // 발급 대상 Credential
+            ResolvedIssuer issuer // 발급 Issuer
+    ) {
+        if (StringUtils.hasText(holderKeyId)) {
+            return holderKeyId.trim();
+        }
+        if (credential != null && StringUtils.hasText(credential.getHolderDid())) {
+            return credential.getHolderDid().trim() + "#holder-key-1";
+        }
+        if (issuer == null && coreProperties.isDevSeedEnabled()) {
+            return CoreMockSeedData.DEV_HOLDER_KEY_ID;
+        }
+        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 Holder 키 식별자가 없습니다.");
     }
 
     private KyvcEnums.CredentialStatus resolveCredentialStatus(
