@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\school\\\\front\\\\kyvc\\\\frontend_core_admin\" -Directory | Where-Object { $_.Name -eq \"components\" })",
+      "Bash(Get-ChildItem -Path \"c:\\\\school\\\\front\\\\kyvc\\\\frontend_core_admin\\\\app\\\\\\(admin\\)\" -Recurse -Filter \"page.tsx\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(find \"c:\\\\\\\\school\\\\\\\\front\\\\\\\\kyvc\\\\\\\\frontend_core_admin\\\\\\\\app\\\\\\\\\\(admin\\)\" -name \"page.tsx\" -type f)",
+      "Bash(xargs sed -i '/^\\\\s*pageId=\"CADM-[0-9]*\"\\\\s*$/d')",
+      "Bash(xargs sed -i 's/ pageId=\"CADM-[0-9]*\"//g')",
+      "Bash(xargs sed -i 's/ · Form//g; s/ · Table//g')",
+      "Bash(sed -i '/<p className=\"text-xs text-slate-400\">CADM-001<\\\\/p>/d' \"app/\\(admin\\)/dashboard/page.tsx\")",
+      "Bash(cat)",
+      "Bash(python3 /tmp/remove_module.py)",
+      "Bash(mkdir -p \"c:/school/front/kyvc/frontend_core_admin/app/\\(admin\\)/version/[module]\" && echo \"done\")",
+      "Bash(mkdir -p \"c:/school/front/kyvc/frontend_core_admin/app/\\(admin\\)/ai/settings/prompts/[id]/[version]\")",
+      "Bash(mkdir -p \"c:/school/front/kyvc/frontend_core_admin/app/\\(admin\\)/schema/[id]\")",
+      "Bash(npx tsc *)",
+      "WebFetch(domain:dev-admin-api-kyvc.khuoo.synology.me)",
+      "WebFetch(domain:dev-admin-core-kyvc.khuoo.synology.me)"
+    ],
+    "additionalDirectories": [
+      "c:\\school\\front\\kyvc\\frontend_core_admin\\app\\(admin)\\version"
+    ]
+  }
+}
