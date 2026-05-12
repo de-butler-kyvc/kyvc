@@ -93,6 +93,7 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String CORE_LEGAL_ENTITY_INCORPORATED_ASSOCIATION = "INCORPORATED_ASSOCIATION";
     private static final String CORE_LEGAL_ENTITY_COOPERATIVE = "COOPERATIVE";
     private static final String CORE_LEGAL_ENTITY_FOREIGN_COMPANY = "FOREIGN_COMPANY";
+    private static final String CREDENTIAL_STATUS_ID_TYPE = "credential";
     private static final String CORE_APPLICANT_ROLE_REPRESENTATIVE = "REPRESENTATIVE";
     private static final String CORE_APPLICANT_ROLE_DELEGATE = "DELEGATE";
     private static final String CORE_ASSESSMENT_NORMAL = "NORMAL";
@@ -1215,7 +1216,14 @@ public class CoreHttpAdapter implements CoreAdapter {
         String credentialExternalId = StringUtils.hasText(body.credentialId())
                 ? body.credentialId()
                 : extractString(status, "credential_id", "credentialId", "jti");
+        ParsedCredentialStatusId parsedStatusId = parseCredentialStatusId(credentialStatusId);
         String issuerDid = extractString(status, "issuer_did", "issuerDid");
+        String actualIssuerDid = parsedStatusId == null
+                ? issuerDid
+                : "did:xrpl:1:" + parsedStatusId.issuerAccount();
+        String actualCredentialType = parsedStatusId == null
+                ? body.credentialType()
+                : parsedStatusId.credentialType();
         String vcHash = StringUtils.hasText(body.vcCoreHash()) ? body.vcCoreHash() : extractString(status, "vc_hash", "vcHash");
         String xrplTxHash = extractString(tx, "hash", "tx_hash", "transaction_hash");
         LocalDateTime issuedAt = parseDateTime(extractString(status, "issued_at", "issuedAt", "created_at"));
@@ -1236,8 +1244,8 @@ public class CoreHttpAdapter implements CoreAdapter {
                 "Core VC 발급 API 호출 성공",
                 LocalDateTime.now(),
                 credentialExternalId,
-                body.credentialType(),
-                StringUtils.hasText(issuerDid) ? issuerDid : request.issuerDid(),
+                actualCredentialType,
+                StringUtils.hasText(actualIssuerDid) ? actualIssuerDid : request.issuerDid(),
                 format,
                 credentialPayloadJson,
                 credentialJwt,
@@ -1247,6 +1255,47 @@ public class CoreHttpAdapter implements CoreAdapter {
                 issuedAt,
                 expiresAt
         );
+    }
+
+    private ParsedCredentialStatusId parseCredentialStatusId(
+            String credentialStatusId // Credential 상태 ID
+    ) {
+        if (!StringUtils.hasText(credentialStatusId)) {
+            return null;
+        }
+
+        String[] parts = credentialStatusId.trim().split(":");
+        if (parts.length < 5
+                || !DEFAULT_STATUS_MODE.equalsIgnoreCase(parts[0])
+                || !CREDENTIAL_STATUS_ID_TYPE.equalsIgnoreCase(parts[1])) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core Credential Status ID 형식이 올바르지 않습니다.");
+        }
+
+        String issuerAccount = parts[2].trim(); // Issuer XRPL 계정
+        String holderAccount = parts[3].trim(); // Holder XRPL 계정
+        String credentialType = String.join(":", java.util.Arrays.copyOfRange(parts, 4, parts.length)).trim(); // Credential 유형
+        if (!isXrplClassicAddress(issuerAccount)
+                || !isXrplClassicAddress(holderAccount)
+                || !StringUtils.hasText(credentialType)) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core Credential Status ID 데이터가 올바르지 않습니다.");
+        }
+        return new ParsedCredentialStatusId(issuerAccount, holderAccount, credentialType);
+    }
+
+    private boolean isXrplClassicAddress(
+            String value // XRPL classic 주소
+    ) {
+        return StringUtils.hasText(value)
+                && value.startsWith("r")
+                && value.length() >= 25
+                && value.length() <= 35;
+    }
+
+    private record ParsedCredentialStatusId(
+            String issuerAccount, // Issuer XRPL 계정
+            String holderAccount, // Holder XRPL 계정
+            String credentialType // Credential 유형
+    ) {
     }
 
     private String serializeCredentialPayload(
