@@ -108,6 +108,7 @@ type Pending = {
   reject: (err: Error) => void;
   expectedAction: string;
   expectedActions: string[];
+  shouldResolve?: (r: BridgeResult) => boolean;
   timeout: ReturnType<typeof setTimeout>;
 };
 
@@ -124,6 +125,10 @@ function removePendingFromActions(pending: Pending) {
   });
 }
 
+function shouldResolvePending(pending: Pending, result: BridgeResult) {
+  return pending.shouldResolve ? pending.shouldResolve(result) : true;
+}
+
 function dispatchResult(result: BridgeResult) {
   const reqId =
     typeof result.requestId === "string" ? result.requestId : undefined;
@@ -131,26 +136,31 @@ function dispatchResult(result: BridgeResult) {
   // 1) requestId 매칭 우선
   if (reqId && pendingByRequestId.has(reqId)) {
     const p = pendingByRequestId.get(reqId)!;
-    pendingByRequestId.delete(reqId);
-    clearTimeout(p.timeout);
-    removePendingFromActions(p);
-    p.resolve(result);
+    if (shouldResolvePending(p, result)) {
+      pendingByRequestId.delete(reqId);
+      clearTimeout(p.timeout);
+      removePendingFromActions(p);
+      p.resolve(result);
+    }
   } else if (typeof result.action === "string") {
     // 2) action FIFO 매칭
     const queue = pendingByAction.get(result.action);
     if (queue && queue.length) {
-      const p = queue.shift()!;
-      clearTimeout(p.timeout);
-      removePendingFromActions(p);
-      // requestId 등록도 정리
-      for (const [rid, item] of pendingByRequestId.entries()) {
-        if (item === p) {
-          pendingByRequestId.delete(rid);
-          break;
+      const idx = queue.findIndex((item) => shouldResolvePending(item, result));
+      if (idx >= 0) {
+        const p = queue.splice(idx, 1)[0]!;
+        clearTimeout(p.timeout);
+        removePendingFromActions(p);
+        // requestId 등록도 정리
+        for (const [rid, item] of pendingByRequestId.entries()) {
+          if (item === p) {
+            pendingByRequestId.delete(rid);
+            break;
+          }
         }
+        if (queue.length === 0) pendingByAction.delete(result.action);
+        p.resolve(result);
       }
-      if (queue.length === 0) pendingByAction.delete(result.action);
-      p.resolve(result);
     }
   }
 
@@ -240,6 +250,7 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
   options: {
     expectedAction?: string;
     expectedActions?: string[];
+    shouldResolve?: (result: BridgeResult) => boolean;
     timeoutMs?: number;
   } = {},
 ): Promise<T> {
@@ -287,6 +298,7 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
       reject,
       expectedAction,
       expectedActions,
+      shouldResolve: options.shouldResolve,
       timeout,
     };
 
@@ -446,31 +458,54 @@ export type IssueQrScanResult = {
   actionType?: string;
   qrData?: string;
   endpoint?: string;
+  expiresAt?: string;
   error?: string;
 };
 
-const ISSUE_QR_ACTIONS = new Set(["SCAN_ISSUE_QR_CODE", "SCAN_QR_CODE"]);
+const ISSUE_QR_ACTIONS = new Set(["SCAN_ISSUE_QR_CODE"]);
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function extractQrData(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") return undefined;
+
+  const record = result as Record<string, unknown>;
+  const qrData = optionalString(record.qrData);
+  if (qrData && qrData.length > 0) return qrData;
+
+  const rawPayload = optionalString(record.rawPayload);
+  if (rawPayload && rawPayload.length > 0) return rawPayload;
+
+  return undefined;
+}
+
+function shouldResolveIssueQrResult(result: BridgeResult): boolean {
+  const action = optionalString(result.action);
+  if (!action || !ISSUE_QR_ACTIONS.has(action)) return false;
+  if (result.ok === false) return true;
+  return result.ok === true && Boolean(extractQrData(result));
+}
+
 function toIssueQrScanResult(result: BridgeResult): IssueQrScanResult {
   const action = optionalString(result.action);
-  const qrData = optionalString(result.qrData);
-  const hasAllowedAction = !action || ISSUE_QR_ACTIONS.has(action);
-  const hasQrData = typeof qrData === "string" && qrData.length > 0;
+  const qrData = extractQrData(result);
+  const hasAllowedAction = Boolean(action && ISSUE_QR_ACTIONS.has(action));
 
   return {
-    ok: result.ok === true && hasAllowedAction && hasQrData,
+    ok: result.ok === true && hasAllowedAction && Boolean(qrData),
     action,
     source: optionalString(result.source),
     requestId: optionalString(result.requestId),
     mode: optionalString(result.mode),
     actionType: optionalString(result.actionType) ?? "VC_ISSUE",
-    qrData: hasQrData ? qrData : undefined,
+    qrData,
     endpoint: optionalString(result.endpoint),
-    error: optionalString(result.error),
+    expiresAt: optionalString(result.expiresAt),
+    error:
+      optionalString(result.error) ??
+      (result.ok === false ? "QR 스캔에 실패했습니다." : undefined),
   };
 }
 
@@ -746,12 +781,17 @@ export const bridge = {
       requestId: newRequestId(),
     }),
   scanIssueQrCode: async (): Promise<IssueQrScanResult> => {
-    const result = await callBridge("scanIssueQrCode", {
-      requestId: newRequestId(),
-    }, {
-      expectedAction: "SCAN_ISSUE_QR_CODE",
-      expectedActions: Array.from(ISSUE_QR_ACTIONS),
-    });
+    const result = await callBridge(
+      "scanIssueQrCode",
+      {
+        requestId: newRequestId(),
+      },
+      {
+        expectedAction: "SCAN_ISSUE_QR_CODE",
+        expectedActions: Array.from(ISSUE_QR_ACTIONS),
+        shouldResolve: shouldResolveIssueQrResult,
+      },
+    );
     return toIssueQrScanResult(result);
   },
   scanPresentationQrCode: () =>
