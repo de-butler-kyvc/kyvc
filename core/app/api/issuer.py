@@ -22,6 +22,7 @@ from app.status.sdjwt_status import credential_type_hex_for_sdjwt
 from app.xrpl.client import enforce_mainnet_policy, make_client
 from app.xrpl.ledger import (
     datetime_to_ripple_epoch,
+    get_account_info as get_xrpl_account_info,
     get_credential_entry as get_xrpl_credential_entry,
     get_did_entry,
     submit_credential_create,
@@ -259,6 +260,14 @@ def issue_kyc_credential(payload: IssueKycCredentialRequest, request: Request) -
     ledger_entry = None
     if payload.status_mode == "xrpl":
         assert client is not None and issuer_wallet is not None
+        if get_xrpl_account_info(client, payload.holder_account) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "holder_account was not found on the configured XRPL network. "
+                    "Fund or create the holder account before issuing XRPL-backed credentials."
+                ),
+            )
         create_tx = submit_credential_create(
             client,
             issuer_wallet,
