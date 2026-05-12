@@ -229,7 +229,7 @@ export default function MobileHomePage() {
     }
     try {
       const r = await bridge.scanIssueQrCode();
-      if (!r.ok) {
+      if (!r.ok || !r.qrData) {
         showToast(r.error ?? "증명서 발급 QR 스캔에 실패했습니다.");
         return;
       }
@@ -240,6 +240,11 @@ export default function MobileHomePage() {
         requestId: r.requestId,
         receivedAt: Date.now(),
       });
+      const saved = mSession.readScanResult();
+      if (!saved?.qrData) {
+        showToast("QR 정보를 저장하지 못했습니다. 다시 스캔해주세요.");
+        return;
+      }
       router.push("/m/vc/issue");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "증명서 발급 QR 스캔에 실패했습니다.");
@@ -253,7 +258,7 @@ export default function MobileHomePage() {
     }
     try {
       const r = await bridge.scanPresentationQrCode();
-      if (!r.ok) {
+      if (!r.ok || !r.qrData) {
         showToast(r.error ?? "증명서 제출 QR 스캔에 실패했습니다.");
         return;
       }
