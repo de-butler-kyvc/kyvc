@@ -48,6 +48,7 @@ class Settings(BaseModel):
     azure_document_intelligence_key: str | None = Field(default=None)
     azure_document_intelligence_model_id: str = Field(default="prebuilt-layout")
     azure_document_intelligence_api_version: str | None = Field(default=None)
+    azure_document_intelligence_poll_interval_seconds: float = Field(default=2.0)
     openai_api_key: str | None = Field(default=None)
     openai_model: str | None = Field(default=None)
     openai_base_url: str = Field(default="https://api.openai.com/v1")
@@ -110,6 +111,9 @@ def get_settings() -> Settings:
         azure_document_intelligence_key=os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY"),
         azure_document_intelligence_model_id=os.getenv("AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID", "prebuilt-layout"),
         azure_document_intelligence_api_version=os.getenv("AZURE_DOCUMENT_INTELLIGENCE_API_VERSION"),
+        azure_document_intelligence_poll_interval_seconds=float(
+            os.getenv("AZURE_DOCUMENT_INTELLIGENCE_POLL_INTERVAL_SECONDS", "2")
+        ),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         openai_model=os.getenv("OPENAI_MODEL"),
         openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),

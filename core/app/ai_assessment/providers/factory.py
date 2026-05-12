@@ -49,6 +49,7 @@ def build_ocr_text_provider(settings: Settings, repository=None) -> OcrTextProvi
             key=settings.azure_document_intelligence_key,
             model_id=settings.azure_document_intelligence_model_id,
             api_version=settings.azure_document_intelligence_api_version,
+            poll_interval_seconds=settings.azure_document_intelligence_poll_interval_seconds,
             timeout=outbound_timeout("ocr", settings),
         )
     if provider in {"naver_clova_ocr", "naver_clova"}:

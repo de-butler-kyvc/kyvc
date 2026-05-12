@@ -251,6 +251,54 @@ def test_azure_document_intelligence_ocr_text_provider_parses_content(tmp_path, 
     assert "123-45-67890" in text
 
 
+def test_azure_document_intelligence_ocr_text_provider_respects_retry_after_headers(tmp_path, monkeypatch):
+    scanned = tmp_path / "scan.pdf"
+    scanned.write_bytes(b"pdf")
+    sleeps: list[float] = []
+    responses = [
+        httpx.Response(
+            200,
+            headers={"Retry-After": "3"},
+            json={"status": "running"},
+            request=httpx.Request("GET", "https://azure.example/operations/1"),
+        ),
+        httpx.Response(
+            200,
+            json={
+                "status": "succeeded",
+                "analyzeResult": {"content": "done"},
+            },
+            request=httpx.Request("GET", "https://azure.example/operations/1"),
+        ),
+    ]
+
+    def fake_post(*args, **kwargs):
+        return httpx.Response(
+            202,
+            headers={
+                "operation-location": "https://azure.example/operations/1",
+                "Retry-After": "4",
+            },
+            request=httpx.Request("POST", str(args[0])),
+        )
+
+    def fake_get(*args, **kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr("app.ai_assessment.providers.ocr.httpx.post", fake_post)
+    monkeypatch.setattr("app.ai_assessment.providers.ocr.httpx.get", fake_get)
+    monkeypatch.setattr("app.ai_assessment.providers.ocr.time.sleep", sleeps.append)
+
+    text = AzureDocumentIntelligenceOcrTextProvider(
+        endpoint="https://azure.example",
+        key="secret",
+        poll_interval_seconds=1,
+    ).extract_text(_document("business", DocumentType.BUSINESS_REGISTRATION, scanned))
+
+    assert text == "done"
+    assert sleeps == [4.0, 3.0]
+
+
 def test_naver_clova_ocr_text_provider_parses_fields(tmp_path, monkeypatch):
     scanned = tmp_path / "scan.jpg"
     scanned.write_bytes(b"jpg")
@@ -294,6 +342,7 @@ def test_provider_factory_builds_openai_with_ocr_provider():
         ocr_provider="azure_document_intelligence",
         azure_document_intelligence_endpoint="https://azure.example",
         azure_document_intelligence_key="azure-secret",
+        azure_document_intelligence_poll_interval_seconds=5.0,
     )
 
     provider = build_document_extraction_provider(settings)
@@ -302,6 +351,8 @@ def test_provider_factory_builds_openai_with_ocr_provider():
     assert isinstance(provider, OpenAiDocumentExtractionProvider)
     assert isinstance(provider.ocr_provider, AzureDocumentIntelligenceOcrTextProvider)
     assert isinstance(ocr_provider, AzureDocumentIntelligenceOcrTextProvider)
+    assert provider.ocr_provider.poll_interval_seconds == 5.0
+    assert ocr_provider.poll_interval_seconds == 5.0
 
 
 @pytest.mark.integration

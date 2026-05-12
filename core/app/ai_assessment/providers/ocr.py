@@ -29,7 +29,7 @@ class AzureDocumentIntelligenceOcrTextProvider:
         model_id: str = "prebuilt-layout",
         api_version: str | None = None,
         timeout: float = 120.0,
-        poll_interval_seconds: float = 1.0,
+        poll_interval_seconds: float = 2.0,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.key = key
@@ -59,15 +59,18 @@ class AzureDocumentIntelligenceOcrTextProvider:
         response = execute_outbound("ocr", "azure_document_intelligence_analyze", analyze)
         operation_location = response.headers.get("operation-location") or response.headers.get("Operation-Location")
         if operation_location:
-            result = self._poll(operation_location)
+            result = self._poll(operation_location, initial_delay_seconds=_retry_after_seconds(response.headers))
         else:
             result = response.json()
         return _azure_text(result)
 
-    def _poll(self, operation_location: str) -> dict:
+    def _poll(self, operation_location: str, *, initial_delay_seconds: float | None = None) -> dict:
         deadline = time.monotonic() + self.timeout
         last_payload = {}
+        next_delay_seconds = initial_delay_seconds
         while time.monotonic() < deadline:
+            if next_delay_seconds and next_delay_seconds > 0:
+                time.sleep(next_delay_seconds)
 
             def poll() -> httpx.Response:
                 response = httpx.get(
@@ -86,7 +89,7 @@ class AzureDocumentIntelligenceOcrTextProvider:
                 return payload.get("analyzeResult") or payload
             if status in {"failed", "canceled", "cancelled"}:
                 raise RuntimeError(f"Azure Document Intelligence analyze failed: {payload}")
-            time.sleep(self.poll_interval_seconds)
+            next_delay_seconds = _retry_after_seconds(response.headers) or self.poll_interval_seconds
         raise TimeoutError(f"Azure Document Intelligence analyze timed out: {last_payload}")
 
 
@@ -180,3 +183,13 @@ def _clova_text(payload: dict) -> str:
         if current_line:
             lines.append(" ".join(current_line))
     return "\n".join(lines)
+
+
+def _retry_after_seconds(headers: httpx.Headers) -> float | None:
+    value = headers.get("retry-after") or headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value.strip()))
+    except (TypeError, ValueError):
+        return None
