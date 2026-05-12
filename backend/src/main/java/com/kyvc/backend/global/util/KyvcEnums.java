@@ -116,6 +116,15 @@ public final class KyvcEnums {
         FAILED // 발급 실패
     }
 
+    // Credential Offer 상태
+    public enum CredentialOfferStatus {
+        ACTIVE, // 활성
+        USED, // 사용 완료
+        EXPIRED, // 만료
+        CANCELLED, // 취소
+        FAILED // 실패
+    }
+
     // Credential 요청 유형
     public enum CredentialRequestType {
         ISSUE, // 발급
@@ -311,6 +320,7 @@ public final class KyvcEnums {
         KYC_DOCUMENT, // KYC 문서
         KYC_SUPPLEMENT, // KYC 보완
         CREDENTIAL, // Credential
+        CREDENTIAL_OFFER, // Credential Offer
         VP_VERIFICATION, // VP 검증
         ISSUER_POLICY, // Issuer 정책
         ADMIN_USER, // 관리자 사용자

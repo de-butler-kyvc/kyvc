@@ -26,6 +26,19 @@ public class CredentialRepositoryImpl implements CredentialRepository {
         return credentialJpaRepository.findFirstByKycIdOrderByCreatedAtDesc(kycId);
     }
 
+    // KYC 신청 ID 기준 Wallet 저장 완료 유효 Credential 존재 여부
+    @Override
+    public boolean existsWalletSavedValidByKycId(
+            Long kycId // KYC 신청 ID
+    ) {
+        return credentialJpaRepository.existsByKycIdAndWalletSavedYnAndCredentialStatusAndExpiresAtGreaterThanEqual(
+                kycId,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now()
+        );
+    }
+
     // 법인 ID 기준 최신 Credential 조회
     @Override
     public Optional<Credential> findLatestByCorporateId(

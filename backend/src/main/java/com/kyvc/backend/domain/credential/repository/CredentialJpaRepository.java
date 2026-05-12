@@ -24,6 +24,22 @@ public interface CredentialJpaRepository extends JpaRepository<Credential, Long>
     );
 
     /**
+     * KYC 신청 ID + Wallet 저장 여부 + Credential 상태 + 만료 기준 존재 여부
+     *
+     * @param kycId KYC 신청 ID
+     * @param walletSavedYn Wallet 저장 여부
+     * @param credentialStatus Credential 상태
+     * @param expiresAt 만료 기준 일시
+     * @return Credential 존재 여부
+     */
+    boolean existsByKycIdAndWalletSavedYnAndCredentialStatusAndExpiresAtGreaterThanEqual(
+            Long kycId, // KYC 신청 ID
+            String walletSavedYn, // Wallet 저장 여부
+            KyvcEnums.CredentialStatus credentialStatus, // Credential 상태
+            LocalDateTime expiresAt // 만료 기준 일시
+    );
+
+    /**
      * 법인 ID 기준 최신 Credential 조회
      *
      * @param corporateId 법인 ID
