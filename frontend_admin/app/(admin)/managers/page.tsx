@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getManagers } from "@/lib/api/managers";
+import { createAdminUser, getAllAdminRoles, getManagers, type AdminRole } from "@/lib/api/managers";
 
 const roleBadge: Record<string, string> = {
   "심사자": "bg-blue-100 text-blue-600",
@@ -22,7 +22,7 @@ const mfaBadge: Record<string, string> = {
   "미설정": "bg-red-100 text-red-500",
 };
 
-const defaultManagerForm = { id: "", name: "", role: "심사자", department: "" };
+const defaultManagerForm = { email: "", name: "", password: "", roleId: "", department: "" };
 
 export default function ManagersPage() {
   const [managers, setManagers] = useState<any[]>([]);
@@ -34,16 +34,34 @@ export default function ManagersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [form, setForm] = useState(defaultManagerForm);
+  const [roles, setRoles] = useState<AdminRole[]>([]);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
   const ITEMS_PER_PAGE = 3;
 
-  const handleRegister = () => {
-    if (!form.id || !form.name || !form.department) {
-      alert("모든 항목을 입력해주세요.");
+  const handleRegister = async () => {
+    if (!form.email || !form.name || !form.password || !form.roleId) {
+      setRegisterError("이메일, 성명, 초기 비밀번호, 역할을 입력해주세요.");
       return;
     }
-    alert(`관리자가 등록되었습니다.\nID: ${form.id}`);
-    setShowRegisterModal(false);
-    setForm(defaultManagerForm);
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      await createAdminUser({
+        email: form.email,
+        name: form.name,
+        password: form.password,
+        status: "ACTIVE",
+        roleIds: [form.roleId],
+      });
+      setShowRegisterModal(false);
+      resetRegisterForm();
+      await fetchManagers();
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : "관리자 등록에 실패했습니다.");
+    } finally {
+      setRegistering(false);
+    }
   };
 
   const fetchManagers = async () => {
@@ -64,6 +82,13 @@ export default function ManagersPage() {
 
   useEffect(() => {
     fetchManagers();
+    getAllAdminRoles()
+      .then((items) => {
+        const activeRoles = items.filter((role) => role.status !== "INACTIVE");
+        setRoles(activeRoles.length > 0 ? activeRoles : items);
+        setForm((prev) => prev.roleId ? prev : { ...prev, roleId: String((activeRoles[0] ?? items[0])?.roleId ?? "") });
+      })
+      .catch((error) => console.error("Failed to fetch admin roles:", error));
   }, []);
 
   const handleSearch = () => {
@@ -86,6 +111,7 @@ export default function ManagersPage() {
   const allSelected = paginatedList.length > 0 && paginatedList.every((row: any) => selectedIds.has(row.id));
   const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(paginatedList.map((row: any) => row.id)));
   const toggleRow = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const resetRegisterForm = () => setForm({ ...defaultManagerForm, roleId: String(roles[0]?.roleId ?? "") });
 
   return (
     <div className="space-y-6">
@@ -143,7 +169,7 @@ export default function ManagersPage() {
             <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-blue-600 cursor-pointer" />
             전체 선택
           </label>
-          <button onClick={() => setShowRegisterModal(true)} className="ml-auto bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">+ 관리자 등록</button>
+          <button onClick={() => { resetRegisterForm(); setRegisterError(null); setShowRegisterModal(true); }} className="ml-auto bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">+ 관리자 등록</button>
         </div>
 
         {/* 테이블 */}
@@ -209,22 +235,26 @@ export default function ManagersPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg border border-slate-200 w-full max-w-md p-6 space-y-4">
             <h2 className="text-base font-semibold text-slate-800">관리자 등록</h2>
+            {registerError && <div className="bg-red-50 border border-red-200 rounded px-3 py-2 text-sm text-red-600">{registerError}</div>}
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">사용자 ID</label>
-                <input value={form.id} onChange={e => setForm(f => ({ ...f, id: e.target.value }))} placeholder="admin_xxx" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                <label className="text-xs text-slate-500 mb-1 block">이메일</label>
+                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="admin@kyvc.com" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">성명</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="홍길동" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
               </div>
               <div>
+                <label className="text-xs text-slate-500 mb-1 block">초기 비밀번호</label>
+                <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Password123!" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              </div>
+              <div>
                 <label className="text-xs text-slate-500 mb-1 block">역할</label>
-                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none">
-                  <option>심사자</option>
-                  <option>승인권자</option>
-                  <option>운영자</option>
-                  <option>조회자</option>
+                <select value={form.roleId} onChange={e => setForm(f => ({ ...f, roleId: e.target.value }))} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none">
+                  {roles.map((role) => (
+                    <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -233,8 +263,8 @@ export default function ManagersPage() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => { setShowRegisterModal(false); setForm(defaultManagerForm); }} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
-              <button onClick={handleRegister} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">등록</button>
+              <button onClick={() => { setShowRegisterModal(false); setRegisterError(null); resetRegisterForm(); }} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
+              <button onClick={handleRegister} disabled={registering} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60">{registering ? "등록 중..." : "등록"}</button>
             </div>
           </div>
         </div>

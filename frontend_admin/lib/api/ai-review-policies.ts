@@ -17,10 +17,15 @@ export interface AiReviewPolicyRule {
 }
 
 export interface AiReviewPolicy {
-  aiPolicyId: string;
+  aiPolicyId: string | number;
   policyName: string;
   description?: string;
   modelVersion?: string;
+  corporateTypeCode?: string;
+  autoApproveYn?: string;
+  autoApproveThreshold?: number;
+  supplementThreshold?: number;
+  enabledYn?: string;
   autoApprovalThreshold?: number;
   autoRejectionThreshold?: number;
   manualReviewThreshold?: number;
@@ -39,6 +44,10 @@ export interface UpdateAiReviewPolicyBody {
   policyName?: string;
   description?: string;
   modelVersion?: string;
+  corporateTypeCode?: string;
+  autoApproveYn?: string;
+  autoApproveThreshold?: number;
+  supplementThreshold?: number;
   autoApprovalThreshold?: number;
   autoRejectionThreshold?: number;
   manualReviewThreshold?: number;
@@ -78,6 +87,35 @@ function getAuthHeaders() {
   return headers;
 }
 
+function normalizePolicy(policy: AiReviewPolicy): AiReviewPolicy {
+  const autoApproveThreshold = policy.autoApproveThreshold ?? policy.autoApprovalThreshold;
+  const supplementThreshold = policy.supplementThreshold ?? policy.autoRejectionThreshold;
+
+  return {
+    ...policy,
+    autoApproveThreshold,
+    supplementThreshold,
+    autoApprovalThreshold: autoApproveThreshold,
+    autoRejectionThreshold: supplementThreshold,
+    corporationType: policy.corporationType ?? policy.corporateTypeCode,
+    enabled: policy.enabled ?? policy.enabledYn === "Y",
+  };
+}
+
+function toApiPolicyBody(body: UpdateAiReviewPolicyBody): Record<string, unknown> {
+  return {
+    policyName: body.policyName,
+    description: body.description,
+    modelVersion: body.modelVersion,
+    corporateTypeCode: body.corporateTypeCode ?? body.corporationType,
+    autoApproveYn: body.autoApproveYn,
+    autoApproveThreshold: body.autoApproveThreshold ?? body.autoApprovalThreshold,
+    manualReviewThreshold: body.manualReviewThreshold,
+    supplementThreshold: body.supplementThreshold ?? body.autoRejectionThreshold,
+    rules: body.rules,
+  };
+}
+
 async function errorMessageFromResponse(response: Response): Promise<string> {
   try {
     const text = await response.text();
@@ -107,11 +145,11 @@ export async function getAiReviewPolicies(filters?: {
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewPolicy[] | PageLike<AiReviewPolicy>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map(normalizePolicy);
 }
 
 /** GET /api/admin/backend/ai-review-policies/{aiPolicyId} */
-export async function getAiReviewPolicy(aiPolicyId: string): Promise<AiReviewPolicyDetail> {
+export async function getAiReviewPolicy(aiPolicyId: string | number): Promise<AiReviewPolicyDetail> {
   const response = await fetch(`${POLICY_BASE}/${aiPolicyId}`, {
     method: "GET",
     headers: getAuthHeaders(),
@@ -119,35 +157,35 @@ export async function getAiReviewPolicy(aiPolicyId: string): Promise<AiReviewPol
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewPolicyDetail>;
-  return json.data;
+  return normalizePolicy(json.data) as AiReviewPolicyDetail;
 }
 
 /** PATCH /api/admin/backend/ai-review-policies/{aiPolicyId} */
 export async function updateAiReviewPolicy(
-  aiPolicyId: string,
+  aiPolicyId: string | number,
   body: UpdateAiReviewPolicyBody
 ): Promise<AiReviewPolicyDetail> {
   const response = await fetch(`${POLICY_BASE}/${aiPolicyId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(body),
+    body: JSON.stringify(toApiPolicyBody(body)),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewPolicyDetail>;
-  return json.data;
+  return normalizePolicy(json.data) as AiReviewPolicyDetail;
 }
 
 /** PATCH /api/admin/backend/ai-review-policies/{aiPolicyId}/enabled */
 export async function setAiReviewPolicyEnabled(
-  aiPolicyId: string,
+  aiPolicyId: string | number,
   enabled: boolean
 ): Promise<void> {
   const response = await fetch(`${POLICY_BASE}/${aiPolicyId}/enabled`, {
     method: "PATCH",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ enabledYn: enabled ? "Y" : "N" }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
 }
@@ -160,9 +198,9 @@ export async function createAiReviewPolicy(
     method: "POST",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(body),
+    body: JSON.stringify(toApiPolicyBody(body)),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AiReviewPolicyDetail>;
-  return json.data;
+  return normalizePolicy(json.data) as AiReviewPolicyDetail;
 }

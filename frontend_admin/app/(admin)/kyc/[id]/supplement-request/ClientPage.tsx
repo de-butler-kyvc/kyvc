@@ -3,8 +3,9 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createKycSupplement, getKycDetail } from "@/lib/api/kyc";
+import { getCommonCodes } from "@/lib/api/common-codes";
 
-const docTypes = [
+const DEFAULT_DOC_TYPES = [
   { label: "사업자등록증", value: "BUSINESS_REGISTRATION" },
   { label: "등기사항전부증명서", value: "CORPORATE_REGISTRATION" },
   { label: "주주명부", value: "SHAREHOLDER_LIST" },
@@ -14,6 +15,8 @@ const docTypes = [
   { label: "대리인 신분확인", value: "AGENT_ID" },
 ];
 
+type Option = { label: string; value: string };
+
 function defaultDeadline() {
   const date = new Date();
   date.setDate(date.getDate() + 7);
@@ -21,7 +24,7 @@ function defaultDeadline() {
 }
 
 function docTypeLabel(value: string) {
-  return docTypes.find((type) => type.value === value)?.label ?? value;
+  return DEFAULT_DOC_TYPES.find((type) => type.value === value)?.label ?? value;
 }
 
 function canRequestSupplement(status?: string) {
@@ -31,6 +34,7 @@ function canRequestSupplement(status?: string) {
 export default function SupplementRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const [docTypes, setDocTypes] = useState<Option[]>(DEFAULT_DOC_TYPES);
   const [items, setItems] = useState([{ docType: "SHAREHOLDER_LIST", reason: "" }]);
   const [deadline, setDeadline] = useState(defaultDeadline);
   const [note, setNote] = useState("");
@@ -40,13 +44,23 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    getCommonCodes({ codeGroupId: "DOCUMENT_TYPE", enabled: true })
+      .then((codes) => {
+        const options = codes.map((code) => ({ label: code.codeName, value: code.codeValue })).filter((code) => code.value);
+        if (options.length > 0) {
+          setDocTypes(options);
+          setItems((prev) => prev.map((item) => options.some((type) => type.value === item.docType) ? item : { ...item, docType: options[0].value }));
+        }
+      })
+      .catch(() => undefined);
+
     getKycDetail(id)
       .then((detail) => setStatus(detail.kycStatus ?? detail.status))
       .catch((err) => setError(err instanceof Error ? err.message : "KYC 신청 상태를 불러오지 못했습니다."))
       .finally(() => setStatusLoading(false));
   }, [id]);
 
-  const addItem = () => setItems([...items, { docType: "BUSINESS_REGISTRATION", reason: "" }]);
+  const addItem = () => setItems([...items, { docType: docTypes[0]?.value ?? "BUSINESS_REGISTRATION", reason: "" }]);
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
   const updateItem = (i: number, field: string, value: string) => {
     const next = [...items];
@@ -62,7 +76,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
     setLoading(true);
     setError(null);
     try {
-      const message = items.map((i) => `[${docTypeLabel(i.docType)}] ${i.reason}`).join(" / ");
+      const message = items.map((i) => `[${docTypes.find((type) => type.value === i.docType)?.label ?? docTypeLabel(i.docType)}] ${i.reason}`).join(" / ");
       await createKycSupplement(id, {
         supplementReason: note.trim() ? `${message} / ${note.trim()}` : message,
         requiredDocuments: items.map((i) => i.docType),

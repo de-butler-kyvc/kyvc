@@ -1,12 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { getAllAdminRoles, type AdminRole } from "@/lib/api/managers";
-
-const allPermissions = [
-  "KYC 신청 조회", "KYC 심사 처리", "AI 결과 조회", "보완요청 생성",
-  "최종 승인/반려", "정책 관리", "사용자 관리", "시스템 설정 조회",
-  "SDK 관리", "감사로그 조회", "리포트 조회", "VC 관리 조회", "VP 이력 조회",
-];
 
 interface GroupItem {
   id: string;
@@ -53,6 +47,10 @@ export default function ManagerGroupsPage() {
   }, []);
 
   const group = groupList.find((g) => g.id === selected);
+  const allPermissions = useMemo(
+    () => Array.from(new Set(groupList.flatMap((g) => g.permissions))).sort(),
+    [groupList]
+  );
 
   const handleSelect = (id: string) => {
     setSelected(id);
@@ -138,6 +136,11 @@ export default function ManagerGroupsPage() {
               </div>
               <div className="p-5">
                 <div className="grid grid-cols-2 gap-2">
+                  {allPermissions.length === 0 && (
+                    <div className="col-span-2 rounded border border-slate-100 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                      역할별 권한 목록 API 응답이 없습니다.
+                    </div>
+                  )}
                   {allPermissions.map((perm) => {
                     const has = perms.includes(perm);
                     return (
