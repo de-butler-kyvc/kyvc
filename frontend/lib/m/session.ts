@@ -5,6 +5,8 @@
  * - 민감정보(seed/mnemonic)는 절대 저장하지 않는다.
  */
 
+import type { WalletAssetsResult } from "@/lib/m/android-bridge";
+
 const KEYS = {
   scan: "kyvc.m.scanResult",
   vpRequest: "kyvc.m.vpRequest",
@@ -13,6 +15,7 @@ const KEYS = {
   xrpTransferResult: "kyvc.m.xrpTransferResult",
   corporateProfile: "kyvc.m.corporateProfile",
   vcIssueResult: "kyvc.m.vcIssueResult",
+  walletAssets: "kyvc.m.walletAssets",
 } as const;
 
 export type ScanResult = {
@@ -72,6 +75,11 @@ export type VcIssueResult = {
   receivedAt: number;
 };
 
+export type CachedWalletAssets = {
+  assets: WalletAssetsResult;
+  cachedAt: number;
+};
+
 function read<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
@@ -114,6 +122,9 @@ export const mSession = {
   readVcIssueResult: () => read<VcIssueResult>(KEYS.vcIssueResult),
   writeVcIssueResult: (v: VcIssueResult | null) =>
     write(KEYS.vcIssueResult, v),
+  readWalletAssets: () => read<CachedWalletAssets>(KEYS.walletAssets),
+  writeWalletAssets: (v: CachedWalletAssets | null) =>
+    write(KEYS.walletAssets, v),
   clearAll: () => {
     write(KEYS.scan, null);
     write(KEYS.vpRequest, null);
@@ -122,5 +133,6 @@ export const mSession = {
     write(KEYS.xrpTransferResult, null);
     write(KEYS.corporateProfile, null);
     write(KEYS.vcIssueResult, null);
+    write(KEYS.walletAssets, null);
   },
 };

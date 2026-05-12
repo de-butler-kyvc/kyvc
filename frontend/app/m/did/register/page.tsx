@@ -13,40 +13,15 @@ import {
 } from "@/lib/m/android-bridge";
 import {
   ensureMobileWallet,
+  formatXrpDrops,
   formatXrp,
   readXrpBalance,
+  xrpBalanceDropsFromAssets,
 } from "@/lib/m/wallet-bridge";
 
-const DROPS_PER_XRP = BigInt(1_000_000);
 const DID_TX_FEE_DROPS = BigInt(12);
 const XRPL_BASE_RESERVE_DROPS = BigInt(1_000_000);
 const XRPL_OWNER_RESERVE_DROPS = BigInt(200_000);
-
-function parseXrpToDrops(value?: string | number | null) {
-  if (value == null || value === "") return null;
-  const [wholeRaw, fractionRaw = ""] = String(value).split(".");
-  const whole = wholeRaw && /^-?\d+$/.test(wholeRaw) ? BigInt(wholeRaw) : null;
-  if (whole == null || whole < BigInt(0)) return null;
-  const fraction = fractionRaw.replace(/\D/g, "").slice(0, 6).padEnd(6, "0");
-  return whole * DROPS_PER_XRP + BigInt(fraction || "0");
-}
-
-function walletBalanceDrops(assets?: WalletAssetsResult | null) {
-  if (!assets?.ok || assets.depositRequired) return null;
-  if (typeof assets.xrpBalanceDrops === "string" && /^\d+$/.test(assets.xrpBalanceDrops)) {
-    return BigInt(assets.xrpBalanceDrops);
-  }
-  return parseXrpToDrops(readXrpBalance(assets));
-}
-
-function formatDrops(value?: bigint | null) {
-  if (value == null) return "-";
-  const safe = value < BigInt(0) ? BigInt(0) : value;
-  const whole = safe / DROPS_PER_XRP;
-  const fraction = (safe % DROPS_PER_XRP).toString().padStart(6, "0");
-  const trimmed = fraction.replace(/0+$/, "");
-  return `${whole.toLocaleString("en-US")}${trimmed ? `.${trimmed}` : ""} XRP`;
-}
 
 export default function MobileDidRegisterPage() {
   const router = useRouter();
@@ -88,14 +63,14 @@ export default function MobileDidRegisterPage() {
     }
   };
 
-  const balanceDrops = walletBalanceDrops(walletAssets);
+  const balanceDrops = xrpBalanceDropsFromAssets(walletAssets);
   const ownerCount = walletAssets?.ownerCount ?? 0;
   const reserveAfterDid =
     XRPL_BASE_RESERVE_DROPS + XRPL_OWNER_RESERVE_DROPS * BigInt(ownerCount + 1);
   const spendableAfterDid =
     balanceDrops == null ? null : balanceDrops - reserveAfterDid - DID_TX_FEE_DROPS;
   const currentBalance =
-    balanceDrops == null ? formatXrp(readXrpBalance(walletAssets)) : formatDrops(balanceDrops);
+    balanceDrops == null ? formatXrp(readXrpBalance(walletAssets)) : formatXrpDrops(balanceDrops);
   const depositRequired = Boolean(walletAssets?.depositRequired);
   const insufficientBalance = spendableAfterDid != null && spendableAfterDid < BigInt(0);
 
@@ -120,15 +95,15 @@ export default function MobileDidRegisterPage() {
           </div>
           <div>
             <dt>네트워크 수수료</dt>
-            <dd>{formatDrops(DID_TX_FEE_DROPS)}</dd>
+            <dd>{formatXrpDrops(DID_TX_FEE_DROPS)}</dd>
           </div>
           <div>
             <dt>계정 준비금 증가 (잠금, 소각 아님)</dt>
-            <dd>{formatDrops(XRPL_OWNER_RESERVE_DROPS)}</dd>
+            <dd>{formatXrpDrops(XRPL_OWNER_RESERVE_DROPS)}</dd>
           </div>
           <div>
             <dt>등록 후 사용 가능 잔액</dt>
-            <dd className="accent">{formatDrops(spendableAfterDid)}</dd>
+            <dd className="accent">{formatXrpDrops(spendableAfterDid)}</dd>
           </div>
         </dl>
 
