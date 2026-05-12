@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { createAdminUser, getAllAdminRoles, getManagers, type AdminRole } from "@/lib/api/managers";
+import { managerDetailPath } from "@/lib/navigation/admin-routes";
 
 const roleBadge: Record<string, string> = {
   "심사자": "bg-blue-100 text-blue-600",
@@ -206,7 +207,7 @@ export default function ManagersPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${mfaBadge[row.mfa]}`}>{row.mfa}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/managers/${row.id}`} className="text-blue-600 hover:underline text-xs">수정</Link>
+                    <Link href={managerDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">수정</Link>
                   </td>
                 </tr>
               ))}

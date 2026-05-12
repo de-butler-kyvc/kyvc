@@ -3,6 +3,10 @@ import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getKycSupplements } from "@/lib/api/kyc";
+import {
+  kycDetailPath,
+  kycManualReviewPath,
+} from "@/lib/navigation/admin-routes";
 import type { SupplementRequest } from "@/types/kyc";
 
 export default function SupplementHistoryPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,7 +29,7 @@ export default function SupplementHistoryPage({ params }: { params: Promise<{ id
 
   const handleSubmit = () => {
     setLoading(true);
-    setTimeout(() => { router.push(`/kyc/${id}`); }, 600);
+    setTimeout(() => { router.push(kycDetailPath(id)); }, 600);
   };
 
   const latestSupplement = supplements[0];
@@ -35,7 +39,7 @@ export default function SupplementHistoryPage({ params }: { params: Promise<{ id
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
+            백엔드 어드민 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">보완 제출 내역 조회</h1>
         </div>
@@ -177,7 +181,7 @@ export default function SupplementHistoryPage({ params }: { params: Promise<{ id
               <p className="text-xs text-slate-400">처리자: 이심사 (admin2@kyvc.kr)</p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => router.push(`/kyc/${id}/manual-review`)}
+                  onClick={() => router.push(kycManualReviewPath(id))}
                   className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50"
                 >
                   수동심사 처리로 →

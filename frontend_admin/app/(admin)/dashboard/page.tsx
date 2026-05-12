@@ -1,6 +1,7 @@
 "use client";
 
 import { getDashboardStats, getKycList } from "@/lib/api/kyc";
+import { kycDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import type { KycStatus, KycChannel } from "@/types/kyc";
@@ -162,7 +163,7 @@ export default function DashboardPage() {
                   <td className="px-4 py-3 text-slate-500">{row.reviewer}</td>
                   <td className="px-4 py-3 text-slate-500">{row.date}</td>
                   <td className="px-4 py-3">
-                    <Link href={`/kyc/${row.id}`} className="text-blue-600 hover:underline text-xs">상세 →</Link>
+                    <Link href={kycDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">상세 →</Link>
                   </td>
                 </tr>
               ))}

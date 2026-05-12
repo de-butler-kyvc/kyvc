@@ -2,6 +2,7 @@
 
 import { getVcDetail, requestVcRevoke, type VcDetail } from "@/lib/api/vc";
 import { getCommonCodes } from "@/lib/api/common-codes";
+import { vcDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
@@ -89,7 +90,7 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
             <p className="text-sm text-slate-400 mb-1">사유: <span className="font-medium">{reason}</span></p>
             <p className="text-xs text-slate-400 mb-8">해당 VC는 무효 처리되며 XRPL에 폐기 상태가 기록됩니다.</p>
             <Link
-              href={`/vc/${encodeURIComponent(id)}`}
+              href={vcDetailPath(id)}
               className="bg-slate-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 inline-block transition-colors"
             >
               VC 상세로 돌아가기
@@ -170,7 +171,7 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <p className="text-xs text-slate-400">요청자: 현재 로그인 관리자</p>
               <div className="flex gap-2">
-                <Link href={`/vc/${encodeURIComponent(id)}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
+                <Link href={vcDetailPath(id)} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
                   취소
                 </Link>
                 <button

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createKycSupplement, getKycDetail } from "@/lib/api/kyc";
 import { getCommonCodes } from "@/lib/api/common-codes";
+import { kycDetailPath } from "@/lib/navigation/admin-routes";
 
 const DEFAULT_DOC_TYPES = [
   { label: "사업자등록증", value: "BUSINESS_REGISTRATION" },
@@ -82,7 +83,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
         requiredDocuments: items.map((i) => i.docType),
         dueDate: deadline,
       });
-      router.push(`/kyc/${id}`);
+      router.push(kycDetailPath(id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "보완요청 생성에 실패했습니다.");
     } finally {
@@ -95,7 +96,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
+            백엔드 어드민 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">보완요청 생성</h1>
         </div>
@@ -177,7 +178,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
           <div className="flex items-center justify-between">
             <p className="text-xs text-slate-400">처리자: 관리자</p>
             <div className="flex gap-2">
-              <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">취소</Link>
+              <Link href={kycDetailPath(id)} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">취소</Link>
               <button
                 onClick={handleSubmit}
                 disabled={statusLoading || !canRequestSupplement(status) || loading || items.some((i) => !i.reason.trim())}

@@ -12,6 +12,11 @@ import {
   type AiReviewResult,
   type BackendKycDetail,
 } from "@/lib/api/kyc";
+import {
+  kycDetailPath,
+  kycReReviewPath,
+  kycSupplementRequestPath,
+} from "@/lib/navigation/admin-routes";
 
 const DECISION_APPROVE = "승인";
 const DECISION_REJECT = "반려";
@@ -173,11 +178,11 @@ export default function ManualReviewPage({ params }: { params: Promise<{ id: str
   const handleComplete = async () => {
     if (!reason.trim()) return;
     if (decision === DECISION_SUPPLEMENT) {
-      router.push(`/kyc/${id}/supplement-request`);
+      router.push(kycSupplementRequestPath(id));
       return;
     }
     if (decision === DECISION_RE_REVIEW) {
-      router.push(`/kyc/${id}/re-review`);
+      router.push(kycReReviewPath(id));
       return;
     }
     if (!summary.canManualReview) {
@@ -244,7 +249,7 @@ export default function ManualReviewPage({ params }: { params: Promise<{ id: str
                 목록으로
               </Link>
               <Link
-                href={`/kyc/${id}`}
+                href={kycDetailPath(id)}
                 className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 inline-block transition-colors"
               >
                 신청 상세로
@@ -345,7 +350,7 @@ export default function ManualReviewPage({ params }: { params: Promise<{ id: str
               <p className="text-xs text-slate-400">처리자: 관리자</p>
               <div className="flex gap-2">
                 <Link
-                  href={`/kyc/${id}`}
+                  href={kycDetailPath(id)}
                   className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50"
                 >
                   취소

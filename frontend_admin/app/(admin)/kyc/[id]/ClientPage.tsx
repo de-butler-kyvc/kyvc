@@ -1,8 +1,13 @@
 "use client";
-import { use, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { X, FileText, Download, ExternalLink } from "lucide-react";
 import MfaModal from "@/components/MfaModal";
+import {
+  kycAiResultPath,
+  kycManualReviewPath,
+  kycReviewHistoryPath,
+} from "@/lib/navigation/admin-routes";
 import {
   getKycDetail,
   getKycCorporate,
@@ -97,9 +102,7 @@ function fmtDate(iso?: string) {
 
 const tabs = ["법인정보", "제출서류", "AI 결과", "심사 이력", "VC 발급"];
 
-export default function KycDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-
+export default function KycDetailPage({ id }: { id: string }) {
   // ── 신청 상세 ────────────────────────────────────────────────
   const [detail, setDetail] = useState<BackendKycDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -305,7 +308,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
           <div className="space-y-2">
             {canManualReview ? (
               <Link
-                href={`/kyc/${id}/manual-review`}
+                href={kycManualReviewPath(id)}
                 className="block w-full bg-blue-600 text-white text-center py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
               >
                 수동심사 처리 →
@@ -317,7 +320,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
               </div>
             )}
             <Link
-              href={`/kyc/${id}/ai-result`}
+              href={kycAiResultPath(id)}
               className="block w-full border border-slate-200 text-slate-600 text-center py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors"
             >
               AI 결과 상세 보기
@@ -421,7 +424,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-700">AI 심사 결과 요약</h3>
-                  <Link href={`/kyc/${id}/ai-result`} className="text-xs text-blue-600 hover:underline">
+                  <Link href={kycAiResultPath(id)} className="text-xs text-blue-600 hover:underline">
                     상세 보기 →
                   </Link>
                 </div>
@@ -438,13 +441,13 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                   <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                     <p className="text-xs text-slate-400 mb-1">상세 분석</p>
-                    <Link href={`/kyc/${id}/ai-result`} className="text-xs text-blue-600 hover:underline">
+                    <Link href={kycAiResultPath(id)} className="text-xs text-blue-600 hover:underline">
                       AI 결과 상세 →
                     </Link>
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Link href={`/kyc/${id}/ai-result`} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                  <Link href={kycAiResultPath(id)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
                     AI 결과 상세 →
                   </Link>
                 </div>
@@ -456,7 +459,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-700">최근 심사 이력</h3>
-                  <Link href={`/kyc/${id}/review-history`} className="text-xs text-blue-600 hover:underline">
+                  <Link href={kycReviewHistoryPath(id)} className="text-xs text-blue-600 hover:underline">
                     전체 이력 보기 →
                   </Link>
                 </div>
@@ -483,7 +486,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
                   </table>
                 )}
                 <div className="flex justify-end pt-1">
-                  <Link href={`/kyc/${id}/review-history`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
+                  <Link href={kycReviewHistoryPath(id)} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
                     전체 심사 이력 →
                   </Link>
                 </div>
@@ -568,7 +571,7 @@ export default function KycDetailPage({ params }: { params: Promise<{ id: string
 
                 {canManualReview && (
                   <div className="flex justify-end">
-                    <Link href={`/kyc/${id}/manual-review`} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                    <Link href={kycManualReviewPath(id)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
                       수동심사 처리 →
                     </Link>
                   </div>

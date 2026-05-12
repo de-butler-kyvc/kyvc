@@ -7,6 +7,7 @@ import {
   updateUserStatus,
   type BackendUserDetail,
 } from "@/lib/api/users";
+import { kycDetailPath } from "@/lib/navigation/admin-routes";
 
 const statusBadge: Record<string, string> = {
   정상: "bg-green-100 text-green-600",
@@ -325,7 +326,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                             </span>
                           </td>
                           <td className="px-3 py-2.5">
-                            <Link href={`/kyc/${row.applicationId}`} className="text-blue-600 hover:underline text-xs">
+                            <Link href={kycDetailPath(row.applicationId)} className="text-blue-600 hover:underline text-xs">
                               상세 →
                             </Link>
                           </td>

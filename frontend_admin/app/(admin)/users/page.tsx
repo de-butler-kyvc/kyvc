@@ -1,6 +1,7 @@
 "use client";
 
 import { getUserList } from "@/lib/api/users";
+import { userDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
@@ -165,7 +166,7 @@ export default function UsersPage() {
                   <td className="px-4 py-3 text-slate-500">{row.lastLogin}</td>
                   <td className="px-4 py-3 text-slate-500">{row.regDate}</td>
                   <td className="px-4 py-3">
-                    <Link href={`/users/${row.id}`} className="text-blue-600 hover:underline text-xs">상세 →</Link>
+                    <Link href={userDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">상세 →</Link>
                   </td>
                 </tr>
               ))}

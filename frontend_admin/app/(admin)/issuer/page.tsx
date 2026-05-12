@@ -1,6 +1,7 @@
 "use client";
 
 import { getIssuerList } from "@/lib/api/issuer";
+import { issuerDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
@@ -158,7 +159,7 @@ export default function IssuerPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status]}`}>{row.status}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/issuer/${row.id}`} className="text-blue-600 hover:underline text-xs">상세 →</Link>
+                    <Link href={issuerDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">상세 →</Link>
                   </td>
                 </tr>
               ))}

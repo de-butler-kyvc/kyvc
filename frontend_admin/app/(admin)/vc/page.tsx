@@ -1,6 +1,7 @@
 "use client";
 
 import { getVcList, type VcListItem } from "@/lib/api/vc";
+import { vcDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -165,7 +166,7 @@ export default function VcPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/vc/${encodeURIComponent(row.id)}`} className="text-blue-600 hover:underline text-xs">
+                    <Link href={vcDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">
                       상세 보기
                     </Link>
                   </td>

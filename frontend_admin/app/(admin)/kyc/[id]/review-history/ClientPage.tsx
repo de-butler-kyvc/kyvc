@@ -2,6 +2,7 @@
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { getReviewHistories, type ReviewHistory } from "@/lib/api/kyc";
+import { kycDetailPath } from "@/lib/navigation/admin-routes";
 
 const ACTION_TYPE_KO: Record<string, string> = {
   AI: "AI", MANUAL: "수동", SYSTEM: "시스템",
@@ -37,7 +38,7 @@ export default function ReviewHistoryPage({ params }: { params: Promise<{ id: st
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
+            백엔드 어드민 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">심사 이력 조회</h1>
         </div>
@@ -113,7 +114,7 @@ export default function ReviewHistoryPage({ params }: { params: Promise<{ id: st
             <span className="text-xs text-slate-400">
               {loading ? "" : `총 ${history.length}건`}
             </span>
-            <Link href={`/kyc/${id}`} className="text-xs text-blue-600 hover:underline">
+            <Link href={kycDetailPath(id)} className="text-xs text-blue-600 hover:underline">
               ← 신청 상세로
             </Link>
           </div>
