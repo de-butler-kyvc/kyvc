@@ -1,6 +1,7 @@
 "use client";
 
 import { getVcDetail, requestVcReissue, type VcDetail } from "@/lib/api/vc";
+import { vcDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
@@ -71,7 +72,7 @@ export default function VcReissuePage({ params }: { params: Promise<{ id: string
             <p className="text-sm text-slate-500 mb-1">VC 재발급 요청이 정상적으로 접수되었습니다.</p>
             <p className="text-xs text-slate-400 mb-8">검토 후 새로운 VC가 발급되며 기존 VC는 자동 폐기됩니다.</p>
             <Link
-              href={`/vc/${encodeURIComponent(id)}`}
+              href={vcDetailPath(id)}
               className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 inline-block transition-colors"
             >
               VC 상세로 돌아가기
@@ -142,7 +143,7 @@ export default function VcReissuePage({ params }: { params: Promise<{ id: string
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <p className="text-xs text-slate-400">요청자: 현재 로그인 관리자</p>
               <div className="flex gap-2">
-                <Link href={`/vc/${encodeURIComponent(id)}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
+                <Link href={vcDetailPath(id)} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
                   취소
                 </Link>
                 <button

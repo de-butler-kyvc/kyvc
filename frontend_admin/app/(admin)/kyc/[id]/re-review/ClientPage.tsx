@@ -10,6 +10,7 @@ import {
   type AiReviewResult,
   type BackendKycDetail,
 } from "@/lib/api/kyc";
+import { kycDetailPath } from "@/lib/navigation/admin-routes";
 
 const RETRYABLE_STATUSES = new Set(["SUBMITTED", "MANUAL_REVIEW", "NEED_SUPPLEMENT"]);
 
@@ -119,7 +120,7 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
     setError(null);
     try {
       await retryAiReview(id, { reason: `[${priority}] ${reason.trim()}` });
-      router.push(`/kyc/${id}`);
+      router.push(kycDetailPath(id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "재심사 요청 중 오류가 발생했습니다.");
       setLoading(false);
@@ -131,7 +132,7 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
+            백엔드어드민 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">재심사 요청</h1>
         </div>
@@ -246,7 +247,7 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <p className="text-xs text-slate-400">요청자: 관리자</p>
               <div className="flex gap-2">
-                <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
+                <Link href={kycDetailPath(id)} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
                   취소
                 </Link>
                 <button

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getIssuerList, type IssuerPolicyDetail } from "@/lib/api/issuer";
+import { issuerDetailPath } from "@/lib/navigation/admin-routes";
 import type { IssuerItem } from "@/types/kyc";
 
 const statusBadge: Record<string, string> = {
@@ -79,7 +80,7 @@ export default function IssuerWhitelistPage() {
                   <td className="px-4 py-3 text-slate-500">{row.scope}</td>
                   <td className="px-4 py-3 text-slate-400 text-xs">{row.period}</td>
                   <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status] ?? "bg-slate-100 text-slate-600"}`}>{row.status}</span></td>
-                  <td className="px-4 py-3"><Link href={`/issuer/${row.id}`} className="text-blue-600 hover:underline text-xs">상세 →</Link></td>
+                  <td className="px-4 py-3"><Link href={issuerDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">상세 →</Link></td>
                 </tr>
               ))}
             </tbody>

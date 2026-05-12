@@ -12,6 +12,7 @@ import {
   type AiReviewResult,
   type BeneficialOwner,
 } from "@/lib/api/kyc";
+import { kycDetailPath } from "@/lib/navigation/admin-routes";
 
 const JUDGMENT_KO: Record<string, string> = {
   NORMAL: "정상",
@@ -150,7 +151,7 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드어드민 · <Link href={`/kyc/${id}`} className="hover:underline">KYC 신청 상세</Link>
+            백엔드어드민 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">AI 심사 결과 상세</h1>
         </div>
@@ -335,7 +336,7 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
             )}
 
             <div className="flex justify-end">
-              <Link href={`/kyc/${id}`} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
+              <Link href={kycDetailPath(id)} className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50">
                 신청 상세로 돌아가기
               </Link>
             </div>

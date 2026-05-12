@@ -1,6 +1,11 @@
 "use client";
 
 import { getVcDetail, type VcDetail } from "@/lib/api/vc";
+import {
+  kycDetailPath,
+  vcReissuePath,
+  vcRevokePath,
+} from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
@@ -80,13 +85,13 @@ export default function VcDetailPage({ params }: { params: Promise<{ id: string 
             </div>
 
             <Link
-              href={`/vc/${encodeURIComponent(id)}/reissue`}
+              href={vcReissuePath(id)}
               className="block w-full text-center border border-slate-200 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
             >
               VC 재발급 요청
             </Link>
             <Link
-              href={`/vc/${encodeURIComponent(id)}/revoke`}
+              href={vcRevokePath(id)}
               className="block w-full text-center border border-red-200 text-red-500 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
             >
               VC 폐기 요청
@@ -112,7 +117,7 @@ export default function VcDetailPage({ params }: { params: Promise<{ id: string 
                 <div key={item.label} className="flex items-center border-b border-slate-50 py-3 last:border-0">
                   <span className="text-sm text-slate-400 w-40 shrink-0">{item.label}</span>
                   {item.isLink ? (
-                    <Link href={`/kyc/${encodeURIComponent(item.value)}`} className="text-sm text-blue-600 hover:underline font-mono">
+                    <Link href={kycDetailPath(item.value)} className="text-sm text-blue-600 hover:underline font-mono">
                       {item.value}
                     </Link>
                   ) : item.isGreen ? (

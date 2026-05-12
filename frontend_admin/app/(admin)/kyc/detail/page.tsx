@@ -1,24 +1,20 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useQueryId } from "@/lib/navigation/use-query-id";
+import ClientPage from "../[id]/ClientPage";
 
-function AdminKycDetailRedirect() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+function AdminKycDetailRoute() {
+  const id = useQueryId("/kyc");
+  if (!id) return null;
 
-  useEffect(() => {
-    const id = searchParams.get("id");
-    router.replace(id ? `/kyc/${encodeURIComponent(id)}` : "/kyc");
-  }, [router, searchParams]);
-
-  return null;
+  return <ClientPage id={id} />;
 }
 
 export default function AdminKycDetailPage() {
   return (
     <Suspense fallback={null}>
-      <AdminKycDetailRedirect />
+      <AdminKycDetailRoute />
     </Suspense>
   );
 }

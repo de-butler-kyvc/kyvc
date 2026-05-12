@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { kycManualReviewPath } from "@/lib/navigation/admin-routes";
 
 function AdminReviewDetailRedirect() {
   const router = useRouter();
@@ -9,7 +10,7 @@ function AdminReviewDetailRedirect() {
 
   useEffect(() => {
     const id = searchParams.get("id");
-    router.replace(id ? `/kyc/${encodeURIComponent(id)}/manual-review` : "/kyc");
+    router.replace(id ? kycManualReviewPath(id) : "/kyc");
   }, [router, searchParams]);
 
   return null;
