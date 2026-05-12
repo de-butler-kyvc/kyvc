@@ -118,6 +118,15 @@ def get_did_entry(client: Any, account: str) -> dict[str, Any] | None:
     return node if isinstance(node, dict) else None
 
 
+def get_account_info(client: Any, account: str) -> dict[str, Any] | None:
+    payload = {"command": "account_info", "account": account, "ledger_index": "validated"}
+    result = raw_rpc(client, payload)
+    if result.get("error") in {"actNotFound", "accountNotFound"}:
+        return None
+    account_data = result.get("account_data") or result
+    return account_data if isinstance(account_data, dict) else None
+
+
 def get_credential_entry(
     client: Any,
     issuer_account: str,

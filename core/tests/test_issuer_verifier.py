@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
+from xrpl.asyncio.transaction.reliable_submission import XRPLReliableSubmissionException
 
 from app.ai_assessment.enums import DocumentType
 from app.credentials.resolver import (
@@ -43,6 +45,7 @@ from app.storage.interfaces import VerificationChallengeEntry
 from app.verifier.api_models import IssuePresentationChallengeRequest
 from app.verifier.policy import VerificationPolicy
 from app.verifier.service import VerifierService
+from app.xrpl.client import submit_tx
 
 
 class JsonResponse:
@@ -1737,6 +1740,78 @@ def test_api_issue_xrpl_rejects_issuer_diddoc_ledger_mismatch(tmp_path, monkeypa
     assert issue_response.status_code == 400
     assert "issuer DID Document hash mismatch with XRPL DIDSet" in issue_response.json()["detail"]
     assert repository.get_did_document("did:xrpl:1:rIssuer") is None
+
+
+def test_api_issue_xrpl_rejects_missing_holder_account_on_ledger(tmp_path, monkeypatch):
+    repository = _repo(tmp_path)
+    app = create_app(settings=Settings(), repository=repository)
+    client = TestClient(app)
+    issuer_key = generate_private_key()
+    issuer_doc = IssuerService("rIssuer", issuer_key).build_did_document()
+
+    monkeypatch.setattr("app.api.issuer.make_client", lambda rpc_url: object())
+    monkeypatch.setattr("app.api.issuer.wallet_from_seed", lambda seed: SimpleNamespace(address="rIssuer"))
+    monkeypatch.setattr("app.api.issuer.get_did_entry", lambda xrpl_client, account: _did_ledger_entry(issuer_doc))
+    monkeypatch.setattr("app.api.issuer.get_xrpl_account_info", lambda xrpl_client, account: None)
+
+    response = client.post(
+        "/issuer/credentials/kyc",
+        json={
+            "issuer_seed": "dummy-seed",
+            "issuer_private_key_pem": private_key_to_pem(issuer_key),
+            "holder_account": "rMissingHolder",
+            "claims": _legal_entity_claims(),
+            "valid_from": (datetime.now(tz=UTC) - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "valid_until": (datetime.now(tz=UTC) + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            "status_mode": "xrpl",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "holder_account was not found on the configured XRPL network" in response.json()["detail"]
+
+
+def test_api_issue_xrpl_maps_credential_create_submission_failure_to_400(tmp_path, monkeypatch):
+    repository = _repo(tmp_path)
+    app = create_app(settings=Settings(), repository=repository)
+    client = TestClient(app)
+    issuer_key = generate_private_key()
+    issuer_doc = IssuerService("rIssuer", issuer_key).build_did_document()
+
+    monkeypatch.setattr("app.api.issuer.make_client", lambda rpc_url: object())
+    monkeypatch.setattr("app.api.issuer.wallet_from_seed", lambda seed: SimpleNamespace(address="rIssuer"))
+    monkeypatch.setattr("app.api.issuer.get_did_entry", lambda xrpl_client, account: _did_ledger_entry(issuer_doc))
+    monkeypatch.setattr("app.api.issuer.get_xrpl_account_info", lambda xrpl_client, account: {"Account": account})
+    monkeypatch.setattr(
+        "app.api.issuer.submit_credential_create",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("CredentialCreate failed with result=tecNO_TARGET")),
+    )
+
+    response = client.post(
+        "/issuer/credentials/kyc",
+        json={
+            "issuer_seed": "dummy-seed",
+            "issuer_private_key_pem": private_key_to_pem(issuer_key),
+            "holder_account": "rHolder",
+            "claims": _legal_entity_claims(),
+            "valid_from": (datetime.now(tz=UTC) - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "valid_until": (datetime.now(tz=UTC) + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            "status_mode": "xrpl",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "CredentialCreate failed with result=tecNO_TARGET"
+
+
+def test_submit_tx_translates_reliable_submission_failure_to_runtime_error(monkeypatch):
+    monkeypatch.setattr(
+        "app.xrpl.client.submit_and_wait",
+        lambda tx, client, wallet: (_ for _ in ()).throw(XRPLReliableSubmissionException("Transaction failed: tecNO_TARGET")),
+    )
+
+    with pytest.raises(RuntimeError, match="CredentialCreate failed with result=tecNO_TARGET"):
+        submit_tx(object(), object(), object(), "CredentialCreate")
 
 
 def test_api_verify_presentation_rejects_malformed_json_body(tmp_path):
