@@ -8,6 +8,7 @@ import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.domain.CredentialOffer;
 import com.kyvc.backend.domain.credential.dto.CredentialOfferCreateResponse;
 import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareRequest;
+import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareResponse;
 import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
@@ -43,6 +44,13 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CredentialOfferServiceTest {
+
+    private static final String ACTUAL_ISSUER_ACCOUNT = "rpseLKeHEoLDWBnTJvRJgh1mSNz7vJVENc";
+    private static final String ACTUAL_HOLDER_ACCOUNT = "rf7J73nMdQq3WRh8dPDDRmJtruXk15hnfd";
+    private static final String ACTUAL_HOLDER_DID = "did:xrpl:1:" + ACTUAL_HOLDER_ACCOUNT;
+    private static final String ACTUAL_CREDENTIAL_TYPE = "56435F5354415455535F56313A2EEE";
+    private static final String ACTUAL_CREDENTIAL_STATUS_ID =
+            "xrpl:credential:" + ACTUAL_ISSUER_ACCOUNT + ":" + ACTUAL_HOLDER_ACCOUNT + ":" + ACTUAL_CREDENTIAL_TYPE;
 
     @Mock
     private CredentialOfferRepository credentialOfferRepository;
@@ -158,7 +166,7 @@ class CredentialOfferServiceTest {
 
     @Test
     void prepareWalletCredential_usesHolderDidFallbackHolderKeyId() {
-        mockPrepareCredential("did:xrpl:1:rHolder", null);
+        mockPrepareCredential(ACTUAL_HOLDER_DID, null);
 
         service.prepareWalletCredential(
                 1L,
@@ -166,8 +174,8 @@ class CredentialOfferServiceTest {
                 new WalletCredentialPrepareRequest(
                         "qr-token-001",
                         "device-001",
-                        "did:xrpl:1:rHolder",
-                        "rHolder",
+                        ACTUAL_HOLDER_DID,
+                        ACTUAL_HOLDER_ACCOUNT,
                         null,
                         true
                 )
@@ -176,18 +184,18 @@ class CredentialOfferServiceTest {
         verify(credentialIssuanceService).issueKycCredentialForHolder(
                 any(KycApplication.class),
                 eq(1L),
-                eq("did:xrpl:1:rHolder"),
-                eq("rHolder"),
+                eq(ACTUAL_HOLDER_DID),
+                eq(ACTUAL_HOLDER_ACCOUNT),
                 holderKeyIdCaptor.capture(),
                 any(),
                 any(ResolvedIssuer.class)
         );
-        assertThat(holderKeyIdCaptor.getValue()).isEqualTo("did:xrpl:1:rHolder#holder-key-1");
+        assertThat(holderKeyIdCaptor.getValue()).isEqualTo(ACTUAL_HOLDER_DID + "#holder-key-1");
     }
 
     @Test
     void prepareWalletCredential_usesRequestHolderKeyIdFirst() {
-        mockPrepareCredential("did:xrpl:1:rHolder", "did:xrpl:1:rHolder#custom-key");
+        mockPrepareCredential(ACTUAL_HOLDER_DID, ACTUAL_HOLDER_DID + "#custom-key");
 
         service.prepareWalletCredential(
                 1L,
@@ -195,9 +203,9 @@ class CredentialOfferServiceTest {
                 new WalletCredentialPrepareRequest(
                         "qr-token-001",
                         "device-001",
-                        "did:xrpl:1:rHolder",
-                        "rHolder",
-                        "did:xrpl:1:rHolder#custom-key",
+                        ACTUAL_HOLDER_DID,
+                        ACTUAL_HOLDER_ACCOUNT,
+                        ACTUAL_HOLDER_DID + "#custom-key",
                         true
                 )
         );
@@ -205,13 +213,38 @@ class CredentialOfferServiceTest {
         verify(credentialIssuanceService).issueKycCredentialForHolder(
                 any(KycApplication.class),
                 eq(1L),
-                eq("did:xrpl:1:rHolder"),
-                eq("rHolder"),
+                eq(ACTUAL_HOLDER_DID),
+                eq(ACTUAL_HOLDER_ACCOUNT),
                 holderKeyIdCaptor.capture(),
                 any(),
                 any(ResolvedIssuer.class)
         );
-        assertThat(holderKeyIdCaptor.getValue()).isEqualTo("did:xrpl:1:rHolder#custom-key");
+        assertThat(holderKeyIdCaptor.getValue()).isEqualTo(ACTUAL_HOLDER_DID + "#custom-key");
+    }
+
+    @Test
+    void prepareWalletCredential_usesCredentialStatusIdForMetadataIssuer() {
+        mockPrepareCredential(ACTUAL_HOLDER_DID, null);
+
+        WalletCredentialPrepareResponse response = service.prepareWalletCredential(
+                1L,
+                100L,
+                new WalletCredentialPrepareRequest(
+                        "qr-token-001",
+                        "device-001",
+                        ACTUAL_HOLDER_DID,
+                        ACTUAL_HOLDER_ACCOUNT,
+                        null,
+                        true
+                )
+        );
+
+        Map<String, Object> metadata = metadata(response.credentialPayload());
+        assertThat(metadata.get("issuerAccount")).isEqualTo(ACTUAL_ISSUER_ACCOUNT);
+        assertThat(metadata.get("issuerAccount")).isNotEqualTo("rIssuer");
+        assertThat(metadata.get("issuerDid")).isEqualTo("did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT);
+        assertThat(metadata.get("credentialType")).isEqualTo(ACTUAL_CREDENTIAL_TYPE);
+        assertThat(metadata.get("holderXrplAddress")).isEqualTo(ACTUAL_HOLDER_ACCOUNT);
     }
 
     private Corporate createCorporate() {
@@ -267,7 +300,7 @@ class CredentialOfferServiceTest {
                 "issuer-key-1",
                 KyvcEnums.CredentialType.KYC_CREDENTIAL.name()
         );
-        Credential credential = createValidCredential(holderDid, "rHolder");
+        Credential credential = createValidCredential(holderDid, ACTUAL_HOLDER_ACCOUNT);
 
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
         when(credentialOfferRepository.getById(100L)).thenReturn(offer);
@@ -278,7 +311,7 @@ class CredentialOfferServiceTest {
                 any(KycApplication.class),
                 eq(1L),
                 eq(holderDid),
-                eq("rHolder"),
+                eq(ACTUAL_HOLDER_ACCOUNT),
                 eq(holderKeyId == null ? holderDid + "#holder-key-1" : holderKeyId),
                 any(),
                 eq(issuer)
@@ -293,8 +326,8 @@ class CredentialOfferServiceTest {
                 20L,
                 10L,
                 "credential-external-001",
-                KyvcEnums.CredentialType.KYC_CREDENTIAL.name(),
-                "did:xrpl:1:rIssuer",
+                ACTUAL_CREDENTIAL_TYPE,
+                "did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT,
                 "REVOCATION",
                 KyvcEnums.KycLevel.STANDARD.name(),
                 KyvcEnums.Jurisdiction.KR.name(),
@@ -304,16 +337,23 @@ class CredentialOfferServiceTest {
         ReflectionTestUtils.setField(credential, "credentialId", 200L);
         credential.applyIssuanceMetadata(
                 "credential-external-001",
-                KyvcEnums.CredentialType.KYC_CREDENTIAL.name(),
-                "did:xrpl:1:rIssuer",
+                ACTUAL_CREDENTIAL_TYPE,
+                "did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT,
                 KyvcEnums.CredentialStatus.VALID,
                 "vc-hash-001",
                 "tx-hash-001",
-                "status-id-001",
+                ACTUAL_CREDENTIAL_STATUS_ID,
                 LocalDateTime.now(),
                 LocalDateTime.now().plusYears(1)
         );
         credential.applyCredentialPayload("vc+jwt", null, "vc.jwt.001");
         return credential;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> metadata(
+            Map<String, Object> credentialPayload // Credential payload 데이터
+    ) {
+        return (Map<String, Object>) credentialPayload.get("metadata");
     }
 }

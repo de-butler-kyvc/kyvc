@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -188,7 +189,7 @@ public class CredentialOfferService {
                     offer.getCredentialOfferId(),
                     credential.getCredentialId(),
                     true,
-                    createCredentialPayload(credential, resolveIssuerAccount(credential))
+                    createCredentialPayload(credential)
             );
         }
 
@@ -222,7 +223,7 @@ public class CredentialOfferService {
                 offer.getCredentialOfferId(),
                 credential.getCredentialId(),
                 true,
-                createCredentialPayload(credential, issuer.issuerAccount())
+                createCredentialPayload(credential)
         );
     }
 
@@ -390,28 +391,27 @@ public class CredentialOfferService {
     }
 
     private Map<String, Object> createCredentialPayload(
-            Credential credential, // Credential
-            String issuerAccount // Issuer XRPL Account
+            Credential credential // Credential 엔티티
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("format", credential.getVcFormat());
         payload.put("credentialJwt", credential.getVcJwt());
         payload.put("credential", parseCredentialPayloadJson(credential.getVcPayloadJson()));
-        payload.put("metadata", createCredentialMetadata(credential, issuerAccount));
+        payload.put("metadata", createCredentialMetadata(credential));
         return payload;
     }
 
     private Map<String, Object> createCredentialMetadata(
-            Credential credential, // Credential
-            String issuerAccount // Issuer XRPL Account
+            Credential credential // Credential 엔티티
     ) {
+        ParsedCredentialStatusId parsedStatusId = parseRequiredCredentialStatusId(credential.getCredentialStatusId());
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("credentialId", credential.getCredentialId());
-        metadata.put("credentialType", credential.getCredentialTypeCode());
-        metadata.put("issuerDid", credential.getIssuerDid());
-        metadata.put("issuerAccount", issuerAccount);
+        metadata.put("credentialType", parsedStatusId.credentialType());
+        metadata.put("issuerDid", "did:xrpl:1:" + parsedStatusId.issuerAccount());
+        metadata.put("issuerAccount", parsedStatusId.issuerAccount());
         metadata.put("holderDid", credential.getHolderDid());
-        metadata.put("holderXrplAddress", credential.getHolderXrplAddress());
+        metadata.put("holderXrplAddress", parsedStatusId.holderAccount());
         metadata.put("vcHash", credential.getVcHash());
         metadata.put("xrplTxHash", credential.getXrplTxHash());
         metadata.put("credentialStatusId", credential.getCredentialStatusId());
@@ -419,6 +419,47 @@ public class CredentialOfferService {
         metadata.put("expiresAt", credential.getExpiresAt());
         metadata.put("format", credential.getVcFormat());
         return metadata;
+    }
+
+    private ParsedCredentialStatusId parseRequiredCredentialStatusId(
+            String credentialStatusId // Credential 상태 ID
+    ) {
+        if (!StringUtils.hasText(credentialStatusId)) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Credential Status ID가 없습니다.");
+        }
+
+        String[] parts = credentialStatusId.trim().split(":");
+        if (parts.length < 5
+                || !"xrpl".equalsIgnoreCase(parts[0])
+                || !"credential".equalsIgnoreCase(parts[1])) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Credential Status ID 형식이 올바르지 않습니다.");
+        }
+
+        String issuerAccount = parts[2].trim(); // Issuer XRPL 계정
+        String holderAccount = parts[3].trim(); // Holder XRPL 계정
+        String credentialType = String.join(":", Arrays.copyOfRange(parts, 4, parts.length)).trim(); // Credential 유형
+        if (!isXrplClassicAddress(issuerAccount)
+                || !isXrplClassicAddress(holderAccount)
+                || !StringUtils.hasText(credentialType)) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Credential Status ID 데이터가 올바르지 않습니다.");
+        }
+        return new ParsedCredentialStatusId(issuerAccount, holderAccount, credentialType);
+    }
+
+    private boolean isXrplClassicAddress(
+            String value // XRPL classic 주소
+    ) {
+        return StringUtils.hasText(value)
+                && value.startsWith("r")
+                && value.length() >= 25
+                && value.length() <= 35;
+    }
+
+    private record ParsedCredentialStatusId(
+            String issuerAccount, // Issuer XRPL 계정
+            String holderAccount, // Holder XRPL 계정
+            String credentialType // Credential 유형
+    ) {
     }
 
     private Map<String, Object> parseCredentialPayloadJson(
