@@ -843,6 +843,22 @@ export type WalletCredentialOfferResponse = {
   alreadySaved: boolean;
 };
 
+export type MobileDeviceRegisterRequest = {
+  deviceId: string;
+  deviceName?: string;
+  os?: string;
+  appVersion?: string;
+  publicKey?: string;
+};
+
+export type MobileDeviceRegisterResponse = {
+  deviceId?: string;
+  registered?: boolean;
+  status?: string;
+  deviceStatusCode?: string;
+  active?: boolean;
+};
+
 export type WalletCredentialPrepareRequest = {
   qrToken: string;
   deviceId: string;
@@ -958,6 +974,14 @@ export const mobileVp = {
     deviceId?: string;
   }) =>
     api<VpPresentationResponse>("/api/mobile/vp/presentations", {
+      method: "POST",
+      body,
+    }),
+};
+
+export const mobileDevice = {
+  register: (body: MobileDeviceRegisterRequest) =>
+    api<MobileDeviceRegisterResponse>("/api/mobile/device/register", {
       method: "POST",
       body,
     }),
