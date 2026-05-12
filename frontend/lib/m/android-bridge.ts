@@ -449,6 +449,18 @@ export type CredentialSummariesResult = BridgeResult & {
   credentials?: NativeCredentialSummary[];
 };
 
+export type NativeCredentialScreenResult = BridgeResult & {
+  result?:
+    | "confirm"
+    | "reject"
+    | "viewCredential"
+    | "home"
+    | "showQr"
+    | "submit"
+    | "cancel"
+    | string;
+};
+
 export type IssueQrScanResult = {
   ok: boolean;
   action?: string;
@@ -630,6 +642,42 @@ export const bridge = {
 
   // VC
   saveVC: (payload: AnyJson) => callBridge("saveVC", payload),
+  requestCredentialIssueConfirm: (payload: AnyJson = {}) =>
+    callBridge<NativeCredentialScreenResult>(
+      "requestCredentialIssueConfirm",
+      {
+        ...payload,
+        action: "REQUEST_CREDENTIAL_ISSUE_CONFIRM",
+      },
+      { timeoutMs: 5 * 60_000 },
+    ),
+  requestCredentialIssueComplete: (payload: AnyJson = {}) =>
+    callBridge<NativeCredentialScreenResult>(
+      "requestCredentialIssueComplete",
+      {
+        ...payload,
+        action: "REQUEST_CREDENTIAL_ISSUE_COMPLETE",
+      },
+      { timeoutMs: 5 * 60_000 },
+    ),
+  requestCredentialDetail: (payload: AnyJson = {}) =>
+    callBridge<NativeCredentialScreenResult>(
+      "requestCredentialDetail",
+      {
+        ...payload,
+        action: "REQUEST_CREDENTIAL_DETAIL",
+      },
+      { timeoutMs: 5 * 60_000 },
+    ),
+  requestCredentialSubmit: (payload: AnyJson = {}) =>
+    callBridge<NativeCredentialScreenResult>(
+      "requestCredentialSubmit",
+      {
+        ...payload,
+        action: "REQUEST_CREDENTIAL_SUBMIT",
+      },
+      { timeoutMs: 5 * 60_000 },
+    ),
   checkCredentialStatus: (params: {
     credentialId: string;
     issuerAccount?: string;
