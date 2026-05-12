@@ -234,8 +234,10 @@ export default function MobileVcIssuePage() {
 
         setStep("wallet");
         const wallet = await bridge.getWalletInfo();
-        const holderDid = requiredString(wallet.did);
-        const holderXrplAddress = requiredString(wallet.account);
+        const holderDid = requiredString(wallet.holderDid ?? wallet.did);
+        const holderXrplAddress = requiredString(
+          wallet.holderAccount ?? wallet.account,
+        );
         if (!wallet.ok || !holderDid || !holderXrplAddress) {
           throw new Error("활성화된 지갑을 찾을 수 없습니다. 지갑을 먼저 생성해주세요.");
         }
