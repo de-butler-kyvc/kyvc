@@ -197,7 +197,6 @@ export default function MobileSignupVerifyPage() {
       if (err instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
         showWalletOwnerDialog({ title: err.title, hint: err.hint });
-        router.replace("/m/login");
         return;
       }
       setError(err instanceof ApiError ? err.message : "인증에 실패했습니다.");
