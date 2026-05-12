@@ -117,6 +117,16 @@ export default function MobileHomePage() {
     [normalizeWalletInfo],
   );
 
+  const refreshWalletAssets = useCallback(async () => {
+    if (!isBridgeAvailable()) return;
+    try {
+      const assets = await bridge.getWalletAssets();
+      if (assets.ok) setWalletAssets(assets);
+    } catch {
+      // 홈 잔액 새로고침 실패는 다음 진입/포커스 때 다시 시도한다.
+    }
+  }, []);
+
   // 증명서 목록은 네이티브 지갑 브릿지를 단일 소스로 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
@@ -183,6 +193,7 @@ export default function MobileHomePage() {
         const state = await ensureMobileWallet();
         await refreshHolderDidState(state.wallet);
         setWalletAssets(state.assets);
+        void refreshWalletAssets();
         if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
         setApiError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
@@ -190,7 +201,30 @@ export default function MobileHomePage() {
     })();
     bridge.listWallets().catch(() => {});
     bridge.getCredentialSummaries().catch(() => {});
-  }, [refreshHolderDidState]);
+  }, [refreshHolderDidState, refreshWalletAssets]);
+
+  useEffect(() => {
+    if (!isBridgeAvailable()) return;
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshWalletAssets();
+    };
+    const onFocus = () => {
+      void refreshWalletAssets();
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshWalletAssets();
+    }, 15000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(timer);
+    };
+  }, [refreshWalletAssets]);
 
   // 다른 화면에서 활성 지갑이 바뀌어도 반영
   useBridgeAction("LIST_WALLETS", (r) => {
@@ -226,7 +260,7 @@ export default function MobileHomePage() {
     const next = normalizeWalletInfo(r as WalletInfo);
     setWalletInfo(next);
     void refreshHolderDidState(next);
-    bridge.getWalletAssets().then(setWalletAssets).catch(() => {});
+    void refreshWalletAssets();
   });
 
   useBridgeAction("GET_WALLET_INFO", (r) => {

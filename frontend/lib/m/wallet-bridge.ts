@@ -31,11 +31,22 @@ export function formatXrp(value?: string | number | null) {
   })} XRP`;
 }
 
+function dropsToXrp(drops?: string | number | null) {
+  if (drops == null || drops === "") return null;
+  const raw = String(drops);
+  if (!/^\d+$/.test(raw)) return null;
+  const padded = raw.padStart(7, "0");
+  const whole = padded.slice(0, -6).replace(/^0+(?=\d)/, "") || "0";
+  const fraction = padded.slice(-6).replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
 export function readXrpBalance(assets?: WalletAssetsResult | null) {
   if (!assets?.ok) return null;
   if (assets.depositRequired) return "0";
   return (
     assets.xrpBalanceXrp ??
+    dropsToXrp(assets.xrpBalanceDrops) ??
     (assets.xrpBalance as string | number | undefined) ??
     (assets.balanceXrp as string | number | undefined) ??
     (assets.availableXrp as string | number | undefined) ??
