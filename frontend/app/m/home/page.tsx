@@ -55,6 +55,11 @@ type HomeTestState =
   | "did"
   | "credential";
 
+function shortDid(value: string) {
+  if (value.length <= 24) return value;
+  return `${value.slice(0, 13)}...${value.slice(-6)}`;
+}
+
 export default function MobileHomePage() {
   const router = useRouter();
   const [certs, setCerts] = useState<CertItem[]>([]);
@@ -256,6 +261,23 @@ export default function MobileHomePage() {
     window.setTimeout(() => setToast(""), 1600);
   };
 
+  const copyText = async (value: string) => {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+
+    const el = document.createElement("textarea");
+    el.value = value;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  };
+
   const startIssueQrScan = async () => {
     if (!isBridgeAvailable()) {
       showToast("앱에서만 사용할 수 있는 기능입니다");
@@ -313,7 +335,10 @@ export default function MobileHomePage() {
 
   const testWalletInfo =
     testState === "inactive"
-      ? null
+      ? {
+          ok: true,
+          account: "rKYvC1234567890TestWallet",
+        }
       : testState === "walletOnly"
         ? {
             ok: true,
@@ -333,9 +358,9 @@ export default function MobileHomePage() {
           : walletInfo;
   const testWalletAssets =
     testState === "inactive"
-      ? null
+      ? ({ ok: true, accountActivated: false, depositRequired: true } as WalletAssetsResult)
       : testState === "walletOnly"
-        ? ({ ok: true, accountActivated: false, depositRequired: true } as WalletAssetsResult)
+        ? ({ ok: true, accountActivated: true, depositRequired: false, xrpBalanceXrp: "12.345678" } as WalletAssetsResult)
         : testState === "did" || testState === "credential"
           ? ({ ok: true, accountActivated: true, depositRequired: false, xrpBalanceXrp: "12.345678" } as WalletAssetsResult)
           : walletAssets;
@@ -348,29 +373,31 @@ export default function MobileHomePage() {
   const accountShort = testWalletInfo?.account
     ? `${testWalletInfo.account.slice(0, 6)}...${testWalletInfo.account.slice(-4)}`
     : null;
-  const walletActivated = Boolean(accountShort);
+  const walletExists = Boolean(accountShort);
   const didRegistrationLabel = testWalletInfo?.didRegistrationLabel;
-  const didRegistrationRequired =
-    testWalletInfo?.didRegistrationRequired ??
-    (walletActivated
-      ? didRegistrationLabel === "DID 등록하기" ||
-        testWalletInfo?.didSetRegistered !== true
-      : false);
-  const didRegistered =
-    testWalletInfo?.didSetRegistered === true ||
-    (walletActivated && didRegistrationRequired === false) ||
-    didRegistrationLabel === "DID 등록됨";
+  const registeredDid = testWalletInfo?.holderDid ?? testWalletInfo?.did;
   const ledgerActivated = Boolean(testWalletAssets?.accountActivated);
   const depositRequired = Boolean(testWalletAssets?.depositRequired);
+  const walletXrplActivated = walletExists && ledgerActivated && !depositRequired;
+  const didRegistrationRequired =
+    testWalletInfo?.didRegistrationRequired ??
+    (walletXrplActivated
+      ? didRegistrationLabel === "DID 등록하기" ||
+        (testWalletInfo?.didSetRegistered !== true && !registeredDid)
+      : false);
+  const didRegistered =
+    walletXrplActivated &&
+    (testWalletInfo?.didSetRegistered === true ||
+      didRegistrationLabel === "DID 등록됨" ||
+      (Boolean(registeredDid) && didRegistrationRequired === false));
   const hasCredential = visible.length > 0;
   const walletLabel =
-    didRegistrationLabel ??
-    (walletActivated
-      ? didRegistrationRequired
-        ? "DID 등록하기"
-        : "DID 등록됨"
-      : "지갑 활성화 필요");
-  const balanceXrp = walletActivated
+    !walletExists || !walletXrplActivated
+      ? "지갑 활성화 필요"
+      : didRegistered && registeredDid
+        ? shortDid(registeredDid)
+        : "DID 등록하기";
+  const balanceXrp = walletExists
     ? formatXrp(readXrpBalance(testWalletAssets))
     : "0 XRP";
 
@@ -408,31 +435,33 @@ export default function MobileHomePage() {
               className={`wallet-did-copy${
                 didRegistered
                   ? " did-registered"
-                  : walletActivated
+                  : walletXrplActivated
                     ? " needs-did"
                     : " needs-wallet"
               }`}
               onClick={async () => {
-                if (!walletActivated) {
+                if (!walletExists) {
                   setWalletSheetOpen(true);
                   return;
                 }
-                if (didRegistered && !didRegistrationRequired) {
-                  showToast("DID 등록됨");
+                if (!walletXrplActivated) {
+                  router.push("/m/xrp/receive");
                   return;
                 }
-                try {
-                  const result = await bridge.submitHolderDidSet();
-                  if (!result.ok) {
-                    showToast(result.error ?? "DID 등록 요청에 실패했습니다.");
+                if (didRegistered && !didRegistrationRequired) {
+                  if (!registeredDid) {
+                    showToast("복사할 DID를 찾을 수 없습니다.");
                     return;
                   }
-                  await refreshHolderDidState(testWalletInfo);
-                  bridge.getWalletAssets().then(setWalletAssets).catch(() => {});
-                  showToast("DID 등록 요청이 완료되었습니다.");
-                } catch (e) {
-                  showToast(e instanceof Error ? e.message : "DID 등록 중 오류가 발생했습니다.");
+                  try {
+                    await copyText(registeredDid);
+                    showToast("DID가 복사되었습니다.");
+                  } catch {
+                    showToast("DID를 복사할 수 없습니다.");
+                  }
+                  return;
                 }
+                router.push("/m/did/register");
               }}
             >
               <span>{walletLabel}</span>
@@ -469,9 +498,13 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={!ledgerActivated ? "inactive" : ""}
+              className={!walletXrplActivated ? "inactive" : ""}
               onClick={() => {
-                if (!walletActivated || depositRequired) {
+                if (!walletExists) {
+                  setWalletSheetOpen(true);
+                  return;
+                }
+                if (!walletXrplActivated) {
                   router.push("/m/xrp/receive");
                   return;
                 }
@@ -483,7 +516,7 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={!walletActivated ? "inactive" : ""}
+              className={!walletExists ? "inactive" : ""}
               onClick={() => router.push("/m/transactions")}
             >
               <MIcon.history />
@@ -501,11 +534,15 @@ export default function MobileHomePage() {
                   type="button"
                   className="empty-credential-card"
                   onClick={() => {
-                    if (!walletActivated) {
+                    if (!walletExists) {
                       setWalletSheetOpen(true);
                       return;
                     }
-                    if (walletActivated && !didRegistered) {
+                    if (!walletXrplActivated) {
+                      router.push("/m/xrp/receive");
+                      return;
+                    }
+                    if (!didRegistered) {
                       setDidSheetOpen(true);
                       return;
                     }
@@ -550,7 +587,7 @@ export default function MobileHomePage() {
           setQrNoticeKind(
             didRegistered
               ? "needCredential"
-              : walletActivated
+              : walletXrplActivated
                 ? "did"
                 : "account",
           );
