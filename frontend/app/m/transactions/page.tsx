@@ -15,7 +15,7 @@ type ActivityTab = "all" | "vc" | "vp" | "warn" | "tx";
 type ActivityItem = {
   id: string;
   cat: Exclude<ActivityTab, "all">;
-  icon: "check" | "shield" | "bell" | "cert" | "xrp";
+  icon: "check" | "shield" | "bell" | "cert" | "xrpReceive" | "xrpSend";
   title: string;
   desc: string;
   time: string;
@@ -76,7 +76,8 @@ function ActivityIcon({ name }: { name: ActivityItem["icon"] }) {
   if (name === "check") return <MIcon.check />;
   if (name === "shield") return <MIcon.shield />;
   if (name === "bell") return <MIcon.bell />;
-  if (name === "xrp") return <MIcon.xrp />;
+  if (name === "xrpReceive") return <MIcon.arrowDown />;
+  if (name === "xrpSend") return <MIcon.arrowUpRight />;
   return <MIcon.cert />;
 }
 
@@ -111,7 +112,7 @@ function txToActivity(tx: WalletTransactionSummary, index: number): ActivityItem
   return {
     id: tx.hash ?? `tx-${index}`,
     cat: "tx",
-    icon: "xrp",
+    icon: incoming ? "xrpReceive" : "xrpSend",
     title: incoming ? `${amount} 받음` : `${amount} 보냄`,
     desc: `${tx.transactionType ?? "Transaction"}${result}${fee}`,
     time: formatTxTime(tx.dateUtc),
@@ -186,7 +187,7 @@ export default function MobileTransactionsPage() {
                     key={item.id}
                     className={`activity-item${item.unread ? " unread" : ""}`}
                   >
-                    <div className="activity-icon">
+                    <div className={`activity-icon ${item.icon}`}>
                       <ActivityIcon name={item.icon} />
                     </div>
                     <div className="activity-body">

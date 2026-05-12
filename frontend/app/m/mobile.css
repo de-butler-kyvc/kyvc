@@ -2430,6 +2430,20 @@ html {
   color: #000;
 }
 
+.activity-icon.xrpReceive,
+.activity-icon.xrpSend {
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.activity-icon.xrpReceive {
+  color: var(--m-blue);
+}
+
+.activity-icon.xrpSend {
+  color: var(--m-violet);
+}
+
 .activity-icon svg {
   width: 20px;
   height: 20px;
