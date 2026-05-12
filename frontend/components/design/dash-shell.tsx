@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import { Logo } from "./primitives";
 import { useT, type Lang } from "@/lib/i18n";
+import { clearKyvcLocalStorage } from "@/lib/kyc-flow";
 
 export type DashShellProps = {
   children: React.ReactNode;
@@ -120,6 +121,7 @@ export function DashShell({ children, current, lang = "ko" }: DashShellProps) {
               className="topbar-nav-link"
               onClick={(e) => {
                 e.preventDefault();
+                clearKyvcLocalStorage();
                 router.push("/");
               }}
             >

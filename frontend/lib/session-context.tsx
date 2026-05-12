@@ -15,6 +15,7 @@ import {
   type CorporateProfile,
   type SessionResponse
 } from "@/lib/api";
+import { clearKyvcLocalStorage, syncKyvcSessionUser } from "@/lib/kyc-flow";
 
 type SessionState = {
   session: SessionResponse | null;
@@ -34,9 +35,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const refreshSession = useCallback(async () => {
     try {
       const s = await auth.session();
+      if (s?.authenticated) {
+        syncKyvcSessionUser(s.userId);
+      } else {
+        clearKyvcLocalStorage();
+      }
       setSession(s);
       return s;
     } catch {
+      clearKyvcLocalStorage();
       setSession(null);
       return null;
     }

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MToggle, MTopBar } from "@/components/m/parts";
 import { ApiError, auth, corporate, type CorporateProfile } from "@/lib/api";
+import { clearKyvcLocalStorage } from "@/lib/kyc-flow";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
 
@@ -77,6 +78,7 @@ export default function MobileSettingsPage() {
       tasks.push(bridge.logout().catch(() => null));
     }
     await Promise.all(tasks);
+    clearKyvcLocalStorage();
     // 로그아웃 직후 getWalletInfo 자동 호출 금지(가이드 권장).
     router.replace("/m");
   };

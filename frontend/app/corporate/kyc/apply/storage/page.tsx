@@ -7,7 +7,7 @@ import { Icon } from "@/components/design/icons";
 import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Button } from "@/components/ui/button";
 import { ApiError, kyc as kycApi } from "@/lib/api";
-import { getCurrentKycId } from "@/lib/kyc-flow";
+import { refreshCurrentKycStorage } from "@/lib/kyc-flow";
 
 type StoreOption = "STORE" | "DELETE";
 
@@ -35,21 +35,22 @@ const OPTIONS: {
 
 export default function KycApplyStoragePage() {
   const router = useRouter();
-  const [kycId, setKycId] = useState<number | null>(null);
   const [selected, setSelected] = useState<StoreOption>("STORE");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const id = getCurrentKycId();
+    let cancelled = false;
+    refreshCurrentKycStorage(kycApi.current).then((id) => {
     if (!id) {
       router.push("/corporate/kyc/apply");
       return;
     }
-    setKycId(id);
+    if (cancelled) return;
     kycApi
       .detail(id)
       .then((detail) => {
+        if (cancelled) return;
         if (detail.originalDocumentStoreOption === "DELETE") {
           setSelected("DELETE");
         } else if (detail.originalDocumentStoreOption === "STORE") {
@@ -59,14 +60,22 @@ export default function KycApplyStoragePage() {
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const onNext = async () => {
-    if (!kycId) return;
     setBusy(true);
     setError(null);
     try {
-      await kycApi.setDocumentStoreOption(kycId, selected);
+      const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+      if (!latestKycId) {
+        router.push("/corporate/kyc/apply");
+        return;
+      }
+      await kycApi.setDocumentStoreOption(latestKycId, selected);
       router.push("/corporate/kyc/apply/confirm");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "저장 옵션 저장에 실패했습니다.");

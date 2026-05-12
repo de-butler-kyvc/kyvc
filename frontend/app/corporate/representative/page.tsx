@@ -73,6 +73,7 @@ export default function CorporateRepresentativePage() {
       .me()
       .then(async (res) => {
         const corporateType =
+          res.corporateTypeCode ??
           (typeof window !== "undefined"
             ? window.localStorage.getItem("kyvc.corporateType")
             : null) ?? "";

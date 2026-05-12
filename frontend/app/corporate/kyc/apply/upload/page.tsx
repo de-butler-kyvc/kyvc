@@ -16,7 +16,7 @@ import {
   KYC_DOCUMENT_SLOTS,
   compactHash,
   formatFileSize,
-  getCurrentKycId
+  refreshCurrentKycStorage
 } from "@/lib/kyc-flow";
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png";
@@ -33,7 +33,6 @@ const FALLBACK_SLOTS: RequiredDocument[] = KYC_DOCUMENT_SLOTS.map((slot) => ({
 
 export default function KycApplyUploadPage() {
   const router = useRouter();
-  const [kycId, setKycId] = useState<number | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [slots, setSlots] = useState<RequiredDocument[]>(FALLBACK_SLOTS);
   const [error, setError] = useState<string | null>(null);
@@ -49,23 +48,29 @@ export default function KycApplyUploadPage() {
   };
 
   useEffect(() => {
-    const id = getCurrentKycId();
+    let cancelled = false;
+    refreshCurrentKycStorage(kycApi.current).then((id) => {
     if (!id) {
       router.push("/corporate/kyc/apply");
       return;
     }
-    setKycId(id);
+    if (cancelled) return;
     Promise.all([
       kycApi.requiredDocumentsByKyc(id).catch(() => FALLBACK_SLOTS),
       kycApi.documents(id)
     ])
       .then(([reqs, docs]) => {
+        if (cancelled) return;
         setSlots(reqs.length ? reqs : FALLBACK_SLOTS);
         setDocuments(docs);
       })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const refreshDocuments = async (id: number) => {
@@ -73,8 +78,18 @@ export default function KycApplyUploadPage() {
     setDocuments(items);
   };
 
+  const getFreshKycIdForAction = async () => {
+    const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+    if (!latestKycId) {
+      router.push("/corporate/kyc/apply");
+      return 0;
+    }
+    return latestKycId;
+  };
+
   const upload = async (slot: RequiredDocument, file: File) => {
-    if (!kycId) return;
+    const latestKycId = await getFreshKycIdForAction();
+    if (!latestKycId) return;
     const maxBytes = (slot.maxFileSizeMb ?? 20) * 1024 * 1024;
     if (file.size > maxBytes) {
       setError(`파일은 ${slot.maxFileSizeMb ?? 20}MB 이하만 업로드할 수 있습니다.`);
@@ -84,9 +99,9 @@ export default function KycApplyUploadPage() {
     markBusy(slot.documentTypeCode, true);
     try {
       const existing = findDocument(documents, slot.documentTypeCode);
-      if (existing) await kycApi.deleteDocument(kycId, existing.documentId);
-      await kycApi.uploadDocument(kycId, file, slot.documentTypeCode);
-      await refreshDocuments(kycId);
+      if (existing) await kycApi.deleteDocument(latestKycId, existing.documentId);
+      await kycApi.uploadDocument(latestKycId, file, slot.documentTypeCode);
+      await refreshDocuments(latestKycId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "업로드에 실패했습니다.");
     } finally {
@@ -95,14 +110,15 @@ export default function KycApplyUploadPage() {
   };
 
   const remove = async (slot: RequiredDocument) => {
-    if (!kycId) return;
+    const latestKycId = await getFreshKycIdForAction();
+    if (!latestKycId) return;
     const existing = findDocument(documents, slot.documentTypeCode);
     if (!existing) return;
     markBusy(slot.documentTypeCode, true);
     setError(null);
     try {
-      await kycApi.deleteDocument(kycId, existing.documentId);
-      await refreshDocuments(kycId);
+      await kycApi.deleteDocument(latestKycId, existing.documentId);
+      await refreshDocuments(latestKycId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "삭제에 실패했습니다.");
     } finally {

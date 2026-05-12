@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ApiError, kyc as kycApi } from "@/lib/api";
 import {
   CORPORATE_TYPE_OPTIONS,
-  getCurrentKycId,
   getStoredCorporateType,
+  refreshCurrentKycStorage,
   setCurrentKycId,
   setStoredCorporateType
 } from "@/lib/kyc-flow";
@@ -27,7 +27,7 @@ export default function KycApplyTypePage() {
     let cancelled = false;
     (async () => {
       const storedType = getStoredCorporateType();
-      const existingKycId = getCurrentKycId();
+      const existingKycId = await refreshCurrentKycStorage(kycApi.current);
       if (existingKycId) {
         try {
           const detail = await kycApi.detail(existingKycId);
@@ -57,7 +57,7 @@ export default function KycApplyTypePage() {
     setBusy(true);
     try {
       setStoredCorporateType(selected);
-      const existingId = getCurrentKycId();
+      const existingId = await refreshCurrentKycStorage(kycApi.current);
       let kycId = existingId;
       if (!kycId) {
         const created = await kycApi.create(selected);

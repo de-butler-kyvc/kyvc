@@ -12,37 +12,47 @@ import {
   DOCUMENT_LABELS,
   compactHash,
   formatFileSize,
-  getCurrentKycId
+  refreshCurrentKycStorage
 } from "@/lib/kyc-flow";
 
 export default function KycApplyReviewPage() {
   const router = useRouter();
-  const [kycId, setKycId] = useState<number | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [previewingId, setPreviewingId] = useState<number | null>(null);
 
   useEffect(() => {
-    const id = getCurrentKycId();
+    let cancelled = false;
+    refreshCurrentKycStorage(kycApi.current).then((id) => {
     if (!id) {
       router.push("/corporate/kyc/apply");
       return;
     }
-    setKycId(id);
+    if (cancelled) return;
     kycApi
       .documents(id)
-      .then((items) => setDocuments(items))
+      .then((items) => {
+        if (!cancelled) setDocuments(items);
+      })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const onPreview = async (documentId: number) => {
-    if (!kycId) return;
     setPreviewingId(documentId);
     setError(null);
     try {
-      const { previewUrl } = await kycApi.documentPreview(kycId, documentId);
+      const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+      if (!latestKycId) {
+        router.push("/corporate/kyc/apply");
+        return;
+      }
+      const { previewUrl } = await kycApi.documentPreview(latestKycId, documentId);
       window.open(`${BASE_URL}${previewUrl}`, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(

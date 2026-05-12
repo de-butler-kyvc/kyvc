@@ -17,37 +17,47 @@ import {
   clearCurrentKycId,
   corporateTypeLabel,
   formatFileSize,
-  getCurrentKycId
+  refreshCurrentKycStorage
 } from "@/lib/kyc-flow";
 
 export default function KycApplyConfirmPage() {
   const router = useRouter();
-  const [kycId, setKycId] = useState<number | null>(null);
   const [summary, setSummary] = useState<KycApplicationSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const id = getCurrentKycId();
+    let cancelled = false;
+    refreshCurrentKycStorage(kycApi.current).then((id) => {
     if (!id) {
       router.push("/corporate/kyc/apply");
       return;
     }
-    setKycId(id);
+    if (cancelled) return;
     kycApi
       .summary(id)
-      .then((res) => setSummary(res))
+      .then((res) => {
+        if (!cancelled) setSummary(res);
+      })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
       );
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const onSubmit = async () => {
-    if (!kycId) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await kycApi.submit(kycId);
+      const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+      if (!latestKycId) {
+        router.push("/corporate/kyc/apply");
+        return;
+      }
+      const res = await kycApi.submit(latestKycId);
       if (typeof window !== "undefined") {
         window.localStorage.setItem("kyvc.lastSubmittedKycId", String(res.kycId));
         if (res.submittedAt) {

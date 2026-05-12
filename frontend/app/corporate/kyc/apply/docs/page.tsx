@@ -12,7 +12,8 @@ import { ApiError, type RequiredDocument, kyc as kycApi } from "@/lib/api";
 import {
   KYC_DOCUMENT_SLOTS,
   corporateTypeLabel,
-  getStoredCorporateType
+  getStoredCorporateType,
+  refreshCurrentKycStorage
 } from "@/lib/kyc-flow";
 
 export default function KycApplyDocsPage() {
@@ -22,11 +23,16 @@ export default function KycApplyDocsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    refreshCurrentKycStorage(kycApi.current).then(() => {
     const stored = getStoredCorporateType();
+    if (cancelled) return;
     setCorporateType(stored);
     kycApi
       .documentRequirements(stored)
-      .then((items) => setDocs(items))
+      .then((items) => {
+        if (!cancelled) setDocs(items);
+      })
       .catch((err: unknown) => {
         setDocs(
           KYC_DOCUMENT_SLOTS.map((slot) => ({
@@ -41,6 +47,10 @@ export default function KycApplyDocsPage() {
         );
         setError(err instanceof ApiError ? err.message : "서류 기준 조회에 실패했습니다.");
       });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const required = docs.filter((doc) => doc.required);

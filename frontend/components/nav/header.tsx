@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Icon } from "@/components/design/icons";
 import { ApiError, auth } from "@/lib/api";
+import { clearKyvcLocalStorage } from "@/lib/kyc-flow";
 import { useSession } from "@/lib/session-context";
 
 type HeaderProps = {
@@ -24,10 +25,12 @@ export function Header({ channel, initial = "K" }: HeaderProps) {
     setIsLoggingOut(true);
     try {
       await auth.logout();
+      clearKyvcLocalStorage();
       await refreshSession();
       router.replace("/login");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
+        clearKyvcLocalStorage();
         await refreshSession();
         router.replace("/login");
         return;

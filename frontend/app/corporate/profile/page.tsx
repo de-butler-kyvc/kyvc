@@ -38,11 +38,14 @@ const EXTRA_KEY = "kyvc.corporateExtras";
 
 type ExtraFields = Pick<ProfileForm, "establishedDate" | "contactEmail" | "website">;
 
-const readExtras = (): ExtraFields => {
+const extraKey = (corporateId?: number | null) =>
+  corporateId ? `${EXTRA_KEY}.${corporateId}` : EXTRA_KEY;
+
+const readExtras = (corporateId?: number | null): ExtraFields => {
   if (typeof window === "undefined")
     return { establishedDate: "", contactEmail: "", website: "" };
   try {
-    const raw = window.localStorage.getItem(EXTRA_KEY);
+    const raw = window.localStorage.getItem(extraKey(corporateId));
     return raw
       ? (JSON.parse(raw) as ExtraFields)
       : { establishedDate: "", contactEmail: "", website: "" };
@@ -51,9 +54,10 @@ const readExtras = (): ExtraFields => {
   }
 };
 
-const writeExtras = (extras: ExtraFields) => {
+const writeExtras = (corporateId: number, extras: ExtraFields) => {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(EXTRA_KEY, JSON.stringify(extras));
+  window.localStorage.setItem(extraKey(corporateId), JSON.stringify(extras));
+  window.localStorage.removeItem(EXTRA_KEY);
 };
 
 const composeAddress = (zonecode: string, base: string, detail: string) => {
@@ -92,7 +96,7 @@ export default function CorporateProfilePage() {
       .me()
       .then((res) => {
         if (cancelled) return;
-        const extras = readExtras();
+        const extras = readExtras(res?.corporateId);
         const addr = parseAddress(res?.address ?? "");
         reset({
           corporateName: res?.corporateName ?? "",
@@ -141,7 +145,7 @@ export default function CorporateProfilePage() {
       ? (await corpApi.updateBasicInfo(corporateId, payload), corporateId)
       : (await corpApi.create(payload)).corporateId;
     setCorporateId(id);
-    writeExtras({
+    writeExtras(id, {
       establishedDate: data.establishedDate,
       contactEmail: data.contactEmail,
       website: data.website

@@ -16,6 +16,7 @@ import {
   type UserDashboardResponse
 } from "@/lib/api";
 import { useCorporateProfile } from "@/lib/session-context";
+import { syncCurrentKycStorage } from "@/lib/kyc-flow";
 import { useApi } from "@/lib/use-api";
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -49,6 +50,18 @@ export default function CorporateDashboardPage() {
 
   const { profile } = useCorporateProfile();
   const corporateRegistered = dash?.corporateRegistered === true || !!profile?.corporateId;
+
+  useEffect(() => {
+    if (!dash) return;
+    syncCurrentKycStorage(
+      dash.activeKycId
+        ? {
+            kycId: dash.activeKycId,
+            kycStatus: dash.activeKycStatus
+          }
+        : null
+    );
+  }, [dash]);
 
   const [kycList, setKycList] = useState<KycApplicationResponse[]>([]);
   useEffect(() => {
