@@ -13,6 +13,7 @@ import {
   logoutForWalletOwnerMismatch,
   WalletOwnerMismatchError,
 } from "@/lib/m/wallet-owner";
+import { showWalletOwnerDialog } from "@/lib/m/wallet-owner-dialog";
 
 export default function MobileBiometricPage() {
   const router = useRouter();
@@ -68,7 +69,7 @@ export default function MobileBiometricPage() {
     } catch (e) {
       if (e instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
-        window.alert(`${e.title}\n${e.hint}`);
+        showWalletOwnerDialog({ title: e.title, hint: e.hint });
         router.replace("/m/login");
         return;
       }

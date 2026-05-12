@@ -12,6 +12,7 @@ import {
   logoutForWalletOwnerMismatch,
   WalletOwnerMismatchError,
 } from "@/lib/m/wallet-owner";
+import { showWalletOwnerDialog } from "@/lib/m/wallet-owner-dialog";
 import { readSignupDraft, writeSignupDraft } from "@/lib/signup-flow";
 
 const OTP_LEN = 6;
@@ -195,7 +196,7 @@ export default function MobileSignupVerifyPage() {
     } catch (err) {
       if (err instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
-        window.alert(`${err.title}\n${err.hint}`);
+        showWalletOwnerDialog({ title: err.title, hint: err.hint });
         router.replace("/m/login");
         return;
       }

@@ -10,22 +10,28 @@ import {
   logoutForWalletOwnerMismatch,
   WalletOwnerMismatchError,
 } from "@/lib/m/wallet-owner";
+import {
+  showWalletOwnerDialog,
+  WALLET_OWNER_DIALOG_EVENT,
+  type WalletOwnerDialogDetail,
+} from "@/lib/m/wallet-owner-dialog";
 
 export default function WalletOwnerGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [blockingDialog, setBlockingDialog] =
+    useState<WalletOwnerDialogDetail | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const blockAndLogout = async (error: WalletOwnerMismatchError) => {
-      if (!cancelled) setMessage(`${error.title}\n${error.hint}`);
-      await logoutForWalletOwnerMismatch();
       if (!cancelled) {
-        window.alert(`${error.title}\n${error.hint}`);
-        router.replace("/m/login");
+        setReady(true);
+        setBlockingDialog({ title: error.title, hint: error.hint });
       }
+      await logoutForWalletOwnerMismatch();
     };
 
     const onMismatch = (event: Event) => {
@@ -34,6 +40,10 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
     };
 
     window.addEventListener("kyvc-wallet-owner-mismatch", onMismatch);
+    const onDialog = (event: Event) => {
+      setBlockingDialog((event as CustomEvent<WalletOwnerDialogDetail>).detail);
+    };
+    window.addEventListener(WALLET_OWNER_DIALOG_EVENT, onDialog);
 
     (async () => {
       try {
@@ -68,6 +78,7 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       window.removeEventListener("kyvc-wallet-owner-mismatch", onMismatch);
+      window.removeEventListener(WALLET_OWNER_DIALOG_EVENT, onDialog);
     };
   }, [router]);
 
@@ -82,7 +93,44 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
   return (
     <>
       {message ? <div className="m-error" style={{ margin: 16 }}>{message}</div> : null}
+      {blockingDialog ? (
+        <WalletOwnerBlockingDialog
+          title={blockingDialog.title}
+          hint={blockingDialog.hint}
+          onConfirm={() => {
+            setBlockingDialog(null);
+            router.replace("/m/login");
+          }}
+        />
+      ) : null}
       {children}
     </>
+  );
+}
+
+export function showWalletOwnerMismatchDialog(error: WalletOwnerMismatchError) {
+  showWalletOwnerDialog({ title: error.title, hint: error.hint });
+}
+
+function WalletOwnerBlockingDialog({
+  title,
+  hint,
+  onConfirm,
+}: {
+  title: string;
+  hint: string;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="wallet-owner-dialog-layer" role="dialog" aria-modal="true">
+      <div className="wallet-owner-dialog">
+        <div className="wallet-owner-dialog-icon">!</div>
+        <h2>{title}</h2>
+        <p>{hint}</p>
+        <button type="button" onClick={onConfirm}>
+          로그인으로 이동
+        </button>
+      </div>
+    </div>
   );
 }
