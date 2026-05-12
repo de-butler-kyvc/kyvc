@@ -15,10 +15,11 @@ export async function scanPresentationQrToRoute() {
   if (!r.ok) {
     throw new Error(r.error ?? "증명서 제출 QR 스캔에 실패했습니다.");
   }
+  if (!r.qrData) {
+    throw new Error("스캔한 QR 정보가 없습니다. 다시 스캔해주세요.");
+  }
 
-  const resolved = r.qrData
-    ? await mobileVp.resolveQr(r.qrData).catch(() => null)
-    : null;
+  const resolved = await mobileVp.resolveQr(r.qrData).catch(() => null);
 
   mSession.writeScanResult({
     qrData: r.qrData,

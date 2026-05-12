@@ -16,7 +16,7 @@ const KEYS = {
 } as const;
 
 export type ScanResult = {
-  qrData?: string;
+  qrData: string;
   actionType?: string;
   coreBaseUrl?: string;
   requestId?: string;
@@ -77,6 +77,11 @@ function read<T>(key: string): T | null {
     const raw = window.sessionStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      // storage 접근 불가
+    }
     return null;
   }
 }

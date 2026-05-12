@@ -17,6 +17,7 @@ import { mSession } from "@/lib/m/session";
 const QR_TYPE = {
   CREDENTIAL_OFFER: "CREDENTIAL_OFFER",
 } as const;
+const SCAN_RESULT_KEY = "kyvc.m.scanResult";
 
 type IssueStep =
   | "qr"
@@ -91,6 +92,34 @@ function requiredString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function debugMissingScanResult() {
+  if (process.env.NODE_ENV === "production") return;
+
+  const hasWindow = typeof window !== "undefined";
+  let hasSessionStorage = false;
+  let storageKeys = 0;
+  let hasScanResultKey = false;
+
+  if (hasWindow) {
+    try {
+      const keys = Object.keys(window.sessionStorage);
+      hasSessionStorage = true;
+      storageKeys = keys.filter((key) => key.includes("kyvc")).length;
+      hasScanResultKey = keys.includes(SCAN_RESULT_KEY);
+    } catch {
+      hasSessionStorage = false;
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.debug("[vc-issue] missing scan result", {
+    hasWindow,
+    hasSessionStorage,
+    storageKeys,
+    hasScanResultKey,
+  });
+}
+
 function buildSavePayload(
   credentialId: number,
   credentialPayload: WalletCredentialPayload,
@@ -129,6 +158,7 @@ export default function MobileVcIssuePage() {
 
         const scan = mSession.readScanResult();
         if (!scan?.qrData) {
+          debugMissingScanResult();
           throw new Error("스캔한 QR 정보가 없습니다. 다시 스캔해주세요.");
         }
 

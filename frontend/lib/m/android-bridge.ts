@@ -107,11 +107,22 @@ type Pending = {
   resolve: (r: BridgeResult) => void;
   reject: (err: Error) => void;
   expectedAction: string;
+  expectedActions: string[];
   timeout: ReturnType<typeof setTimeout>;
 };
 
 const pendingByRequestId = new Map<string, Pending>();
 const pendingByAction = new Map<string, Pending[]>();
+
+function removePendingFromActions(pending: Pending) {
+  pending.expectedActions.forEach((action) => {
+    const queue = pendingByAction.get(action);
+    if (!queue) return;
+    const idx = queue.indexOf(pending);
+    if (idx >= 0) queue.splice(idx, 1);
+    if (queue.length === 0) pendingByAction.delete(action);
+  });
+}
 
 function dispatchResult(result: BridgeResult) {
   const reqId =
@@ -122,12 +133,7 @@ function dispatchResult(result: BridgeResult) {
     const p = pendingByRequestId.get(reqId)!;
     pendingByRequestId.delete(reqId);
     clearTimeout(p.timeout);
-    const queue = pendingByAction.get(p.expectedAction);
-    if (queue) {
-      const idx = queue.indexOf(p);
-      if (idx >= 0) queue.splice(idx, 1);
-      if (queue.length === 0) pendingByAction.delete(p.expectedAction);
-    }
+    removePendingFromActions(p);
     p.resolve(result);
   } else if (typeof result.action === "string") {
     // 2) action FIFO 매칭
@@ -135,6 +141,7 @@ function dispatchResult(result: BridgeResult) {
     if (queue && queue.length) {
       const p = queue.shift()!;
       clearTimeout(p.timeout);
+      removePendingFromActions(p);
       // requestId 등록도 정리
       for (const [rid, item] of pendingByRequestId.entries()) {
         if (item === p) {
@@ -230,11 +237,18 @@ export function callAndroidVoid(method: string, payload: AnyJson = {}): boolean 
 export function callBridge<T extends BridgeResult = BridgeResult>(
   method: string,
   payload: AnyJson = {},
-  options: { expectedAction?: string; timeoutMs?: number } = {},
+  options: {
+    expectedAction?: string;
+    expectedActions?: string[];
+    timeoutMs?: number;
+  } = {},
 ): Promise<T> {
   setupBridge();
 
   const expectedAction = options.expectedAction ?? methodToAction(method);
+  const expectedActions = Array.from(
+    new Set([expectedAction, ...(options.expectedActions ?? [])]),
+  );
   const timeoutMs = options.timeoutMs ?? 30_000;
 
   if (typeof window === "undefined") {
@@ -264,12 +278,7 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingByRequestId.delete(requestId);
-      const queue = pendingByAction.get(expectedAction);
-      if (queue) {
-        const idx = queue.findIndex((p) => p.timeout === timeout);
-        if (idx >= 0) queue.splice(idx, 1);
-        if (queue.length === 0) pendingByAction.delete(expectedAction);
-      }
+      removePendingFromActions(entry);
       reject(new Error(`${BRIDGE_TIMEOUT}:${expectedAction}`));
     }, timeoutMs);
 
@@ -277,24 +286,23 @@ export function callBridge<T extends BridgeResult = BridgeResult>(
       resolve: (r) => resolve(r as T),
       reject,
       expectedAction,
+      expectedActions,
       timeout,
     };
 
     pendingByRequestId.set(requestId, entry);
-    const queue = pendingByAction.get(expectedAction) ?? [];
-    queue.push(entry);
-    pendingByAction.set(expectedAction, queue);
+    expectedActions.forEach((action) => {
+      const queue = pendingByAction.get(action) ?? [];
+      queue.push(entry);
+      pendingByAction.set(action, queue);
+    });
 
     try {
       fn.call(window.Android, JSON.stringify(finalPayload));
     } catch (err) {
       clearTimeout(timeout);
       pendingByRequestId.delete(requestId);
-      const q = pendingByAction.get(expectedAction);
-      if (q) {
-        const idx = q.indexOf(entry);
-        if (idx >= 0) q.splice(idx, 1);
-      }
+      removePendingFromActions(entry);
       reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
@@ -428,6 +436,43 @@ export type CredentialSummariesResult = BridgeResult & {
   count?: number;
   credentials?: NativeCredentialSummary[];
 };
+
+export type IssueQrScanResult = {
+  ok: boolean;
+  action?: string;
+  source?: string;
+  requestId?: string;
+  mode?: string;
+  actionType?: string;
+  qrData?: string;
+  endpoint?: string;
+  error?: string;
+};
+
+const ISSUE_QR_ACTIONS = new Set(["SCAN_ISSUE_QR_CODE", "SCAN_QR_CODE"]);
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function toIssueQrScanResult(result: BridgeResult): IssueQrScanResult {
+  const action = optionalString(result.action);
+  const qrData = optionalString(result.qrData);
+  const hasAllowedAction = !action || ISSUE_QR_ACTIONS.has(action);
+  const hasQrData = typeof qrData === "string" && qrData.length > 0;
+
+  return {
+    ok: result.ok === true && hasAllowedAction && hasQrData,
+    action,
+    source: optionalString(result.source),
+    requestId: optionalString(result.requestId),
+    mode: optionalString(result.mode),
+    actionType: optionalString(result.actionType) ?? "VC_ISSUE",
+    qrData: hasQrData ? qrData : undefined,
+    endpoint: optionalString(result.endpoint),
+    error: optionalString(result.error),
+  };
+}
 
 export const bridge = {
   // 인증/세션
@@ -700,17 +745,15 @@ export const bridge = {
       ...(purpose ? { purpose } : {}),
       requestId: newRequestId(),
     }),
-  scanIssueQrCode: () =>
-    callBridge<
-      BridgeResult & {
-        mode?: string;
-        actionType?: string;
-        qrData?: string;
-        endpoint?: string;
-      }
-    >("scanIssueQrCode", {
+  scanIssueQrCode: async (): Promise<IssueQrScanResult> => {
+    const result = await callBridge("scanIssueQrCode", {
       requestId: newRequestId(),
-    }),
+    }, {
+      expectedAction: "SCAN_ISSUE_QR_CODE",
+      expectedActions: Array.from(ISSUE_QR_ACTIONS),
+    });
+    return toIssueQrScanResult(result);
+  },
   scanPresentationQrCode: () =>
     callBridge<
       BridgeResult & {
