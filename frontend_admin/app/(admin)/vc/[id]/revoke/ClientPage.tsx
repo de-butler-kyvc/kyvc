@@ -1,16 +1,18 @@
 "use client";
 
 import { getVcDetail, requestVcRevoke, type VcDetail } from "@/lib/api/vc";
+import { getCommonCodes } from "@/lib/api/common-codes";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
-const revokeReasons = ["법인 정보 변경", "부정 발급 의심", "사용자 요청", "만료 전 폐기", "기타"];
+const DEFAULT_REVOKE_REASONS = ["법인 정보 변경", "부정 발급 의심", "사용자 요청", "만료 전 폐기", "기타"];
 
 export default function VcRevokePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = use(params);
   const id = decodeURIComponent(rawId);
   const [vc, setVc] = useState<VcDetail | null>(null);
-  const [reason, setReason] = useState(revokeReasons[0]);
+  const [revokeReasons, setRevokeReasons] = useState(DEFAULT_REVOKE_REASONS);
+  const [reason, setReason] = useState(DEFAULT_REVOKE_REASONS[0]);
   const [detail, setDetail] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,6 +22,17 @@ export default function VcRevokePage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     let alive = true;
+
+    getCommonCodes({ codeGroupId: "REJECT_REASON", enabled: true })
+      .then((codes) => {
+        if (!alive) return;
+        const reasons = codes.map((code) => code.codeName).filter(Boolean);
+        if (reasons.length > 0) {
+          setRevokeReasons(reasons);
+          setReason((prev) => reasons.includes(prev) ? prev : reasons[0]);
+        }
+      })
+      .catch(() => undefined);
 
     const fetchDetail = async () => {
       setDetailLoading(true);

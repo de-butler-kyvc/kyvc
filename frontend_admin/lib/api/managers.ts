@@ -25,10 +25,12 @@ interface CommonResponse<T> {
 
 export interface AdminRole {
   roleId: number | string;
+  roleCode?: string;
   roleName: string;
   description?: string;
   memberCount?: number;
   permissions?: string[];
+  status?: string;
 }
 
 // ── 관리자 계정 타입 ──────────────────────────────────────────
@@ -166,9 +168,11 @@ function fmtDt(iso?: string) {
 
 /** POST /api/admin/backend/admin-users — 관리자 계정 생성 */
 export async function createAdminUser(data: {
-  loginId: string;
+  loginId?: string;
   name: string;
   email: string;
+  password?: string;
+  status?: string;
   phone?: string;
   roleIds?: (string | number)[];
 }): Promise<AdminUser> {

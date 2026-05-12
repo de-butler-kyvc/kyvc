@@ -1,24 +1,23 @@
 "use client";
 import { useState, useEffect } from "react";
 import { getDocumentRequirements, createDocumentRequirement, updateDocumentRequirement } from "@/lib/api/kyc";
+import { getCommonCodes } from "@/lib/api/common-codes";
 
-const corpTypes = ["주식회사", "유한회사", "합자회사", "합명회사", "사단법인", "재단법인", "조합", "외국기업"];
+const DEFAULT_CORP_TYPES = [
+  { label: "주식회사", value: "CORPORATION" },
+  { label: "유한회사", value: "LIMITED_COMPANY" },
+  { label: "비영리법인", value: "NON_PROFIT" },
+  { label: "조합·단체", value: "ASSOCIATION" },
+  { label: "외국기업", value: "FOREIGN_COMPANY" },
+];
 
-const CORP_TYPE_MAP: Record<string, string> = {
-  주식회사: "CORPORATION",
-  유한회사: "LIMITED",
-  합자회사: "LIMITED_PARTNERSHIP",
-  합명회사: "GENERAL_PARTNERSHIP",
-  사단법인: "ASSOCIATION",
-  재단법인: "FOUNDATION",
-  조합: "COOPERATIVE",
-  외국기업: "FOREIGN",
-};
+type Option = { label: string; value: string };
 
 interface Doc { requirementId?: string; name: string; required: boolean; note: string; }
 
 export default function RequiredDocsPage() {
-  const [selectedType, setSelectedType] = useState("주식회사");
+  const [corpTypes, setCorpTypes] = useState<Option[]>(DEFAULT_CORP_TYPES);
+  const [selectedType, setSelectedType] = useState(DEFAULT_CORP_TYPES[0].value);
   const [editing, setEditing] = useState(false);
   const [docsByType, setDocsByType] = useState<Record<string, Doc[]>>({});
   const [loading, setLoading] = useState(false);
@@ -30,7 +29,7 @@ export default function RequiredDocsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getDocumentRequirements({ corporationType: CORP_TYPE_MAP[type] ?? type });
+      const data = await getDocumentRequirements({ corporationType: type });
       const docs: Doc[] = data.map((d: any) => ({
         requirementId: d.requirementId,
         name: d.documentType ?? d.name ?? "-",
@@ -45,6 +44,18 @@ export default function RequiredDocsPage() {
     }
   };
 
+  useEffect(() => {
+    getCommonCodes({ codeGroupId: "CORPORATE_TYPE", enabled: true })
+      .then((codes) => {
+        const options = codes.map((code) => ({ label: code.codeName, value: code.codeValue })).filter((code) => code.value);
+        if (options.length > 0) {
+          setCorpTypes(options);
+          setSelectedType((prev) => options.some((type) => type.value === prev) ? prev : options[0].value);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => { fetchDocs(selectedType); }, [selectedType]);
 
   const docs = docsByType[selectedType] ?? [];
@@ -54,7 +65,7 @@ export default function RequiredDocsPage() {
     try {
       await createDocumentRequirement({
         documentType: newDoc.name,
-        corporationType: CORP_TYPE_MAP[selectedType] ?? selectedType,
+        corporationType: selectedType,
         required: newDoc.required,
         description: newDoc.note,
       });
@@ -79,6 +90,8 @@ export default function RequiredDocsPage() {
     }
   };
 
+  const selectedLabel = corpTypes.find((type) => type.value === selectedType)?.label ?? selectedType;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -94,13 +107,13 @@ export default function RequiredDocsPage() {
         <div className="w-44 shrink-0 bg-white rounded-lg border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 bg-slate-50"><p className="text-xs font-semibold text-slate-500">법인 유형</p></div>
           {corpTypes.map((type) => (
-            <button key={type} onClick={() => { setSelectedType(type); setEditing(false); }} className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-slate-50 ${selectedType === type ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 hover:bg-slate-50"}`}>{type}</button>
+            <button key={type.value} onClick={() => { setSelectedType(type.value); setEditing(false); }} className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-slate-50 ${selectedType === type.value ? "bg-blue-50 text-blue-600 font-medium" : "text-slate-600 hover:bg-slate-50"}`}>{type.label}</button>
           ))}
         </div>
 
         <div className="flex-1 bg-white rounded-lg border border-slate-200">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-700">{selectedType} · 필수서류 목록</h2>
+            <h2 className="text-sm font-semibold text-slate-700">{selectedLabel} · 필수서류 목록</h2>
             <button onClick={() => setEditing(!editing)} className={`px-4 py-1.5 rounded text-sm transition-colors ${editing ? "bg-slate-100 text-slate-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}>{editing ? "취소" : "편집"}</button>
           </div>
           {loading ? (
@@ -148,7 +161,7 @@ export default function RequiredDocsPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg border border-slate-200 w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-base font-semibold text-slate-800">서류 추가 — {selectedType}</h2>
+            <h2 className="text-base font-semibold text-slate-800">서류 추가 — {selectedLabel}</h2>
             <div className="space-y-3">
               <div><label className="text-xs text-slate-500 mb-1 block">서류명</label><input value={newDoc.name} onChange={(e) => setNewDoc((d) => ({ ...d, name: e.target.value }))} placeholder="사업자등록증" className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" /></div>
               <div><label className="text-xs text-slate-500 mb-1 block">필수 여부</label><select value={newDoc.required ? "필수" : "선택"} onChange={(e) => setNewDoc((d) => ({ ...d, required: e.target.value === "필수" }))} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none"><option>필수</option><option>선택</option></select></div>

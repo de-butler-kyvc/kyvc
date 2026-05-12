@@ -1,17 +1,17 @@
 "use client";
 import { useState, useEffect } from "react";
 import { getAiReviewPolicies, updateAiReviewPolicy, type AiReviewPolicy } from "@/lib/api/ai-review-policies";
+import { getCommonCodes } from "@/lib/api/common-codes";
 
-const CORP_TYPES = ["주식회사", "유한회사", "합명/합자회사", "비영리법인", "조합", "외국기업"];
+const DEFAULT_CORP_TYPES = [
+  { label: "주식회사", value: "CORPORATION" },
+  { label: "유한회사", value: "LIMITED_COMPANY" },
+  { label: "비영리법인", value: "NON_PROFIT" },
+  { label: "조합·단체", value: "ASSOCIATION" },
+  { label: "외국기업", value: "FOREIGN_COMPANY" },
+];
 
-const CORP_TYPE_API: Record<string, string> = {
-  주식회사: "CORPORATION",
-  유한회사: "LIMITED",
-  "합명/합자회사": "PARTNERSHIP",
-  비영리법인: "NON_PROFIT",
-  조합: "COOPERATIVE",
-  외국기업: "FOREIGN",
-};
+type Option = { label: string; value: string };
 
 function policyToFields(policy?: AiReviewPolicy) {
   if (!policy) return { "KYC 유효기간": "", "AI 자동승인 기준": "", "AI 자동반려 기준": "", "수동심사 기준": "" };
@@ -25,22 +25,30 @@ function policyToFields(policy?: AiReviewPolicy) {
 
 export default function PolicyPage() {
   const [policies, setPolicies] = useState<AiReviewPolicy[]>([]);
+  const [corpTypes, setCorpTypes] = useState<Option[]>(DEFAULT_CORP_TYPES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState("주식회사");
+  const [selected, setSelected] = useState(DEFAULT_CORP_TYPES[0].value);
   const [editValues, setEditValues] = useState<Record<string, Record<string, string>>>({});
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
-    getAiReviewPolicies()
-      .then((list) => {
+    Promise.all([
+      getAiReviewPolicies(),
+      getCommonCodes({ codeGroupId: "CORPORATE_TYPE", enabled: true }).catch(() => []),
+    ])
+      .then(([list, codes]) => {
+        const options = codes.map((code) => ({ label: code.codeName, value: code.codeValue })).filter((code) => code.value);
+        const nextCorpTypes = options.length > 0 ? options : DEFAULT_CORP_TYPES;
+        setCorpTypes(nextCorpTypes);
+        setSelected((prev) => nextCorpTypes.some((type) => type.value === prev) ? prev : nextCorpTypes[0].value);
         setPolicies(list);
         const initial: Record<string, Record<string, string>> = {};
-        CORP_TYPES.forEach((type) => {
-          const p = list.find((p) => p.corporationType === CORP_TYPE_API[type]);
-          initial[type] = policyToFields(p);
+        nextCorpTypes.forEach((type) => {
+          const p = list.find((p) => p.corporationType === type.value);
+          initial[type.value] = policyToFields(p);
         });
         setEditValues(initial);
       })
@@ -48,7 +56,8 @@ export default function PolicyPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const currentPolicy = policies.find((p) => p.corporationType === CORP_TYPE_API[selected]);
+  const selectedLabel = corpTypes.find((type) => type.value === selected)?.label ?? selected;
+  const currentPolicy = policies.find((p) => p.corporationType === selected);
   const currentValues = editValues[selected] ?? {};
 
   const handleChange = (label: string, value: string) => {
@@ -94,8 +103,8 @@ export default function PolicyPage() {
         <div className="w-48 border-r border-slate-200 p-4 shrink-0">
           <p className="text-xs text-slate-400 mb-3 font-medium">KYC 규칙 관리</p>
           <div className="space-y-1">
-            {CORP_TYPES.map((type) => (
-              <button key={type} onClick={() => { setSelected(type); setSaved(false); }} className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${type === selected ? "bg-blue-50 text-blue-600 font-medium border border-blue-200" : "text-slate-600 hover:bg-slate-50"}`}>{type}</button>
+            {corpTypes.map((type) => (
+              <button key={type.value} onClick={() => { setSelected(type.value); setSaved(false); }} className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${type.value === selected ? "bg-blue-50 text-blue-600 font-medium border border-blue-200" : "text-slate-600 hover:bg-slate-50"}`}>{type.label}</button>
             ))}
           </div>
         </div>
@@ -107,7 +116,7 @@ export default function PolicyPage() {
             <>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-base font-semibold text-slate-800">{selected} KYC 규칙</h2>
+                  <h2 className="text-base font-semibold text-slate-800">{selectedLabel} KYC 규칙</h2>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${currentPolicy?.enabled ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-500"}`}>{currentPolicy?.enabled ? "활성" : currentPolicy ? "비활성" : "미설정"}</span>
                 </div>
                 <div className="flex gap-2">
@@ -144,7 +153,7 @@ export default function PolicyPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg border border-slate-200 w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-800">{selected} · AI 정책 정보</h2>
+              <h2 className="text-base font-semibold text-slate-800">{selectedLabel} · AI 정책 정보</h2>
               <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
             </div>
             <div className="space-y-2 text-sm">

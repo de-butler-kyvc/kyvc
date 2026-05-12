@@ -11,21 +11,27 @@ const GROUP_BASE = `${API_BASE}/api/admin/backend/common-code-groups`;
 export interface CommonCode {
   codeId: string;
   codeGroupId?: string;
+  codeGroup?: string;
   codeName: string;
+  code?: string;
   codeValue: string;
   description?: string;
   sortOrder?: number;
-  enabled: boolean;
+  enabled?: boolean;
+  enabledYn?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface CommonCodeGroup {
   codeGroupId: string;
+  codeGroup?: string;
   groupName: string;
+  codeGroupName?: string;
   description?: string;
   codeCount?: number;
   enabled?: boolean;
+  enabledYn?: string;
   createdAt?: string;
 }
 
@@ -65,6 +71,25 @@ function getAuthHeaders() {
   return headers;
 }
 
+function normalizeCommonCode(code: CommonCode): CommonCode {
+  return {
+    ...code,
+    codeId: String(code.codeId),
+    codeGroupId: code.codeGroupId != null ? String(code.codeGroupId) : undefined,
+    codeValue: code.codeValue ?? code.code ?? "",
+    enabled: code.enabled ?? code.enabledYn === "Y",
+  };
+}
+
+function normalizeCommonCodeGroup(group: CommonCodeGroup): CommonCodeGroup {
+  return {
+    ...group,
+    codeGroupId: String(group.codeGroupId),
+    groupName: group.groupName ?? group.codeGroupName ?? group.codeGroup ?? String(group.codeGroupId),
+    enabled: group.enabled ?? group.enabledYn === "Y",
+  };
+}
+
 async function errorMessageFromResponse(response: Response): Promise<string> {
   try {
     const text = await response.text();
@@ -94,11 +119,11 @@ export async function getCommonCodes(filters?: {
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCode[] | PageLike<CommonCode>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map(normalizeCommonCode);
 }
 
 /** GET /api/admin/backend/common-codes/{codeId} */
-export async function getCommonCode(codeId: string): Promise<CommonCode> {
+export async function getCommonCode(codeId: string | number): Promise<CommonCode> {
   const response = await fetch(`${CODE_BASE}/${codeId}`, {
     method: "GET",
     headers: getAuthHeaders(),
@@ -106,11 +131,11 @@ export async function getCommonCode(codeId: string): Promise<CommonCode> {
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCode>;
-  return json.data;
+  return normalizeCommonCode(json.data);
 }
 
 /** POST /api/admin/backend/common-codes/{codeId}/enable */
-export async function enableCommonCode(codeId: string): Promise<void> {
+export async function enableCommonCode(codeId: string | number): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/enable`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -120,7 +145,7 @@ export async function enableCommonCode(codeId: string): Promise<void> {
 }
 
 /** POST /api/admin/backend/common-codes/{codeId}/disable */
-export async function disableCommonCode(codeId: string): Promise<void> {
+export async function disableCommonCode(codeId: string | number): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/disable`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -150,7 +175,7 @@ export async function createCommonCode(data: {
 
 /** PATCH /api/admin/backend/common-codes/{codeId} — 공통코드 수정 */
 export async function updateCommonCode(
-  codeId: string,
+  codeId: string | number,
   data: { codeName?: string; codeValue?: string; description?: string; sortOrder?: number }
 ): Promise<CommonCode> {
   const response = await fetch(`${CODE_BASE}/${codeId}`, {
@@ -165,7 +190,7 @@ export async function updateCommonCode(
 }
 
 /** DELETE /api/admin/backend/common-codes/{codeId} — 공통코드 삭제 */
-export async function deleteCommonCode(codeId: string): Promise<void> {
+export async function deleteCommonCode(codeId: string | number): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
@@ -188,11 +213,11 @@ export async function getCommonCodeGroups(filters?: {
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCodeGroup[] | PageLike<CommonCodeGroup>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map(normalizeCommonCodeGroup);
 }
 
 /** GET /api/admin/backend/common-code-groups/{codeGroupId} */
-export async function getCommonCodeGroup(codeGroupId: string): Promise<CommonCodeGroupDetail> {
+export async function getCommonCodeGroup(codeGroupId: string | number): Promise<CommonCodeGroupDetail> {
   const response = await fetch(`${GROUP_BASE}/${codeGroupId}`, {
     method: "GET",
     headers: getAuthHeaders(),
@@ -200,5 +225,8 @@ export async function getCommonCodeGroup(codeGroupId: string): Promise<CommonCod
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCodeGroupDetail>;
-  return json.data;
+  return {
+    ...normalizeCommonCodeGroup(json.data),
+    codes: json.data.codes?.map(normalizeCommonCode),
+  };
 }
