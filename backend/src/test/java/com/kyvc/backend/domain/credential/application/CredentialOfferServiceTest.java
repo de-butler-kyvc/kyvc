@@ -7,6 +7,7 @@ import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.domain.CredentialOffer;
 import com.kyvc.backend.domain.credential.dto.CredentialOfferCreateResponse;
+import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareRequest;
 import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
@@ -27,12 +28,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,6 +76,9 @@ class CredentialOfferServiceTest {
 
     @Captor
     private ArgumentCaptor<CredentialOffer> offerCaptor;
+
+    @Captor
+    private ArgumentCaptor<String> holderKeyIdCaptor;
 
     private CredentialOfferService service;
 
@@ -149,6 +156,64 @@ class CredentialOfferServiceTest {
         verify(credentialOfferRepository, never()).save(any(CredentialOffer.class));
     }
 
+    @Test
+    void prepareWalletCredential_usesHolderDidFallbackHolderKeyId() {
+        mockPrepareCredential("did:xrpl:1:rHolder", null);
+
+        service.prepareWalletCredential(
+                1L,
+                100L,
+                new WalletCredentialPrepareRequest(
+                        "qr-token-001",
+                        "device-001",
+                        "did:xrpl:1:rHolder",
+                        "rHolder",
+                        null,
+                        true
+                )
+        );
+
+        verify(credentialIssuanceService).issueKycCredentialForHolder(
+                any(KycApplication.class),
+                eq(1L),
+                eq("did:xrpl:1:rHolder"),
+                eq("rHolder"),
+                holderKeyIdCaptor.capture(),
+                any(),
+                any(ResolvedIssuer.class)
+        );
+        assertThat(holderKeyIdCaptor.getValue()).isEqualTo("did:xrpl:1:rHolder#holder-key-1");
+    }
+
+    @Test
+    void prepareWalletCredential_usesRequestHolderKeyIdFirst() {
+        mockPrepareCredential("did:xrpl:1:rHolder", "did:xrpl:1:rHolder#custom-key");
+
+        service.prepareWalletCredential(
+                1L,
+                100L,
+                new WalletCredentialPrepareRequest(
+                        "qr-token-001",
+                        "device-001",
+                        "did:xrpl:1:rHolder",
+                        "rHolder",
+                        "did:xrpl:1:rHolder#custom-key",
+                        true
+                )
+        );
+
+        verify(credentialIssuanceService).issueKycCredentialForHolder(
+                any(KycApplication.class),
+                eq(1L),
+                eq("did:xrpl:1:rHolder"),
+                eq("rHolder"),
+                holderKeyIdCaptor.capture(),
+                any(),
+                any(ResolvedIssuer.class)
+        );
+        assertThat(holderKeyIdCaptor.getValue()).isEqualTo("did:xrpl:1:rHolder#custom-key");
+    }
+
     private Corporate createCorporate() {
         Corporate corporate = Corporate.create(
                 1L,
@@ -180,5 +245,75 @@ class CredentialOfferServiceTest {
         KycApplication kycApplication = KycApplication.createDraft(20L, 1L, "CORPORATION");
         ReflectionTestUtils.setField(kycApplication, "kycId", 10L);
         return kycApplication;
+    }
+
+    private void mockPrepareCredential(
+            String holderDid, // Holder DID
+            String holderKeyId // Holder 키 ID
+    ) {
+        Corporate corporate = createCorporate();
+        KycApplication kycApplication = createApprovedKyc();
+        CredentialOffer offer = CredentialOffer.create(
+                10L,
+                20L,
+                TokenHashUtil.sha256("qr-token-001"),
+                LocalDateTime.now().plusMinutes(10)
+        );
+        ReflectionTestUtils.setField(offer, "credentialOfferId", 100L);
+        ResolvedIssuer issuer = new ResolvedIssuer(
+                "rIssuer",
+                "did:xrpl:1:rIssuer",
+                "did:xrpl:1:rIssuer#issuer-key-1",
+                "issuer-key-1",
+                KyvcEnums.CredentialType.KYC_CREDENTIAL.name()
+        );
+        Credential credential = createValidCredential(holderDid, "rHolder");
+
+        when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
+        when(credentialOfferRepository.getById(100L)).thenReturn(offer);
+        when(kycApplicationRepository.findById(10L)).thenReturn(Optional.of(kycApplication));
+        when(credentialIssuerResolver.resolveKycIssuer()).thenReturn(issuer);
+        when(credentialClaimsAssembler.assemble(kycApplication)).thenReturn(Map.of("corporateName", "KYVC Corp"));
+        when(credentialIssuanceService.issueKycCredentialForHolder(
+                any(KycApplication.class),
+                eq(1L),
+                eq(holderDid),
+                eq("rHolder"),
+                eq(holderKeyId == null ? holderDid + "#holder-key-1" : holderKeyId),
+                any(),
+                eq(issuer)
+        )).thenReturn(credential);
+    }
+
+    private Credential createValidCredential(
+            String holderDid, // Holder DID
+            String holderXrplAddress // Holder XRPL 주소
+    ) {
+        Credential credential = Credential.createIssuing(
+                20L,
+                10L,
+                "credential-external-001",
+                KyvcEnums.CredentialType.KYC_CREDENTIAL.name(),
+                "did:xrpl:1:rIssuer",
+                "REVOCATION",
+                KyvcEnums.KycLevel.STANDARD.name(),
+                KyvcEnums.Jurisdiction.KR.name(),
+                holderDid,
+                holderXrplAddress
+        );
+        ReflectionTestUtils.setField(credential, "credentialId", 200L);
+        credential.applyIssuanceMetadata(
+                "credential-external-001",
+                KyvcEnums.CredentialType.KYC_CREDENTIAL.name(),
+                "did:xrpl:1:rIssuer",
+                KyvcEnums.CredentialStatus.VALID,
+                "vc-hash-001",
+                "tx-hash-001",
+                "status-id-001",
+                LocalDateTime.now(),
+                LocalDateTime.now().plusYears(1)
+        );
+        credential.applyCredentialPayload("vc+jwt", null, "vc.jwt.001");
+        return credential;
     }
 }

@@ -1177,7 +1177,13 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (StringUtils.hasText(request.holderKeyId())) {
             return request.holderKeyId().trim();
         }
-        return coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null;
+        if (StringUtils.hasText(request.holderDid())) {
+            return request.holderDid().trim() + "#holder-key-1";
+        }
+        if (coreProperties.isDevSeedEnabled()) {
+            return CoreMockSeedData.DEV_HOLDER_KEY_ID;
+        }
+        throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 Holder 키 식별자가 없습니다.");
     }
 
     private String resolveVct(

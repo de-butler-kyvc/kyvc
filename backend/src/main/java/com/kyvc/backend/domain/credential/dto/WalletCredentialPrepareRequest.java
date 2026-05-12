@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @param deviceId 모바일 기기 ID
  * @param holderDid Holder DID
  * @param holderXrplAddress Holder XRPL 주소
+ * @param holderKeyId Holder 키 ID
  * @param accepted 저장 동의 여부
  */
 @Schema(description = "Wallet Credential 준비 요청")
@@ -21,6 +22,8 @@ public record WalletCredentialPrepareRequest(
         String holderDid, // Holder DID
         @Schema(description = "Holder XRPL 주소", example = "rHolder")
         String holderXrplAddress, // Holder XRPL 주소
+        @Schema(description = "Holder 키 ID", example = "did:xrpl:1:rHolder#holder-key-1")
+        String holderKeyId, // Holder 키 ID
         @Schema(description = "저장 동의 여부", example = "true")
         Boolean accepted // 저장 동의 여부
 ) {
