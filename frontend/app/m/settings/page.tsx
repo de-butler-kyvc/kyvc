@@ -7,8 +7,9 @@ import { MIcon } from "@/components/m/icons";
 import { MToggle, MTopBar } from "@/components/m/parts";
 import { ApiError, auth, corporate, type CorporateProfile } from "@/lib/api";
 import { clearKyvcLocalStorage } from "@/lib/kyc-flow";
-import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { bridge, isBridgeAvailable, type AuthStatus } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
+import { clearWalletUiState } from "@/lib/m/wallet-owner";
 
 export default function MobileSettingsPage() {
   const router = useRouter();
@@ -27,6 +28,8 @@ export default function MobileSettingsPage() {
   });
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingWallet, setDeletingWallet] = useState(false);
 
   const showToast = (message: string) => {
     setToastClosing(false);
@@ -70,16 +73,56 @@ export default function MobileSettingsPage() {
     };
   }, [router]);
 
-  const onLogout = async () => {
-    // 동시 호출: 백엔드 세션 종료 + 네이티브 인증 세션 무효화
-    const tasks: Promise<unknown>[] = [];
-    tasks.push(auth.logout().catch(() => null));
-    if (isBridgeAvailable()) {
-      tasks.push(bridge.logout().catch(() => null));
+  const nativeAuthMethod = (status: AuthStatus) => {
+    if (status.availableMethods?.includes("biometric")) return "biometric";
+    if (status.availableMethods?.includes("pin")) return "pin";
+    if (status.availableMethods?.includes("pattern")) return "pattern";
+    return null;
+  };
+
+  const ensureNativeSession = async () => {
+    const status = await bridge.getAuthStatus();
+    if (status.sessionUnlocked) return;
+    const method = nativeAuthMethod(status);
+    if (!method) throw new Error("사용 가능한 네이티브 인증 수단이 없습니다.");
+    const result = await bridge.requestNativeAuth(method, "wallet-login");
+    if (!result.ok || !result.authenticated) {
+      throw new Error(result.error ?? "네이티브 인증에 실패했습니다.");
     }
-    await Promise.all(tasks);
+  };
+
+  const onConfirmDeleteAndLogout = async () => {
+    setDeletingWallet(true);
+    try {
+      if (isBridgeAvailable()) {
+        await ensureNativeSession();
+        const result = await bridge.logoutAndDeleteLocalWalletData();
+        if (!result.ok) {
+          throw new Error(result.error ?? "지갑 삭제와 로그아웃에 실패했습니다.");
+        }
+      }
+      await auth.logout().catch(() => null);
+      clearWalletUiState();
+      mSession.clearAll();
+      clearKyvcLocalStorage();
+      router.replace("/m");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "지갑 삭제와 로그아웃에 실패했습니다.");
+    } finally {
+      setDeletingWallet(false);
+      setDeleteConfirmOpen(false);
+    }
+  };
+
+  const onLogout = async () => {
+    setDeleteConfirmOpen(true);
+  };
+
+  const onWebOnlyLogout = async () => {
+    await auth.logout().catch(() => null);
+    clearWalletUiState();
+    mSession.clearAll();
     clearKyvcLocalStorage();
-    // 로그아웃 직후 getWalletInfo 자동 호출 금지(가이드 권장).
     router.replace("/m");
   };
 
@@ -205,7 +248,7 @@ export default function MobileSettingsPage() {
           onClick={onLogout}
         >
           <MIcon.logout />
-          <span>로그아웃</span>
+          <span>지갑 삭제 및 로그아웃</span>
         </button>
         <p className="settings-version">KYvC Wallet v1.0.4</p>
       </div>
@@ -214,6 +257,50 @@ export default function MobileSettingsPage() {
           {toast}
         </div>
       ) : null}
+      {deleteConfirmOpen ? (
+        <WalletDeleteConfirmDialog
+          busy={deletingWallet}
+          onCancel={() => setDeleteConfirmOpen(false)}
+          onConfirm={onConfirmDeleteAndLogout}
+          onWebOnlyLogout={!isBridgeAvailable() ? onWebOnlyLogout : undefined}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function WalletDeleteConfirmDialog({
+  busy,
+  onCancel,
+  onConfirm,
+  onWebOnlyLogout,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onWebOnlyLogout?: () => void;
+}) {
+  return (
+    <div className="wallet-owner-dialog-layer" role="dialog" aria-modal="true">
+      <div className="wallet-owner-dialog">
+        <div className="wallet-owner-dialog-icon">!</div>
+        <h2>지갑을 삭제하고 로그아웃할까요?</h2>
+        <p>
+          이 기기에 저장된 로컬 지갑 데이터가 삭제됩니다. 원래 사용하던 지갑은
+          복구 문구로 다시 복구할 수 있습니다.
+        </p>
+        <button type="button" onClick={onConfirm} disabled={busy}>
+          {busy ? "삭제 중..." : "지갑 삭제 후 로그아웃"}
+        </button>
+        {onWebOnlyLogout ? (
+          <button type="button" className="wallet-owner-dialog-secondary" onClick={onWebOnlyLogout}>
+            웹 세션만 로그아웃
+          </button>
+        ) : null}
+        <button type="button" className="wallet-owner-dialog-secondary" onClick={onCancel}>
+          취소
+        </button>
+      </div>
+    </div>
   );
 }

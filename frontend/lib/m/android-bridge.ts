@@ -138,10 +138,19 @@ export function isWalletOwnerMismatch(result: BridgeResult) {
   );
 }
 
+export function isPreviousWalletDeleted(result: BridgeResult) {
+  return result.walletAccess === "previous_wallet_deleted";
+}
+
 function dispatchResult(result: BridgeResult) {
   if (typeof window !== "undefined" && isWalletOwnerMismatch(result)) {
     window.dispatchEvent(
       new CustomEvent("kyvc-wallet-owner-mismatch", { detail: result }),
+    );
+  }
+  if (typeof window !== "undefined" && isPreviousWalletDeleted(result)) {
+    window.dispatchEvent(
+      new CustomEvent("kyvc-previous-wallet-deleted", { detail: result }),
     );
   }
 
@@ -358,6 +367,7 @@ export type AuthStatus = BridgeResult & {
 export type WalletAccess =
   | "allowed"
   | "no_wallet"
+  | "previous_wallet_deleted"
   | "binding_required"
   | "wallet_owner_mismatch"
   | string;
@@ -681,6 +691,10 @@ export const bridge = {
   deleteLocalWalletData: () =>
     callBridge("deleteLocalWalletData", {
       action: "DELETE_LOCAL_WALLET_DATA",
+    }),
+  logoutAndDeleteLocalWalletData: () =>
+    callBridge("logoutAndDeleteLocalWalletData", {
+      action: "LOGOUT_AND_DELETE_LOCAL_WALLET_DATA",
     }),
   submitHolderDidSet: (didDocumentUri?: string) =>
     callBridge("submitHolderDidSet", {

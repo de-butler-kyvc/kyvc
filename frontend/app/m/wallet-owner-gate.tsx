@@ -7,6 +7,7 @@ import { auth } from "@/lib/api";
 import { isBridgeAvailable, type BridgeResult } from "@/lib/m/android-bridge";
 import {
   bindSessionWalletOwner,
+  clearWalletUiState,
   logoutForWalletOwnerMismatch,
   WalletOwnerMismatchError,
 } from "@/lib/m/wallet-owner";
@@ -43,6 +44,18 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
     };
 
     window.addEventListener("kyvc-wallet-owner-mismatch", onMismatch);
+    const onPreviousWalletDeleted = (event: Event) => {
+      const detail = (event as CustomEvent<BridgeResult>).detail;
+      clearWalletUiState();
+      showWalletOwnerDialog({
+        title: "기존 로컬 지갑을 삭제했습니다.",
+        hint:
+          typeof detail.errorHint === "string"
+            ? detail.errorHint
+            : "현재 계정으로 새 지갑을 생성하거나 기존 지갑을 복구하세요.",
+      });
+    };
+    window.addEventListener("kyvc-previous-wallet-deleted", onPreviousWalletDeleted);
     const onDialog = (event: Event) => {
       setBlockingDialog((event as CustomEvent<WalletOwnerDialogDetail>).detail);
     };
@@ -81,6 +94,7 @@ export default function WalletOwnerGate({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       window.removeEventListener("kyvc-wallet-owner-mismatch", onMismatch);
+      window.removeEventListener("kyvc-previous-wallet-deleted", onPreviousWalletDeleted);
       window.removeEventListener(WALLET_OWNER_DIALOG_EVENT, onDialog);
     };
   }, [router]);
