@@ -9,6 +9,8 @@ import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
+import com.kyvc.backend.domain.credential.domain.CredentialOffer;
+import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.vp.domain.VpVerification;
 import com.kyvc.backend.domain.vp.dto.EligibleCredentialListResponse;
@@ -60,6 +62,9 @@ class VpVerificationServiceTest {
     private CredentialRepository credentialRepository;
 
     @Mock
+    private CredentialOfferRepository credentialOfferRepository;
+
+    @Mock
     private CorporateRepository corporateRepository;
 
     @Mock
@@ -93,6 +98,7 @@ class VpVerificationServiceTest {
         service = new VpVerificationService(
                 vpVerificationRepository,
                 credentialRepository,
+                credentialOfferRepository,
                 corporateRepository,
                 coreRequestService,
                 coreAdapter,
@@ -105,6 +111,12 @@ class VpVerificationServiceTest {
 
     @Test
     void resolveQr_parsesCredentialOfferQr() {
+        when(credentialOfferRepository.getById(1L)).thenReturn(createCredentialOffer(
+                1L,
+                KyvcEnums.CredentialOfferStatus.ACTIVE,
+                LocalDateTime.now().plusMinutes(10)
+        ));
+
         QrResolveResponse response = service.resolveQr(
                 userDetails(),
                 new QrResolveRequest("{\"type\":\"CREDENTIAL_OFFER\",\"offerId\":1,\"qrToken\":\"token\"}")
@@ -752,6 +764,21 @@ class VpVerificationServiceTest {
         ReflectionTestUtils.setField(credential, "expiresAt", expiresAt);
         ReflectionTestUtils.setField(credential, "walletSavedYn", walletSavedYn);
         return credential;
+    }
+
+    private CredentialOffer createCredentialOffer(
+            Long offerId, // Offer ID
+            KyvcEnums.CredentialOfferStatus offerStatus, // Offer 상태
+            LocalDateTime expiresAt // 만료 일시
+    ) {
+        CredentialOffer offer = newInstance(CredentialOffer.class);
+        ReflectionTestUtils.setField(offer, "credentialOfferId", offerId);
+        ReflectionTestUtils.setField(offer, "kycId", 300L);
+        ReflectionTestUtils.setField(offer, "corporateId", 10L);
+        ReflectionTestUtils.setField(offer, "offerTokenHash", "token-hash");
+        ReflectionTestUtils.setField(offer, "offerStatus", offerStatus);
+        ReflectionTestUtils.setField(offer, "expiresAt", expiresAt);
+        return offer;
     }
 
     private VpVerification createRequestedVpVerification(

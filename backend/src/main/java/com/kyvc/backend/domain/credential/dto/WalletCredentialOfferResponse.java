@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
  * Wallet Credential Offer 응답
  *
  * @param offerId Offer ID
+ * @param kycId KYC 신청 ID
  * @param credentialId Credential ID
  * @param credentialTypeCode Credential 유형 코드
  * @param issuerDid 발급자 DID
@@ -20,6 +21,8 @@ import java.time.LocalDateTime;
 public record WalletCredentialOfferResponse(
         @Schema(description = "Offer ID", example = "1")
         Long offerId, // Offer ID
+        @Schema(description = "KYC 신청 ID", example = "10")
+        Long kycId, // KYC 신청 ID
         @Schema(description = "Credential ID", example = "1")
         Long credentialId, // Credential ID
         @Schema(description = "Credential 유형 코드", example = "KYC_CREDENTIAL")

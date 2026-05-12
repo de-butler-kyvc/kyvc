@@ -78,6 +78,7 @@ public class MobileWalletService {
 
         return new WalletCredentialOfferResponse(
                 offerId,
+                credential.getKycId(),
                 credential.getCredentialId(),
                 credential.getCredentialTypeCode(),
                 credential.getIssuerDid(),

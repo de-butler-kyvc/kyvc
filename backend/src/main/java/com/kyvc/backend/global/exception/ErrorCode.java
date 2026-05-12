@@ -178,6 +178,22 @@ public enum ErrorCode {
     CREDENTIAL_OFFER_INVALID_TOKEN(HttpStatus.BAD_REQUEST, "CREDENTIAL_OFFER_INVALID_TOKEN", "Credential Offer 토큰이 올바르지 않습니다."),
     // HTTP 409 - Credential Offer 사용 완료
     CREDENTIAL_OFFER_ALREADY_USED(HttpStatus.CONFLICT, "CREDENTIAL_OFFER_ALREADY_USED", "이미 사용된 Credential Offer입니다."),
+    // HTTP 409 - Credential Offer 상태 오류
+    CREDENTIAL_OFFER_NOT_ACTIVE(HttpStatus.CONFLICT, "CREDENTIAL_OFFER_NOT_ACTIVE", "유효하지 않은 Credential Offer입니다."),
+    // HTTP 409 - Credential Offer 생성 불가
+    CREDENTIAL_OFFER_CREATE_NOT_ALLOWED(HttpStatus.CONFLICT, "CREDENTIAL_OFFER_CREATE_NOT_ALLOWED", "현재 상태에서는 Credential Offer를 생성할 수 없습니다."),
+    // HTTP 403 - Credential Offer 접근 거부
+    CREDENTIAL_OFFER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CREDENTIAL_OFFER_ACCESS_DENIED", "Credential Offer 접근 권한이 없습니다."),
+    // HTTP 502 - Wallet Credential 준비 실패
+    WALLET_CREDENTIAL_PREPARE_FAILED(HttpStatus.BAD_GATEWAY, "WALLET_CREDENTIAL_PREPARE_FAILED", "Wallet 저장 준비에 실패했습니다."),
+    // HTTP 409 - Wallet Credential 확정 실패
+    WALLET_CREDENTIAL_CONFIRM_FAILED(HttpStatus.CONFLICT, "WALLET_CREDENTIAL_CONFIRM_FAILED", "Wallet 저장 확정에 실패했습니다."),
+    // HTTP 400 - Credential claims 필수 데이터 부족
+    CREDENTIAL_CLAIMS_REQUIRED_DATA_MISSING(HttpStatus.BAD_REQUEST, "CREDENTIAL_CLAIMS_REQUIRED_DATA_MISSING", "Credential 발급에 필요한 claims 데이터가 부족합니다."),
+    // HTTP 404 - Credential Issuer 설정 없음
+    CREDENTIAL_ISSUER_CONFIG_NOT_FOUND(HttpStatus.NOT_FOUND, "CREDENTIAL_ISSUER_CONFIG_NOT_FOUND", "Credential 발급자 설정을 찾을 수 없습니다."),
+    // HTTP 410 - Deprecated API
+    DEPRECATED_API(HttpStatus.GONE, "DEPRECATED_API", "더 이상 사용하지 않는 API입니다."),
     // HTTP 404 - Wallet Credential 없음
     WALLET_CREDENTIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "WALLET_CREDENTIAL_NOT_FOUND", "Wallet Credential을 찾을 수 없습니다."),
     // HTTP 409 - Wallet Credential 중복 저장

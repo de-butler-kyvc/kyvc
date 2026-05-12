@@ -12,6 +12,8 @@ import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
+import com.kyvc.backend.domain.credential.domain.CredentialOffer;
+import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.vp.domain.VpVerification;
 import com.kyvc.backend.domain.vp.dto.EligibleCredentialListResponse;
@@ -56,6 +58,7 @@ public class VpVerificationService {
 
     private final VpVerificationRepository vpVerificationRepository;
     private final CredentialRepository credentialRepository;
+    private final CredentialOfferRepository credentialOfferRepository;
     private final CorporateRepository corporateRepository;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
@@ -242,6 +245,8 @@ public class VpVerificationService {
             JsonNode rootNode // QR Payload JSON
     ) {
         Long offerId = extractLongField(rootNode, "offerId");
+        CredentialOffer credentialOffer = credentialOfferRepository.getById(offerId);
+        validateCredentialOfferResolvable(credentialOffer, LocalDateTime.now());
         return new QrResolveResponse(
                 KyvcEnums.QrType.CREDENTIAL_OFFER.name(),
                 String.valueOf(offerId),
@@ -250,6 +255,21 @@ public class VpVerificationService {
                 KyvcEnums.QrNextAction.OPEN_CREDENTIAL_OFFER.name(),
                 QR_CREDENTIAL_OFFER_MESSAGE
         );
+    }
+
+    private void validateCredentialOfferResolvable(
+            CredentialOffer credentialOffer, // Credential Offer
+            LocalDateTime now // 기준 일시
+    ) {
+        if (credentialOffer.isUsed()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_OFFER_ALREADY_USED);
+        }
+        if (credentialOffer.isExpired(now)) {
+            throw new ApiException(ErrorCode.CREDENTIAL_OFFER_EXPIRED);
+        }
+        if (KyvcEnums.CredentialOfferStatus.ACTIVE != credentialOffer.getOfferStatus()) {
+            throw new ApiException(ErrorCode.CREDENTIAL_OFFER_NOT_ACTIVE);
+        }
     }
 
     private QrResolveResponse resolveVpRequestQr(

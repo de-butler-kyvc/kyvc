@@ -21,6 +21,16 @@ public interface CredentialRepository {
     );
 
     /**
+     * KYC 신청 ID 기준 Wallet 저장 완료 유효 Credential 존재 여부
+     *
+     * @param kycId KYC 신청 ID
+     * @return Wallet 저장 완료 유효 Credential 존재 여부
+     */
+    boolean existsWalletSavedValidByKycId(
+            Long kycId // KYC 신청 ID
+    );
+
+    /**
      * 법인 ID 기준 최신 Credential 조회
      *
      * @param corporateId 법인 ID

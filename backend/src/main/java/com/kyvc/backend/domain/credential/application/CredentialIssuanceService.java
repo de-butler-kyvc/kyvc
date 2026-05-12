@@ -30,6 +30,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.UUID;
 
 // KYC 승인 후 VC 발급 요청 서비스
 @Service
@@ -74,6 +75,33 @@ public class CredentialIssuanceService {
             Long userId // 사용자 ID
     ) {
         return issueKycCredentialIfRequired(kycApplication, KyvcEnums.ActorType.USER, userId);
+    }
+
+    // Holder 정보 기반 KYC Credential 발급 요청
+    public Credential issueKycCredentialForHolder(
+            KycApplication kycApplication, // KYC 신청
+            Long requestedByUserId, // 요청 사용자 ID
+            String holderDid, // Holder DID
+            String holderXrplAddress, // Holder XRPL 주소
+            Map<String, Object> claims, // VC claims
+            ResolvedIssuer issuer // 발급 Issuer
+    ) {
+        validateHolderIssuanceInput(kycApplication, holderDid, holderXrplAddress, claims, issuer);
+        Credential credential = createIssuingCredentialForHolder(
+                kycApplication,
+                requestedByUserId,
+                holderDid,
+                holderXrplAddress,
+                issuer
+        );
+        return requestVcIssuance(
+                kycApplication,
+                credential,
+                KyvcEnums.ActorType.USER,
+                requestedByUserId,
+                claims,
+                issuer
+        );
     }
 
     private Credential issueKycCredentialIfRequired(
@@ -134,11 +162,54 @@ public class CredentialIssuanceService {
         return saved;
     }
 
+    private Credential createIssuingCredentialForHolder(
+            KycApplication kycApplication, // KYC 신청
+            Long requestedByUserId, // 요청 사용자 ID
+            String holderDid, // Holder DID
+            String holderXrplAddress, // Holder XRPL 주소
+            ResolvedIssuer issuer // 발급 Issuer
+    ) {
+        Credential credential = Credential.createIssuing(
+                kycApplication.getCorporateId(),
+                kycApplication.getKycId(),
+                PENDING_EXTERNAL_ID_PREFIX + kycApplication.getKycId() + "-" + UUID.randomUUID(),
+                issuer.credentialType(),
+                issuer.issuerDid(),
+                CoreMockSeedData.DEV_CREDENTIAL_STATUS_PURPOSE,
+                KyvcEnums.KycLevel.STANDARD.name(),
+                KyvcEnums.Jurisdiction.KR.name(),
+                holderDid,
+                holderXrplAddress
+        );
+        Credential saved = credentialRepository.save(credential);
+        saveStatusHistory(
+                saved.getCredentialId(),
+                null,
+                saved.getCredentialStatus(),
+                KyvcEnums.ActorType.USER,
+                requestedByUserId,
+                KyvcEnums.CredentialRequestType.ISSUE.name(),
+                "Wallet 수령 VC 발급 요청 생성"
+        );
+        return saved;
+    }
+
     private Credential requestVcIssuance(
             KycApplication kycApplication, // KYC 신청
             Credential credential, // 발급 대상 Credential
             KyvcEnums.ActorType actorType, // 요청자 유형
             Long actorId // 요청자 ID
+    ) {
+        return requestVcIssuance(kycApplication, credential, actorType, actorId, null, null);
+    }
+
+    private Credential requestVcIssuance(
+            KycApplication kycApplication, // KYC 신청
+            Credential credential, // 발급 대상 Credential
+            KyvcEnums.ActorType actorType, // 요청자 유형
+            Long actorId, // 요청자 ID
+            Map<String, Object> claims, // VC claims
+            ResolvedIssuer issuer // 발급 Issuer
     ) {
         CredentialRequest credentialRequest = credentialRequestRepository.save(CredentialRequest.create(
                 credential.getCredentialId(),
@@ -151,7 +222,13 @@ public class CredentialIssuanceService {
         CoreRequest coreRequest = coreRequestService.createVcIssuanceRequest(credential.getCredentialId(), null);
         credentialRequest.markProcessing(coreRequest.getCoreRequestId());
         credentialRequestRepository.save(credentialRequest);
-        CoreVcIssuanceRequest request = buildVcIssuanceRequest(kycApplication, credential, coreRequest.getCoreRequestId());
+        CoreVcIssuanceRequest request = buildVcIssuanceRequest(
+                kycApplication,
+                credential,
+                coreRequest.getCoreRequestId(),
+                claims,
+                issuer
+        );
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(request));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
 
@@ -279,12 +356,19 @@ public class CredentialIssuanceService {
     private CoreVcIssuanceRequest buildVcIssuanceRequest(
             KycApplication kycApplication, // KYC 신청
             Credential credential, // 발급 대상 Credential
-            String coreRequestId // Core 요청 ID
+            String coreRequestId, // Core 요청 ID
+            Map<String, Object> claims, // VC claims
+            ResolvedIssuer issuer // 발급 Issuer
     ) {
-        IssuanceSeed seed = resolveIssuanceSeed(credential);
+        IssuanceSeed seed = issuer == null
+                ? resolveIssuanceSeed(credential)
+                : resolveIssuanceSeed(credential, issuer);
         OffsetDateTime validFrom = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime validUntil = validFrom.plusYears(1);
-        String credentialType = resolveText(credential.getCredentialTypeCode(), CoreMockSeedData.DEV_CREDENTIAL_TYPE);
+        String credentialType = resolveText(
+                issuer == null ? credential.getCredentialTypeCode() : issuer.credentialType(),
+                CoreMockSeedData.DEV_CREDENTIAL_TYPE
+        );
         return new CoreVcIssuanceRequest(
                 coreRequestId,
                 credential.getCredentialId(),
@@ -295,13 +379,13 @@ public class CredentialIssuanceService {
                 null,
                 seed.issuerDid(),
                 seed.issuerVerificationMethodId(),
-                null,
+                issuer == null ? null : issuer.signingKeyRef(),
                 seed.holderAccount(),
                 seed.holderDid(),
                 credentialType,
                 resolveText(credential.getKycLevelCode(), CoreMockSeedData.DEV_KYC_LEVEL),
                 resolveText(credential.getJurisdictionCode(), CoreMockSeedData.DEV_JURISDICTION),
-                resolveClaims(),
+                claims == null ? resolveClaims() : claims,
                 validFrom,
                 validUntil,
                 true,
@@ -314,9 +398,31 @@ public class CredentialIssuanceService {
                 CORE_STATUS_MODE_XRPL,
                 CORE_CREDENTIAL_FORMAT_JWT,
                 CORE_VC_FORMAT_JWT,
-                coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
+                issuer == null && coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
                 credentialType,
                 validFrom
+        );
+    }
+
+    private IssuanceSeed resolveIssuanceSeed(
+            Credential credential, // 발급 대상 Credential
+            ResolvedIssuer issuer // 발급 Issuer
+    ) {
+        if (credential == null
+                || issuer == null
+                || !StringUtils.hasText(issuer.issuerAccount())
+                || !StringUtils.hasText(issuer.issuerDid())
+                || !StringUtils.hasText(issuer.issuerVerificationMethodId())
+                || !StringUtils.hasText(credential.getHolderDid())
+                || !StringUtils.hasText(credential.getHolderXrplAddress())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
+        }
+        return new IssuanceSeed(
+                issuer.issuerAccount(),
+                issuer.issuerDid(),
+                issuer.issuerVerificationMethodId(),
+                credential.getHolderXrplAddress(),
+                credential.getHolderDid()
         );
     }
 
@@ -357,6 +463,32 @@ public class CredentialIssuanceService {
             throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 claims 데이터가 부족합니다.");
         }
         return CoreMockSeedData.legalEntityClaims();
+    }
+
+    private void validateHolderIssuanceInput(
+            KycApplication kycApplication, // KYC 신청
+            String holderDid, // Holder DID
+            String holderXrplAddress, // Holder XRPL 주소
+            Map<String, Object> claims, // VC claims
+            ResolvedIssuer issuer // 발급 Issuer
+    ) {
+        if (kycApplication == null || kycApplication.getKycId() == null) {
+            throw new ApiException(ErrorCode.KYC_NOT_FOUND);
+        }
+        if (!kycApplication.isCredentialIssuable()) {
+            throw new ApiException(ErrorCode.KYC_INVALID_STATUS);
+        }
+        if (!StringUtils.hasText(holderDid)
+                || !StringUtils.hasText(holderXrplAddress)
+                || claims == null
+                || claims.isEmpty()
+                || issuer == null
+                || !StringUtils.hasText(issuer.issuerAccount())
+                || !StringUtils.hasText(issuer.issuerDid())
+                || !StringUtils.hasText(issuer.issuerVerificationMethodId())
+                || !StringUtils.hasText(issuer.credentialType())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING);
+        }
     }
 
     private KyvcEnums.CredentialStatus resolveCredentialStatus(
