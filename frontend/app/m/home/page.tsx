@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import {
@@ -42,7 +42,7 @@ const TEST_CREDENTIAL: CertItem = {
   issuer: "우리은행",
   title: "법인 KYC 증명서",
   status: "유효",
-  id: "DID:kyvc:corp:240315",
+  id: "KYVC-CERT-240315",
   date: "2026.05.03",
   expiresAt: "2026.05.07",
   gradient: PALETTES[0]!,
@@ -72,6 +72,45 @@ export default function MobileHomePage() {
   const [testState, setTestState] = useState<HomeTestState>("bridge");
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
+
+  const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
+    const holderAccount = info.holderAccount ?? info.account;
+    const holderDid = info.holderDid ?? info.did;
+    return {
+      ...info,
+      ...(holderAccount ? { account: holderAccount, holderAccount } : {}),
+      ...(holderDid ? { did: holderDid, holderDid } : {}),
+    };
+  }, []);
+
+  const refreshHolderDidState = useCallback(
+    async (base?: WalletInfo | null) => {
+      if (!isBridgeAvailable()) return base ?? null;
+
+      let next = base ? normalizeWalletInfo(base) : null;
+      try {
+        const info = await bridge.getWalletInfo();
+        if (info.ok) {
+          next = normalizeWalletInfo({ ...(next ?? { ok: true }), ...info });
+        }
+      } catch {
+        // DID 상태 확인은 아래 checkHolderDidSet 결과로 한 번 더 시도한다.
+      }
+
+      try {
+        const did = await bridge.checkHolderDidSet();
+        if (did.ok) {
+          next = normalizeWalletInfo({ ...(next ?? { ok: true }), ...did });
+        }
+      } catch {
+        // 구버전 앱에서는 getWalletInfo 결과만 사용한다.
+      }
+
+      if (next) setWalletInfo(next);
+      return next;
+    },
+    [normalizeWalletInfo],
+  );
 
   // 증명서 목록은 네이티브 지갑 브릿지를 단일 소스로 사용한다.
   useEffect(() => {
@@ -137,7 +176,7 @@ export default function MobileHomePage() {
     (async () => {
       try {
         const state = await ensureMobileWallet();
-        setWalletInfo(state.wallet);
+        await refreshHolderDidState(state.wallet);
         setWalletAssets(state.assets);
         if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
@@ -146,7 +185,7 @@ export default function MobileHomePage() {
     })();
     bridge.listWallets().catch(() => {});
     bridge.getCredentialSummaries().catch(() => {});
-  }, []);
+  }, [refreshHolderDidState]);
 
   // 다른 화면에서 활성 지갑이 바뀌어도 반영
   useBridgeAction("LIST_WALLETS", (r) => {
@@ -161,11 +200,13 @@ export default function MobileHomePage() {
       | undefined;
     const active = list?.find((w) => w.isActive);
     if (active?.account) {
-      setWalletInfo((prev) => ({
-        ...(prev ?? { ok: true }),
+      const next = normalizeWalletInfo({
+        ok: true,
         account: active.account,
         did: active.did,
-      }));
+      });
+      setWalletInfo(next);
+      void refreshHolderDidState(next);
     }
   });
 
@@ -177,12 +218,22 @@ export default function MobileHomePage() {
 
   useBridgeAction("CREATE_WALLET", (r) => {
     if (!r.ok) return;
-    setWalletInfo(r as WalletInfo);
+    const next = normalizeWalletInfo(r as WalletInfo);
+    setWalletInfo(next);
+    void refreshHolderDidState(next);
     bridge.getWalletAssets().then(setWalletAssets).catch(() => {});
   });
 
   useBridgeAction("GET_WALLET_INFO", (r) => {
-    if (r.ok) setWalletInfo(r as WalletInfo);
+    if (r.ok) setWalletInfo(normalizeWalletInfo(r as WalletInfo));
+  });
+
+  useBridgeAction("CHECK_HOLDER_DID_SET", (r) => {
+    if (r.ok) {
+      setWalletInfo((prev) =>
+        normalizeWalletInfo({ ...(prev ?? { ok: true }), ...(r as WalletInfo) }),
+      );
+    }
   });
 
   useBridgeAction("GET_WALLET_ASSETS", (r) => {
@@ -203,23 +254,6 @@ export default function MobileHomePage() {
     setToast(message);
     window.setTimeout(() => setToastClosing(true), 1400);
     window.setTimeout(() => setToast(""), 1600);
-  };
-
-  const copyText = async (value: string) => {
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(value);
-      return;
-    }
-
-    const el = document.createElement("textarea");
-    el.value = value;
-    el.setAttribute("readonly", "");
-    el.style.position = "fixed";
-    el.style.left = "-9999px";
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand("copy");
-    document.body.removeChild(el);
   };
 
   const startIssueQrScan = async () => {
@@ -284,12 +318,17 @@ export default function MobileHomePage() {
         ? {
             ok: true,
             account: "rKYvC1234567890TestWallet",
+            didRegistrationRequired: true,
+            didRegistrationLabel: "DID 등록하기",
           }
         : testState === "did" || testState === "credential"
           ? {
               ok: true,
               account: "rKYvC1234567890TestWallet",
-              did: "did:xrpl:rKYvC1234567890TestWallet",
+              holderDid: "did:xrpl:rKYvC1234567890TestWallet",
+              didSetRegistered: true,
+              didRegistrationRequired: false,
+              didRegistrationLabel: "DID 등록됨",
           }
           : walletInfo;
   const testWalletAssets =
@@ -309,19 +348,28 @@ export default function MobileHomePage() {
   const accountShort = testWalletInfo?.account
     ? `${testWalletInfo.account.slice(0, 6)}...${testWalletInfo.account.slice(-4)}`
     : null;
-  const didShort = testWalletInfo?.did
-    ? `${testWalletInfo.did.slice(0, 13)}...${testWalletInfo.did.slice(-4)}`
-    : null;
-  const didRegistered = Boolean(testWalletInfo?.did);
   const walletActivated = Boolean(accountShort);
+  const didRegistrationLabel = testWalletInfo?.didRegistrationLabel;
+  const didRegistrationRequired =
+    testWalletInfo?.didRegistrationRequired ??
+    (walletActivated
+      ? didRegistrationLabel === "DID 등록하기" ||
+        testWalletInfo?.didSetRegistered !== true
+      : false);
+  const didRegistered =
+    testWalletInfo?.didSetRegistered === true ||
+    (walletActivated && didRegistrationRequired === false) ||
+    didRegistrationLabel === "DID 등록됨";
   const ledgerActivated = Boolean(testWalletAssets?.accountActivated);
   const depositRequired = Boolean(testWalletAssets?.depositRequired);
   const hasCredential = visible.length > 0;
-  const walletLabel = didRegistered
-    ? (didShort ?? "DID 등록됨")
-    : walletActivated
-      ? "DID 등록하기"
-      : "지갑 활성화 필요";
+  const walletLabel =
+    didRegistrationLabel ??
+    (walletActivated
+      ? didRegistrationRequired
+        ? "DID 등록하기"
+        : "DID 등록됨"
+      : "지갑 활성화 필요");
   const balanceXrp = walletActivated
     ? formatXrp(readXrpBalance(testWalletAssets))
     : "0 XRP";
@@ -365,17 +413,25 @@ export default function MobileHomePage() {
                     : " needs-wallet"
               }`}
               onClick={async () => {
-                if (didRegistered) {
-                  try {
-                    await copyText(testWalletInfo?.did ?? "");
-                    showToast("DID가 복사되었습니다.");
-                  } catch {
-                    showToast("DID를 복사할 수 없습니다.");
-                  }
-                } else if (walletActivated) {
-                  router.push("/m/did/register");
-                } else {
+                if (!walletActivated) {
                   setWalletSheetOpen(true);
+                  return;
+                }
+                if (didRegistered && !didRegistrationRequired) {
+                  showToast("DID 등록됨");
+                  return;
+                }
+                try {
+                  const result = await bridge.submitHolderDidSet();
+                  if (!result.ok) {
+                    showToast(result.error ?? "DID 등록 요청에 실패했습니다.");
+                    return;
+                  }
+                  await refreshHolderDidState(testWalletInfo);
+                  bridge.getWalletAssets().then(setWalletAssets).catch(() => {});
+                  showToast("DID 등록 요청이 완료되었습니다.");
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : "DID 등록 중 오류가 발생했습니다.");
                 }
               }}
             >

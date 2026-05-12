@@ -108,7 +108,10 @@ function MobileVcQrInner() {
         let bridgeAddress: string | null = null;
         try {
           const wallet = await bridge.getWalletInfo();
-          bridgeAddress = wallet.ok && wallet.account ? wallet.account : null;
+          bridgeAddress =
+            wallet.ok && (wallet.holderAccount ?? wallet.account)
+              ? (wallet.holderAccount ?? wallet.account ?? null)
+              : null;
         } catch {
           bridgeAddress = null;
         }

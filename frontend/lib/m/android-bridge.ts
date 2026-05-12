@@ -342,11 +342,28 @@ export type AuthStatus = BridgeResult & {
 
 export type WalletInfo = BridgeResult & {
   account?: string;
+  holderAccount?: string;
   publicKey?: string;
   authPublicKey?: string;
   did?: string;
+  holderDid?: string;
+  didSetRegistered?: boolean;
+  didRegistrationRequired?: boolean;
+  didRegistrationLabel?: string;
+  didAccountBindingValid?: boolean;
   mnemonic?: string;
   didDocument?: string;
+};
+
+export type HolderDidSetResult = BridgeResult & {
+  account?: string;
+  holderAccount?: string;
+  did?: string;
+  holderDid?: string;
+  didSetRegistered?: boolean;
+  didRegistrationRequired?: boolean;
+  didRegistrationLabel?: string;
+  didAccountBindingValid?: boolean;
 };
 
 export type DeviceInfoResult = BridgeResult & {
@@ -623,6 +640,8 @@ export const bridge = {
     callBridge("submitHolderDidSet", {
       ...(didDocumentUri ? { didDocumentUri } : {}),
     }),
+  checkHolderDidSet: () =>
+    callBridge<HolderDidSetResult>("checkHolderDidSet", {}),
 
   // 자산/거래
   getWalletAssets: () => callBridge<WalletAssetsResult>("getWalletAssets", {}),

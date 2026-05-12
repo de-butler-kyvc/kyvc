@@ -11,6 +11,16 @@ export type MobileWalletState = {
   created: boolean;
 };
 
+function normalizeWalletInfo(wallet: WalletInfo): WalletInfo {
+  const holderAccount = wallet.holderAccount ?? wallet.account;
+  const holderDid = wallet.holderDid ?? wallet.did;
+  return {
+    ...wallet,
+    ...(holderAccount ? { account: holderAccount, holderAccount } : {}),
+    ...(holderDid ? { did: holderDid, holderDid } : {}),
+  };
+}
+
 export function formatXrp(value?: string | number | null) {
   if (value == null || value === "") return "0 XRP";
   const numeric = Number(value);
@@ -44,7 +54,8 @@ export async function ensureMobileWallet(): Promise<MobileWalletState> {
 
   try {
     const info = await bridge.getWalletInfo();
-    if (info.ok && info.account) wallet = info;
+    const account = info.holderAccount ?? info.account;
+    if (info.ok && account) wallet = normalizeWalletInfo(info);
   } catch {
     wallet = null;
   }
@@ -55,8 +66,9 @@ export async function ensureMobileWallet(): Promise<MobileWalletState> {
 
   if (!wallet) {
     const createdWallet = await bridge.createWallet(false);
-    if (createdWallet.ok && createdWallet.account) {
-      wallet = createdWallet;
+    const account = createdWallet.holderAccount ?? createdWallet.account;
+    if (createdWallet.ok && account) {
+      wallet = normalizeWalletInfo(createdWallet);
       created = true;
     } else {
       throw new Error(createdWallet.error ?? "지갑 생성에 실패했습니다.");
