@@ -2,6 +2,9 @@ package com.kyvc.backendadmin.domain.corporate.controller;
 
 import com.kyvc.backendadmin.domain.corporate.application.AdminCorporateService;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateDetailResponse;
+import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserCreateRequest;
+import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserCreateResponse;
+import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserDeleteResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserDetailResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserListResponse;
 import com.kyvc.backendadmin.domain.corporate.dto.AdminCorporateUserSearchRequest;
@@ -16,9 +19,11 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -76,6 +81,31 @@ public class AdminCorporateController {
     }
 
     /**
+     * 법인 사용자 계정과 법인 정보를 등록합니다.
+     *
+     * <p>초기 비밀번호는 서버에서 BCrypt로 해시 저장하며, 응답에는 비밀번호 해시를 포함하지 않습니다.
+     * 등록 성공 시 users, corporates를 생성하고 audit_logs에 사용자/법인 생성 이력을 기록합니다.</p>
+     *
+     * @param request 법인 사용자 계정 등록 요청
+     * @return 생성된 사용자 ID, 법인 ID와 생성 여부
+     */
+    @Operation(
+            summary = "법인 사용자 계정 등록",
+            description = "SYSTEM_ADMIN 또는 OPERATOR 권한으로 법인 사용자 계정과 법인 정보를 등록하고 감사로그를 기록합니다."
+    )
+    @PostMapping("/users")
+    public CommonResponse<AdminCorporateUserCreateResponse> createUser(
+            @RequestBody(
+                    description = "법인 사용자 계정 등록 요청",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = AdminCorporateUserCreateRequest.class))
+            )
+            @Valid @org.springframework.web.bind.annotation.RequestBody AdminCorporateUserCreateRequest request
+    ) {
+        return CommonResponseFactory.success(adminCorporateService.createUser(request));
+    }
+
+    /**
      * 법인 사용자 상세 정보를 조회합니다.
      *
      * @param userId 조회할 사용자 ID
@@ -88,6 +118,27 @@ public class AdminCorporateController {
             @PathVariable Long userId
     ) {
         return CommonResponseFactory.success(adminCorporateService.getUserDetail(userId));
+    }
+
+    /**
+     * 법인 사용자 계정을 삭제 처리합니다.
+     *
+     * <p>물리 삭제는 수행하지 않고 users.user_status_code를 WITHDRAWN으로 변경합니다.
+     * 진행 중인 KYC 또는 발급 중/유효 Credential이 있으면 삭제를 차단합니다.</p>
+     *
+     * @param userId 삭제 처리할 사용자 ID
+     * @return 삭제 처리된 사용자 ID와 삭제 여부
+     */
+    @Operation(
+            summary = "법인 사용자 계정 삭제",
+            description = "SYSTEM_ADMIN 또는 OPERATOR 권한으로 법인 사용자를 WITHDRAWN 상태로 soft delete 처리하고 활성 인증 토큰을 폐기합니다."
+    )
+    @DeleteMapping("/users/{userId}")
+    public CommonResponse<AdminCorporateUserDeleteResponse> deleteUser(
+            @Parameter(description = "삭제 처리할 사용자 ID", example = "1")
+            @PathVariable Long userId
+    ) {
+        return CommonResponseFactory.success(adminCorporateService.deleteUser(userId));
     }
 
     /**

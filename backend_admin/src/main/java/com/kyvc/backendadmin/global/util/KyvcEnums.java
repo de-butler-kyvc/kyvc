@@ -88,6 +88,7 @@ public final class KyvcEnums {
         REQUEST_AI_REVIEW, // AI 심사요청
         REQUEST_SUPPLEMENT, // 보완요청 생성
         SUPPLEMENT_SUBMIT, // 보완서류 제출
+        SUPPLEMENT_COMPLETE, // 보완서류 처리 완료
         MANUAL_REVIEW, // 수동심사 전환
         APPROVE, // 승인
         REJECT, // 반려

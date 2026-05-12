@@ -122,6 +122,32 @@ public class AuditLog {
         auditLog.description = description;
         return auditLog;
     }
+
+    /**
+     * 법인 정보 대상 감사 로그 엔티티를 생성합니다.
+     *
+     * @param actorId 변경을 수행한 관리자 ID
+     * @param targetId 변경 대상 법인 ID
+     * @param action 작업 코드
+     * @param description 변경 내용 요약
+     * @return 법인 정보 감사 로그 엔티티
+     */
+    public static AuditLog corporate(
+            Long actorId,
+            Long targetId,
+            String action,
+            String description
+    ) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.actorType = KyvcEnums.ActorType.ADMIN;
+        auditLog.actorId = actorId;
+        auditLog.targetType = KyvcEnums.AuditTargetType.CORPORATE;
+        auditLog.targetId = targetId;
+        auditLog.action = action;
+        auditLog.description = description;
+        return auditLog;
+    }
+
     /**
      * KYC 필수서류 정책 대상 감사 로그 엔티티를 생성합니다.
      *

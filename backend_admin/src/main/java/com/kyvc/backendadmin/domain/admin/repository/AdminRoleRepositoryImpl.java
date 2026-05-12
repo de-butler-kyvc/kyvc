@@ -1,6 +1,7 @@
 package com.kyvc.backendadmin.domain.admin.repository;
 
 import com.kyvc.backendadmin.domain.admin.domain.AdminRole;
+import com.kyvc.backendadmin.global.util.KyvcEnums;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -38,6 +39,28 @@ public class AdminRoleRepositoryImpl implements AdminRoleRepository {
             return Optional.empty();
         }
         return Optional.ofNullable(entityManager().find(AdminRole.class, roleId));
+    }
+
+    @Override
+    public AdminRole save(AdminRole adminRole) {
+        entityManager().persist(adminRole);
+        return adminRole;
+    }
+
+    @Override
+    public boolean existsByRoleCode(KyvcEnums.RoleCode roleCode) {
+        if (roleCode == null) {
+            return false;
+        }
+        Long count = entityManager()
+                .createQuery("""
+                        select count(role)
+                        from AdminRole role
+                        where role.roleCode = :roleCode
+                        """, Long.class)
+                .setParameter("roleCode", roleCode)
+                .getSingleResult();
+        return count > 0;
     }
 
     private EntityManager entityManager() {

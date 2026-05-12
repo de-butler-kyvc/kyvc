@@ -5,6 +5,8 @@ import com.kyvc.backendadmin.domain.review.dto.AdminReviewActionResponse;
 import com.kyvc.backendadmin.domain.review.dto.AdminReviewApproveRequest;
 import com.kyvc.backendadmin.domain.review.dto.AdminReviewRejectRequest;
 import com.kyvc.backendadmin.domain.review.dto.AdminSupplementRequest;
+import com.kyvc.backendadmin.domain.review.dto.KycSupplementCompleteRequest;
+import com.kyvc.backendadmin.domain.review.dto.KycSupplementCompleteResponse;
 import com.kyvc.backendadmin.global.response.CommonResponse;
 import com.kyvc.backendadmin.global.response.CommonResponseFactory;
 import io.swagger.v3.oas.annotations.Operation;
@@ -106,6 +108,33 @@ public class AdminReviewController {
             @Valid @org.springframework.web.bind.annotation.RequestBody AdminSupplementRequest request
     ) {
         return CommonResponseFactory.success(adminReviewService.requestSupplement(kycId, request));
+    }
+
+    /**
+     * KYC 보완 제출분을 처리 완료합니다.
+     *
+     * <p>제출 완료된 보완요청의 문서 존재 여부를 확인한 뒤 보완요청을 COMPLETED로 변경하고,
+     * KYC 신청 상태를 MANUAL_REVIEW로 되돌려 후속 수동심사가 가능하도록 처리합니다.</p>
+     *
+     * @param kycId KYC 신청 ID
+     * @param supplementId 보완요청 ID
+     * @param request 처리 완료 요청
+     * @return 보완 제출분 처리 완료 응답
+     */
+    @Operation(
+            summary = "KYC 보완 제출분 처리 완료",
+            description = "SUBMITTED 상태의 보완요청과 제출 문서를 확인한 뒤 보완요청을 COMPLETED로 변경하고 KYC를 MANUAL_REVIEW 상태로 전환합니다."
+    )
+    @PostMapping("/{kycId}/supplements/{supplementId}/complete")
+    public CommonResponse<KycSupplementCompleteResponse> completeSupplement(
+            @Parameter(description = "KYC 신청 ID", required = true)
+            @PathVariable Long kycId,
+            @Parameter(description = "보완요청 ID", required = true)
+            @PathVariable Long supplementId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "KYC 보완 제출분 처리 완료 요청", required = false)
+            @org.springframework.web.bind.annotation.RequestBody(required = false) KycSupplementCompleteRequest request
+    ) {
+        return CommonResponseFactory.success(adminReviewService.completeSupplement(kycId, supplementId, request));
     }
 
     private AdminReviewApproveRequest withMfaToken(AdminReviewApproveRequest request, String headerToken) {

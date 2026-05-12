@@ -23,12 +23,52 @@ public interface CorporateRepository {
     Optional<User> findUserById(Long userId);
 
     /**
+     * users 테이블에 법인 사용자 계정을 저장합니다.
+     *
+     * @param user 저장할 사용자 엔티티
+     * @return 저장된 사용자 엔티티
+     */
+    User saveUser(User user);
+
+    /**
+     * users 테이블에서 이메일 중복 여부를 확인합니다.
+     *
+     * @param email 확인할 로그인 이메일
+     * @return 이미 존재하면 true
+     */
+    boolean existsUserByEmail(String email);
+
+    /**
      * corporates 테이블에서 법인 ID 기준으로 법인 정보를 조회합니다.
      *
      * @param corporateId 조회할 법인 ID
      * @return 법인 Optional
      */
     Optional<Corporate> findCorporateById(Long corporateId);
+
+    /**
+     * corporates 테이블에 법인 정보를 저장합니다.
+     *
+     * @param corporate 저장할 법인 엔티티
+     * @return 저장된 법인 엔티티
+     */
+    Corporate saveCorporate(Corporate corporate);
+
+    /**
+     * 진행 중인 KYC 신청 존재 여부를 확인합니다.
+     *
+     * @param userId 사용자 ID
+     * @return 진행 중인 KYC가 있으면 true
+     */
+    boolean existsActiveKycByUserId(Long userId);
+
+    /**
+     * 발급 중이거나 유효한 Credential 존재 여부를 확인합니다.
+     *
+     * @param userId 사용자 ID
+     * @return 발급 중이거나 유효한 Credential이 있으면 true
+     */
+    boolean existsValidCredentialByUserId(Long userId);
 
     /**
      * audit_logs 테이블에 사용자 상태 변경 감사로그를 저장합니다.

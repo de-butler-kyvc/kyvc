@@ -11,4 +11,9 @@ import java.util.List;
 public interface OperationReportQueryRepository {
     AdminOperationReportDtos.Summary summary(LocalDate fromDate, LocalDate toDate);
     List<AdminOperationReportDtos.Row> rows(LocalDate fromDate, LocalDate toDate, String groupBy);
+    List<AdminOperationReportDtos.StatusCount> kycStatusCounts(LocalDate fromDate, LocalDate toDate);
+    List<AdminOperationReportDtos.StatusCount> credentialStatusCounts(LocalDate fromDate, LocalDate toDate);
+    List<AdminOperationReportDtos.StatusCount> vpStatusCounts(LocalDate fromDate, LocalDate toDate);
+    List<AdminOperationReportDtos.StatusCount> aiReviewStatusCounts(LocalDate fromDate, LocalDate toDate);
+    List<AdminOperationReportDtos.AuditActionCount> auditActionCounts(LocalDate fromDate, LocalDate toDate);
 }

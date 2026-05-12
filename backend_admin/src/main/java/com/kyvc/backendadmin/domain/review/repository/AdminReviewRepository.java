@@ -5,6 +5,8 @@ import com.kyvc.backendadmin.domain.review.domain.KycReviewHistory;
 import com.kyvc.backendadmin.domain.review.domain.KycSupplement;
 import com.kyvc.backendadmin.global.util.KyvcEnums;
 
+import java.util.Optional;
+
 public interface AdminReviewRepository {
 
     /**
@@ -22,6 +24,22 @@ public interface AdminReviewRepository {
      * @return 저장된 보완요청 엔티티
      */
     KycSupplement saveSupplement(KycSupplement supplement);
+
+    /**
+     * 보완요청 ID로 KYC 보완요청을 조회합니다.
+     *
+     * @param supplementId 보완요청 ID
+     * @return 보완요청 Optional
+     */
+    Optional<KycSupplement> findSupplementById(Long supplementId);
+
+    /**
+     * 보완 제출 문서 존재 여부를 확인합니다.
+     *
+     * @param supplementId 보완요청 ID
+     * @return 제출 문서가 있으면 true
+     */
+    boolean existsSupplementDocument(Long supplementId);
 
     /**
      * KYC 상태 변경 조건으로 현재 상태가 expectedStatus인 경우에만 목표 상태로 변경합니다.

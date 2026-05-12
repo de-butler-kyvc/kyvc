@@ -63,4 +63,29 @@ public final class AdminOperationReportDtos {
             String content
     ) {
     }
+
+    @Schema(description = "상태별 집계")
+    public record StatusCount(
+            /** 상태 코드 */
+            @Schema(description = "상태 코드", example = "APPROVED")
+            String status,
+            /** 건수 */
+            @Schema(description = "건수", example = "10")
+            long count
+    ) {
+    }
+
+    @Schema(description = "감사로그 액션별 집계")
+    public record AuditActionCount(
+            /** 감사 대상 유형 */
+            @Schema(description = "감사 대상 유형", example = "KYC_APPLICATION")
+            String targetType,
+            /** 액션 코드 */
+            @Schema(description = "액션 코드", example = "KYC_MANUAL_APPROVE")
+            String action,
+            /** 건수 */
+            @Schema(description = "건수", example = "3")
+            long count
+    ) {
+    }
 }

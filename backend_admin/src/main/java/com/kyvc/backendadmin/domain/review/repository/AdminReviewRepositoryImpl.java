@@ -10,6 +10,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -27,6 +28,27 @@ public class AdminReviewRepositoryImpl implements AdminReviewRepository {
     public KycSupplement saveSupplement(KycSupplement supplement) {
         entityManager().persist(supplement);
         return supplement;
+    }
+
+    @Override
+    public Optional<KycSupplement> findSupplementById(Long supplementId) {
+        if (supplementId == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(entityManager().find(KycSupplement.class, supplementId));
+    }
+
+    @Override
+    public boolean existsSupplementDocument(Long supplementId) {
+        Number count = (Number) entityManager().createNativeQuery("""
+                        select count(*)
+                        from kyc_supplement_documents supplement_document
+                        join kyc_documents document on document.document_id = supplement_document.document_id
+                        where supplement_document.supplement_id = :supplementId
+                        """)
+                .setParameter("supplementId", supplementId)
+                .getSingleResult();
+        return count.longValue() > 0;
     }
 
     @Override

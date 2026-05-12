@@ -27,8 +27,65 @@ public class CorporateRepositoryImpl implements CorporateRepository {
     }
 
     @Override
+    public User saveUser(User user) {
+        entityManager().persist(user);
+        return user;
+    }
+
+    @Override
+    public boolean existsUserByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        Number count = (Number) entityManager()
+                .createNativeQuery("""
+                        select count(*)
+                        from users
+                        where lower(email) = lower(:email)
+                        """)
+                .setParameter("email", email)
+                .getSingleResult();
+        return count.longValue() > 0;
+    }
+
+    @Override
     public Optional<Corporate> findCorporateById(Long corporateId) {
         return Optional.ofNullable(entityManager().find(Corporate.class, corporateId));
+    }
+
+    @Override
+    public Corporate saveCorporate(Corporate corporate) {
+        entityManager().persist(corporate);
+        return corporate;
+    }
+
+    @Override
+    public boolean existsActiveKycByUserId(Long userId) {
+        Number count = (Number) entityManager()
+                .createNativeQuery("""
+                        select count(*)
+                        from kyc_applications
+                        where applicant_user_id = :userId
+                          and kyc_status_code in ('DRAFT', 'SUBMITTED', 'AI_REVIEWING', 'NEED_SUPPLEMENT', 'MANUAL_REVIEW')
+                        """)
+                .setParameter("userId", userId)
+                .getSingleResult();
+        return count.longValue() > 0;
+    }
+
+    @Override
+    public boolean existsValidCredentialByUserId(Long userId) {
+        Number count = (Number) entityManager()
+                .createNativeQuery("""
+                        select count(*)
+                        from credentials credential
+                        join corporates corporate on corporate.corporate_id = credential.corporate_id
+                        where corporate.user_id = :userId
+                          and credential.credential_status_code in ('ISSUING', 'VALID')
+                        """)
+                .setParameter("userId", userId)
+                .getSingleResult();
+        return count.longValue() > 0;
     }
 
     @Override

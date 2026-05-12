@@ -89,4 +89,19 @@ public class KycSupplement {
         supplement.dueAt = dueAt;
         return supplement;
     }
+
+    /**
+     * 보완 제출분을 관리자 확인 완료 상태로 변경합니다.
+     *
+     * @param completedAt 처리 완료 시각
+     * @param submittedComment 처리 코멘트
+     */
+    public void complete(
+            LocalDateTime completedAt,
+            String submittedComment
+    ) {
+        this.supplementStatus = KyvcEnums.SupplementStatus.COMPLETED;
+        this.completedAt = completedAt;
+        this.submittedComment = submittedComment;
+    }
 }
