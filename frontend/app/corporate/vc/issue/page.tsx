@@ -32,7 +32,8 @@ const OFFER_STATUS = {
 export default function CorporateVcIssuePage() {
   const [guide, setGuide] = useState<CredentialIssueGuideResponse | null>(null);
   const [profile, setProfile] = useState<CorporateProfile | null>(null);
-  const [current, setCurrent] = useState<KycApplicationResponse | null>(null);
+  const [pendingKycs, setPendingKycs] = useState<KycApplicationResponse[]>([]);
+  const [selectedKycId, setSelectedKycId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
   const [offer, setOffer] = useState<CredentialOfferCreateResponse | null>(null);
@@ -45,12 +46,24 @@ export default function CorporateVcIssuePage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.allSettled([credentialsApi.issueGuide(), corporateApi.me(), kycApi.current()]).then(
-      ([guideResult, profileResult, currentResult]) => {
+    Promise.allSettled([credentialsApi.issueGuide(), corporateApi.me(), kycApi.list()]).then(
+      ([guideResult, profileResult, listResult]) => {
         if (cancelled) return;
-        if (guideResult.status === "fulfilled") setGuide(guideResult.value);
+        const nextGuide = guideResult.status === "fulfilled" ? guideResult.value : null;
+        const nextPendingKycs =
+          listResult.status === "fulfilled"
+            ? normalizeKycList(listResult.value)
+                .filter((item) => item.kycStatus === KYC_STATUS.APPROVED)
+                .sort((a, b) => b.kycId - a.kycId)
+            : [];
+
+        setGuide(nextGuide);
         if (profileResult.status === "fulfilled") setProfile(profileResult.value);
-        if (currentResult.status === "fulfilled") setCurrent(currentResult.value);
+        setPendingKycs(nextPendingKycs);
+        setSelectedKycId(
+          nextPendingKycs[0]?.kycId ??
+            (nextGuide?.issueAvailable ? nextGuide.latestKycId ?? null : null)
+        );
         setLoading(false);
       }
     );
@@ -59,10 +72,26 @@ export default function CorporateVcIssuePage() {
     };
   }, []);
 
-  const kycId = guide?.latestKycId ?? current?.kycId;
-  const status = guide?.kycStatus ?? current?.kycStatus;
-  const isApproved = status === KYC_STATUS.APPROVED || guide?.issueAvailable === true;
-  const canCreateOffer = Boolean(kycId && isApproved && !guide?.credentialIssued);
+  const selectedKyc =
+    pendingKycs.find((item) => item.kycId === selectedKycId) ?? pendingKycs[0] ?? null;
+  const guideKycId = guide?.issueAvailable ? guide.latestKycId : null;
+  const kycId = selectedKyc?.kycId ?? guideKycId ?? undefined;
+  const status = selectedKyc?.kycStatus ?? (kycId === guide?.latestKycId ? guide?.kycStatus : undefined);
+  const usesGuideOnly = !selectedKyc && kycId === guide?.latestKycId;
+  const credentialIssued = usesGuideOnly ? guide?.credentialIssued : false;
+  const isApproved = status === KYC_STATUS.APPROVED || (usesGuideOnly && guide?.issueAvailable === true);
+  const canCreateOffer = Boolean(kycId && isApproved && !credentialIssued);
+
+  const selectKyc = (nextKycId: number) => {
+    setSelectedKycId(nextKycId);
+    setOffer(null);
+    setQrValue(null);
+    setOfferStatus(null);
+    setWalletSaved(false);
+    setPolling(false);
+    setMessage(null);
+    setError(null);
+  };
 
   useEffect(() => {
     if (!offer || !polling) return;
@@ -186,9 +215,53 @@ export default function CorporateVcIssuePage() {
           <Row label="KYC 신청번호" value={kycId ? `KYC-${kycId}` : "-"} mono />
           <Row
             label="발급 가능 여부"
-            value={guide?.issueAvailable ? "가능" : guide?.credentialIssued ? "발급 완료" : "-"}
+            value={isApproved ? "가능" : credentialIssued ? "발급 완료" : "-"}
           />
         </div>
+
+        {pendingKycs.length > 1 ? (
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-[13px] font-semibold">VC 발급대기 KYC</div>
+              <div className="text-[12px] text-muted-foreground">{pendingKycs.length}건</div>
+            </div>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>신청번호</th>
+                    <th>신청일</th>
+                    <th>상태</th>
+                    <th className="text-right">선택</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingKycs.map((item) => {
+                    const selected = item.kycId === kycId;
+                    return (
+                      <tr key={item.kycId}>
+                        <td className="mono">{`KYC-${item.kycId}`}</td>
+                        <td>{formatDate(item.submittedAt ?? item.createdAt)}</td>
+                        <td>발급 대기</td>
+                        <td className="text-right">
+                          <Button
+                            type="button"
+                            variant={selected ? "default" : "outline"}
+                            size="sm"
+                            disabled={selected}
+                            onClick={() => selectKyc(item.kycId)}
+                          >
+                            {selected ? "선택됨" : "선택"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
 
         {guide?.guideMessage ? (
           <p className="mt-4 text-[13px] text-muted-foreground">{guide.guideMessage}</p>
@@ -274,4 +347,15 @@ function Row({ label, value, mono = false }: { label: string; value: string; mon
       <div className={`kv-val${mono ? " mono" : ""}`}>{value}</div>
     </div>
   );
+}
+
+function normalizeKycList(
+  value: KycApplicationResponse | KycApplicationResponse[] | null | undefined
+) {
+  if (Array.isArray(value)) return value;
+  return value?.kycId ? [value] : [];
+}
+
+function formatDate(value?: string | null) {
+  return value ? value.slice(0, 10).replace(/-/g, ".") : "-";
 }
