@@ -17,6 +17,7 @@ import {
   logoutForWalletOwnerMismatch,
   WalletOwnerMismatchError,
 } from "@/lib/m/wallet-owner";
+import { showWalletOwnerDialog } from "@/lib/m/wallet-owner-dialog";
 
 type Tab = "business" | "email";
 
@@ -91,7 +92,7 @@ export default function MobileLoginPage() {
     } catch (err) {
       if (err instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
-        window.alert(`${err.title}\n${err.hint}`);
+        showWalletOwnerDialog({ title: err.title, hint: err.hint });
         router.replace("/m/login");
         return;
       }
@@ -133,7 +134,7 @@ export default function MobileLoginPage() {
     } catch (e) {
       if (e instanceof WalletOwnerMismatchError) {
         await logoutForWalletOwnerMismatch();
-        window.alert(`${e.title}\n${e.hint}`);
+        showWalletOwnerDialog({ title: e.title, hint: e.hint });
         router.replace("/m/login");
         return;
       }

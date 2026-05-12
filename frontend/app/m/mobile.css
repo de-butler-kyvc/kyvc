@@ -5332,6 +5332,67 @@ html {
   animation: toastOut .2s ease-in forwards;
 }
 
+.wallet-owner-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .42);
+  backdrop-filter: blur(10px);
+}
+
+.wallet-owner-dialog {
+  width: min(100%, 312px);
+  border-radius: 22px;
+  background: #fff;
+  padding: 24px 20px 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .28);
+  text-align: center;
+}
+
+.wallet-owner-dialog-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.wallet-owner-dialog h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 800;
+}
+
+.wallet-owner-dialog p {
+  margin: 10px 0 20px;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 20px;
+  word-break: keep-all;
+}
+
+.wallet-owner-dialog button {
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-radius: 14px;
+  background: #111827;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
 @keyframes toastIn {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to { opacity: 1; transform: translate(-50%, 0); }
