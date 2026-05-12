@@ -65,7 +65,9 @@ export default function MobileHomePage() {
   const [certs, setCerts] = useState<CertItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
-  const [walletAssets, setWalletAssets] = useState<WalletAssetsResult | null>(null);
+  const [walletAssets, setWalletAssets] = useState<WalletAssetsResult | null>(
+    () => mSession.readWalletAssets()?.assets ?? null,
+  );
   const [apiError, setApiError] = useState<string | null>(null);
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
   const [didSheetOpen, setDidSheetOpen] = useState(false);
@@ -121,7 +123,10 @@ export default function MobileHomePage() {
     if (!isBridgeAvailable()) return;
     try {
       const assets = await bridge.getWalletAssets();
-      if (assets.ok) setWalletAssets(assets);
+      if (assets.ok) {
+        setWalletAssets(assets);
+        mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
+      }
     } catch {
       // 홈 잔액 새로고침 실패는 다음 진입/포커스 때 다시 시도한다.
     }
@@ -192,8 +197,10 @@ export default function MobileHomePage() {
       try {
         const state = await ensureMobileWallet();
         await refreshHolderDidState(state.wallet);
-        setWalletAssets(state.assets);
-        void refreshWalletAssets();
+        if (state.assets?.ok) {
+          setWalletAssets(state.assets);
+          mSession.writeWalletAssets({ assets: state.assets, cachedAt: Date.now() });
+        }
         if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
         setApiError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
