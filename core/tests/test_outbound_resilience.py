@@ -62,6 +62,25 @@ def test_non_retriable_failure_does_not_retry():
     assert calls == 1
 
 
+def test_retry_after_header_overrides_retry_delay():
+    calls = 0
+    sleeps: list[float] = []
+
+    def rate_limited_then_ok():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            request = httpx.Request("GET", "https://dependency.example")
+            response = httpx.Response(429, headers={"Retry-After": "3"}, request=request)
+            raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+        return "ok"
+
+    result = execute_outbound("ocr", "test", rate_limited_then_ok, policy=_policy(), sleep=sleeps.append)
+
+    assert result == "ok"
+    assert sleeps == [3.0]
+
+
 def test_circuit_opens_after_threshold_failures():
     policy = _policy(attempts=1, threshold=2, recovery=60.0)
 

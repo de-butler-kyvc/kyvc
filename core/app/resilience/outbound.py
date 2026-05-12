@@ -1,6 +1,8 @@
 import logging
 import random
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
@@ -128,7 +130,7 @@ def execute_outbound(
             if attempt >= selected_policy.max_attempts:
                 breaker.record_failure(category)
                 raise OutboundDependencyError(category, operation, f"{type(exc).__name__}: {exc}") from exc
-            sleep(_retry_delay(selected_policy, attempt))
+            sleep(_retry_delay_for_failure(selected_policy, attempt, exc))
             continue
         breaker.record_success(category)
         return result
@@ -181,6 +183,34 @@ def _retry_delay(policy: OutboundPolicy, attempt: int) -> float:
     if delay <= 0:
         return 0.0
     return random.uniform(0, delay)
+
+
+def _retry_delay_for_failure(policy: OutboundPolicy, attempt: int, exc: BaseException) -> float:
+    if isinstance(exc, httpx.HTTPStatusError):
+        retry_after = _retry_after_seconds(exc.response.headers)
+        if retry_after is not None:
+            return retry_after
+    return _retry_delay(policy, attempt)
+
+
+def _retry_after_seconds(headers: httpx.Headers) -> float | None:
+    value = headers.get("retry-after") or headers.get("Retry-After")
+    if not value:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    try:
+        return max(0.0, float(stripped))
+    except ValueError:
+        pass
+    try:
+        retry_at = parsedate_to_datetime(stripped)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
 
 
 def _timeout_for(settings: Settings, category: DependencyCategory) -> float:

@@ -312,7 +312,8 @@ recovery timeout elapses, then allow a half-open probe.
 Network timeouts, connection failures, 5xx responses, and rate-limit responses
 from OCR/LLM providers are retried. Mainnet policy violations, XRPL
 amendment-disabled failures, DID missing-document cases, and obvious 4xx
-caller/configuration failures are not retried.
+caller/configuration failures are not retried. When providers return a
+`Retry-After` header, Core waits for that server-provided delay before retrying.
 
 Key environment variables:
 
@@ -327,6 +328,7 @@ OUTBOUND_RETRY_BASE_DELAY_SECONDS=0.2
 OUTBOUND_RETRY_MAX_DELAY_SECONDS=2
 OUTBOUND_CIRCUIT_FAILURE_THRESHOLD=5
 OUTBOUND_CIRCUIT_RECOVERY_TIMEOUT_SECONDS=30
+AZURE_DOCUMENT_INTELLIGENCE_POLL_INTERVAL_SECONDS=2
 ```
 
 ## OCR/LLM Provider Selection
