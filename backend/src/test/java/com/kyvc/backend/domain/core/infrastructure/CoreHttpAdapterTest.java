@@ -2,9 +2,11 @@ package com.kyvc.backend.domain.core.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiRequest;
 import com.kyvc.backend.domain.core.infrastructure.dto.VerifyPresentationApiRequest;
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +15,41 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class CoreHttpAdapterTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    @Test
+    void issueKycCredentialApiRequest_omitsIssuerOptionalFields() throws Exception {
+        IssueKycCredentialApiRequest request = new IssueKycCredentialApiRequest(
+                "rHolder",
+                "did:xrpl:1:rHolder",
+                Map.of("corporateName", "KYVC Corp"),
+                OffsetDateTime.parse("2026-05-12T12:00:00Z"),
+                OffsetDateTime.parse("2027-05-12T12:00:00Z"),
+                true,
+                true,
+                false,
+                null,
+                null,
+                false,
+                "xrpl",
+                "jwt",
+                "vc+jwt",
+                "did:xrpl:1:rHolder#holder-key-1",
+                "KYC_CREDENTIAL"
+        );
+
+        JsonNode rootNode = objectMapper.readTree(objectMapper.writeValueAsString(request));
+
+        assertThat(rootNode.has("issuer_account")).isFalse();
+        assertThat(rootNode.has("issuer_seed")).isFalse();
+        assertThat(rootNode.has("issuer_private_key_pem")).isFalse();
+        assertThat(rootNode.has("issuer_did")).isFalse();
+        assertThat(rootNode.has("key_id")).isFalse();
+        assertThat(rootNode.has("store_issuer_did_document")).isFalse();
+        assertThat(rootNode.get("holder_account").asText()).isEqualTo("rHolder");
+        assertThat(rootNode.get("holder_did").asText()).isEqualTo("did:xrpl:1:rHolder");
+        assertThat(rootNode.get("holder_key_id").asText()).isEqualTo("did:xrpl:1:rHolder#holder-key-1");
+    }
 
     @Test
     void verifyPresentationApiRequest_serializesVpJwtPayload() throws Exception {

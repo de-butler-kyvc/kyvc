@@ -1,5 +1,6 @@
 package com.kyvc.backend.domain.core.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -52,20 +53,25 @@ public record CoreVcIssuanceRequest(
         @Schema(description = "법인 ID", example = "10")
         Long corporateId, // 법인 ID
         @Schema(description = "Issuer XRPL Account", example = "rIssuer")
+        @JsonIgnore
         @JsonProperty("issuer_account")
         String issuerAccount, // Issuer XRPL Account
         @Schema(description = "Issuer seed")
+        @JsonIgnore
         @JsonProperty("issuer_seed")
         String issuerSeed, // Issuer seed
         @Schema(description = "Issuer private key PEM")
+        @JsonIgnore
         @JsonProperty("issuer_private_key_pem")
         String issuerPrivateKeyPem, // Issuer private key PEM
         @Schema(description = "Issuer DID", example = "did:xrpl:1:rIssuer")
+        @JsonIgnore
         @JsonProperty("issuer_did")
         String issuerDid, // Issuer DID
         @Schema(description = "Issuer Verification Method ID", example = "did:xrpl:1:rIssuer#issuer-key-1")
         String issuerVerificationMethodId, // Issuer Verification Method ID
         @Schema(description = "Issuer key ID", example = "issuer-key-1")
+        @JsonIgnore
         @JsonProperty("key_id")
         String keyId, // Issuer key ID
         @Schema(description = "Holder XRPL Account", example = "rHolder")
@@ -99,6 +105,7 @@ public record CoreVcIssuanceRequest(
         @JsonProperty("mark_status_accepted")
         Boolean markStatusAccepted, // 상태 수락 마킹 여부
         @Schema(description = "Issuer DID Document 저장 여부", example = "true")
+        @JsonIgnore
         @JsonProperty("store_issuer_did_document")
         Boolean storeIssuerDidDocument, // Issuer DID Document 저장 여부
         @Schema(description = "상태 URI")
