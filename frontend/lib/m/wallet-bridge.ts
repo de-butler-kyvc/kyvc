@@ -22,7 +22,8 @@ export function formatXrp(value?: string | number | null) {
 }
 
 export function readXrpBalance(assets?: WalletAssetsResult | null) {
-  if (!assets?.ok || assets.depositRequired) return null;
+  if (!assets?.ok) return null;
+  if (assets.depositRequired) return "0";
   return (
     assets.xrpBalanceXrp ??
     (assets.xrpBalance as string | number | undefined) ??

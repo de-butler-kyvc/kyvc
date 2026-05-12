@@ -54,10 +54,6 @@ export default function MobileXrpSendPage() {
     }
     ensureMobileWallet()
       .then(({ assets }) => {
-        if (assets?.depositRequired) {
-          setAvailableXrp("입금 필요");
-          return;
-        }
         const balance = readXrpBalance(assets);
         setAvailableXrp(balance == null ? "확인 실패" : formatXrp(balance));
       })
