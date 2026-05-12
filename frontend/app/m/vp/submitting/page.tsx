@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { MIcon } from "@/components/m/icons";
+import { MTopBar } from "@/components/m/parts";
 import {
   bridge,
   CORE_BASE_URL,
@@ -15,9 +17,9 @@ import { mSession } from "@/lib/m/session";
 
 type Stage = "challenge" | "sign" | "submit" | "done";
 const LABEL: Record<Stage, string> = {
-  challenge: "Verifier에 nonce 요청 중...",
-  sign: "SD-JWT+KB 서명 중...",
-  submit: "Verifier에 제출 중...",
+  challenge: "검증 요청 정보를 확인하고 있어요",
+  sign: "지갑에서 제출 증명을 만들고 있어요",
+  submit: "검증 기관에 증명서를 제출하고 있어요",
   done: "완료",
 };
 
@@ -123,15 +125,30 @@ export default function MobileVpSubmittingPage() {
   }, [router]);
 
   return (
-    <section className="view wash center">
-      <div className="progress-card" />
-      <div className="content">
-        <h1 className="headline m-auth-title">{error ? "제출 실패" : "제출 중..."}</h1>
-        <p className="subcopy">
-          {error ?? LABEL[stage]}
-        </p>
+    <section className="view wash mobile-process-view">
+      <MTopBar title="증명서 제출" back="/m/home" />
+      <div className="content scroll mobile-process-content">
+        <section className={`process-panel${error ? " error" : ""}`}>
+          <div className={`process-icon${error ? " error" : ""}`}>
+            {error ? <MIcon.x /> : <MIcon.shield />}
+          </div>
+          <span className="process-eyebrow">Verifier</span>
+          <h1>{error ? "증명서 제출에 실패했습니다" : "증명서를 제출하고 있어요"}</h1>
+          <p>{error ?? LABEL[stage]}</p>
+          {!error ? (
+            <div className="process-steps" aria-label="증명서 제출 진행 상태">
+              {(["challenge", "sign", "submit", "done"] as Stage[]).map((item) => (
+                <span
+                  key={item}
+                  className={item === stage ? "active" : ""}
+                  aria-current={item === stage ? "step" : undefined}
+                />
+              ))}
+            </div>
+          ) : null}
+        </section>
         {error ? (
-          <div className="bottom-action" style={{ marginTop: 24 }}>
+          <div className="process-actions">
             <button
               type="button"
               className="primary"
