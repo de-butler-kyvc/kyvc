@@ -60,6 +60,14 @@ function shortDid(value: string) {
   return `${value.slice(0, 13)}...${value.slice(-6)}`;
 }
 
+function isWalletActivated(
+  wallet?: WalletInfo | null,
+  assets?: WalletAssetsResult | null,
+) {
+  const account = wallet?.holderAccount ?? wallet?.account;
+  return Boolean(account) && Boolean(assets?.accountActivated) && !assets?.depositRequired;
+}
+
 export default function MobileHomePage() {
   const router = useRouter();
   const [certs, setCerts] = useState<CertItem[]>([]);
@@ -77,6 +85,7 @@ export default function MobileHomePage() {
   const [testState, setTestState] = useState<HomeTestState>("bridge");
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
+  const [inactiveStateConfirmed, setInactiveStateConfirmed] = useState(false);
 
   const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
     const holderAccount = info.holderAccount ?? info.account;
@@ -301,6 +310,32 @@ export default function MobileHomePage() {
     return off;
   }, []);
 
+  useEffect(() => {
+    if (testState !== "bridge") {
+      setInactiveStateConfirmed(true);
+      return;
+    }
+    setInactiveStateConfirmed(false);
+    if (!walletInfo || !walletAssets) return;
+    if (isWalletActivated(walletInfo, walletAssets)) return;
+
+    let cancelled = false;
+    bridge
+      .getWalletAssets()
+      .then((assets) => {
+        if (cancelled || !assets.ok) return;
+        setWalletAssets(assets);
+        mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
+        if (!isWalletActivated(walletInfo, assets)) {
+          setInactiveStateConfirmed(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [testState, walletInfo, walletAssets]);
+
   const showToast = (message: string) => {
     setToastClosing(false);
     setToast(message);
@@ -426,6 +461,11 @@ export default function MobileHomePage() {
   const ledgerActivated = Boolean(testWalletAssets?.accountActivated);
   const depositRequired = Boolean(testWalletAssets?.depositRequired);
   const walletXrplActivated = walletExists && ledgerActivated && !depositRequired;
+  const walletStateCanRender =
+    testState !== "bridge" ||
+    !walletExists ||
+    walletXrplActivated ||
+    inactiveStateConfirmed;
   const didRegistrationRequired =
     testWalletInfo?.didRegistrationRequired ??
     (walletXrplActivated
@@ -446,6 +486,9 @@ export default function MobileHomePage() {
         : "DID 등록하기";
   const balanceValue = walletExists && testWalletAssets ? readXrpBalance(testWalletAssets) : null;
   const balanceXrp = balanceValue == null ? null : formatXrp(balanceValue);
+  const homeStateReady =
+    testState !== "bridge" ||
+    Boolean(testWalletInfo && testWalletAssets && walletStateCanRender);
 
   return (
     <section className="view wash home-view">
@@ -475,66 +518,72 @@ export default function MobileHomePage() {
 
         <div className="home-figma-stage">
           <section className="wallet-hero xrp-home-hero">
-            {balanceXrp ? <h1>{balanceXrp}</h1> : null}
-            <button
-              type="button"
-              className={`wallet-did-copy${
-                didRegistered
-                  ? " did-registered"
-                  : walletXrplActivated
-                    ? " needs-did"
-                    : " needs-wallet"
-              }`}
-              onClick={async () => {
-                if (!walletExists) {
-                  setWalletSheetOpen(true);
-                  return;
-                }
-                if (!walletXrplActivated) {
-                  setWalletSheetOpen(true);
-                  return;
-                }
-                if (didRegistered && !didRegistrationRequired) {
-                  if (!registeredDid) {
-                    showToast("복사할 DID를 찾을 수 없습니다.");
-                    return;
-                  }
-                  try {
-                    await copyText(registeredDid);
-                    showToast("DID가 복사되었습니다.");
-                  } catch {
-                    showToast("DID를 복사할 수 없습니다.");
-                  }
-                  return;
-                }
-                router.push("/m/did/register");
-              }}
-            >
-              <span>{walletLabel}</span>
-              {didRegistered ? (
-                <svg
-                  className="wallet-did-copy-icon"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  aria-hidden="true"
+            <div className={`home-wallet-state${homeStateReady ? " ready" : ""}`}>
+              {homeStateReady ? (
+                <>
+                  {balanceXrp ? <h1>{balanceXrp}</h1> : null}
+                <button
+                  type="button"
+                  className={`wallet-did-copy${
+                    didRegistered
+                      ? " did-registered"
+                      : walletXrplActivated
+                        ? " needs-did"
+                        : " needs-wallet"
+                  }`}
+                  onClick={async () => {
+                    if (!walletExists) {
+                      setWalletSheetOpen(true);
+                      return;
+                    }
+                    if (!walletXrplActivated) {
+                      setWalletSheetOpen(true);
+                      return;
+                    }
+                    if (didRegistered && !didRegistrationRequired) {
+                      if (!registeredDid) {
+                        showToast("복사할 DID를 찾을 수 없습니다.");
+                        return;
+                      }
+                      try {
+                        await copyText(registeredDid);
+                        showToast("DID가 복사되었습니다.");
+                      } catch {
+                        showToast("DID를 복사할 수 없습니다.");
+                      }
+                      return;
+                    }
+                    router.push("/m/did/register");
+                  }}
                 >
-                  <path
-                    d="M11.6667 4.66667H5.83333C5.189 4.66667 4.66667 5.189 4.66667 5.83333V11.6667C4.66667 12.311 5.189 12.8333 5.83333 12.8333H11.6667C12.311 12.8333 12.8333 12.311 12.8333 11.6667V5.83333C12.8333 5.189 12.311 4.66667 11.6667 4.66667Z"
-                    stroke="currentColor"
-                    strokeWidth="1.16667"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M2.33333 9.33333C1.69167 9.33333 1.16667 8.80833 1.16667 8.16667V2.33333C1.16667 1.69167 1.69167 1.16667 2.33333 1.16667H8.16667C8.80833 1.16667 9.33333 1.69167 9.33333 2.33333"
-                    stroke="currentColor"
-                    strokeWidth="1.16667"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                  <span>{walletLabel}</span>
+                  {didRegistered ? (
+                    <svg
+                      className="wallet-did-copy-icon"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M11.6667 4.66667H5.83333C5.189 4.66667 4.66667 5.189 4.66667 5.83333V11.6667C4.66667 12.311 5.189 12.8333 5.83333 12.8333H11.6667C12.311 12.8333 12.8333 12.311 12.8333 11.6667V5.83333C12.8333 5.189 12.311 4.66667 11.6667 4.66667Z"
+                        stroke="currentColor"
+                        strokeWidth="1.16667"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M2.33333 9.33333C1.69167 9.33333 1.16667 8.80833 1.16667 8.16667V2.33333C1.16667 1.69167 1.69167 1.16667 2.33333 1.16667H8.16667C8.80833 1.16667 9.33333 1.69167 9.33333 2.33333"
+                        stroke="currentColor"
+                        strokeWidth="1.16667"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : null}
+                </button>
+                </>
               ) : null}
-            </button>
+            </div>
           </section>
 
           <section className="wallet-actions xrp-home-actions">
@@ -544,8 +593,9 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={!walletXrplActivated ? "inactive" : ""}
+              className={homeStateReady && !walletXrplActivated ? "inactive" : ""}
               onClick={() => {
+                if (!homeStateReady) return;
                 if (!walletExists) {
                   setWalletSheetOpen(true);
                   return;
@@ -562,7 +612,7 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={!walletExists ? "inactive" : ""}
+              className={homeStateReady && !walletExists ? "inactive" : ""}
               onClick={() => router.push("/m/transactions")}
             >
               <MIcon.history />
@@ -580,6 +630,7 @@ export default function MobileHomePage() {
                   type="button"
                   className="empty-credential-card"
                   onClick={() => {
+                    if (!homeStateReady) return;
                     if (!walletExists) {
                       setWalletSheetOpen(true);
                       return;
