@@ -3,19 +3,21 @@
 import { useRouter } from "next/navigation";
 
 import { MIcon } from "@/components/m/icons";
+import { MTopBar } from "@/components/m/parts";
 
 export default function MobileVpCompletePage() {
   const router = useRouter();
   return (
-    <section className="view wash">
-      <div className="content full-w scroll center">
-        <div className="success-circle">
+    <section className="view wash mobile-process-view">
+      <MTopBar title="증명서 제출" back={false} />
+      <div className="content full-w scroll mobile-complete-content">
+        <div className="success-circle compact">
           <MIcon.check />
         </div>
-        <h1 className="headline m-auth-title mt-24">제출 완료</h1>
-        <p className="subcopy">신한은행에 증명서 제출이 완료되었어요.</p>
+        <h1>제출 완료</h1>
+        <p>증명서 제출이 완료되었습니다.</p>
 
-        <div className="tx-details mt-24 text-left">
+        <div className="tx-details mt-24">
           <div className="tx-row">
             <span>제출 기관</span>
             <strong>신한은행</strong>

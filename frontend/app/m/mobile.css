@@ -1229,6 +1229,16 @@ html {
   animation: riseIn .35s ease both;
 }
 
+.home-wallet-state {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.home-wallet-state .wallet-did-copy {
+  pointer-events: auto;
+}
+
 .wallet-hero {
   margin: 4px 18px 16px;
   min-height: 138px;
@@ -2301,9 +2311,15 @@ html {
 /* ── 활동 ──────────────────────────────────────────────────────── */
 .view.wash.activity-view {
   height: 100vh;
+  height: -webkit-fill-available;
   height: 100dvh;
+  height: var(--m-visual-height, 100dvh);
   min-height: 100vh;
+  min-height: -webkit-fill-available;
   min-height: 100dvh;
+  min-height: var(--m-visual-height, 100dvh);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
@@ -2357,13 +2373,14 @@ html {
 }
 
 .activity-scroll {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
   overflow-x: hidden;
   padding: 24px 25px 24px;
   background: transparent;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .activity-group {
@@ -3064,6 +3081,162 @@ html {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── Mobile process screens ─────────────────────────────────── */
+.mobile-process-view {
+  background:
+    radial-gradient(circle at 84% 12%, rgba(124, 58, 237, .12), transparent 30%),
+    #fff;
+}
+
+.mobile-process-view .m-topbar {
+  height: 60px;
+  padding: 12px 18.75px;
+}
+
+.mobile-process-content {
+  min-height: calc(100dvh - 60px);
+  padding: 34px 22px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.process-panel {
+  width: 100%;
+  min-height: 392px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  animation: riseIn .42s ease both;
+}
+
+.process-orbit,
+.process-icon {
+  width: 116px;
+  height: 116px;
+  margin-bottom: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.process-orbit {
+  position: relative;
+  color: #fff;
+  background: linear-gradient(135deg, var(--m-blue), var(--m-violet));
+  box-shadow: 0 24px 52px rgba(79, 124, 255, .26);
+}
+
+.process-orbit span {
+  position: absolute;
+  inset: -12px;
+  border-radius: inherit;
+  border: 1px solid rgba(79, 124, 255, .18);
+  border-top-color: rgba(124, 58, 237, .75);
+  animation: spin 1.6s linear infinite;
+}
+
+.process-orbit svg,
+.process-icon svg {
+  width: 42px;
+  height: 42px;
+  stroke-width: 1.8;
+  position: relative;
+  z-index: 1;
+}
+
+.process-icon {
+  color: #2563eb;
+  background: #eef4ff;
+}
+
+.process-icon.error {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.process-eyebrow {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.process-panel h1,
+.mobile-complete-content h1 {
+  margin: 9px 0 0;
+  color: var(--m-ink);
+  font-size: 24px;
+  line-height: 31px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.process-panel p,
+.mobile-complete-content > p {
+  max-width: 286px;
+  margin: 12px auto 0;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 21px;
+  word-break: keep-all;
+}
+
+.process-panel.error p {
+  color: #dc2626;
+}
+
+.process-steps {
+  height: 6px;
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.process-steps span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #d8def0;
+  transition: width .18s ease, background .18s ease;
+}
+
+.process-steps span.active {
+  width: 28px;
+  background: linear-gradient(135deg, var(--m-blue), var(--m-violet));
+}
+
+.process-actions {
+  width: 100%;
+  margin-top: 22px;
+  display: grid;
+  gap: 10px;
+}
+
+.mobile-complete-content {
+  padding: 22px 22px 120px;
+  text-align: center;
+}
+
+.success-circle.compact {
+  width: 84px;
+  height: 84px;
+  margin-top: 16px;
+}
+
+.success-circle.compact svg {
+  width: 40px;
+  height: 40px;
+}
+
+.mobile-complete-content .tx-details {
+  margin-top: 24px;
+  text-align: left;
 }
 
 /* ── DID register ───────────────────────────────────────────── */

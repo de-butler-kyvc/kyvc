@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import {
   ApiError,
@@ -418,20 +419,37 @@ export default function MobileVcIssuePage() {
   };
 
   return (
-    <section className="view wash">
+    <section className="view wash mobile-process-view">
       <MTopBar title="증명서 발급" back="/m/home" />
-      <div className="content scroll center">
+      <div className="content scroll mobile-process-content">
         {error ? (
-          <>
-            <h1 className="headline m-auth-title mt-24">증명서 발급에 실패했습니다.</h1>
-            <p className="m-error mt-16">{error}</p>
-          </>
+          <section className="process-panel error">
+            <div className="process-icon error">
+              <MIcon.x />
+            </div>
+            <span className="process-eyebrow">발급 실패</span>
+            <h1>증명서 발급에 실패했습니다</h1>
+            <p>{error}</p>
+          </section>
         ) : (
-          <>
-            <div className="m-loading mt-24">{STEP_TEXT[step]}</div>
-            <h1 className="headline m-auth-title mt-24">증명서를 발급하고 있어요...</h1>
-            <p className="subcopy">잠시만 기다려주세요.</p>
-          </>
+          <section className="process-panel">
+            <div className="process-orbit" aria-hidden="true">
+              <span />
+              <MIcon.cert />
+            </div>
+            <span className="process-eyebrow">KYvC Wallet</span>
+            <h1>증명서를 발급하고 있어요</h1>
+            <p>{STEP_TEXT[step]}</p>
+            <div className="process-steps" aria-label="증명서 발급 진행 상태">
+              {(["qr", "offer", "wallet", "device", "prepare", "save", "xrpl", "status", "confirm"] as IssueStep[]).map((item) => (
+                <span
+                  key={item}
+                  className={item === step ? "active" : ""}
+                  aria-current={item === step ? "step" : undefined}
+                />
+              ))}
+            </div>
+          </section>
         )}
       </div>
       {error ? (
