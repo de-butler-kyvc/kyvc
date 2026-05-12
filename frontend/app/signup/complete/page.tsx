@@ -5,10 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Logo, SignupStepper } from "@/components/design/primitives";
 import { Icon } from "@/components/design/icons";
-import { auth } from "@/lib/api";
-import { useSession } from "@/lib/session-context";
 import {
+  clearSignupCompleteSnapshot,
   clearSignupDraft,
+  clearSignupEmailChallenge,
+  readSignupCompleteSnapshot,
   readSignupDraft,
   type SignupDraft
 } from "@/lib/signup-flow";
@@ -24,11 +25,10 @@ function formatDate(iso?: string) {
 
 export default function SignupCompletePage() {
   const router = useRouter();
-  const { refreshSession } = useSession();
   const [draft, setDraft] = useState<SignupDraft | null>(null);
 
   useEffect(() => {
-    const d = readSignupDraft();
+    const d = readSignupCompleteSnapshot() ?? readSignupDraft();
     if (!d.signedUpAt) {
       router.replace("/signup");
       return;
@@ -40,20 +40,19 @@ export default function SignupCompletePage() {
 
   if (!draft) return null;
 
-  const goDashboard = async () => {
+  const clearSignupState = () => {
+    clearSignupCompleteSnapshot();
     clearSignupDraft();
-    await refreshSession();
-    router.replace("/corporate");
+    clearSignupEmailChallenge();
   };
 
-  const goLogin = async () => {
-    clearSignupDraft();
-    try {
-      await auth.logout();
-    } catch {
-      // 세션이 이미 만료되었을 수 있음
-    }
-    await refreshSession();
+  const goDashboard = () => {
+    clearSignupState();
+    router.replace("/login?signup=ok");
+  };
+
+  const goLogin = () => {
+    clearSignupState();
     router.replace("/login?signup=ok");
   };
 

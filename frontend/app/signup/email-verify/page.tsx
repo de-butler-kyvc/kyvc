@@ -7,23 +7,46 @@ import { useEffect, useRef, useState } from "react";
 import { Logo, SignupStepper } from "@/components/design/primitives";
 import { Icon } from "@/components/design/icons";
 import { ApiError, auth } from "@/lib/api";
-import { useSession } from "@/lib/session-context";
 import { SessionGateSplash } from "@/lib/session-gate";
-import { readSignupDraft, writeSignupDraft } from "@/lib/signup-flow";
+import {
+  clearSignupDraft,
+  clearSignupEmailChallenge,
+  isValidSignupEmailChallenge,
+  loadSignupEmailChallenge,
+  readSignupDraft,
+  saveSignupCompleteSnapshot,
+  saveSignupEmailChallenge,
+  type SignupDraft,
+  type SignupEmailChallenge
+} from "@/lib/signup-flow";
 
 const OTP_LEN = 6;
 
+function secondsUntil(expiresAt: string) {
+  const directMs = new Date(expiresAt).getTime() - Date.now();
+  if (Number.isFinite(directMs) && directMs > 0) return Math.round(directMs / 1000);
+
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt);
+  if (!hasTimezone) {
+    const utcMs = new Date(`${expiresAt}Z`).getTime() - Date.now();
+    if (Number.isFinite(utcMs) && utcMs > 0) return Math.round(utcMs / 1000);
+  }
+
+  return 0;
+}
+
 export default function SignupEmailVerifyPage() {
   const router = useRouter();
-  const { refreshSession } = useSession();
 
   const [bootstrapping, setBootstrapping] = useState(true);
   const [email, setEmail] = useState("");
   const [maskedTarget, setMaskedTarget] = useState("");
-  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [challengeId, setChallengeId] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [digits, setDigits] = useState<string[]>(() => Array(OTP_LEN).fill(""));
   const [verifying, setVerifying] = useState(false);
+  const [signingUp, setSigningUp] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -35,51 +58,44 @@ export default function SignupEmailVerifyPage() {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    (async () => {
-      const draft = readSignupDraft();
-      if (!draft.entityTypeId) {
-        router.replace("/signup");
-        return;
-      }
-      if (!draft.email || !draft.password) {
-        router.replace("/signup/info");
-        return;
-      }
-      if (!draft.termsAcceptedAt) {
-        router.replace("/signup/terms");
-        return;
-      }
-      setEmail(draft.email);
+    const draft = readSignupDraft();
+    if (!draft.entityTypeId) {
+      router.replace("/signup");
+      return;
+    }
+    if (!draft.email || !draft.password) {
+      router.replace("/signup/info");
+      return;
+    }
+    if (!draft.termsAcceptedAt) {
+      router.replace("/signup/terms");
+      return;
+    }
 
-      try {
-        // 가입 → 자동 로그인 → MFA 챌린지
-        // 이미 가입했고 세션이 살아있으면 가입 단계는 건너뜁니다.
-        if (!draft.signedUpAt) {
-          await auth.signup({
-            email: draft.email,
-            password: draft.password,
-            userName: draft.userName!,
-            phone: draft.phone,
-            corporateName: draft.corporateName!
-          });
-          writeSignupDraft({ signedUpAt: new Date().toISOString() });
-        }
-        try {
-          await auth.login(draft.email, draft.password);
-        } catch (loginErr) {
-          // 이미 로그인된 상태라면 무시
-          if (!(loginErr instanceof ApiError)) throw loginErr;
-        }
-        await refreshSession();
-        await sendChallenge();
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "회원가입 처리 중 오류가 발생했습니다.");
-      } finally {
-        setBootstrapping(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const storedChallenge = loadSignupEmailChallenge();
+    if (!storedChallenge) {
+      router.replace("/signup/terms");
+      return;
+    }
+    if (storedChallenge.email !== draft.email) {
+      clearSignupEmailChallenge();
+      router.replace("/signup/info");
+      return;
+    }
+    if (!isValidSignupEmailChallenge(storedChallenge, draft.email)) {
+      clearSignupEmailChallenge();
+      router.replace("/signup/terms");
+      return;
+    }
+
+    setEmail(draft.email);
+    setChallengeId(storedChallenge.verificationId);
+    setMaskedTarget(storedChallenge.maskedEmail ?? "");
+    setSecondsLeft(secondsUntil(storedChallenge.expiresAt));
+    setDigits(Array(OTP_LEN).fill(""));
+    setBootstrapping(false);
+    window.setTimeout(() => cellRefs.current[0]?.focus(), 0);
+  }, [router]);
 
   // 카운트다운
   useEffect(() => {
@@ -94,12 +110,25 @@ export default function SignupEmailVerifyPage() {
 
   const sendChallenge = async () => {
     setError(null);
-    const res = await auth.mfaChallenge("EMAIL", "LOGIN");
-    setChallengeId(res.challengeId);
-    setMaskedTarget(res.maskedTarget);
-    const ms = new Date(res.expiresAt).getTime() - Date.now();
-    setSecondsLeft(Math.max(0, Math.round(ms / 1000)));
+    const draft = readSignupDraft();
+    if (!draft.email) {
+      router.replace("/signup/info");
+      return;
+    }
+    const res = await auth.requestSignupEmailVerification(draft.email);
+    const nextChallenge: SignupEmailChallenge = {
+      verificationId: res.verificationId,
+      email: draft.email,
+      maskedEmail: res.maskedEmail,
+      expiresAt: res.expiresAt
+    };
+    saveSignupEmailChallenge(nextChallenge);
+    setEmail(draft.email);
+    setChallengeId(nextChallenge.verificationId);
+    setMaskedTarget(nextChallenge.maskedEmail ?? "");
+    setSecondsLeft(secondsUntil(nextChallenge.expiresAt));
     setDigits(Array(OTP_LEN).fill(""));
+    setEmailVerified(false);
     cellRefs.current[0]?.focus();
   };
 
@@ -129,23 +158,64 @@ export default function SignupEmailVerifyPage() {
     cellRefs.current[Math.min(pasted.length, OTP_LEN - 1)]?.focus();
   };
 
+  const signupCorporate = async (draft: SignupDraft) => {
+    if (!draft.email || !draft.password || !draft.userName || !draft.corporateName) {
+      router.replace("/signup/info");
+      return;
+    }
+    const signedUpAt = new Date().toISOString();
+    const snapshot: SignupDraft = {
+      ...draft,
+      email: draft.email.trim(),
+      userName: draft.userName.trim(),
+      phone: draft.phone?.trim() ?? "",
+      corporateName: draft.corporateName.trim(),
+      signedUpAt
+    };
+    await auth.signup({
+      email: snapshot.email!,
+      password: draft.password,
+      userName: snapshot.userName!,
+      phone: snapshot.phone,
+      corporateName: snapshot.corporateName!
+    });
+    saveSignupCompleteSnapshot(snapshot);
+    clearSignupDraft();
+    clearSignupEmailChallenge();
+    router.push("/signup/complete");
+  };
+
   const onVerify = async () => {
-    if (!challengeId || !allFilled) return;
+    if (!challengeId || !allFilled || verifying || signingUp) return;
+    if (secondsLeft <= 0) {
+      clearSignupEmailChallenge();
+      router.replace("/signup/terms");
+      return;
+    }
+    const draft = readSignupDraft();
+    if (!draft.email || !draft.password) {
+      router.replace("/signup/info");
+      return;
+    }
     setError(null);
     setInfo(null);
-    setVerifying(true);
+    setVerifying(!emailVerified);
     try {
-      const res = await auth.mfaVerify(challengeId, digits.join(""));
-      if (!res.verified) {
-        setError("인증번호가 올바르지 않습니다. 다시 입력해 주세요.");
-        return;
+      if (!emailVerified) {
+        const res = await auth.verifySignupEmail(challengeId, draft.email, digits.join(""));
+        if (!res.verified) {
+          setError("인증번호가 올바르지 않습니다. 다시 입력해 주세요.");
+          return;
+        }
+        setEmailVerified(true);
       }
-      await refreshSession();
-      router.push("/signup/complete");
+      setSigningUp(true);
+      await signupCorporate(draft);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "인증에 실패했습니다.");
     } finally {
       setVerifying(false);
+      setSigningUp(false);
     }
   };
 
@@ -250,7 +320,9 @@ export default function SignupEmailVerifyPage() {
               type="button"
               className="btn btn-primary btn-block btn-lg"
               onClick={onVerify}
-              disabled={verifying || !allFilled || !challengeId}
+              disabled={
+                verifying || signingUp || !allFilled || !challengeId || secondsLeft <= 0
+              }
             >
               {verifying ? "인증 중..." : "인증 확인"}
             </button>
@@ -258,7 +330,7 @@ export default function SignupEmailVerifyPage() {
               type="button"
               className="btn btn-ghost btn-block"
               onClick={onResend}
-              disabled={resending}
+              disabled={resending || verifying || signingUp}
             >
               {resending ? "재전송 중..." : "인증번호 재전송"}
             </button>
@@ -269,6 +341,7 @@ export default function SignupEmailVerifyPage() {
               href="#"
               onClick={(e) => {
                 e.preventDefault();
+                clearSignupEmailChallenge();
                 router.push("/signup/info");
               }}
               style={{ fontSize: 13, color: "var(--accent)" }}

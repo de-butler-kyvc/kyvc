@@ -99,7 +99,16 @@ export type SignupDraft = {
   signedUpAt?: string;
 };
 
+export type SignupEmailChallenge = {
+  verificationId: number;
+  email: string;
+  maskedEmail?: string;
+  expiresAt: string;
+};
+
 const STORAGE_KEY = "kyvc.signupDraft";
+const SIGNUP_EMAIL_CHALLENGE_KEY = "kyvc.signupEmailChallenge";
+const SIGNUP_COMPLETE_KEY = "kyvc.signupComplete";
 
 export function readSignupDraft(): SignupDraft {
   if (typeof window === "undefined") return {};
@@ -123,9 +132,59 @@ export function clearSignupDraft() {
   window.sessionStorage.removeItem(STORAGE_KEY);
 }
 
+export function saveSignupEmailChallenge(challenge: SignupEmailChallenge) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(SIGNUP_EMAIL_CHALLENGE_KEY, JSON.stringify(challenge));
+}
+
+export function loadSignupEmailChallenge(): SignupEmailChallenge | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+    return raw ? (JSON.parse(raw) as SignupEmailChallenge) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSignupEmailChallenge() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(SIGNUP_EMAIL_CHALLENGE_KEY);
+}
+
+export function isValidSignupEmailChallenge(
+  challenge: SignupEmailChallenge | null,
+  email?: string,
+) {
+  if (!challenge || !challenge.verificationId || !email) return false;
+  return challenge.email === email;
+}
+
+export function saveSignupCompleteSnapshot(snapshot: SignupDraft) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(SIGNUP_COMPLETE_KEY, JSON.stringify(snapshot));
+}
+
+export function readSignupCompleteSnapshot(): SignupDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SIGNUP_COMPLETE_KEY);
+    return raw ? (JSON.parse(raw) as SignupDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSignupCompleteSnapshot() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(SIGNUP_COMPLETE_KEY);
+}
+
 export function setSignupEntityType(id: SignupEntityTypeId) {
   const meta = SIGNUP_ENTITY_TYPES.find((t) => t.id === id);
   if (!meta) return;
+  clearSignupEmailChallenge();
+  clearSignupCompleteSnapshot();
   writeSignupDraft({ entityTypeId: id, entityLabel: meta.label });
   // KYC 플로우와 연동: 회원가입 시 선택한 유형을 KYC 신청에서 재사용
   setStoredCorporateType(meta.corporateTypeCode);
