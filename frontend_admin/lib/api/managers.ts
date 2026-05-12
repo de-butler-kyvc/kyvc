@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const ADMIN_USERS_URL = `${API_BASE}/api/admin/backend/admin-users`;
 const ADMIN_ROLES_URL = `${API_BASE}/api/admin/backend/admin-roles`;
 

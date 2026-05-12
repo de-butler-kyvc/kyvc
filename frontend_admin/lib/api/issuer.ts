@@ -1,7 +1,7 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
 import type { IssuerItem } from "@/types/kyc";
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const ISSUER_POLICIES_URL = `${API_BASE}/api/admin/backend/issuer-policies`;
 
 type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };

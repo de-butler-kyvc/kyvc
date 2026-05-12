@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const DOC_DELETE_BASE = `${API_BASE}/api/admin/backend/document-delete-requests`;
 
 // ── 타입 ──────────────────────────────────────────────────────

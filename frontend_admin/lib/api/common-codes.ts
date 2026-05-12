@@ -1,6 +1,6 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const CODE_BASE = `${API_BASE}/api/admin/backend/common-codes`;
 const GROUP_BASE = `${API_BASE}/api/admin/backend/common-code-groups`;
 

@@ -1,7 +1,7 @@
 import { getAccessTokenForApi, isPlaceholderAccessToken } from "@/lib/auth-session";
 
 import type { UserItem } from "@/types/kyc";
-const API_BASE = "";
+import { API_BASE } from "@/lib/api/api-base";
 const USERS_URL = `${API_BASE}/api/admin/backend/users`;
 
 type PageLike<T> = { content?: T[]; items?: T[]; list?: T[] };
