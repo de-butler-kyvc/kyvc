@@ -252,10 +252,6 @@ public class CoreHttpAdapter implements CoreAdapter {
     ) {
         validateVcIssuanceRequest(request);
 
-        String issuerAccount = resolveIssuerAccount(request);
-        String issuerDid = resolveIssuerDid(request);
-        String issuerVerificationMethodId = resolveIssuerVerificationMethodId(request, issuerDid);
-        String keyId = resolveKeyId(request, issuerVerificationMethodId);
         String holderAccount = resolveHolderAccount(request);
         String holderDid = resolveHolderDid(request, holderAccount);
         OffsetDateTime validFrom = resolveValidFrom(request);
@@ -270,11 +266,6 @@ public class CoreHttpAdapter implements CoreAdapter {
         String format = resolveAllowedValue(request.format(), DEFAULT_VC_FORMAT, ALLOWED_VC_FORMATS, "format");
 
         IssueKycCredentialApiRequest apiRequest = new IssueKycCredentialApiRequest(
-                issuerAccount,
-                normalizeOptional(request.issuerSeed()),
-                normalizeOptional(request.issuerPrivateKeyPem()),
-                issuerDid,
-                keyId,
                 holderAccount,
                 holderDid,
                 resolveClaims(request.claims()),
@@ -283,7 +274,6 @@ public class CoreHttpAdapter implements CoreAdapter {
                 resolveBoolean(request.persist(), true),
                 resolveBoolean(request.persistStatus(), true),
                 resolveBoolean(request.markStatusAccepted(), false),
-                resolveBoolean(request.storeIssuerDidDocument(), true),
                 normalizeOptional(request.statusUri()),
                 normalizeOptional(request.xrplJsonRpcUrl()),
                 resolveBoolean(request.allowMainnet(), false),

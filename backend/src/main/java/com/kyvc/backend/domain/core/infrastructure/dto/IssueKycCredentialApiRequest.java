@@ -7,16 +7,6 @@ import java.util.Map;
 
 // Core /issuer/credentials/kyc 요청 DTO
 public record IssueKycCredentialApiRequest(
-        @JsonProperty("issuer_account")
-        String issuerAccount, // Issuer XRPL Account
-        @JsonProperty("issuer_seed")
-        String issuerSeed, // Issuer seed
-        @JsonProperty("issuer_private_key_pem")
-        String issuerPrivateKeyPem, // Issuer private key PEM
-        @JsonProperty("issuer_did")
-        String issuerDid, // Issuer DID
-        @JsonProperty("key_id")
-        String keyId, // Issuer Verification Method key ID
         @JsonProperty("holder_account")
         String holderAccount, // Holder XRPL Account
         @JsonProperty("holder_did")
@@ -33,8 +23,6 @@ public record IssueKycCredentialApiRequest(
         Boolean persistStatus, // 상태 저장 여부
         @JsonProperty("mark_status_accepted")
         Boolean markStatusAccepted, // 상태 수락 마킹 여부
-        @JsonProperty("store_issuer_did_document")
-        Boolean storeIssuerDidDocument, // Issuer DID Document 저장 여부
         @JsonProperty("status_uri")
         String statusUri, // 상태 URI
         @JsonProperty("xrpl_json_rpc_url")
