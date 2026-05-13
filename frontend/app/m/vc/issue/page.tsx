@@ -126,6 +126,10 @@ function xrplClassicAddressFrom(value: unknown) {
   return isXrplClassicAddress(lastDidPart) ? lastDidPart : null;
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function preferredNativeAuthMethod(methods?: ("pin" | "pattern" | "biometric")[]) {
   if (methods?.includes("biometric")) return "biometric";
   if (methods?.includes("pin")) return "pin";
@@ -152,6 +156,24 @@ async function ensureWalletSession() {
   if (!auth.ok || !auth.authenticated) {
     throw new Error(auth.error ?? "네이티브 인증에 실패했습니다.");
   }
+}
+
+async function waitForCredentialAccepted(params: {
+  credentialId: string;
+  issuerAccount: string;
+  holderAccount: string;
+  credentialType: string;
+}) {
+  let lastResult: Awaited<ReturnType<typeof bridge.checkCredentialStatus>> | null = null;
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (attempt > 0) await wait(1500);
+    lastResult = await bridge.checkCredentialStatus(params);
+    if (lastResult.ok && lastResult.accepted !== false) return lastResult;
+  }
+
+  const hint = lastResult?.error ? ` ${lastResult.error}` : "";
+  throw new Error(`블록체인 기록 상태를 확인하지 못했습니다.${hint}`);
 }
 
 function credentialStringFromPayload(payload: WalletCredentialPayload) {
@@ -463,15 +485,12 @@ export default function MobileVcIssuePage() {
         }
 
         setStep("status");
-        const statusResult = await bridge.checkCredentialStatus({
+        const statusResult = await waitForCredentialAccepted({
           credentialId: String(prepared.credentialId),
           issuerAccount,
           holderAccount,
           credentialType,
         });
-        if (!statusResult.ok || statusResult.accepted === false) {
-          throw new Error("블록체인 기록 상태를 확인하지 못했습니다.");
-        }
 
         const walletSavedAt = new Date().toISOString();
         const txHash =
