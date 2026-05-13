@@ -181,24 +181,30 @@ public class WebVpLoginService {
         vpVerification.markWebVpLoginPresented(credential.getCorporateId(), credential.getCredentialId(), vpHash, now);
         vpVerificationRepository.save(vpVerification);
 
+        Object acceptedVct = resolveAcceptedVct(vpVerification);
+        logCoreVerifyRequested(vpVerification, credential, didDocuments, acceptedVct);
         CorePresentationVerifyResponse coreResponse = requestCoreVerify(vpVerification, request.vp(), didDocuments);
+        Object disclosedPayloadVct = extractDisclosedPayloadVct(coreResponse);
         boolean verified = coreResponse != null && coreResponse.isVerified();
         if (!verified) {
             vpVerification.markInvalid(resolveCoreVerifySummary(coreResponse, "웹 VP 로그인 Core 검증 실패"), LocalDateTime.now());
             VpVerification saved = vpVerificationRepository.save(vpVerification);
-            logCoreVerifyFailed(saved, coreResponse, didDocuments);
+            logCoreVerifyFailed(saved, coreResponse, didDocuments, acceptedVct, disclosedPayloadVct);
             throw new ApiException(ErrorCode.VP_LOGIN_CORE_VERIFY_FAILED);
         }
         vpVerification.markValid(resolveCoreVerifySummary(coreResponse, "웹 VP 로그인 Core 검증 성공"), LocalDateTime.now());
         VpVerification saved = vpVerificationRepository.save(vpVerification);
 
-        logEventLogger.info("auth.web_vp_login.presentation.submitted", "Web VP login presentation submitted", Map.of(
-                "vpVerificationId", saved.getVpVerificationId(),
-                "requestId", saved.getVpRequestId(),
-                "credentialId", saved.getCredentialId(),
-                "corporateId", saved.getCorporateId(),
-                "status", saved.getVpVerificationStatus().name()
-        ));
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("vpVerificationId", saved.getVpVerificationId());
+        fields.put("requestId", saved.getVpRequestId());
+        fields.put("credentialId", saved.getCredentialId());
+        fields.put("corporateId", saved.getCorporateId());
+        fields.put("status", saved.getVpVerificationStatus().name());
+        fields.put("presentationDefinitionAcceptedVct", acceptedVct);
+        fields.put("disclosedPayloadVct", disclosedPayloadVct);
+        fields.put("coreErrors", coreResponse == null ? List.of() : coreResponse.errors());
+        logEventLogger.info("auth.web_vp_login.presentation.submitted", "Web VP login presentation submitted", fields);
 
         return new WebVpLoginSubmitResponse(
                 saved.getVpRequestId(),
@@ -314,11 +320,31 @@ public class WebVpLoginService {
         }
     }
 
+    private void logCoreVerifyRequested(
+            VpVerification vpVerification, // VP 로그인 요청
+            Credential credential, // 제출 Credential
+            Map<String, Map<String, Object>> didDocuments, // DID document 목록
+            Object acceptedVct // 허용 VCT
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("vpVerificationId", vpVerification.getVpVerificationId());
+        fields.put("requestId", vpVerification.getVpRequestId());
+        fields.put("credentialId", credential.getCredentialId());
+        fields.put("corporateId", credential.getCorporateId());
+        fields.put("credentialTypeCode", credential.getCredentialTypeCode());
+        fields.put("didDocumentsCount", didDocuments == null ? 0 : didDocuments.size());
+        fields.put("didDocumentIds", didDocuments == null ? List.of() : List.copyOf(didDocuments.keySet()));
+        fields.put("presentationDefinitionAcceptedVct", acceptedVct);
+        logEventLogger.info("auth.web_vp_login.core_verify.requested", "Web VP login Core verify requested", fields);
+    }
+
     // Core 검증 실패 로그
     private void logCoreVerifyFailed(
             VpVerification vpVerification, // VP 로그인 요청
             CorePresentationVerifyResponse coreResponse, // Core 검증 응답
-            Map<String, Map<String, Object>> didDocuments // DID document 목록
+            Map<String, Map<String, Object>> didDocuments, // DID document 목록
+            Object acceptedVct, // 허용 VCT
+            Object disclosedPayloadVct // 제출 VC VCT
     ) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("vpVerificationId", vpVerification.getVpVerificationId());
@@ -333,6 +359,8 @@ public class WebVpLoginService {
         fields.put("coreVerified", coreResponse == null ? null : coreResponse.verified());
         fields.put("coreMessage", coreResponse == null ? null : coreResponse.message());
         fields.put("coreErrors", coreResponse == null ? List.of() : coreResponse.errors());
+        fields.put("presentationDefinitionAcceptedVct", acceptedVct);
+        fields.put("disclosedPayloadVct", disclosedPayloadVct);
         fields.put("coreDetailKeys", coreResponse == null || coreResponse.details() == null
                 ? List.of()
                 : List.copyOf(coreResponse.details().keySet()));
@@ -623,6 +651,35 @@ public class WebVpLoginService {
             return (Map<String, Object>) mapValue;
         }
         return createPresentationDefinition();
+    }
+
+    private Object resolveAcceptedVct(
+            VpVerification vpVerification // VP 로그인 요청
+    ) {
+        return resolvePresentationDefinition(readMetadata(vpVerification)).getOrDefault("acceptedVct", List.of(ACCEPTED_VCT));
+    }
+
+    private Object extractDisclosedPayloadVct(
+            CorePresentationVerifyResponse response // Core 검증 응답
+    ) {
+        if (response == null) {
+            return null;
+        }
+        return extractNestedValue(response.details(), "credential", "details", "disclosedPayload", "vct");
+    }
+
+    private Object extractNestedValue(
+            Object value, // 탐색 대상
+            String... paths // 탐색 경로
+    ) {
+        Object current = value;
+        for (String path : paths) {
+            if (!(current instanceof Map<?, ?> mapValue)) {
+                return null;
+            }
+            current = mapValue.get(path);
+        }
+        return current;
     }
 
     // 문자열 메타데이터 조회

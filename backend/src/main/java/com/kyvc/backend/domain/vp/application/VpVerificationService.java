@@ -39,6 +39,7 @@ import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -109,10 +110,12 @@ public class VpVerificationService {
         AuthContext authContext = resolveAuthContext(userDetails);
         VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
+        List<String> acceptedVcts = resolveAcceptedVcts(vpVerification);
         List<EligibleCredentialResponse> credentials = credentialRepository
                 .findVpEligibleCredentialsByCorporateId(authContext.corporateId())
                 .stream()
                 .filter(credential -> credential.isValid(LocalDateTime.now()))
+                .filter(credential -> matchesAcceptedVct(credential, acceptedVcts))
                 .map(this::toEligibleCredentialResponse)
                 .toList();
         return new EligibleCredentialListResponse(vpVerification.getVpRequestId(), credentials, credentials.size());
@@ -636,6 +639,51 @@ public class VpVerificationService {
         if (!vpVerification.matchesChallenge(request.challenge())) {
             throw new ApiException(ErrorCode.VP_CHALLENGE_INVALID);
         }
+    }
+
+    private List<String> resolveAcceptedVcts(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (!StringUtils.hasText(vpVerification.getPermissionResultJson())) {
+            return List.of();
+        }
+        try {
+            JsonNode rootNode = objectMapper.readTree(vpVerification.getPermissionResultJson());
+            List<String> acceptedVcts = new ArrayList<>();
+            addAcceptedVcts(acceptedVcts, rootNode.path("presentationDefinition").path("acceptedVct"));
+            addAcceptedVcts(acceptedVcts, rootNode.path("coreChallenge").path("presentationDefinition").path("acceptedVct"));
+            addAcceptedVcts(acceptedVcts, rootNode.path("coreChallenge").path("acceptedVct"));
+            return acceptedVcts.stream().distinct().toList();
+        } catch (JsonProcessingException exception) {
+            return List.of();
+        }
+    }
+
+    private void addAcceptedVcts(
+            List<String> acceptedVcts, // 허용 VCT 목록
+            JsonNode acceptedVctNode // 허용 VCT 노드
+    ) {
+        if (acceptedVctNode == null || acceptedVctNode.isMissingNode() || acceptedVctNode.isNull()) {
+            return;
+        }
+        if (acceptedVctNode.isArray()) {
+            acceptedVctNode.forEach(node -> addAcceptedVcts(acceptedVcts, node));
+            return;
+        }
+        if (StringUtils.hasText(acceptedVctNode.asText())) {
+            acceptedVcts.add(acceptedVctNode.asText().trim());
+        }
+    }
+
+    private boolean matchesAcceptedVct(
+            Credential credential, // Credential
+            List<String> acceptedVcts // 허용 VCT 목록
+    ) {
+        if (acceptedVcts == null || acceptedVcts.isEmpty()) {
+            return true;
+        }
+        return StringUtils.hasText(credential.getCredentialTypeCode())
+                && acceptedVcts.contains(credential.getCredentialTypeCode().trim());
     }
 
     // Holder DID Document 목록 생성
