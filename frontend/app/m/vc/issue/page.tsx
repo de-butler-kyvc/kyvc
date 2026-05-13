@@ -111,6 +111,21 @@ function requiredString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isXrplClassicAddress(value: string | null) {
+  return Boolean(value && /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(value));
+}
+
+function xrplClassicAddressFrom(value: unknown) {
+  const text = requiredString(value);
+  if (!text) return null;
+  if (isXrplClassicAddress(text)) return text;
+
+  const lastDidPart = text.startsWith("did:xrpl:")
+    ? text.split(":").at(-1) ?? null
+    : null;
+  return isXrplClassicAddress(lastDidPart) ? lastDidPart : null;
+}
+
 function preferredNativeAuthMethod(methods?: ("pin" | "pattern" | "biometric")[]) {
   if (methods?.includes("biometric")) return "biometric";
   if (methods?.includes("pin")) return "pin";
@@ -414,13 +429,9 @@ export default function MobileVcIssuePage() {
         setPayloadDelivered(true);
 
         const metadata = prepared.credentialPayload.metadata ?? {};
-        const issuerAccount = requiredString(metadata.issuerAccount);
         const credentialType = requiredString(metadata.credentialType) ?? "KYC_CREDENTIAL";
         const holderAccount =
           requiredString(metadata.holderXrplAddress) ?? holderXrplAddress;
-        if (!issuerAccount) {
-          throw new Error("블록체인 기록에 필요한 발급자 정보가 없습니다.");
-        }
 
         setStep("save");
         const savePayload = buildSavePayload(
@@ -430,6 +441,14 @@ export default function MobileVcIssuePage() {
         const saveResult = await bridge.saveVC(savePayload);
         if (!saveResult.ok) {
           throw new Error(saveResult.error ?? "증명서를 지갑에 저장하지 못했습니다.");
+        }
+        const issuerAccount =
+          xrplClassicAddressFrom(saveResult.issuerAccount) ??
+          xrplClassicAddressFrom(metadata.issuerAccount) ??
+          xrplClassicAddressFrom(metadata.issuerDid) ??
+          xrplClassicAddressFrom(offer.issuerDid);
+        if (!issuerAccount) {
+          throw new Error("블록체인 기록에 필요한 실제 발급자 XRPL 주소가 없습니다.");
         }
 
         setStep("xrpl");
