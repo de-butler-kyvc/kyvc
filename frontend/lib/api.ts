@@ -868,11 +868,17 @@ export type WalletCredentialPrepareRequest = {
 };
 
 export type WalletCredentialPayload = {
-  format?: string;
+  format: "dc+sd-jwt" | "vc+jwt" | string;
+  sdJwt?: string;
   credentialJwt?: string;
-  credential?: Record<string, unknown>;
+  vcJwt?: string;
+  credential?: unknown;
+  selectiveDisclosure?: {
+    disclosablePaths?: string[];
+    [key: string]: unknown;
+  };
   metadata?: {
-    credentialId?: number;
+    credentialId?: number | string;
     credentialType?: string;
     issuerDid?: string;
     issuerAccount?: string;

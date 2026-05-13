@@ -48,28 +48,44 @@ export default function MobileVpSubmittingPage() {
         const endpoint =
           scan?.endpoint?.replace("/challenges", "/verify") ||
           DEFAULT_VERIFIER_ENDPOINT;
+        const presentationDefinition = defaultPresentationDefinition();
 
         // 1) Verifier challenge (nonce/aud)
         setStage("challenge");
-        let nonce = scan?.challenge;
-        if (!nonce) {
+        let nonce = scan?.nonce ?? scan?.challenge;
+        let challenge = scan?.challenge ?? scan?.nonce;
+        if (!nonce || !challenge) {
           const ch = await bridge.requestVerifierChallenge({
             coreBaseUrl: scan?.coreBaseUrl || CORE_BASE_URL,
             aud,
-            presentationDefinition: defaultPresentationDefinition(),
+            presentationDefinition,
           });
           if (!ch.ok) throw new Error(ch.error ?? "nonce 요청 실패");
           nonce = ch.nonce ?? ch.challenge ?? "";
+          challenge = ch.challenge ?? ch.nonce ?? "";
         }
         if (!nonce) throw new Error("nonce가 비어 있습니다.");
+        if (!challenge) throw new Error("challenge가 비어 있습니다.");
 
         // 2) SD-JWT+KB 생성
         setStage("sign");
         const signed = await bridge.signMessage({
-          challenge: nonce,
+          credentialId: selectedVcId ? String(selectedVcId) : undefined,
+          nonce,
+          challenge,
           domain: aud,
+          presentationDefinition,
         });
         if (!signed.ok) throw new Error(signed.error ?? "KB-JWT 생성 실패");
+
+        const device = await bridge.getDeviceInfo();
+        const deviceId =
+          typeof device.deviceId === "string" && device.deviceId.trim()
+            ? device.deviceId.trim()
+            : undefined;
+        const format = signed.format ?? "kyvc-sd-jwt-presentation-v1";
+        const presentation = signed.presentation ?? signed.sdJwtKb ?? signed.presentationJwt;
+        if (!presentation) throw new Error("presentation이 비어 있습니다.");
 
         // 3) Verifier 제출
         setStage("submit");
@@ -78,33 +94,28 @@ export default function MobileVpSubmittingPage() {
             requestId: scan.requestId,
             credentialId: selectedCredentialId,
             nonce,
-            challenge: nonce,
-            format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
-            vpJwt: signed.presentationJwt,
-            presentation:
-              signed.presentation ??
-              ({
-                format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
-                definitionId: "wallet-direct-kyc-test-v1",
-                aud,
-                nonce,
-                sdJwtKb: signed.sdJwtKb,
-              } as Record<string, unknown>),
+            challenge,
+            format,
+            presentation,
+            ...(signed.presentation || signed.sdJwtKb ? {} : { vpJwt: signed.presentationJwt }),
+            ...(deviceId ? { deviceId } : {}),
           });
         } else {
           const sub = await bridge.submitPresentationToVerifier({
             endpoint,
-            presentation: {
-              format: signed.format ?? "kyvc-sd-jwt-presentation-v1",
+            presentation: signed.presentation ?? {
+              format,
               definitionId: "wallet-direct-kyc-test-v1",
               aud,
               nonce,
-              sdJwtKb: signed.sdJwtKb,
+              challenge,
+              sdJwtKb: signed.sdJwtKb ?? presentation,
             },
-            presentationJwt: signed.presentationJwt,
-            sdJwtKb: signed.sdJwtKb,
+            ...(signed.sdJwtKb ? { sdJwtKb: signed.sdJwtKb } : {}),
+            ...(signed.presentation || signed.sdJwtKb ? {} : { presentationJwt: signed.presentationJwt }),
             didDocument: signed.didDocument,
-            challenge: nonce,
+            nonce,
+            challenge,
             domain: aud,
           });
           if (!sub.ok) throw new Error(sub.error ?? "Verifier 제출 실패");

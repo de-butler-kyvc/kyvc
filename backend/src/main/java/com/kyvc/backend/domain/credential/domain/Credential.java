@@ -54,12 +54,6 @@ public class Credential {
     @Column(name = "vc_format", length = 50)
     private String vcFormat;
 
-    @Column(name = "vc_payload_json", columnDefinition = "TEXT")
-    private String vcPayloadJson;
-
-    @Column(name = "vc_jwt", columnDefinition = "TEXT")
-    private String vcJwt;
-
     @Column(name = "xrpl_tx_hash", length = 255)
     private String xrplTxHash;
 
@@ -190,14 +184,6 @@ public class Credential {
 
     public String getVcFormat() {
         return vcFormat;
-    }
-
-    public String getVcPayloadJson() {
-        return vcPayloadJson;
-    }
-
-    public String getVcJwt() {
-        return vcJwt;
     }
 
     public String getXrplTxHash() {
@@ -378,15 +364,13 @@ public class Credential {
         }
     }
 
-    // Core VC 원문 반영
-    public void applyCredentialPayload(
-            String vcFormat, // VC format
-            String vcPayloadJson, // VC JSON 원문
-            String vcJwt // VC JWT 원문
+    // VC format 메타데이터 반영
+    public void applyCredentialFormat(
+            String vcFormat // VC format
     ) {
-        this.vcFormat = vcFormat;
-        this.vcPayloadJson = vcPayloadJson;
-        this.vcJwt = vcJwt;
+        if (hasText(vcFormat)) {
+            this.vcFormat = vcFormat;
+        }
     }
 
     // Core VC 발급 메타데이터 반영

@@ -186,6 +186,8 @@ public enum ErrorCode {
     CREDENTIAL_OFFER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CREDENTIAL_OFFER_ACCESS_DENIED", "Credential Offer 접근 권한이 없습니다."),
     // HTTP 502 - Wallet Credential 준비 실패
     WALLET_CREDENTIAL_PREPARE_FAILED(HttpStatus.BAD_GATEWAY, "WALLET_CREDENTIAL_PREPARE_FAILED", "Wallet 저장 준비에 실패했습니다."),
+    // HTTP 410 - Wallet Credential payload 재전송 불가
+    WALLET_CREDENTIAL_PAYLOAD_NOT_REPLAYABLE(HttpStatus.GONE, "WALLET_CREDENTIAL_PAYLOAD_NOT_REPLAYABLE", "Credential payload는 재전송할 수 없습니다. QR을 다시 생성해 주세요."),
     // HTTP 409 - Wallet Credential 확정 실패
     WALLET_CREDENTIAL_CONFIRM_FAILED(HttpStatus.CONFLICT, "WALLET_CREDENTIAL_CONFIRM_FAILED", "Wallet 저장 확정에 실패했습니다."),
     // HTTP 400 - Credential claims 필수 데이터 부족

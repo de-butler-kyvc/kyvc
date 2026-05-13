@@ -1,6 +1,5 @@
 package com.kyvc.backend.domain.credential.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
@@ -28,7 +27,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,7 +67,6 @@ class MobileWalletServiceTest {
                 corporateRepository,
                 coreAdapter,
                 new CoreProperties(),
-                new ObjectMapper().findAndRegisterModules(),
                 logEventLogger
         );
 
@@ -77,8 +74,8 @@ class MobileWalletServiceTest {
     }
 
     @Test
-    void acceptCredentialOffer_returnsVcJwtPayload_whenCredentialHasVcJwt() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", false, LocalDateTime.now().plusMinutes(10));
+    void acceptCredentialOffer_returnsNullCredentialPayload_whenAccepted() {
+        Credential credential = createCredential(100L, false, LocalDateTime.now().plusMinutes(10));
         mockCredentialForAccept(credential);
 
         WalletCredentialAcceptResponse response = service.acceptCredentialOffer(
@@ -86,76 +83,15 @@ class MobileWalletServiceTest {
                 100L,
                 acceptRequest(true)
         );
-
-        Map<String, Object> payload = response.credentialPayload();
-        Map<String, Object> metadata = metadata(payload);
 
         assertThat(response.walletSaved()).isTrue();
-        assertThat(payload.get("format")).isEqualTo("vc+jwt");
-        assertThat(payload.get("credentialJwt")).isEqualTo("dev.vc.jwt.100");
-        assertThat(payload.get("credential")).isNull();
-        assertThat(metadata.get("credentialId")).isEqualTo(100L);
-        assertThat(metadata.get("credentialType")).isEqualTo(KyvcEnums.CredentialType.KYC_CREDENTIAL.name());
-        assertThat(metadata.get("issuerDid")).isEqualTo("did:xrpl:1:rIssuer");
-        assertThat(metadata.get("holderDid")).isEqualTo("did:xrpl:1:rHolder");
-        assertThat(metadata.get("holderXrplAddress")).isEqualTo("rHolder");
-        assertThat(metadata.get("vcHash")).isEqualTo("vc-hash-100");
-        assertThat(metadata.get("xrplTxHash")).isEqualTo("tx-hash-100");
-        assertThat(metadata.get("credentialStatusId")).isEqualTo("status-id-100");
-        assertThat(metadata.get("issuedAt")).isNotNull();
-        assertThat(metadata.get("expiresAt")).isNotNull();
-    }
-
-    @Test
-    void acceptCredentialOffer_returnsVcJsonPayload_whenCredentialHasVcPayloadJson() {
-        Credential credential = createCredential(
-                100L,
-                "kyvc-jsonld-vc-v1",
-                "{\"id\":\"vc-001\",\"credentialSubject\":{\"name\":\"KYVC\"}}",
-                null,
-                false,
-                LocalDateTime.now().plusMinutes(10)
-        );
-        mockCredentialForAccept(credential);
-
-        WalletCredentialAcceptResponse response = service.acceptCredentialOffer(
-                userDetails(),
-                100L,
-                acceptRequest(true)
-        );
-
-        Map<String, Object> payload = response.credentialPayload();
-        Map<String, Object> credentialPayload = castMap(payload.get("credential"));
-
-        assertThat(payload.get("format")).isEqualTo("kyvc-jsonld-vc-v1");
-        assertThat(payload.get("credentialJwt")).isNull();
-        assertThat(credentialPayload.get("id")).isEqualTo("vc-001");
-        assertThat(castMap(credentialPayload.get("credentialSubject")).get("name")).isEqualTo("KYVC");
-        assertThat(metadata(payload).get("credentialId")).isEqualTo(100L);
-    }
-
-    @Test
-    void acceptCredentialOffer_returnsMetadataOnly_whenPayloadIsMissing() {
-        Credential credential = createCredential(100L, null, null, null, false, LocalDateTime.now().plusMinutes(10));
-        mockCredentialForAccept(credential);
-
-        WalletCredentialAcceptResponse response = service.acceptCredentialOffer(
-                userDetails(),
-                100L,
-                acceptRequest(true)
-        );
-
-        Map<String, Object> payload = response.credentialPayload();
-
-        assertThat(payload.get("format")).isNull();
-        assertThat(payload.get("credentialJwt")).isNull();
-        assertThat(payload.get("credential")).isNull();
-        assertThat(metadata(payload).get("credentialId")).isEqualTo(100L);
+        assertThat(response.credentialPayload()).isNull();
+        assertThat(response.message()).isEqualTo("Credential payload는 반환하지 않습니다. prepare/confirm API를 사용해 주세요.");
     }
 
     @Test
     void acceptCredentialOffer_doesNotReturnPayload_whenUserDeclines() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", false, LocalDateTime.now().plusMinutes(10));
+        Credential credential = createCredential(100L, false, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
 
         WalletCredentialAcceptResponse response = service.acceptCredentialOffer(
@@ -171,7 +107,7 @@ class MobileWalletServiceTest {
 
     @Test
     void acceptCredentialOffer_throwsInvalidToken_whenQrTokenMismatch() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", false, LocalDateTime.now().plusMinutes(10));
+        Credential credential = createCredential(100L, false, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
 
         ApiException exception = assertThrows(
@@ -188,7 +124,7 @@ class MobileWalletServiceTest {
 
     @Test
     void acceptCredentialOffer_throwsDeviceNotRegistered_whenDeviceMissing() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", false, LocalDateTime.now().plusMinutes(10));
+        Credential credential = createCredential(100L, false, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
         when(mobileDeviceService.getActiveDeviceBinding(1L, DEVICE_ID))
                 .thenThrow(new ApiException(ErrorCode.WALLET_DEVICE_NOT_REGISTERED));
@@ -203,7 +139,7 @@ class MobileWalletServiceTest {
 
     @Test
     void acceptCredentialOffer_throwsDeviceInactive_whenDeviceInactive() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", false, LocalDateTime.now().plusMinutes(10));
+        Credential credential = createCredential(100L, false, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
         when(mobileDeviceService.getActiveDeviceBinding(1L, DEVICE_ID))
                 .thenThrow(new ApiException(ErrorCode.WALLET_DEVICE_INACTIVE));
@@ -218,7 +154,7 @@ class MobileWalletServiceTest {
 
     @Test
     void acceptCredentialOffer_throwsExpired_whenOfferExpired() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", false, LocalDateTime.now().minusSeconds(1));
+        Credential credential = createCredential(100L, false, LocalDateTime.now().minusSeconds(1));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
 
         ApiException exception = assertThrows(
@@ -231,7 +167,7 @@ class MobileWalletServiceTest {
 
     @Test
     void acceptCredentialOffer_throwsAlreadySaved_whenCredentialAlreadySaved() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", true, LocalDateTime.now().plusMinutes(10));
+        Credential credential = createCredential(100L, true, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
 
         ApiException exception = assertThrows(
@@ -243,29 +179,18 @@ class MobileWalletServiceTest {
     }
 
     @Test
-    void getWalletCredentialDetail_returnsCredentialPayload() {
-        Credential credential = createCredential(
-                100L,
-                "kyvc-jsonld-vc-v1",
-                "{\"id\":\"vc-detail\",\"credentialSubject\":{\"name\":\"KYVC\"}}",
-                null,
-                true,
-                LocalDateTime.now().plusMinutes(10)
-        );
+    void getWalletCredentialDetail_returnsNullCredentialPayload() {
+        Credential credential = createCredential(100L, true, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.getById(100L)).thenReturn(credential);
 
         WalletCredentialDetailResponse response = service.getWalletCredentialDetail(userDetails(), 100L);
 
-        Map<String, Object> payload = response.credentialPayload();
-
-        assertThat(payload.get("format")).isEqualTo("kyvc-jsonld-vc-v1");
-        assertThat(castMap(payload.get("credential")).get("id")).isEqualTo("vc-detail");
-        assertThat(metadata(payload).get("credentialId")).isEqualTo(100L);
+        assertThat(response.credentialPayload()).isNull();
     }
 
     @Test
     void getWalletCredentialList_doesNotExposeCredentialPayload() {
-        Credential credential = createCredential(100L, "vc+jwt", null, "dev.vc.jwt.100", true, LocalDateTime.now().plusMinutes(10));
+        Credential credential = createCredential(100L, true, LocalDateTime.now().plusMinutes(10));
         when(credentialRepository.findWalletCredentialsByCorporateId(10L)).thenReturn(List.of(credential));
 
         WalletCredentialListResponse response = service.getWalletCredentials(userDetails());
@@ -298,9 +223,6 @@ class MobileWalletServiceTest {
 
     private Credential createCredential(
             Long credentialId, // Credential ID
-            String vcFormat, // VC format
-            String vcPayloadJson, // VC JSON 원문
-            String vcJwt, // VC JWT 원문
             boolean walletSaved, // Wallet 저장 여부
             LocalDateTime qrExpiresAt // QR 만료 일시
     ) {
@@ -327,7 +249,7 @@ class MobileWalletServiceTest {
         ReflectionTestUtils.setField(credential, "credentialStatusPurposeCode", "REVOCATION");
         ReflectionTestUtils.setField(credential, "kycLevelCode", "BASIC");
         ReflectionTestUtils.setField(credential, "jurisdictionCode", "KR");
-        credential.applyCredentialPayload(vcFormat, vcPayloadJson, vcJwt);
+        credential.applyCredentialFormat("dc+sd-jwt");
         return credential;
     }
 
@@ -363,20 +285,6 @@ class MobileWalletServiceTest {
                 List.of("ROLE_CORPORATE_USER"),
                 true
         );
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> metadata(
-            Map<String, Object> payload // Credential payload
-    ) {
-        return (Map<String, Object>) payload.get("metadata");
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> castMap(
-            Object value // Map 변환 대상
-    ) {
-        return (Map<String, Object>) value;
     }
 
     private <T> T newInstance(Class<T> type) {

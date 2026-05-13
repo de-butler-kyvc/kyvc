@@ -55,7 +55,7 @@ public class CredentialRequestService {
     private static final String PENDING_REISSUE_EXTERNAL_ID_PREFIX = "pending-reissue-";
     private static final String CORE_STATUS_MODE_XRPL = "xrpl";
     private static final String CORE_CREDENTIAL_FORMAT_JWT = "jwt";
-    private static final String CORE_VC_FORMAT_JWT = "vc+jwt";
+    private static final String CORE_VC_FORMAT_DC_SD_JWT = "dc+sd-jwt";
 
     private final CredentialRepository credentialRepository;
     private final CredentialRequestRepository credentialRequestRepository;
@@ -126,13 +126,9 @@ public class CredentialRequestService {
                     coreResponse.expiresAt()
             );
             if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
-                reissuedCredential.applyCredentialPayload(
-                        coreResponse.format(),
-                        coreResponse.credentialPayloadJson(),
-                        coreResponse.credentialJwt()
-                );
+                reissuedCredential.applyCredentialFormat(resolveCredentialFormat(coreResponse, coreRequestPayload));
                 credentialRequest.markCompleted(null);
-                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(coreResponse));
+                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(toStoredCoreIssuanceMetadata(coreResponse)));
             } else {
                 reissuedCredential.refreshStatus(KyvcEnums.CredentialStatus.FAILED);
                 credentialRequest.markFailed(ErrorCode.CORE_API_CALL_FAILED.getCode());
@@ -403,11 +399,43 @@ public class CredentialRequestService {
                 false,
                 CORE_STATUS_MODE_XRPL,
                 CORE_CREDENTIAL_FORMAT_JWT,
-                CORE_VC_FORMAT_JWT,
+                CORE_VC_FORMAT_DC_SD_JWT,
                 coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
                 credentialType,
                 validFrom
         );
+    }
+
+    // Core 발급 저장용 메타데이터 생성
+    private Map<String, Object> toStoredCoreIssuanceMetadata(
+            CoreVcIssuanceResponse response // Core 발급 응답
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("coreRequestId", response.coreRequestId());
+        metadata.put("status", response.status());
+        metadata.put("format", response.format());
+        metadata.put("credentialExternalId", response.credentialExternalId());
+        metadata.put("credentialType", response.credentialType());
+        metadata.put("issuerDid", response.issuerDid());
+        metadata.put("vcHash", response.vcHash());
+        metadata.put("xrplTxHash", response.xrplTxHash());
+        metadata.put("credentialStatusId", response.credentialStatusId());
+        metadata.put("issuedAt", response.issuedAt());
+        metadata.put("expiresAt", response.expiresAt());
+        metadata.put("hasCredentialPayload",
+                StringUtils.hasText(response.credentialJwt())
+                        || StringUtils.hasText(response.credentialPayloadJson()));
+        metadata.put("hasSelectiveDisclosure",
+                response.selectiveDisclosure() != null && !response.selectiveDisclosure().isEmpty());
+        return metadata;
+    }
+
+    // Core 발급 format 결정
+    private String resolveCredentialFormat(
+            CoreVcIssuanceResponse response, // Core 발급 응답
+            CoreVcIssuanceRequest request // Core 발급 요청
+    ) {
+        return StringUtils.hasText(response.format()) ? response.format() : request.format();
     }
 
     private CoreRevokeCredentialRequest buildCoreRevokeCredentialRequest(

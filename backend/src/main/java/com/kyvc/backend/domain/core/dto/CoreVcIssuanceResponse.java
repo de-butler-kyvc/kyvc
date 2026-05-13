@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.core.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * Core VC 발급 요청 응답
@@ -22,6 +23,7 @@ import java.time.LocalDateTime;
  * @param credentialStatusId Credential Status ID
  * @param issuedAt 발급 시각
  * @param expiresAt 만료 시각
+ * @param selectiveDisclosure 선택공개 정보
  */
 @Schema(description = "Core VC 발급 요청 응답")
 public record CoreVcIssuanceResponse(
@@ -54,6 +56,8 @@ public record CoreVcIssuanceResponse(
         @Schema(description = "발급 시각", example = "2026-05-07T12:00:00")
         LocalDateTime issuedAt, // 발급 시각
         @Schema(description = "만료 시각", example = "2027-05-07T12:00:00")
-        LocalDateTime expiresAt // 만료 시각
+        LocalDateTime expiresAt, // 만료 시각
+        @Schema(description = "선택공개 정보")
+        Map<String, Object> selectiveDisclosure // 선택공개 정보
 ) {
 }

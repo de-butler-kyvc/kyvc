@@ -22,6 +22,8 @@ public record IssueKycCredentialApiResponse(
         Map<String, Object> credentialCreateTransaction, // 발급 트랜잭션 객체
         @JsonProperty("ledger_entry")
         Map<String, Object> ledgerEntry, // Ledger entry 객체
+        @JsonProperty("selectiveDisclosure")
+        Map<String, Object> selectiveDisclosure, // 선택공개 정보
         @JsonProperty("status_mode")
         String statusMode // 상태 저장 모드
 ) {

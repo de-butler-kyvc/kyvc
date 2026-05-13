@@ -97,14 +97,15 @@ public class CoreMockResponseFactory {
                 "fallback-" + request.coreRequestId(),
                 request.credentialType() == null ? CoreMockSeedData.DEV_CREDENTIAL_TYPE : request.credentialType(),
                 request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
-                "vc+jwt",
+                request.format() == null ? "dc+sd-jwt" : request.format(),
                 null,
                 null,
                 null,
                 null,
                 null,
                 LocalDateTime.now(),
-                request.validUntil() == null ? null : request.validUntil().toLocalDateTime()
+                request.validUntil() == null ? null : request.validUntil().toLocalDateTime(),
+                null
         );
     }
 

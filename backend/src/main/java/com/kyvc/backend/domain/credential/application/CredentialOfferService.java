@@ -1,8 +1,5 @@
 package com.kyvc.backend.domain.credential.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
@@ -57,7 +54,6 @@ public class CredentialOfferService {
     private final CredentialIssuerResolver credentialIssuerResolver;
     private final CredentialIssuanceService credentialIssuanceService;
     private final AuditLogService auditLogService;
-    private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
 
     // PC Credential Offer 생성
@@ -177,20 +173,12 @@ public class CredentialOfferService {
         Corporate corporate = getCorporateByUserId(userId);
         CredentialOffer offer = credentialOfferRepository.getById(offerId);
         validateOfferCorporate(corporate.getCorporateId(), offer);
-        validateOfferActiveForPrepare(offer, LocalDateTime.now());
         validateQrToken(offer, request.qrToken());
+        validateOfferActiveForPrepare(offer, LocalDateTime.now());
         mobileDeviceService.getActiveDeviceBinding(userId, normalizeRequiredText(request.deviceId()));
 
         if (offer.isPrepared()) {
-            Credential credential = credentialRepository.getById(offer.getCredentialId());
-            validatePreparedRequestMatchesOffer(offer, request);
-            validatePreparedCredential(credential);
-            return new WalletCredentialPrepareResponse(
-                    offer.getCredentialOfferId(),
-                    credential.getCredentialId(),
-                    true,
-                    createCredentialPayload(credential)
-            );
+            throw new ApiException(ErrorCode.WALLET_CREDENTIAL_PAYLOAD_NOT_REPLAYABLE);
         }
 
         KycApplication kycApplication = kycApplicationRepository.findById(offer.getKycId())
@@ -201,7 +189,8 @@ public class CredentialOfferService {
 
         ResolvedIssuer issuer = credentialIssuerResolver.resolveKycIssuer();
         Map<String, Object> claims = credentialClaimsAssembler.assemble(kycApplication);
-        Credential credential = issueCredentialForOffer(userId, offer, request, kycApplication, claims, issuer);
+        CredentialIssuanceResult issuanceResult = issueCredentialForOffer(userId, offer, request, kycApplication, claims, issuer);
+        Credential credential = issuanceResult.credential();
         validatePreparedCredential(credential);
 
         offer.bindPreparedCredential(
@@ -223,7 +212,7 @@ public class CredentialOfferService {
                 offer.getCredentialOfferId(),
                 credential.getCredentialId(),
                 true,
-                createCredentialPayload(credential)
+                createCredentialPayload(issuanceResult)
         );
     }
 
@@ -287,7 +276,7 @@ public class CredentialOfferService {
                 });
     }
 
-    private Credential issueCredentialForOffer(
+    private CredentialIssuanceResult issueCredentialForOffer(
             Long userId, // 사용자 ID
             CredentialOffer offer, // Credential Offer
             WalletCredentialPrepareRequest request, // 준비 요청
@@ -296,7 +285,7 @@ public class CredentialOfferService {
             ResolvedIssuer issuer // 발급 Issuer
     ) {
         try {
-            Credential credential = credentialIssuanceService.issueKycCredentialForHolder(
+            CredentialIssuanceResult issuanceResult = credentialIssuanceService.issueKycCredentialForHolderPayload(
                     kycApplication,
                     userId,
                     normalizeRequiredText(request.holderDid()),
@@ -305,12 +294,13 @@ public class CredentialOfferService {
                     claims,
                     issuer
             );
+            Credential credential = issuanceResult.credential();
             if (KyvcEnums.CredentialStatus.VALID != credential.getCredentialStatus()) {
                 offer.markFailed(ErrorCode.WALLET_CREDENTIAL_PREPARE_FAILED.getCode());
                 credentialOfferRepository.save(offer);
                 throw new ApiException(ErrorCode.WALLET_CREDENTIAL_PREPARE_FAILED);
             }
-            return credential;
+            return issuanceResult;
         } catch (ApiException exception) {
             offer.markFailed(exception.getErrorCode().getCode());
             credentialOfferRepository.save(offer);
@@ -391,12 +381,26 @@ public class CredentialOfferService {
     }
 
     private Map<String, Object> createCredentialPayload(
-            Credential credential // Credential 엔티티
+            CredentialIssuanceResult result // Holder 전달용 발급 결과
     ) {
+        Credential credential = result.credential(); // 저장된 Credential 메타데이터
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("format", credential.getVcFormat());
-        payload.put("credentialJwt", credential.getVcJwt());
-        payload.put("credential", parseCredentialPayloadJson(credential.getVcPayloadJson()));
+        String format = result.format(); // VC format
+        String compactCredential = result.compactCredential(); // Holder 전달용 compact Credential
+
+        payload.put("format", format);
+        if ("dc+sd-jwt".equalsIgnoreCase(format)) {
+            if (!StringUtils.hasText(compactCredential)) {
+                throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID);
+            }
+            payload.put("sdJwt", compactCredential);
+            payload.put("credentialJwt", compactCredential);
+            payload.put("credential", null);
+        } else {
+            payload.put("credentialJwt", compactCredential);
+            payload.put("credential", result.credentialObject());
+        }
+        payload.put("selectiveDisclosure", result.selectiveDisclosure());
         payload.put("metadata", createCredentialMetadata(credential));
         return payload;
     }
@@ -460,32 +464,6 @@ public class CredentialOfferService {
             String holderAccount, // Holder XRPL 계정
             String credentialType // Credential 유형
     ) {
-    }
-
-    private Map<String, Object> parseCredentialPayloadJson(
-            String vcPayloadJson // VC JSON 원문
-    ) {
-        if (!StringUtils.hasText(vcPayloadJson)) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(vcPayloadJson, new TypeReference<>() {
-            });
-        } catch (JsonProcessingException exception) {
-            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, exception);
-        }
-    }
-
-    private String resolveIssuerAccount(
-            Credential credential // Credential
-    ) {
-        String issuerDid = credential == null ? null : credential.getIssuerDid();
-        if (!StringUtils.hasText(issuerDid)) {
-            return null;
-        }
-        String prefix = "did:xrpl:1:";
-        String normalized = issuerDid.trim();
-        return normalized.startsWith(prefix) ? normalized.substring(prefix.length()) : null;
     }
 
     private void validateOfferActiveForRead(
@@ -564,17 +542,6 @@ public class CredentialOfferService {
                 || !StringUtils.hasText(request.deviceId())
                 || !Boolean.TRUE.equals(request.walletSaved())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
-        }
-    }
-
-    private void validatePreparedRequestMatchesOffer(
-            CredentialOffer offer, // Credential Offer
-            WalletCredentialPrepareRequest request // 준비 요청
-    ) {
-        if (!normalizeRequiredText(request.deviceId()).equals(offer.getDeviceId())
-                || !normalizeRequiredText(request.holderDid()).equals(offer.getHolderDid())
-                || !normalizeRequiredText(request.holderXrplAddress()).equals(offer.getHolderXrplAddress())) {
-            throw new ApiException(ErrorCode.WALLET_CREDENTIAL_PREPARE_FAILED);
         }
     }
 

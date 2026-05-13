@@ -11,7 +11,7 @@ import java.util.Map;
  * @param credentialId Credential ID
  * @param walletSaved Wallet 저장 여부
  * @param walletSavedAt Wallet 저장 일시
- * @param credentialPayload format, credentialJwt, credential, metadata 포함 Credential payload
+ * @param credentialPayload Backend Credential 원문 미저장으로 항상 null
  * @param message 처리 메시지
  */
 @Schema(description = "Wallet Credential Offer 수락 응답")
@@ -22,8 +22,8 @@ public record WalletCredentialAcceptResponse(
         boolean walletSaved, // Wallet 저장 여부
         @Schema(description = "Wallet 저장 일시", example = "2026-05-07T14:00:00")
         LocalDateTime walletSavedAt, // Wallet 저장 일시
-        @Schema(description = "format, credentialJwt, credential, metadata 포함 Credential payload")
-        Map<String, Object> credentialPayload, // Wallet 표시용 Credential payload
+        @Schema(description = "Backend는 Credential 원문을 저장하지 않으므로 항상 null")
+        Map<String, Object> credentialPayload, // Credential payload 미반환
         @Schema(description = "처리 메시지", example = "Credential이 Wallet에 저장되었습니다.")
         String message // 처리 메시지
 ) {

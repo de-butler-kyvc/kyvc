@@ -5,6 +5,7 @@ import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
+import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.core.mock.CoreMockSeedData;
@@ -37,7 +38,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,6 +75,10 @@ class CredentialRequestServiceTest {
 
     @Captor
     private ArgumentCaptor<Credential> credentialCaptor;
+    @Captor
+    private ArgumentCaptor<CoreVcIssuanceRequest> coreVcIssuanceRequestCaptor;
+    @Captor
+    private ArgumentCaptor<String> coreResponsePayloadCaptor;
 
     private CredentialRequestService credentialRequestService;
     private CoreProperties coreProperties;
@@ -90,7 +97,7 @@ class CredentialRequestServiceTest {
                 coreRequestService,
                 coreAdapter,
                 coreProperties,
-                new ObjectMapper(),
+                new ObjectMapper().findAndRegisterModules(),
                 logEventLogger
         );
     }
@@ -113,14 +120,15 @@ class CredentialRequestServiceTest {
                 "reissued-credential-external-id",
                 CoreMockSeedData.DEV_CREDENTIAL_TYPE,
                 CoreMockSeedData.DEV_ISSUER_DID,
-                "vc+jwt",
+                "dc+sd-jwt",
                 null,
-                "dev.vc.jwt.11",
+                "header.payload.signature~disclosure-011~",
                 "vc-hash",
                 "tx-hash",
                 "status-id",
                 LocalDateTime.now(),
-                LocalDateTime.now().plusYears(1)
+                LocalDateTime.now().plusYears(1),
+                null
         );
 
         mockBaseOwnership(sourceCredential);
@@ -164,39 +172,50 @@ class CredentialRequestServiceTest {
         assertThat(List.of(CredentialOperationResponse.class.getRecordComponents()))
                 .extracting(component -> component.getName())
                 .doesNotContain("coreRequestId");
-        verify(coreAdapter).requestVcIssuance(any());
+        verify(coreAdapter).requestVcIssuance(coreVcIssuanceRequestCaptor.capture());
+        assertThat(coreVcIssuanceRequestCaptor.getValue().format()).isEqualTo("dc+sd-jwt");
     }
 
     @Test
-    void requestReissue_savesVcJwtPayload_whenCoreReturnsStringCredential() {
+    void requestReissue_savesFormatOnly_whenCoreReturnsStringCredential() {
         Credential saved = executeReissueAndCaptureCredential(coreIssuanceResponse(
                 KyvcEnums.CredentialStatus.VALID.name(),
-                "vc+jwt",
+                "dc+sd-jwt",
                 null,
-                "dev.vc.jwt.11"
+                "header.payload.signature~disclosure-011~"
         ));
 
-        assertThat(saved.getVcFormat()).isEqualTo("vc+jwt");
-        assertThat(saved.getVcJwt()).isEqualTo("dev.vc.jwt.11");
-        assertThat(saved.getVcPayloadJson()).isNull();
+        assertThat(saved.getVcFormat()).isEqualTo("dc+sd-jwt");
         assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID);
     }
 
     @Test
-    void requestReissue_savesVcJsonPayload_whenCoreReturnsObjectCredential() {
+    void credentialEntity_doesNotHaveRawPayloadFields() {
+        assertThat(Arrays.stream(Credential.class.getDeclaredFields()))
+                .extracting(field -> field.getName())
+                .doesNotContain("vcPayloadJson", "vcJwt");
+    }
+
+    @Test
+    void requestReissue_storesCoreResponseMetadataOnly() {
         String credentialPayloadJson = "{\"id\":\"vc-001\",\"type\":[\"VerifiableCredential\"]}";
 
         Credential saved = executeReissueAndCaptureCredential(coreIssuanceResponse(
                 KyvcEnums.CredentialStatus.VALID.name(),
-                "kyvc-jsonld-vc-v1",
+                "dc+sd-jwt",
                 credentialPayloadJson,
-                null
+                "header.payload.signature~disclosure-011~",
+                Map.of("disclosablePaths", List.of("$.legalEntity.corporateName"))
         ));
 
-        assertThat(saved.getVcFormat()).isEqualTo("kyvc-jsonld-vc-v1");
-        assertThat(saved.getVcJwt()).isNull();
-        assertThat(saved.getVcPayloadJson()).isEqualTo(credentialPayloadJson);
+        verify(coreRequestService).markSuccess(any(), coreResponsePayloadCaptor.capture());
+        String storedPayload = coreResponsePayloadCaptor.getValue();
+
+        assertThat(saved.getVcFormat()).isEqualTo("dc+sd-jwt");
         assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID);
+        assertThat(storedPayload)
+                .contains("hasCredentialPayload", "hasSelectiveDisclosure")
+                .doesNotContain("header.payload.signature~disclosure-011~", credentialPayloadJson, "$.legalEntity.corporateName", "credentialJwt", "credentialPayloadJson", "\"selectiveDisclosure\"");
     }
 
     @Test
@@ -218,12 +237,11 @@ class CredentialRequestServiceTest {
                 "tx-hash",
                 "status-id",
                 issuedAt,
-                expiresAt
+                expiresAt,
+                null
         ));
 
-        assertThat(saved.getVcFormat()).isNull();
-        assertThat(saved.getVcJwt()).isNull();
-        assertThat(saved.getVcPayloadJson()).isNull();
+        assertThat(saved.getVcFormat()).isEqualTo("dc+sd-jwt");
         assertThat(saved.getCredentialExternalId()).isEqualTo("reissued-credential-external-id");
         assertThat(saved.getIssuerDid()).isEqualTo(CoreMockSeedData.DEV_ISSUER_DID);
         assertThat(saved.getVcHash()).isEqualTo("vc-hash");
@@ -238,14 +256,12 @@ class CredentialRequestServiceTest {
     void requestReissue_doesNotSavePayload_whenCoreIssuanceFails() {
         Credential saved = executeReissueAndCaptureCredential(coreIssuanceResponse(
                 KyvcEnums.CredentialStatus.FAILED.name(),
-                "vc+jwt",
+                "dc+sd-jwt",
                 "{\"id\":\"failed-vc\"}",
-                "dev.vc.jwt.failed"
+                "header.payload.signature~failed-disclosure~"
         ));
 
         assertThat(saved.getVcFormat()).isNull();
-        assertThat(saved.getVcJwt()).isNull();
-        assertThat(saved.getVcPayloadJson()).isNull();
         assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.FAILED);
     }
 
@@ -413,6 +429,16 @@ class CredentialRequestServiceTest {
             String credentialPayloadJson, // VC JSON 원문
             String credentialJwt // VC JWT 원문
     ) {
+        return coreIssuanceResponse(status, format, credentialPayloadJson, credentialJwt, null);
+    }
+
+    private CoreVcIssuanceResponse coreIssuanceResponse(
+            String status, // Core 응답 상태
+            String format, // VC format
+            String credentialPayloadJson, // VC JSON 원문
+            String credentialJwt, // VC JWT 원문
+            Map<String, Object> selectiveDisclosure // 선택공개 정보
+    ) {
         return new CoreVcIssuanceResponse(
                 "core-request-id",
                 status,
@@ -428,7 +454,8 @@ class CredentialRequestServiceTest {
                 "tx-hash",
                 "status-id",
                 LocalDateTime.now(),
-                LocalDateTime.now().plusYears(1)
+                LocalDateTime.now().plusYears(1),
+                selectiveDisclosure
         );
     }
 

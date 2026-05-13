@@ -14,6 +14,19 @@
 
 type AnyJson = Record<string, unknown>;
 
+export type SaveVcPayload = {
+  credentialId: string;
+  format: string;
+  credential: string;
+  sdJwt?: string;
+  vcJwt?: string;
+  metadata?: Record<string, unknown>;
+  selectiveDisclosure?: {
+    disclosablePaths?: string[];
+    [key: string]: unknown;
+  };
+};
+
 export type BridgeResult = {
   action?: string;
   ok: boolean;
@@ -712,7 +725,7 @@ export const bridge = {
     callBridge("copyTextToClipboard", { text }),
 
   // VC
-  saveVC: (payload: AnyJson) => callBridge("saveVC", payload),
+  saveVC: (payload: SaveVcPayload) => callBridge("saveVC", payload),
   requestCredentialIssueConfirm: (payload: AnyJson = {}) =>
     callBridge<NativeCredentialScreenResult>(
       "requestCredentialIssueConfirm",
@@ -854,9 +867,11 @@ export const bridge = {
   signMessage: (params: {
     challenge: string;
     domain: string;
+    nonce?: string;
     credentialId?: string;
     credential?: string;
     selectedDisclosures?: string[];
+    presentationDefinition?: AnyJson;
     vcJson?: string;
     vcJwt?: string | null;
     sdJwt?: string | null;

@@ -13,13 +13,15 @@ import {
   type WalletCredentialOfferResponse,
   type WalletCredentialPayload,
 } from "@/lib/api";
-import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { bridge, isBridgeAvailable, type SaveVcPayload } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
 
 const QR_TYPE = {
   CREDENTIAL_OFFER: "CREDENTIAL_OFFER",
 } as const;
 const SCAN_RESULT_KEY = "kyvc.m.scanResult";
+const PAYLOAD_NOT_REPLAYABLE_MESSAGE =
+  "증명서 발급 응답은 재전송할 수 없습니다. PC 화면에서 QR을 다시 생성해 주세요.";
 
 type IssueStep =
   | "qr"
@@ -89,6 +91,9 @@ function apiErrorMessage(error: ApiError) {
   if (error.code === "CREDENTIAL_OFFER_INVALID_TOKEN") {
     return "지원하지 않는 QR입니다.";
   }
+  if (error.code === "WALLET_CREDENTIAL_PAYLOAD_NOT_REPLAYABLE") {
+    return PAYLOAD_NOT_REPLAYABLE_MESSAGE;
+  }
   if (error.code === "WALLET_DEVICE_NOT_REGISTERED") {
     return "Wallet 기기 등록 정보를 찾을 수 없습니다. 앱을 다시 실행한 뒤 재시도해주세요.";
   }
@@ -101,28 +106,32 @@ function requiredString(value: unknown) {
 
 function credentialStringFromPayload(payload: WalletCredentialPayload) {
   const record = payload as Record<string, unknown>;
+  const format = requiredString(record.format);
+
+  if (format === "dc+sd-jwt") {
+    return (
+      requiredString(record.sdJwt) ??
+      requiredString(record.credentialJwt) ??
+      requiredString(record.credential) ??
+      ""
+    );
+  }
+
+  if (format === "vc+jwt") {
+    return (
+      requiredString(record.credentialJwt) ??
+      requiredString(record.vcJwt) ??
+      requiredString(record.credential) ??
+      ""
+    );
+  }
+
   return (
-    requiredString(record.credential) ??
     requiredString(record.sdJwt) ??
     requiredString(record.credentialJwt) ??
+    requiredString(record.credential) ??
     ""
   );
-}
-
-function logSdJwtShape(label: string, credential: string, source?: Record<string, unknown>) {
-  const tildeCount = (credential.match(/~/g) || []).length;
-  const firstSegmentStarts = credential.split("~")[0]?.slice(0, 20) ?? "";
-
-  // eslint-disable-next-line no-console
-  console.log(`${label} keys`, source ? Object.keys(source) : []);
-  // eslint-disable-next-line no-console
-  console.log(`${label} format`, source?.format);
-  // eslint-disable-next-line no-console
-  console.log(`${label} credential length`, credential.length);
-  // eslint-disable-next-line no-console
-  console.log(`${label} tilde count`, tildeCount);
-  // eslint-disable-next-line no-console
-  console.log(`${label} first segment starts`, firstSegmentStarts);
 }
 
 async function registerMobileDevice(device: {
@@ -177,20 +186,27 @@ function debugMissingScanResult() {
 function buildSavePayload(
   credentialId: number,
   credentialPayload: WalletCredentialPayload,
-) {
+): SaveVcPayload {
   const metadata = credentialPayload.metadata ?? {};
+  const format = requiredString(credentialPayload.format);
   const credential = credentialStringFromPayload(credentialPayload);
-  const credentialJson = credentialPayload.credential
-    ? JSON.stringify(credentialPayload.credential)
-    : undefined;
+
+  if (!format) {
+    throw new Error("Credential format이 없습니다.");
+  }
+
+  if (!credential) {
+    throw new Error("저장할 Credential payload가 없습니다.");
+  }
 
   return {
     credentialId: String(credentialId),
-    credential: credential || credentialPayload.credential,
-    sdJwt: credential || undefined,
-    vcJwt: requiredString(credentialPayload.credentialJwt) ?? undefined,
-    vcJson: credentialJson,
+    format,
+    credential,
+    sdJwt: format === "dc+sd-jwt" ? credential : undefined,
+    vcJwt: format === "vc+jwt" ? credential : undefined,
     metadata,
+    selectiveDisclosure: credentialPayload.selectiveDisclosure,
   };
 }
 
@@ -223,6 +239,7 @@ export default function MobileVcIssuePage() {
   const router = useRouter();
   const [step, setStep] = useState<IssueStep>("qr");
   const [error, setError] = useState<string | null>(null);
+  const [payloadDelivered, setPayloadDelivered] = useState(false);
   const [runKey, setRunKey] = useState(0);
   const startedRef = useRef(false);
 
@@ -231,6 +248,7 @@ export default function MobileVcIssuePage() {
     startedRef.current = true;
 
     const run = async () => {
+      let deliveredPayload = false;
       try {
         if (!isBridgeAvailable()) {
           throw new Error("앱 내부 발급 모듈에 연결할 수 없습니다.");
@@ -313,12 +331,8 @@ export default function MobileVcIssuePage() {
           throw new Error("증명서 발급 준비에 실패했습니다.");
         }
 
-        const issuerCredential = credentialStringFromPayload(prepared.credentialPayload);
-        logSdJwtShape(
-          "issuer response",
-          issuerCredential,
-          prepared.credentialPayload as Record<string, unknown>,
-        );
+        deliveredPayload = true;
+        setPayloadDelivered(true);
 
         const metadata = prepared.credentialPayload.metadata ?? {};
         const issuerAccount = requiredString(metadata.issuerAccount);
@@ -334,7 +348,6 @@ export default function MobileVcIssuePage() {
           prepared.credentialId,
           prepared.credentialPayload,
         );
-        logSdJwtShape("saveVC", requiredString(savePayload.credential) ?? "");
         const saveResult = await bridge.saveVC(savePayload);
         if (!saveResult.ok) {
           throw new Error(saveResult.error ?? "증명서를 지갑에 저장하지 못했습니다.");
@@ -400,6 +413,10 @@ export default function MobileVcIssuePage() {
         mSession.writeScanResult(null);
         router.replace("/m/vc/celebration");
       } catch (e) {
+        if (deliveredPayload) {
+          setError(PAYLOAD_NOT_REPLAYABLE_MESSAGE);
+          return;
+        }
         if (e instanceof ApiError) {
           setError(apiErrorMessage(e));
           return;
@@ -414,6 +431,7 @@ export default function MobileVcIssuePage() {
   const retry = () => {
     startedRef.current = false;
     setError(null);
+    setPayloadDelivered(false);
     setStep("qr");
     setRunKey((value) => value + 1);
   };
@@ -457,9 +475,11 @@ export default function MobileVcIssuePage() {
           <button type="button" className="primary" onClick={() => router.replace("/m/home")}>
             홈으로
           </button>
-          <button type="button" className="ghost" onClick={retry}>
-            다시 시도
-          </button>
+          {!payloadDelivered ? (
+            <button type="button" className="ghost" onClick={retry}>
+              다시 시도
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>
