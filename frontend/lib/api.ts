@@ -257,6 +257,32 @@ export type SignupEmailVerificationVerifyResponse = {
   email: string;
 };
 
+export type VpLoginQrPayload = {
+  type: string;
+  requestId: string;
+  qrToken: string;
+};
+
+export type VpLoginStartResponse = {
+  requestId: string;
+  qrPayload: VpLoginQrPayload;
+  expiresAt: string;
+};
+
+export type VpLoginStatusResponse = {
+  requestId: string;
+  status: string;
+  canComplete: boolean;
+  expiresAt: string;
+};
+
+export type VpLoginCompleteResponse = {
+  userId: number;
+  corporateId: number;
+  email: string;
+  userName?: string;
+};
+
 export const auth = {
   signup: (body: CorporateSignupBody) =>
     api<SignupResponse>("/api/auth/signup/corporate", {
@@ -273,6 +299,23 @@ export const auth = {
       method: "POST",
     }),
   session: () => api<SessionResponse>("/api/common/session"),
+  startVpLogin: () =>
+    api<VpLoginStartResponse>("/api/auth/vp-login-requests", {
+      method: "POST",
+      body: {},
+    }),
+  getVpLoginStatus: (requestId: string) =>
+    api<VpLoginStatusResponse>(
+      `/api/auth/vp-login-requests/${encodeURIComponent(requestId)}/status`,
+    ),
+  completeVpLogin: (requestId: string) =>
+    api<VpLoginCompleteResponse>(
+      `/api/auth/vp-login-requests/${encodeURIComponent(requestId)}/complete`,
+      {
+        method: "POST",
+        body: {},
+      },
+    ),
   mfaChallenge: (channel: MfaChannel, purpose: MfaPurpose) =>
     api<MfaChallengeResponse>("/api/auth/mfa/challenge", {
       method: "POST",
