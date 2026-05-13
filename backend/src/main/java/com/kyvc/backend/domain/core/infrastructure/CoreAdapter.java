@@ -11,6 +11,7 @@ import com.kyvc.backend.domain.core.dto.CoreDidDocumentResponse;
 import com.kyvc.backend.domain.core.dto.CoreHealthResponse;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationVerifyResponse;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialRequest;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
@@ -129,6 +130,16 @@ public interface CoreAdapter {
      */
     CorePresentationChallengeResponse issuePresentationChallenge(
             CorePresentationChallengeRequest request // VP Challenge 발급 요청
+    );
+
+    /**
+     * 웹 VP 로그인 Presentation 검증 요청
+     *
+     * @param vp Wallet 생성 VP 객체
+     * @return Presentation 검증 응답
+     */
+    CorePresentationVerifyResponse verifyWebVpLoginPresentation(
+            Object vp // Wallet 생성 VP 객체
     );
 
     /**

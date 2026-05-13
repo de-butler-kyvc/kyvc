@@ -61,13 +61,18 @@ public class SecurityConfig {
                                 "/api/auth/email-verifications/request",
                                 "/api/auth/email-verifications/verify",
                                 "/api/auth/dev/token",
+                                "/api/auth/vp-login-requests",
+                                "/api/auth/vp-login-requests/*/complete",
                                 "/api/mobile/auth/login",
                                 "/api/mobile/auth/vp-login/challenge",
-                                "/api/mobile/auth/vp-login"
+                                "/api/mobile/auth/vp-login",
+                                "/api/mobile/auth/vp-login-requests/resolve",
+                                "/api/mobile/auth/vp-login-requests/*/submit"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/common/session",
+                                "/api/auth/vp-login-requests/*/status",
                                 "/api/common/dids/*/institution",
                                 "/health",
                                 "/actuator/health",
