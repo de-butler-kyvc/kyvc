@@ -36,12 +36,14 @@ export interface AdminRole {
 // ── 관리자 계정 타입 ──────────────────────────────────────────
 
 export interface AdminUser {
-  adminUserId: string;
+  adminUserId?: string | number;
+  adminId?: string | number;
   loginId?: string;
   name: string;
   email?: string;
   phone?: string;
   roleName?: string;
+  roles?: AdminRole[] | string[];
   status?: string;
   lastLoginAt?: string;
   createdAt?: string;
@@ -49,7 +51,7 @@ export interface AdminUser {
 }
 
 export interface AdminUserDetail extends AdminUser {
-  roles?: AdminRole[];
+  roles?: AdminRole[] | string[];
   department?: string;
 }
 
@@ -87,6 +89,40 @@ export async function getAllAdminRoles(): Promise<AdminRole[]> {
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<AdminRole[] | PageLike<AdminRole>>;
   return unwrapListData(json.data);
+}
+
+/** POST /api/admin/backend/admin-roles — 권한 그룹 생성 */
+export async function createAdminRole(data: {
+  roleName: string;
+  roleCode?: string;
+  description?: string;
+  permissions?: string[];
+}): Promise<AdminRole> {
+  const response = await fetch(ADMIN_ROLES_URL, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<AdminRole>;
+  return json.data;
+}
+
+/** PATCH /api/admin/backend/admin-roles/{roleId} — 권한 그룹 수정 */
+export async function updateAdminRole(
+  roleId: string | number,
+  data: { roleName?: string; description?: string; permissions?: string[]; status?: string }
+): Promise<AdminRole> {
+  const response = await fetch(`${ADMIN_ROLES_URL}/${roleId}`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+  const json = (await response.json()) as CommonResponse<AdminRole>;
+  return json.data;
 }
 
 /** GET /api/admin/backend/admin-users/{adminUserId}/roles — 특정 관리자의 역할 목록 조회 */
@@ -166,6 +202,20 @@ function fmtDt(iso?: string) {
   return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
 }
 
+function adminUserIdOf(user: AdminUser): string {
+  return String(user.adminUserId ?? user.adminId ?? user.loginId ?? user.email ?? "");
+}
+
+function adminRoleNameOf(user: AdminUser): string {
+  if (user.roleName) return user.roleName;
+  if (Array.isArray(user.roles) && user.roles.length > 0) {
+    const first = user.roles[0];
+    if (typeof first === "string") return first;
+    return first.roleName;
+  }
+  return "-";
+}
+
 /** POST /api/admin/backend/admin-users — 관리자 계정 생성 */
 export async function createAdminUser(data: {
   loginId?: string;
@@ -216,10 +266,10 @@ export async function getManagers(filters?: {
   mfa: string;
 }[]> {
   const users = await getAdminUsers(filters);
-  return users.map((u) => ({
-    id: u.adminUserId,
+  return users.map((u, index) => ({
+    id: adminUserIdOf(u) || `manager-${index}`,
     name: u.name,
-    role: u.roleName ?? "-",
+    role: adminRoleNameOf(u),
     status: u.status ?? "-",
     lastLogin: fmtDt(u.lastLoginAt),
     mfa: u.mfaEnabled === true ? "설정됨" : u.mfaEnabled === false ? "미설정" : "-",

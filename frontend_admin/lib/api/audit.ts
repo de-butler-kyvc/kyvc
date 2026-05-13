@@ -9,12 +9,14 @@ const AUDIT_BASE = `${API_BASE}/api/admin/backend/audit-logs`;
 
 export interface AuditLog {
   auditId: string;
+  auditLogId?: string | number;
   actorId?: string;
   actorName?: string;
   actionType?: string;
   targetId?: string;
   targetType?: string;
   description?: string;
+  requestSummary?: string;
   ipAddress?: string;
   result?: string;
   createdAt?: string;
@@ -23,6 +25,9 @@ export interface AuditLog {
 export interface AuditLogDetail extends AuditLog {
   requestBody?: Record<string, unknown>;
   responseBody?: Record<string, unknown>;
+  beforeValueJson?: string;
+  afterValueJson?: string;
+  traceId?: string;
   userAgent?: string;
   sessionId?: string;
 }
@@ -77,6 +82,11 @@ function fmtDt(iso?: string) {
   return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
 }
 
+function normalizeDateTime(date: string, endOfDay = false): string {
+  if (date.includes("T")) return date;
+  return `${date}T${endOfDay ? "23:59:59" : "00:00:00"}`;
+}
+
 // ────────────────────────────────────────────────────────────
 // 감사로그 API
 // ────────────────────────────────────────────────────────────
@@ -99,11 +109,13 @@ export async function getAuditLogs(filters?: {
   result: string;
 }[]> {
   const params = new URLSearchParams();
+  params.set("page", "0");
+  params.set("size", "100");
   if (filters?.search?.trim()) params.set("keyword", filters.search.trim());
   if (filters?.action && filters.action !== "전체 액션 유형") params.set("actionType", filters.action);
   if (filters?.actorId) params.set("actorId", filters.actorId);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
+  if (filters?.from) params.set("from", normalizeDateTime(filters.from));
+  if (filters?.to) params.set("to", normalizeDateTime(filters.to, true));
   const url = params.toString() ? `${AUDIT_BASE}?${params}` : AUDIT_BASE;
 
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
@@ -111,14 +123,14 @@ export async function getAuditLogs(filters?: {
 
   const json = (await response.json()) as CommonResponse<AuditLog[] | PageLike<AuditLog>>;
   return unwrapListData(json.data).map((log) => ({
-    id: log.auditId,
+    id: String(log.auditLogId ?? log.auditId ?? ""),
     date: fmtDt(log.createdAt),
     actor: log.actorName ?? log.actorId ?? "-",
     action: log.actionType ?? "-",
     target: log.targetId ? `${log.targetType ? `${log.targetType}-` : ""}${log.targetId}` : "-",
-    content: log.description ?? "-",
+    content: log.requestSummary ?? log.description ?? "-",
     ip: log.ipAddress ?? "-",
-    result: log.result ?? "-",
+    result: log.result ?? "성공",
   }));
 }
 

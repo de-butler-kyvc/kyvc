@@ -1,6 +1,6 @@
 "use client";
 
-import { getUserList } from "@/lib/api/users";
+import { createUser, getUserList } from "@/lib/api/users";
 import { userDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -27,16 +27,34 @@ export default function UsersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [form, setForm] = useState(defaultUserForm);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const ITEMS_PER_PAGE = 3;
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!form.id || !form.name || !form.organization || !form.email) {
-      alert("모든 항목을 입력해주세요.");
+      setRegisterError("모든 항목을 입력해주세요.");
       return;
     }
-    alert(`계정이 등록되었습니다.\nID: ${form.id}`);
-    setShowRegisterModal(false);
-    setForm(defaultUserForm);
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      await createUser({
+        loginId: form.id,
+        userId: form.id,
+        name: form.name,
+        email: form.email,
+        corporateName: form.organization,
+        organization: form.organization,
+      });
+      setShowRegisterModal(false);
+      setForm(defaultUserForm);
+      await fetchUserList();
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : "계정 등록에 실패했습니다.");
+    } finally {
+      setRegistering(false);
+    }
   };
 
   const fetchUserList = async () => {
@@ -195,6 +213,11 @@ export default function UsersPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg border border-slate-200 w-full max-w-md p-6 space-y-4">
             <h2 className="text-base font-semibold text-slate-800">계정 등록</h2>
+            {registerError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
+                {registerError}
+              </div>
+            )}
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">사용자 ID</label>
@@ -215,7 +238,9 @@ export default function UsersPage() {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => { setShowRegisterModal(false); setForm(defaultUserForm); }} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
-              <button onClick={handleRegister} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">등록</button>
+              <button onClick={handleRegister} disabled={registering} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60">
+                {registering ? "등록 중..." : "등록"}
+              </button>
             </div>
           </div>
         </div>

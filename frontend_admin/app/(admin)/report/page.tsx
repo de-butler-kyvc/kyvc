@@ -24,17 +24,22 @@ export default function ReportPage() {
 
   useEffect(() => { fetchReport(); }, []);
 
-  const handleExcelExport = async () => {
+  const downloadReport = async (format: "csv" | "xlsx" | "pdf") => {
     try {
-      const blob = await exportOperationsReport({ from, to, format: "csv" });
+      const { blob, fileName } = await exportOperationsReport({
+        from,
+        to,
+        granularity: "monthly",
+        format,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `report-${from}-${to}.csv`;
+      a.download = fileName || `report-${from}-${to}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      window.print();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "리포트 내보내기에 실패했습니다.");
     }
   };
 
@@ -87,8 +92,8 @@ export default function ReportPage() {
         </div>
         <button onClick={fetchReport} disabled={loading} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60">{loading ? "조회 중..." : "조회"}</button>
         <div className="ml-auto flex gap-2">
-          <button onClick={() => window.print()} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">PDF 내보내기</button>
-          <button onClick={handleExcelExport} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">Excel 내보내기</button>
+          <button onClick={() => downloadReport("pdf")} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">PDF 내보내기</button>
+          <button onClick={() => downloadReport("csv")} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">Excel 내보내기</button>
         </div>
       </div>
 
