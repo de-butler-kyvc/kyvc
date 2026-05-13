@@ -70,7 +70,7 @@ public class StartupLoggerRunner implements ApplicationRunner {
         startupConsoleLog.info("Context Path: {}", environment.getProperty("server.servlet.context-path", "/"));
         startupConsoleLog.info("로그 경로: {}", environment.getProperty("LOG_PATH", "/app/logs"));
         startupConsoleLog.info("Dev 토큰 활성화 여부: {}", environment.getProperty("kyvc.dev-token.enabled", "false"));
-        startupConsoleLog.info("파일 저장 루트 경로: {}", environment.getProperty("app.storage.root", "(설정되지 않음)"));
+        startupConsoleLog.info("파일 저장 루트 경로: {}", environment.getProperty("kyvc.document.storage-path", "(설정되지 않음)"));
         startupConsoleLog.info("프로세스 ID: {}", ProcessHandle.current().pid());
         startupConsoleLog.info("JVM Uptime: {}", formatDuration(ManagementFactory.getRuntimeMXBean().getUptime()));
         startupConsoleLog.info("Java 버전: {}", System.getProperty("java.version"));

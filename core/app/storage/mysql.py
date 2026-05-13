@@ -8,6 +8,7 @@ from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
 
 from app.credentials.resolver import did_resolution_result
+from app.provider_selection.models import ProviderCategory, ProviderSelection, ProviderSelectionHistoryEntry
 from app.storage.interfaces import VerificationChallengeEntry
 
 
@@ -101,7 +102,31 @@ class MySQLRepository:
                 domain VARCHAR(255) NOT NULL,
                 expires_at VARCHAR(32) NOT NULL,
                 used_at VARCHAR(32) NULL,
-                created_at VARCHAR(32) NOT NULL
+                created_at VARCHAR(32) NOT NULL,
+                presentation_definition_json LONGTEXT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS provider_selections (
+                category VARCHAR(32) PRIMARY KEY,
+                provider VARCHAR(128) NOT NULL,
+                profile VARCHAR(128) NOT NULL,
+                active TINYINT(1) NOT NULL,
+                updated_by VARCHAR(255) NULL,
+                updated_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS provider_selection_history (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                category VARCHAR(32) NOT NULL,
+                previous_provider VARCHAR(128) NULL,
+                previous_profile VARCHAR(128) NULL,
+                new_provider VARCHAR(128) NOT NULL,
+                new_profile VARCHAR(128) NOT NULL,
+                changed_by VARCHAR(255) NULL,
+                changed_at VARCHAR(32) NOT NULL,
+                INDEX idx_provider_selection_history_category_time (category, changed_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """,
         ]
@@ -109,6 +134,16 @@ class MySQLRepository:
             with connection.cursor() as cursor:
                 for statement in statements:
                     cursor.execute(statement)
+                try:
+                    cursor.execute(
+                        """
+                        ALTER TABLE verification_challenges
+                        ADD COLUMN presentation_definition_json LONGTEXT NULL
+                        """
+                    )
+                except pymysql.err.OperationalError as exc:
+                    if exc.args[0] != 1060:
+                        raise
         self._schema_initialized = True
 
     @staticmethod
@@ -126,6 +161,110 @@ class MySQLRepository:
     @staticmethod
     def _parse_datetime(value: str) -> datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+
+    def readiness_probe(self) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+    def get_provider_selection(self, category: ProviderCategory) -> ProviderSelection | None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT category, provider, profile, active, updated_by, updated_at
+                    FROM provider_selections
+                    WHERE category = %s AND active = 1
+                    """,
+                    (category,),
+                )
+                row = cursor.fetchone()
+        if row is None:
+            return None
+        return ProviderSelection(
+            category=row["category"],
+            provider=row["provider"],
+            profile=row["profile"],
+            active=bool(row["active"]),
+            updated_by=row["updated_by"],
+            updated_at=row["updated_at"],
+        )
+
+    def save_provider_selection(
+        self,
+        selection: ProviderSelection,
+        *,
+        previous: ProviderSelection | None = None,
+    ) -> None:
+        updated_at = selection.updated_at or self._now()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO provider_selections (category, provider, profile, active, updated_by, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        provider = VALUES(provider),
+                        profile = VALUES(profile),
+                        active = VALUES(active),
+                        updated_by = VALUES(updated_by),
+                        updated_at = VALUES(updated_at)
+                    """,
+                    (
+                        selection.category,
+                        selection.provider,
+                        selection.profile,
+                        1 if selection.active else 0,
+                        selection.updated_by,
+                        updated_at,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO provider_selection_history (
+                        category, previous_provider, previous_profile,
+                        new_provider, new_profile, changed_by, changed_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        selection.category,
+                        previous.provider if previous else None,
+                        previous.profile if previous else None,
+                        selection.provider,
+                        selection.profile,
+                        selection.updated_by,
+                        updated_at,
+                    ),
+                )
+
+    def list_provider_selection_history(self, *, limit: int = 20) -> list[ProviderSelectionHistoryEntry]:
+        safe_limit = max(1, min(limit, 100))
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT category, previous_provider, previous_profile,
+                           new_provider, new_profile, changed_by, changed_at
+                    FROM provider_selection_history
+                    ORDER BY id DESC
+                    LIMIT %s
+                    """,
+                    (safe_limit,),
+                )
+                rows = cursor.fetchall()
+        return [
+            ProviderSelectionHistoryEntry(
+                category=row["category"],
+                previous_provider=row["previous_provider"],
+                previous_profile=row["previous_profile"],
+                new_provider=row["new_provider"],
+                new_profile=row["new_profile"],
+                changed_by=row["changed_by"],
+                changed_at=row["changed_at"],
+            )
+            for row in rows
+        ]
 
     def save_did_document(self, did: str, did_document: dict[str, Any]) -> None:
         with self._connect() as connection:
@@ -319,19 +458,23 @@ class MySQLRepository:
         domain: str,
         expires_at: datetime,
         created_at: datetime,
+        presentation_definition: dict[str, Any] | None = None,
     ) -> None:
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO verification_challenges (challenge, domain, expires_at, used_at, created_at)
-                    VALUES (%s, %s, %s, NULL, %s)
+                    INSERT INTO verification_challenges (
+                        challenge, domain, expires_at, used_at, created_at, presentation_definition_json
+                    )
+                    VALUES (%s, %s, %s, NULL, %s, %s)
                     """,
                     (
                         challenge,
                         domain,
                         self._datetime(expires_at),
                         self._datetime(created_at),
+                        self._json(presentation_definition) if presentation_definition is not None else None,
                     ),
                 )
 
@@ -340,7 +483,7 @@ class MySQLRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT challenge, domain, expires_at, used_at, created_at
+                    SELECT challenge, domain, expires_at, used_at, created_at, presentation_definition_json
                     FROM verification_challenges
                     WHERE challenge = %s
                     """,
@@ -351,12 +494,16 @@ class MySQLRepository:
             return None
         used_at = row["used_at"]
         created_at = row["created_at"]
+        presentation_definition = row.get("presentation_definition_json")
         return VerificationChallengeEntry(
             challenge=str(row["challenge"]),
             domain=str(row["domain"]),
             expires_at=self._parse_datetime(str(row["expires_at"])),
             used_at=self._parse_datetime(str(used_at)) if used_at is not None else None,
             created_at=self._parse_datetime(str(created_at)) if created_at is not None else None,
+            presentation_definition=(
+                json.loads(str(presentation_definition)) if presentation_definition is not None else None
+            ),
         )
 
     def mark_verification_challenge_used(self, challenge: str, used_at: datetime) -> bool:

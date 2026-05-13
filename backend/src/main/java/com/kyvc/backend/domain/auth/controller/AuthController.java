@@ -11,6 +11,12 @@ import com.kyvc.backend.global.jwt.TokenCookieUtil;
 import com.kyvc.backend.global.response.CommonResponse;
 import com.kyvc.backend.global.response.CommonResponseFactory;
 import com.kyvc.backend.global.security.CustomUserDetails;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -31,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "인증 / 계정", description = "사용자 인증, 계정, 개발 토큰, 모바일 로그인 및 비밀번호 재설정 API")
 public class AuthController {
 
     private final AuthService authService;
@@ -42,8 +49,27 @@ public class AuthController {
      * @param request 회원가입 요청 데이터
      * @return 회원가입 응답
      */
+    @Operation(
+            summary = "법인 사용자 회원가입",
+            description = """
+                    법인 사용자 회원가입 API입니다.
+                    입력값은 로그인 이메일과 비밀번호입니다.
+                    PART 6의 이메일 인증 API는 프론트 화면에서 회원가입 버튼 활성화 여부를 제어하기 위한 별도 본인인증 Flow입니다.
+                    현재 회원가입 API에서는 emailVerificationToken을 강제 검증하지 않습니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "201",
+            description = "생성된 사용자 ID, 이메일, 사용자 유형, 사용자 상태 반환",
+            content = @Content(schema = @Schema(implementation = CorporateSignupResponse.class))
+    )
     @PostMapping("/signup/corporate")
     public ResponseEntity<CommonResponse<CorporateSignupResponse>> signupCorporate(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "법인 사용자 회원가입 요청 데이터",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = CorporateSignupRequest.class))
+            )
             @Valid @RequestBody CorporateSignupRequest request // 회원가입 요청 데이터
     ) {
         CorporateSignupResponse response = authService.signupCorporate(request);
@@ -58,9 +84,24 @@ public class AuthController {
      * @param response HTTP 응답 객체
      * @return 로그인 응답
      */
+    @Operation(
+            summary = "사용자 로그인",
+            description = "이메일과 비밀번호로 로그인합니다. 입력값은 로그인 이메일과 비밀번호이며, 인증 토큰은 HttpOnly Cookie로 발급합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "사용자 ID, 이메일, 사용자 유형, 권한 목록 반환",
+            content = @Content(schema = @Schema(implementation = LoginResponse.class))
+    )
     @PostMapping("/login")
     public ResponseEntity<CommonResponse<LoginResponse>> login(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "로그인 요청 데이터",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = LoginRequest.class))
+            )
             @Valid @RequestBody LoginRequest request, // 로그인 요청 데이터
+            @Parameter(hidden = true)
             HttpServletResponse response // HTTP 응답 객체
     ) {
         AuthService.TokenIssueResult<LoginResponse> result = authService.login(request);
@@ -76,10 +117,22 @@ public class AuthController {
      * @param response HTTP 응답 객체
      * @return 로그아웃 응답
      */
+    @Operation(
+            summary = "사용자 로그아웃",
+            description = "로그인 사용자를 로그아웃 처리하고 인증 Cookie를 삭제합니다. 사용자가 직접 입력하는 요청 본문은 없습니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "로그아웃 완료 여부 반환",
+            content = @Content(schema = @Schema(implementation = LogoutResponse.class))
+    )
     @PostMapping("/logout")
     public ResponseEntity<CommonResponse<LogoutResponse>> logout(
+            @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
+            @Parameter(hidden = true)
             HttpServletRequest request, // HTTP 요청 객체
+            @Parameter(hidden = true)
             HttpServletResponse response // HTTP 응답 객체
     ) {
         LogoutResponse logoutResponse = authService.logout(
@@ -97,9 +150,20 @@ public class AuthController {
      * @param response HTTP 응답 객체
      * @return 토큰 재발급 응답
      */
+    @Operation(
+            summary = "토큰 재발급",
+            description = "Refresh Token Cookie로 Access Token과 Refresh Token을 재발급합니다. 사용자가 직접 입력하는 요청 본문은 없습니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "토큰 재발급 완료 여부 반환",
+            content = @Content(schema = @Schema(implementation = TokenRefreshResponse.class))
+    )
     @PostMapping("/token/refresh")
     public ResponseEntity<CommonResponse<TokenRefreshResponse>> refreshToken(
+            @Parameter(hidden = true)
             HttpServletRequest request, // HTTP 요청 객체
+            @Parameter(hidden = true)
             HttpServletResponse response // HTTP 응답 객체
     ) {
         AuthService.TokenIssueResult<TokenRefreshResponse> result = authService.refresh(

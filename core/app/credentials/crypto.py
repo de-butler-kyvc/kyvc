@@ -1,4 +1,6 @@
 import base64
+import binascii
+import json
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
@@ -8,6 +10,17 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
     EllipticCurvePrivateKey,
     EllipticCurvePublicKey,
 )
+from cryptography.hazmat.primitives.asymmetric.utils import (
+    decode_dss_signature,
+    encode_dss_signature,
+)
+
+from app.credentials.canonical import canonical_json
+
+# ES256K is JOSE-standardized for secp256k1, but many JWT/KMS stacks support
+# ES256/P-256 or EdDSA more broadly. See README for migration tradeoffs.
+JWS_ALG = "ES256K"
+JWS_SIGNATURE_BYTES = 64
 
 
 def b64url_encode(data: bytes) -> str:
@@ -61,14 +74,79 @@ def public_key_from_jwk(jwk: dict[str, Any]) -> EllipticCurvePublicKey:
     return ec.EllipticCurvePublicNumbers(x, y, ec.SECP256K1()).public_key()
 
 
-def sign_der_base64url(private_key: EllipticCurvePrivateKey, data: bytes) -> str:
-    return b64url_encode(private_key.sign(data, ec.ECDSA(hashes.SHA256())))
+def _der_to_raw_signature(der_signature: bytes) -> bytes:
+    r, s = decode_dss_signature(der_signature)
+    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
 
 
-def verify_der_base64url(public_key: EllipticCurvePublicKey, signature: str, data: bytes) -> bool:
+def _raw_to_der_signature(raw_signature: bytes) -> bytes:
+    if len(raw_signature) != JWS_SIGNATURE_BYTES:
+        raise ValueError("expected 64-byte ES256K JWS signature")
+    r = int.from_bytes(raw_signature[:32], "big")
+    s = int.from_bytes(raw_signature[32:], "big")
+    return encode_dss_signature(r, s)
+
+
+def compact_jws_signing_input(protected_header: dict[str, Any], payload: dict[str, Any]) -> bytes:
+    protected = b64url_encode(canonical_json(protected_header))
+    encoded_payload = b64url_encode(canonical_json(payload))
+    return f"{protected}.{encoded_payload}".encode("ascii")
+
+
+def sign_compact_jws(
+    private_key: EllipticCurvePrivateKey,
+    payload: dict[str, Any],
+    protected_header: dict[str, Any],
+) -> str:
+    header = {"alg": JWS_ALG, **protected_header}
+    signing_input = compact_jws_signing_input(header, payload)
+    signature = _der_to_raw_signature(
+        private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
+    )
+    return f"{signing_input.decode('ascii')}.{b64url_encode(signature)}"
+
+
+def decode_compact_jws(value: str) -> tuple[dict[str, Any], dict[str, Any], bytes, bytes]:
+    parts = value.split(".")
+    if len(parts) != 3:
+        raise ValueError("expected compact JWS")
+    protected_b64, payload_b64, signature_b64 = parts
+    protected = json.loads(b64url_decode(protected_b64))
+    payload = json.loads(b64url_decode(payload_b64))
+    if not isinstance(protected, dict) or not isinstance(payload, dict):
+        raise ValueError("expected JWS header and payload objects")
+    signing_input = f"{protected_b64}.{payload_b64}".encode("ascii")
+    return protected, payload, signing_input, b64url_decode(signature_b64)
+
+
+def verify_compact_jws(
+    public_key: EllipticCurvePublicKey,
+    value: str,
+    expected_payload: dict[str, Any] | None = None,
+    expected_headers: dict[str, Any] | None = None,
+) -> bool:
     try:
-        public_key.verify(b64url_decode(signature), data, ec.ECDSA(hashes.SHA256()))
+        protected, payload, signing_input, raw_signature = decode_compact_jws(value)
+        if protected.get("alg") != JWS_ALG:
+            return False
+        if expected_headers is not None:
+            for key, expected_value in expected_headers.items():
+                if protected.get(key) != expected_value:
+                    return False
+        if expected_payload is not None and payload != expected_payload:
+            return False
+        public_key.verify(
+            _raw_to_der_signature(raw_signature),
+            signing_input,
+            ec.ECDSA(hashes.SHA256()),
+        )
         return True
-    except InvalidSignature:
+    except (
+        InvalidSignature,
+        ValueError,
+        KeyError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        binascii.Error,
+    ):
         return False
-

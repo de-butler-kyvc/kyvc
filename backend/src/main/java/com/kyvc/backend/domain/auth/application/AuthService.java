@@ -48,12 +48,19 @@ public class AuthService {
     public CorporateSignupResponse signupCorporate(
             CorporateSignupRequest request // 회원가입 요청 데이터
     ) {
+        validateSignupRequest(request);
         String email = normalizeEmail(request.email()); // 정규화된 이메일
         if (userRepository.existsByEmail(email)) {
             throw new ApiException(ErrorCode.USER_ALREADY_EXISTS);
         }
 
-        User user = User.createCorporateUser(email, passwordEncoder.encode(request.password()));
+        User user = User.createCorporateUser(
+                email,
+                passwordEncoder.encode(request.password()),
+                normalizeRequired(request.userName()),
+                normalizeOptional(request.phone()),
+                normalizeRequired(request.corporateName())
+        );
         User savedUser = userRepository.save(user);
 
         logEventLogger.info("auth.signup.success", "Corporate user signup success", Map.of(
@@ -62,8 +69,11 @@ public class AuthService {
         ));
 
         return new CorporateSignupResponse(
+                savedUser.getOnboardingCorporateName(),
                 savedUser.getUserId(),
                 savedUser.getEmail(),
+                savedUser.getUserName(),
+                savedUser.getPhone(),
                 savedUser.getUserTypeCode().name(),
                 savedUser.getUserStatusCode().name()
         );
@@ -227,6 +237,29 @@ public class AuthService {
         return new TokenIssueResult<>(body, accessToken, refreshToken);
     }
 
+    // 검증 완료 사용자 토큰 발급
+    public TokenIssueResult<Void> issueTokensForVerifiedUser(
+            User user // 토큰 발급 대상 사용자
+    ) {
+        if (user == null) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (!user.isActive()) {
+            throw new ApiException(ErrorCode.USER_INACTIVE);
+        }
+        return issueTokens(user, null);
+    }
+
+    // 사용자 권한 목록 조회
+    public List<String> resolveUserRoles(
+            User user // 권한 조회 대상 사용자
+    ) {
+        if (user == null) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+        return resolveRoles(user);
+    }
+
     // Dev 사용자 생성
     private User createDevUser(
             String email, // 생성 대상 이메일
@@ -240,6 +273,18 @@ public class AuthService {
                 email,
                 passwordEncoder.encode(UUID.randomUUID().toString())
         ));
+    }
+
+    // 회원가입 요청 검증
+    private void validateSignupRequest(
+            CorporateSignupRequest request // 회원가입 요청 데이터
+    ) {
+        if (request == null || !StringUtils.hasText(request.userName()) || !StringUtils.hasText(request.corporateName())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        if (!StringUtils.hasText(request.email()) || !StringUtils.hasText(request.password())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
     }
 
     // Refresh Token 엔티티 생성
@@ -278,6 +323,23 @@ public class AuthService {
     private String normalizeEmail(String email // 원본 이메일
     ) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    // 필수 문자열 정규화
+    private String normalizeRequired(
+            String value // 원본 문자열
+    ) {
+        return value.trim();
+    }
+
+    // 선택 문자열 정규화
+    private String normalizeOptional(
+            String value // 원본 문자열
+    ) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 
     // 권한 목록 생성

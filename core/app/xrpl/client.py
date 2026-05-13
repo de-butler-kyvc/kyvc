@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from xrpl.asyncio.transaction.reliable_submission import XRPLReliableSubmissionException
 from xrpl.clients import JsonRpcClient
 from xrpl.transaction import submit_and_wait
 from xrpl.wallet import Wallet
@@ -74,6 +75,12 @@ def submit_tx(client: JsonRpcClient, tx: Any, wallet: Wallet, label: str) -> dic
     except Exception as exc:
         if "temDISABLED" in str(exc):
             raise RuntimeError(f"{label} failed because the selected XRPL network has the amendment disabled") from exc
+        if isinstance(exc, XRPLReliableSubmissionException):
+            detail = str(exc)
+            prefix = "Transaction failed:"
+            if detail.startswith(prefix):
+                result = detail[len(prefix) :].strip() or "unknown"
+                raise RuntimeError(f"{label} failed with result={result}") from exc
         raise
     return assert_tes_success(response, label)
 

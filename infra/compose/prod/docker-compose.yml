@@ -9,6 +9,8 @@ services:
         KYVC_ENV: prod
     container_name: kyvc-frontend-prod
     restart: unless-stopped
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "3000:80"
     volumes:
@@ -24,6 +26,8 @@ services:
     env_file:
       - .env.common
       - .env.backend
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8080:8080"
     volumes:
@@ -41,6 +45,8 @@ services:
     env_file:
       - .env.common
       - .env.core
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8090:8090"
     volumes:
@@ -57,6 +63,8 @@ services:
     env_file:
       - .env.common
       - .env.backend_admin
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8081:8080"
     volumes:
@@ -73,6 +81,8 @@ services:
     env_file:
       - .env.common
       - .env.core_admin
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8091:8091"
     volumes:

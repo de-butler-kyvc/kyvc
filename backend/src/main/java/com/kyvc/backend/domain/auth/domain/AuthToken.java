@@ -17,7 +17,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
-// 인증 토큰 엔티티
+// 인증 토큰 Entity
 @Entity
 @Table(name = "auth_tokens")
 @Getter
@@ -67,9 +67,28 @@ public class AuthToken {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // Refresh Token 저장 엔티티 생성
+    // Refresh Token 저장 Entity 생성
     public static AuthToken createRefreshToken(
             Long actorId, // 사용자 ID
+            String tokenHash, // SHA-256 토큰 해시
+            String tokenJti, // JWT ID
+            LocalDateTime issuedAt, // 발급 시각
+            LocalDateTime expiresAt // 만료 시각
+    ) {
+        return createUserToken(
+                actorId,
+                KyvcEnums.TokenType.REFRESH,
+                tokenHash,
+                tokenJti,
+                issuedAt,
+                expiresAt
+        );
+    }
+
+    // 사용자 토큰 Entity 생성
+    public static AuthToken createUserToken(
+            Long actorId, // 사용자 ID
+            KyvcEnums.TokenType tokenType, // 토큰 유형
             String tokenHash, // SHA-256 토큰 해시
             String tokenJti, // JWT ID
             LocalDateTime issuedAt, // 발급 시각
@@ -78,7 +97,7 @@ public class AuthToken {
         AuthToken authToken = new AuthToken();
         authToken.actorTypeCode = KyvcEnums.ActorType.USER;
         authToken.actorId = actorId;
-        authToken.tokenTypeCode = KyvcEnums.TokenType.REFRESH;
+        authToken.tokenTypeCode = tokenType;
         authToken.tokenHash = tokenHash;
         authToken.tokenJti = tokenJti;
         authToken.tokenStatusCode = KyvcEnums.TokenStatus.ACTIVE;
@@ -88,10 +107,19 @@ public class AuthToken {
     }
 
     // 토큰 폐기 처리
-    public void revoke(LocalDateTime revokedAt // 폐기 시각
+    public void revoke(
+            LocalDateTime revokedAt // 폐기 시각
     ) {
         this.tokenStatusCode = KyvcEnums.TokenStatus.REVOKED;
         this.revokedAt = revokedAt;
+    }
+
+    // 토큰 사용 완료 처리
+    public void markUsed(
+            LocalDateTime usedAt // 사용 완료 시각
+    ) {
+        this.tokenStatusCode = KyvcEnums.TokenStatus.USED;
+        this.revokedAt = usedAt;
     }
 
     // 활성 토큰 여부
@@ -100,7 +128,8 @@ public class AuthToken {
     }
 
     // 만료 여부
-    public boolean isExpired(LocalDateTime now // 기준 시각
+    public boolean isExpired(
+            LocalDateTime now // 기준 시각
     ) {
         return expiresAt.isBefore(now);
     }

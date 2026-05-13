@@ -4,7 +4,7 @@ from typing import Any
 
 
 def canonical_json(obj: Any) -> bytes:
-    """PoC deterministic JSON bytes. This is not JSON-LD RDF normalization."""
+    """Deterministic JSON bytes for stable local hashes and JWS payloads."""
     return json.dumps(
         obj,
         sort_keys=True,
@@ -19,4 +19,3 @@ def sha256_bytes(data: bytes) -> bytes:
 
 def multihash_sha2_256(data: bytes) -> bytes:
     return bytes.fromhex("1220") + sha256_bytes(data)
-

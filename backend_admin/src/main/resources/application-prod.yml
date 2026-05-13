@@ -16,3 +16,13 @@ logging:
   level:
     root: INFO
     com.kyvc.backendadmin: INFO
+
+kyvc:
+  cors:
+    allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:https://admin-kyvc.khuoo.synology.me}
+    allowed-origin-patterns: ${KYVC_CORS_ALLOWED_ORIGIN_PATTERNS:}
+  openapi:
+    server-url: ${KYVC_OPENAPI_SERVER_URL:https://admin-kyvc.khuoo.synology.me}
+    server-description: ${KYVC_OPENAPI_SERVER_DESCRIPTION:KYvC backendadmin prod API}
+  backend:
+    base-url: ${KYVC_BACKEND_BASE_URL:http://kyvc-backend-prod:8080}

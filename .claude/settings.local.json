@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\promo\\\\OneDrive\\\\Documents\\\\GitHub\\\\kyvc\\\\frontend_admin\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\promo\\\\OneDrive\\\\Documents\\\\GitHub\\\\kyvc\\\\backend_admin\\\\src\\\\main\\\\java\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\promo\\\\OneDrive\\\\Documents\\\\GitHub\\\\kyvc\" -Directory)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\promo\\\\OneDrive\\\\Documents\\\\GitHub\\\\kyvc\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)"
+    ]
+  }
+}

@@ -6,3 +6,4 @@ cryptography
 xrpl-py
 python-dotenv
 pymysql
+python-multipart

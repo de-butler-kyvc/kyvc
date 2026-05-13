@@ -23,13 +23,21 @@ class IssueKycCredentialRequest(BaseModel):
     xrpl_json_rpc_url: str | None = None
     allow_mainnet: bool = False
     status_mode: Literal["xrpl", "local"] = "xrpl"
+    credential_format: Literal["jwt", "embedded_jws"] = "jwt"
+    format: Literal["dc+sd-jwt", "vc+jwt"] | None = None
+    holder_key_id: str = Field(default="holder-key-1")
+    vct: str | None = None
 
 
 class IssueKycCredentialResponse(BaseModel):
-    credential: dict[str, Any]
+    format: str = "vc+jwt"
+    credential: dict[str, Any] | str
+    credentialId: str | None = None
     issuer_did_document: dict[str, Any] | None = None
     credential_type: str
-    vc_core_hash: str
+    vc_core_hash: str | None = None
+    status: dict[str, Any] | None = None
+    selectiveDisclosure: dict[str, Any] | None = None
     credential_create_transaction: dict[str, Any] | None = None
     ledger_entry: dict[str, Any] | None = None
     status_mode: str
@@ -39,7 +47,12 @@ class RevokeCredentialRequest(BaseModel):
     issuer_account: str | None = None
     issuer_seed: str | None = None
     holder_account: str
-    credential_type: str
+    credential_type: str | None = None
+    jti: str | None = None
+    status_id: str | None = None
+    holder_did: str | None = None
+    issuer_did: str | None = None
+    vct: str | None = None
     xrpl_json_rpc_url: str | None = None
     allow_mainnet: bool = False
     status_mode: Literal["xrpl", "local"] = "xrpl"

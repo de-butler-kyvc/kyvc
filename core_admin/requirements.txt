@@ -4,3 +4,4 @@ pydantic
 httpx
 cryptography
 xrpl-py
+python-dotenv

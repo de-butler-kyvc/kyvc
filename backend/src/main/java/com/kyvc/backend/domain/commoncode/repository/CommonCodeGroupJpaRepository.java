@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.commoncode.repository;
 import com.kyvc.backend.domain.commoncode.domain.CommonCodeGroup;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -29,4 +30,8 @@ public interface CommonCodeGroupJpaRepository extends JpaRepository<CommonCodeGr
     Optional<CommonCodeGroup> findByCodeGroupAndEnabledTrue(
             String codeGroup // 공통코드 그룹 코드
     );
+
+    List<CommonCodeGroup> findAllByOrderBySortOrderAscCodeGroupAsc();
+
+    List<CommonCodeGroup> findByEnabledTrueOrderBySortOrderAscCodeGroupAsc();
 }

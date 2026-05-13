@@ -1,0 +1,13 @@
+---
+description: Git/PR 브랜치 정책 — feature는 develop만 대상
+alwaysApply: true
+---
+
+# PR 및 머지 정책 (kyvc)
+
+- **기능 PR**: 반드시 `feature/*` → **`develop`** 만 생성한다. `feature/*` → **`main`** PR은 만들지 않는다.
+- **실수로 `main` 대상 PR을 만든 경우**: 머지하지 말고 PR을 닫은 뒤, **`develop` 대상**으로 다시 생성한다.
+- **이미 `main`에 머지된 변경만** 브랜치를 맞출 때: 그때만 **`main` → `develop`** 동기화 PR로 싱크한다.
+- **`develop` → `main`**: 2026년 5월 7일 예정. 그 전까지는 `feature/*` → `develop` PR만 생성하고, 기능 작업은 **`develop`까지만** 머지한다.
+
+에이전트가 `gh pr create` 등으로 PR을 올릴 때 기본 베이스는 **`develop`**으로 한다.

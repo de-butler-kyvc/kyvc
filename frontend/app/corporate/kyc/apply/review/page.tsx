@@ -1,0 +1,156 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { Icon } from "@/components/design/icons";
+import { StepIndicator } from "@/components/kyc/step-indicator";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ApiError, BASE_URL, type KycDocument, kyc as kycApi } from "@/lib/api";
+import {
+  DOCUMENT_LABELS,
+  compactHash,
+  formatFileSize,
+  refreshCurrentKycStorage
+} from "@/lib/kyc-flow";
+
+export default function KycApplyReviewPage() {
+  const router = useRouter();
+  const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshCurrentKycStorage(kycApi.current).then((id) => {
+    if (!id) {
+      router.push("/corporate/kyc/apply");
+      return;
+    }
+    if (cancelled) return;
+    kycApi
+      .documents(id)
+      .then((items) => {
+        if (!cancelled) setDocuments(items);
+      })
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : "조회에 실패했습니다.")
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  const onPreview = async (documentId: number) => {
+    setPreviewingId(documentId);
+    setError(null);
+    try {
+      const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+      if (!latestKycId) {
+        router.push("/corporate/kyc/apply");
+        return;
+      }
+      const { previewUrl } = await kycApi.documentPreview(latestKycId, documentId);
+      window.open(`${BASE_URL}${previewUrl}`, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "미리보기 URL 발급에 실패했습니다."
+      );
+    } finally {
+      setPreviewingId(null);
+    }
+  };
+
+  return (
+    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+      <div className="page-head">
+        <div>
+          <h1 className="page-head-title">업로드 서류 미리보기</h1>
+          <p className="page-head-desc">업로드된 서류 목록과 해시를 확인하세요.</p>
+        </div>
+      </div>
+
+      <StepIndicator current={4} />
+
+      <section className="form-card">
+        <div className="form-card-header">
+          <div className="form-card-title">업로드된 서류 {documents.length}건</div>
+          <div className="form-card-meta flex items-center gap-1">
+            <Icon.Lock size={13} /> SHA-256 해시 검증완료
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>파일명</th>
+                <th>서류 유형</th>
+                <th>크기</th>
+                <th>해시</th>
+                <th>상태</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {documents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center text-muted-foreground">
+                    업로드된 서류가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                documents.map((doc) => (
+                  <tr key={doc.documentId}>
+                    <td>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Icon.File size={14} /> {doc.fileName ?? "-"}
+                      </span>
+                    </td>
+                    <td>
+                      {DOCUMENT_LABELS[doc.documentTypeCode ?? ""] ??
+                        doc.documentTypeCode ??
+                        "-"}
+                    </td>
+                    <td className="mono">{formatFileSize(doc.fileSize)}</td>
+                    <td className="mono text-subtle-foreground">
+                      {compactHash(doc.documentHash)}
+                    </td>
+                    <td>
+                      <Badge variant="success">
+                        <Icon.Check size={11} /> 완료
+                      </Badge>
+                    </td>
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        className="link inline-flex items-center gap-1"
+                        disabled={previewingId === doc.documentId}
+                        onClick={() => onPreview(doc.documentId)}
+                      >
+                        <Icon.Eye size={14} />
+                        {previewingId === doc.documentId ? "여는 중..." : "미리보기"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {error ? <p className="mt-4 text-[12px] text-destructive">{error}</p> : null}
+
+      <div className="form-actions right">
+        <Button type="button" variant="ghost" onClick={() => router.push("/corporate/kyc/apply/upload")}>
+          이전
+        </Button>
+        <Button type="button" onClick={() => router.push("/corporate/kyc/apply/storage")}>
+          저장 옵션 선택
+        </Button>
+      </div>
+    </div>
+  );
+}

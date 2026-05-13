@@ -1,6 +1,9 @@
 spring:
   application:
     name: kyvc-backend
+  threads:
+    virtual:
+      enabled: true
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
@@ -20,6 +23,17 @@ spring:
     enabled: ${FLYWAY_ENABLED:true}
     baseline-on-migrate: true
     locations: classpath:db/migration
+  mail:
+    host: ${KYVC_MAIL_HOST:smtp.gmail.com}
+    port: ${KYVC_MAIL_PORT:587}
+    username: ${KYVC_MAIL_USERNAME:}
+    password: ${KYVC_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${KYVC_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${KYVC_MAIL_SMTP_STARTTLS_ENABLE:true}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -59,8 +73,35 @@ kyvc:
     same-site: ${KYVC_JWT_SAME_SITE:Lax}
     cookie-path: ${KYVC_JWT_COOKIE_PATH:/}
   cors:
-    allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    allowed-origins: ${KYVC_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origin-patterns: ${KYVC_CORS_ALLOWED_ORIGIN_PATTERNS:}
   dev-token:
     enabled: ${KYVC_DEV_TOKEN_ENABLED:false}
     auto-create-user: ${KYVC_DEV_TOKEN_AUTO_CREATE_USER:true}
     default-email: ${KYVC_DEV_TOKEN_DEFAULT_EMAIL:dev-corporate-user@kyvc.local}
+  auth:
+    mfa:
+      expiration-minutes: ${KYVC_MFA_EXPIRATION_MINUTES:5}
+      session-expiration-minutes: ${KYVC_MFA_SESSION_EXPIRATION_MINUTES:10}
+      code-length: ${KYVC_MFA_CODE_LENGTH:6}
+      max-failed-attempts: ${KYVC_MFA_MAX_FAILED_ATTEMPTS:5}
+    password-reset:
+      expiration-minutes: ${KYVC_PASSWORD_RESET_EXPIRATION_MINUTES:30}
+      base-url: ${KYVC_PASSWORD_RESET_BASE_URL:}
+  document:
+    preview:
+      expiration-minutes: ${KYVC_DOCUMENT_PREVIEW_EXPIRATION_MINUTES:10}
+  notification:
+    default-page-size: ${KYVC_NOTIFICATION_DEFAULT_PAGE_SIZE:20}
+    max-page-size: ${KYVC_NOTIFICATION_MAX_PAGE_SIZE:100}
+  mail:
+    from: ${KYVC_MAIL_FROM:}
+  core:
+    mode: ${KYVC_CORE_MODE:http}
+    base-url: ${KYVC_CORE_BASE_URL:https://dev-core-kyvc.khuoo.synology.me}
+    connect-timeout-seconds: ${KYVC_CORE_CONNECT_TIMEOUT_SECONDS:10}
+    read-timeout-seconds: ${KYVC_CORE_READ_TIMEOUT_SECONDS:60}
+    ai-review-read-timeout-seconds: ${KYVC_CORE_AI_REVIEW_READ_TIMEOUT_SECONDS:300}
+    dev-seed-enabled: ${KYVC_CORE_DEV_SEED_ENABLED:false}
+    failure-fallback-enabled: ${KYVC_CORE_FAILURE_FALLBACK_ENABLED:false}
+    api-key: ${KYVC_CORE_API_KEY:}

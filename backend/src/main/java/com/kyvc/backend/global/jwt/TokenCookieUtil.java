@@ -36,6 +36,15 @@ public class TokenCookieUtil {
         );
     }
 
+    // HttpOnly Cookie 생성
+    public ResponseCookie createHttpOnlyCookie(
+            String name, // Cookie 이름
+            String value, // Cookie 값
+            Duration maxAge // Cookie 유지 시간
+    ) {
+        return createCookie(name, value, maxAge);
+    }
+
     // Access Token Cookie 삭제
     public ResponseCookie deleteAccessTokenCookie() {
         return deleteCookie(jwtProperties.getAccessCookieName());
@@ -44,6 +53,13 @@ public class TokenCookieUtil {
     // Refresh Token Cookie 삭제
     public ResponseCookie deleteRefreshTokenCookie() {
         return deleteCookie(jwtProperties.getRefreshCookieName());
+    }
+
+    // HttpOnly Cookie 삭제
+    public ResponseCookie deleteHttpOnlyCookie(
+            String name // Cookie 이름
+    ) {
+        return deleteCookie(name);
     }
 
     // Access Token 조회
@@ -56,6 +72,14 @@ public class TokenCookieUtil {
     public String resolveRefreshToken(HttpServletRequest request // HTTP 요청
     ) {
         return resolveCookieValue(request, jwtProperties.getRefreshCookieName());
+    }
+
+    // Cookie 값 조회
+    public String resolveCookie(
+            HttpServletRequest request, // HTTP 요청
+            String cookieName // Cookie 이름
+    ) {
+        return resolveCookieValue(request, cookieName);
     }
 
     // 공통 Cookie 생성

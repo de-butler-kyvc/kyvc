@@ -33,6 +33,7 @@ class VerificationChallengeEntry:
     expires_at: datetime
     used_at: datetime | None = None
     created_at: datetime | None = None
+    presentation_definition: dict[str, Any] | None = None
 
 
 class CredentialRepository(Protocol):
@@ -101,6 +102,7 @@ class VerificationChallengeRepository(Protocol):
         domain: str,
         expires_at: datetime,
         created_at: datetime,
+        presentation_definition: dict[str, Any] | None = None,
     ) -> None:
         """Persist a verifier-issued presentation challenge."""
 
