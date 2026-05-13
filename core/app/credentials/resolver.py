@@ -1,5 +1,7 @@
 from collections.abc import Mapping
+import logging
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 import httpx
 
@@ -7,6 +9,8 @@ from app.credentials.canonical import canonical_json, multihash_sha2_256
 from app.credentials.did import account_from_did
 from app.credentials.hexutil import bytes_to_hex, hex_to_utf8
 from app.resilience.outbound import OutboundDependencyError, execute_outbound, outbound_timeout
+
+logger = logging.getLogger(__name__)
 
 
 class DidResolver(Protocol):
@@ -185,7 +189,22 @@ def xrpl_did_entry_metadata(client: Any, did: str) -> tuple[str, str, str]:
     data_hex = str(entry.get("Data") or entry.get("data") or "").upper()
     if not uri_hex or not data_hex:
         raise ValueError(f"DID ledger entry missing URI/Data for {did}")
-    return account, hex_to_utf8(uri_hex), data_hex
+    uri = hex_to_utf8(uri_hex)
+    parsed_uri = urlparse(uri)
+    logger.warning(
+        "xrpl did entry resolved did=%s account=%s uri=%r uri_scheme=%s uri_netloc=%s "
+        "uri_path=%s uri_hex=%s data_hash=%s entry_keys=%s",
+        did,
+        account,
+        uri,
+        parsed_uri.scheme or "<missing>",
+        parsed_uri.netloc or "<missing>",
+        parsed_uri.path or "<missing>",
+        uri_hex,
+        data_hex,
+        sorted(str(key) for key in entry.keys()),
+    )
+    return account, uri, data_hex
 
 
 class XrplDidResolver:
@@ -194,6 +213,18 @@ class XrplDidResolver:
 
     def resolve(self, did: str) -> dict[str, Any]:
         account, uri, data_hash = xrpl_did_entry_metadata(self.client, did)
+        parsed_uri = urlparse(uri)
+        logger.warning(
+            "fetching xrpl did document did=%s account=%s uri=%r uri_scheme=%s uri_netloc=%s "
+            "uri_path=%s data_hash=%s",
+            did,
+            account,
+            uri,
+            parsed_uri.scheme or "<missing>",
+            parsed_uri.netloc or "<missing>",
+            parsed_uri.path or "<missing>",
+            data_hash,
+        )
         try:
             def fetch() -> httpx.Response:
                 response = httpx.get(uri, timeout=outbound_timeout("did_resolver"))
@@ -206,9 +237,35 @@ class XrplDidResolver:
                 fetch,
             )
         except (httpx.HTTPError, OutboundDependencyError) as exc:
+            logger.warning(
+                "xrpl did document fetch failed did=%s account=%s uri=%r uri_scheme=%s "
+                "uri_netloc=%s uri_path=%s data_hash=%s error_type=%s error=%s",
+                did,
+                account,
+                uri,
+                parsed_uri.scheme or "<missing>",
+                parsed_uri.netloc or "<missing>",
+                parsed_uri.path or "<missing>",
+                data_hash,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             raise ValueError(f"DID Document fetch failed for {did}: uri={uri}: {exc}") from exc
         did_document = response.json()
 
+        logger.warning(
+            "xrpl did document fetched did=%s account=%s uri=%r data_hash=%s "
+            "document_id=%s verification_method_count=%s",
+            did,
+            account,
+            uri,
+            data_hash,
+            did_document.get("id"),
+            len(did_document.get("verificationMethod", []))
+            if isinstance(did_document.get("verificationMethod"), list)
+            else "<invalid>",
+        )
         verify_did_document_hash(did, did_document, data_hash)
 
         result = did_resolution_result(did, did_document, {"resolver": "xrpl", "ledger": "xrpl", "account": account})
