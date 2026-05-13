@@ -169,14 +169,9 @@ public class WebVpLoginService {
         }
         validateNotCompleted(vpVerification);
         validateNotExpired(vpVerification, LocalDateTime.now());
-        if (request.credentialId() == null) {
-            throw new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_INVALID);
-        }
+        Credential credential = getCredentialForVpLogin(vpVerification.getVpRequestId(), request == null ? null : request.credentialId());
+        validateCredential(vpVerification, credential);
         requirePresentation(request.vp());
-
-        Credential credential = credentialRepository.findById(request.credentialId())
-                .orElseThrow(() -> new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_INVALID));
-        validateCredential(credential, LocalDateTime.now());
 
         String vpHash = TokenHashUtil.sha256(toJson(request.vp()));
         LocalDateTime now = LocalDateTime.now();
@@ -368,16 +363,76 @@ public class WebVpLoginService {
     }
 
     // Credential 사용 가능 여부 검증
-    private void validateCredential(
-            Credential credential, // Credential
-            LocalDateTime now // 기준 일시
+    private Credential getCredentialForVpLogin(
+            String requestId, // VP 로그인 요청 ID
+            Long credentialId // Credential ID
     ) {
-        if (credential == null || !credential.isValid(now)) {
+        if (credentialId == null) {
+            logInvalidCredential(requestId, null, false, null, null, false, "credentialIdMissing");
+            throw new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_INVALID);
+        }
+        return credentialRepository.findById(credentialId)
+                .orElseThrow(() -> {
+                    logInvalidCredential(requestId, credentialId, false, null, null, false, "credentialNotFound");
+                    return new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_INVALID);
+                });
+    }
+
+    // Credential 최소 사용 가능 여부 검증
+    private void validateCredential(
+            VpVerification vpVerification, // VP 로그인 요청
+            Credential credential // Credential
+    ) {
+        if (credential.getCorporateId() == null) {
+            logInvalidCredential(vpVerification.getVpRequestId(), credential, "corporateIdMissing");
+            throw new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_INVALID);
+        }
+        if (KyvcEnums.CredentialStatus.VALID != credential.getCredentialStatus()) {
+            logInvalidCredential(vpVerification.getVpRequestId(), credential, "credentialStatusNotValid");
             throw new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_INVALID);
         }
         if (!credential.isWalletSaved()) {
+            logInvalidCredential(vpVerification.getVpRequestId(), credential, "walletNotSaved");
             throw new ApiException(ErrorCode.VP_LOGIN_CREDENTIAL_NOT_WALLET_SAVED);
         }
+    }
+
+    // Credential 검증 실패 로그
+    private void logInvalidCredential(
+            String requestId, // VP 로그인 요청 ID
+            Credential credential, // Credential
+            String reason // 실패 사유
+    ) {
+        logInvalidCredential(
+                requestId,
+                credential == null ? null : credential.getCredentialId(),
+                credential != null,
+                credential == null || credential.getCredentialStatus() == null ? null : credential.getCredentialStatus().name(),
+                credential == null ? null : credential.getWalletSavedYn(),
+                credential != null && credential.getCorporateId() != null,
+                reason
+        );
+    }
+
+    // Credential 검증 실패 로그
+    private void logInvalidCredential(
+            String requestId, // VP 로그인 요청 ID
+            Long credentialId, // Credential ID
+            boolean credentialExists, // Credential 존재 여부
+            String credentialStatusCode, // Credential 상태 코드
+            String walletSavedYn, // Wallet 저장 여부
+            boolean corporateIdExists, // 법인 ID 존재 여부
+            String reason // 실패 사유
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("requestId", requestId);
+        fields.put("credentialId", credentialId);
+        fields.put("credentialExists", credentialExists);
+        fields.put("credentialStatusCode", credentialStatusCode);
+        fields.put("walletSavedYn", walletSavedYn);
+        fields.put("corporateIdExists", corporateIdExists);
+        fields.put("reason", reason);
+        logEventLogger.warn("auth.web_vp_login.credential.invalid", "Web VP login credential invalid", fields);
     }
 
     // VP 객체 필수값 검증
