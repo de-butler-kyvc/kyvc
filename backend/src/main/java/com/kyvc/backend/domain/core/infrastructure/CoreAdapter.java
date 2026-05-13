@@ -22,6 +22,8 @@ import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreXrplTransactionResponse;
 
+import java.util.Map;
+
 /**
  * Core 연동 어댑터 계약
  */
@@ -111,7 +113,7 @@ public interface CoreAdapter {
             CoreVpVerificationRequest request, // VP 검증 요청
             String format, // Presentation format
             Object presentation, // Presentation 원문 또는 객체
-            java.util.Map<String, Object> didDocuments // DID document 목록
+            Map<String, Object> didDocuments // DID document 목록
     );
 
     /**
@@ -159,6 +161,20 @@ public interface CoreAdapter {
     CorePresentationVerifyResponse verifyWebVpLoginPresentation(
             Object vp // Wallet 생성 VP 객체
     );
+
+    /**
+     * 웹 VP 로그인 Presentation 검증 요청
+     *
+     * @param vp Wallet 생성 VP 객체
+     * @param didDocuments DID document 목록
+     * @return Presentation 검증 응답
+     */
+    default CorePresentationVerifyResponse verifyWebVpLoginPresentation(
+            Object vp, // Wallet 생성 VP 객체
+            Map<String, Map<String, Object>> didDocuments // DID document 목록
+    ) {
+        return verifyWebVpLoginPresentation(vp);
+    }
 
     /**
      * Credential 검증 요청

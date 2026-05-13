@@ -1,5 +1,6 @@
 package com.kyvc.backend.domain.vp.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -31,6 +32,7 @@ public record VpPresentationRequest(
         String format, // Presentation format
         @Schema(description = "Presentation 원문 또는 객체")
         Object presentation, // Presentation 원문 또는 객체
+        @JsonAlias({"did_document", "didDocuments", "did_documents"})
         @Schema(description = "Holder DID Document")
         Object didDocument, // Holder DID Document
         @Schema(description = "모바일 기기 ID", example = "device-001")
