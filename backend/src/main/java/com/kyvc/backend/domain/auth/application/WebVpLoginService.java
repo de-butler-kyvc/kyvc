@@ -186,13 +186,7 @@ public class WebVpLoginService {
         if (!verified) {
             vpVerification.markInvalid(resolveCoreVerifySummary(coreResponse, "웹 VP 로그인 Core 검증 실패"), LocalDateTime.now());
             VpVerification saved = vpVerificationRepository.save(vpVerification);
-            logEventLogger.info("auth.web_vp_login.presentation.invalid", "Web VP login presentation invalid", Map.of(
-                    "vpVerificationId", saved.getVpVerificationId(),
-                    "requestId", saved.getVpRequestId(),
-                    "credentialId", saved.getCredentialId(),
-                    "corporateId", saved.getCorporateId(),
-                    "status", saved.getVpVerificationStatus().name()
-            ));
+            logCoreVerifyFailed(saved, coreResponse, didDocuments);
             throw new ApiException(ErrorCode.VP_LOGIN_CORE_VERIFY_FAILED);
         }
         vpVerification.markValid(resolveCoreVerifySummary(coreResponse, "웹 VP 로그인 Core 검증 성공"), LocalDateTime.now());
@@ -318,6 +312,31 @@ public class WebVpLoginService {
             vpVerificationRepository.save(vpVerification);
             throw apiException;
         }
+    }
+
+    // Core 검증 실패 로그
+    private void logCoreVerifyFailed(
+            VpVerification vpVerification, // VP 로그인 요청
+            CorePresentationVerifyResponse coreResponse, // Core 검증 응답
+            Map<String, Map<String, Object>> didDocuments // DID document 목록
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("vpVerificationId", vpVerification.getVpVerificationId());
+        fields.put("requestId", vpVerification.getVpRequestId());
+        fields.put("credentialId", vpVerification.getCredentialId());
+        fields.put("corporateId", vpVerification.getCorporateId());
+        fields.put("status", vpVerification.getVpVerificationStatus().name());
+        fields.put("didDocumentsCount", didDocuments == null ? 0 : didDocuments.size());
+        fields.put("didDocumentIds", didDocuments == null ? List.of() : List.copyOf(didDocuments.keySet()));
+        fields.put("coreOk", coreResponse == null ? null : coreResponse.ok());
+        fields.put("coreValid", coreResponse == null ? null : coreResponse.valid());
+        fields.put("coreVerified", coreResponse == null ? null : coreResponse.verified());
+        fields.put("coreMessage", coreResponse == null ? null : coreResponse.message());
+        fields.put("coreErrors", coreResponse == null ? List.of() : coreResponse.errors());
+        fields.put("coreDetailKeys", coreResponse == null || coreResponse.details() == null
+                ? List.of()
+                : List.copyOf(coreResponse.details().keySet()));
+        logEventLogger.info("auth.web_vp_login.presentation.invalid", "Web VP login presentation invalid", fields);
     }
 
     // Holder DID Document 목록 생성
