@@ -41,9 +41,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/api/auth/email-verifications/request".equals(path)
                 || "/api/auth/email-verifications/verify".equals(path)
                 || "/api/auth/dev/token".equals(path)
+                || isWebVpLoginPath(path)
                 || "/api/mobile/auth/login".equals(path)
                 || "/api/mobile/auth/vp-login/challenge".equals(path)
                 || "/api/mobile/auth/vp-login".equals(path)
+                || isMobileWebVpLoginPath(path)
                 || path.startsWith("/api/verifier/")
                 || path.startsWith("/api/internal/")
                 || "/health".equals(path)
@@ -52,6 +54,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/swagger-ui.html".equals(path)
                 || path.startsWith("/swagger-ui/")
                 || path.startsWith("/v3/api-docs");
+    }
+
+    // 웹 VP 로그인 공개 경로 여부
+    private boolean isWebVpLoginPath(
+            String path // 요청 경로
+    ) {
+        return "/api/auth/vp-login-requests".equals(path)
+                || path.matches("^/api/auth/vp-login-requests/[^/]+/(status|complete)$");
+    }
+
+    // 모바일 웹 VP 로그인 공개 경로 여부
+    private boolean isMobileWebVpLoginPath(
+            String path // 요청 경로
+    ) {
+        return "/api/mobile/auth/vp-login-requests/resolve".equals(path)
+                || path.matches("^/api/mobile/auth/vp-login-requests/[^/]+/submit$");
     }
 
     @Override

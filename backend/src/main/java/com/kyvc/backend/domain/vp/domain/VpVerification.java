@@ -29,7 +29,7 @@ public class VpVerification {
     @Column(name = "credential_id")
     private Long credentialId;
 
-    @Column(name = "corporate_id", nullable = false)
+    @Column(name = "corporate_id")
     private Long corporateId;
 
     @Column(name = "request_nonce", nullable = false, length = 255)
@@ -74,6 +74,15 @@ public class VpVerification {
 
     @Column(name = "vp_jwt_hash", length = 255)
     private String vpJwtHash;
+
+    @Column(name = "qr_token_hash", length = 255)
+    private String qrTokenHash;
+
+    @Column(name = "browser_session_hash", length = 255)
+    private String browserSessionHash;
+
+    @Column(name = "login_completed_at")
+    private LocalDateTime loginCompletedAt;
 
     @Column(name = "core_request_id", length = 255)
     private String coreRequestId;
@@ -146,6 +155,38 @@ public class VpVerification {
         return vpVerification;
     }
 
+    // 웹 VP 로그인 요청 생성
+    public static VpVerification createWebVpLoginRequest(
+            String vpRequestId, // VP 로그인 요청 ID
+            String qrTokenHash, // QR 토큰 해시
+            String browserSessionHash, // 브라우저 세션 해시
+            String requestNonce, // Core nonce
+            String challenge, // Core challenge
+            String domain, // Core domain
+            String requiredClaimsJson, // 필수 disclosure JSON
+            LocalDateTime expiresAt, // 만료 일시
+            String metadataJson // Core challenge 메타데이터 JSON
+    ) {
+        VpVerification vpVerification = new VpVerification();
+        vpVerification.vpRequestId = vpRequestId;
+        vpVerification.qrTokenHash = qrTokenHash;
+        vpVerification.browserSessionHash = browserSessionHash;
+        vpVerification.requestNonce = requestNonce;
+        vpVerification.challenge = challenge;
+        vpVerification.purpose = "WEB_VP_LOGIN";
+        vpVerification.requesterName = domain;
+        vpVerification.requiredClaimsJson = requiredClaimsJson;
+        vpVerification.expiresAt = expiresAt;
+        vpVerification.permissionResultJson = metadataJson;
+        vpVerification.requestTypeCode = KyvcEnums.VpRequestType.VP_LOGIN;
+        vpVerification.testYn = KyvcEnums.Yn.N;
+        vpVerification.reAuthYn = KyvcEnums.Yn.N;
+        vpVerification.vpVerificationStatus = KyvcEnums.VpVerificationStatus.REQUESTED;
+        vpVerification.replaySuspectedYn = KyvcEnums.Yn.N.name();
+        vpVerification.requestedAt = LocalDateTime.now();
+        return vpVerification;
+    }
+
     // 요청 만료 여부
     public boolean isExpired(
             LocalDateTime now // 기준 일시
@@ -186,6 +227,20 @@ public class VpVerification {
         return this.challenge != null && this.challenge.equals(challenge);
     }
 
+    // QR 토큰 해시 일치 여부
+    public boolean matchesQrTokenHash(
+            String qrTokenHash // QR 토큰 해시
+    ) {
+        return this.qrTokenHash != null && this.qrTokenHash.equals(qrTokenHash);
+    }
+
+    // 브라우저 세션 해시 일치 여부
+    public boolean matchesBrowserSessionHash(
+            String browserSessionHash // 브라우저 세션 해시
+    ) {
+        return this.browserSessionHash != null && this.browserSessionHash.equals(browserSessionHash);
+    }
+
     // VP 제출 처리
     public void markPresented(
             Long credentialId, // Credential ID
@@ -208,6 +263,23 @@ public class VpVerification {
         this.credentialId = credentialId;
         this.vpJwtHash = vpJwtHash;
         this.coreRequestId = coreRequestId;
+        this.presentedAt = presentedAt;
+        this.vpVerificationStatus = KyvcEnums.VpVerificationStatus.PRESENTED;
+        this.replaySuspectedYn = KyvcEnums.Yn.N.name();
+        this.resultSummary = null;
+        this.verifiedAt = null;
+    }
+
+    // 웹 VP 로그인 제출 처리
+    public void markWebVpLoginPresented(
+            Long corporateId, // 법인 ID
+            Long credentialId, // Credential ID
+            String vpHash, // VP 객체 해시
+            LocalDateTime presentedAt // 제출 일시
+    ) {
+        this.corporateId = corporateId;
+        this.credentialId = credentialId;
+        this.vpJwtHash = vpHash;
         this.presentedAt = presentedAt;
         this.vpVerificationStatus = KyvcEnums.VpVerificationStatus.PRESENTED;
         this.replaySuspectedYn = KyvcEnums.Yn.N.name();
@@ -278,6 +350,13 @@ public class VpVerification {
                 verifiedAt,
                 KyvcEnums.Yn.N
         );
+    }
+
+    // 웹 VP 로그인 완료 처리
+    public void markLoginCompleted(
+            LocalDateTime loginCompletedAt // 로그인 완료 일시
+    ) {
+        this.loginCompletedAt = loginCompletedAt == null ? LocalDateTime.now() : loginCompletedAt;
     }
 
     // 검증 결과 반영

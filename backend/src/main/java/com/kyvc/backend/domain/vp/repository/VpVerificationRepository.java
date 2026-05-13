@@ -60,6 +60,16 @@ public interface VpVerificationRepository {
     );
 
     /**
+     * QR 토큰 해시 기준 Optional 조회
+     *
+     * @param qrTokenHash QR 토큰 해시
+     * @return VP 검증 조회 결과
+     */
+    Optional<VpVerification> findByQrTokenHash(
+            String qrTokenHash // QR 토큰 해시
+    );
+
+    /**
      * 재사용 의심 후보 여부 조회
      *
      * @param requestNonce 요청 nonce

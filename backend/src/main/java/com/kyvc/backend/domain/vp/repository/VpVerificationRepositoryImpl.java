@@ -57,7 +57,14 @@ public class VpVerificationRepositoryImpl implements VpVerificationRepository {
         return vpVerificationJpaRepository.findByCoreRequestId(coreRequestId);
     }
 
-    // 재사용 의심 후보 여부 조회
+    // QR 토큰 해시 기준 Optional 조회
+    @Override
+    public Optional<VpVerification> findByQrTokenHash(
+            String qrTokenHash // QR 토큰 해시
+    ) {
+        return vpVerificationJpaRepository.findByQrTokenHash(qrTokenHash);
+    }
+
     @Override
     public boolean existsReplayCandidate(
             String requestNonce, // 요청 nonce

@@ -16,6 +16,8 @@ import com.kyvc.backend.domain.core.dto.CoreDidDocumentResponse;
 import com.kyvc.backend.domain.core.dto.CoreHealthResponse;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationVerifyRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationVerifyResponse;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialRequest;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
@@ -535,6 +537,46 @@ public class CoreHttpAdapter implements CoreAdapter {
                     parseDateTime(StringUtils.hasText(body.expiresAtCamelCase()) ? body.expiresAtCamelCase() : body.expiresAtSnakeCase()),
                     body.presentationDefinition()
             );
+        } catch (RestClientException exception) {
+            throw mapCoreException(endpoint, exception, fields);
+        }
+    }
+
+    @Override
+    public CorePresentationVerifyResponse verifyWebVpLoginPresentation(
+            Object vp // Wallet 생성 VP 객체
+    ) {
+        if (vp == null || (vp instanceof String vpText && !StringUtils.hasText(vpText))) {
+            throw new ApiException(ErrorCode.VP_LOGIN_PRESENTATION_REQUIRED);
+        }
+
+        CorePresentationVerifyRequest apiRequest = new CorePresentationVerifyRequest(
+                PRESENTATION_FORMAT_SD_JWT,
+                vp,
+                Map.<String, Map<String, Object>>of(),
+                null,
+                true,
+                null,
+                false,
+                DEFAULT_STATUS_MODE
+        );
+
+        String endpoint = VERIFY_PRESENTATION_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
+        fields.put("presentationFormat", PRESENTATION_FORMAT_SD_JWT);
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.call.started", "Core web VP login verify API call started", fields);
+        try {
+            ResponseEntity<CorePresentationVerifyResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .body(apiRequest)
+                    .retrieve()
+                    .toEntity(CorePresentationVerifyResponse.class);
+            CorePresentationVerifyResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            logEventLogger.info("core.response.mapped", "Core web VP login verify response mapped", fields);
+            return body;
         } catch (RestClientException exception) {
             throw mapCoreException(endpoint, exception, fields);
         }

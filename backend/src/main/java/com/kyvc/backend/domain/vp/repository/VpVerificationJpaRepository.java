@@ -43,6 +43,16 @@ public interface VpVerificationJpaRepository extends JpaRepository<VpVerificatio
     );
 
     /**
+     * QR 토큰 해시 기준 조회
+     *
+     * @param qrTokenHash QR 토큰 해시
+     * @return VP 검증 조회 결과
+     */
+    Optional<VpVerification> findByQrTokenHash(
+            String qrTokenHash // QR 토큰 해시
+    );
+
+    /**
      * nonce + VP JWT 해시 기준 재사용 의심 여부 조회
      *
      * @param requestNonce 요청 nonce

@@ -301,6 +301,16 @@ public enum ErrorCode {
     // HTTP 400 - VP 로그인 nonce 불일치
     VP_LOGIN_NONCE_MISMATCH(HttpStatus.BAD_REQUEST, "VP_LOGIN_NONCE_MISMATCH", "VP 로그인 nonce가 일치하지 않습니다."),
     // HTTP 409 - VP 로그인 Credential 오류
+    VP_LOGIN_QR_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "VP_LOGIN_QR_TOKEN_INVALID", "웹 VP 로그인 QR 토큰이 올바르지 않습니다."),
+    // HTTP 409 - 웹 VP 로그인 완료 중복
+    VP_LOGIN_ALREADY_COMPLETED(HttpStatus.CONFLICT, "VP_LOGIN_ALREADY_COMPLETED", "이미 완료된 웹 VP 로그인 요청입니다."),
+    // HTTP 409 - 웹 VP 로그인 검증 미완료
+    VP_LOGIN_NOT_VERIFIED(HttpStatus.CONFLICT, "VP_LOGIN_NOT_VERIFIED", "웹 VP 로그인 VP 검증이 완료되지 않았습니다."),
+    // HTTP 400 - 웹 VP 로그인 VP 객체 필수
+    VP_LOGIN_PRESENTATION_REQUIRED(HttpStatus.BAD_REQUEST, "VP_LOGIN_PRESENTATION_REQUIRED", "웹 VP 로그인 VP 객체가 필요합니다."),
+    // HTTP 403 - 웹 VP 로그인 세션 오류
+    VP_LOGIN_SESSION_INVALID(HttpStatus.FORBIDDEN, "VP_LOGIN_SESSION_INVALID", "웹 VP 로그인 세션이 올바르지 않습니다."),
+    // HTTP 400 - 웹 VP 로그인 QR 토큰 오류
     VP_LOGIN_CREDENTIAL_INVALID(HttpStatus.CONFLICT, "VP_LOGIN_CREDENTIAL_INVALID", "VP 로그인에 사용할 수 없는 Credential입니다."),
     // HTTP 409 - VP 로그인 Wallet 저장 필요
     VP_LOGIN_CREDENTIAL_NOT_WALLET_SAVED(HttpStatus.CONFLICT, "VP_LOGIN_CREDENTIAL_NOT_WALLET_SAVED", "Wallet에 저장된 Credential만 VP 로그인에 사용할 수 있습니다."),

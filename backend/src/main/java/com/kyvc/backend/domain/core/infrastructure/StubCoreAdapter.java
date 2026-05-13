@@ -11,6 +11,7 @@ import com.kyvc.backend.domain.core.dto.CoreDidDocumentResponse;
 import com.kyvc.backend.domain.core.dto.CoreHealthResponse;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationVerifyResponse;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialRequest;
 import com.kyvc.backend.domain.core.dto.CoreRevokeCredentialResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
@@ -184,6 +185,21 @@ public class StubCoreAdapter implements CoreAdapter {
     }
 
     // Credential 검증
+    @Override
+    public CorePresentationVerifyResponse verifyWebVpLoginPresentation(
+            Object vp // Wallet 생성 VP 객체
+    ) {
+        return new CorePresentationVerifyResponse(
+                true,
+                true,
+                true,
+                List.of(),
+                Map.of("message", "Web VP login presentation verified by mock core."),
+                "Web VP login presentation verified by mock core."
+        );
+    }
+
+    // 웹 VP 로그인 Presentation 검증
     @Override
     public CoreCredentialVerificationResponse verifyCredential(
             CoreCredentialVerificationRequest request // Credential 검증 요청
