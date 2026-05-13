@@ -2,7 +2,7 @@
 
 ![KYvC Core Admin Banner](./public/kyvcwordmarkdark.png)
 
-KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provider 설정을 확인/관리하기 위한 관리자 콘솔입니다.
+KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provider 설정을 확인하고 관리하기 위한 관리자 콘솔입니다.
 
 ## 1. 서비스 개요
 
@@ -15,14 +15,13 @@ KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provi
 
 ### 담당 화면
 
-- 관리자 로그인, MFA, 비밀번호 재설정
 - Core Admin 대시보드
 - Core API 상태 및 health check 확인
 - AI Provider 설정
 - OCR / LLM Provider 선택 및 변경 이력 확인
 - Schema, VC, VP, XRPL, Issuer, SDK, 버전/배포, 설정 승인, 감사로그 화면 뼈대
 
-현재 라우트 파일은 대부분 구성되어 있으나, 실제 접근이 허용된 화면은 `dashboard`, `ai/settings` 중심입니다. 나머지 메뉴는 개발중 상태로 안내 후 대시보드로 이동합니다.
+현재 실제 접근이 허용된 화면은 `dashboard`, `ai/settings` 중심입니다. 나머지 메뉴는 개발중 상태로 안내 후 대시보드로 이동합니다.
 
 ### 서비스 역할
 
@@ -39,23 +38,12 @@ KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provi
 
 ## 2. 기술 스택
 
-### 언어
-
 - TypeScript
 - TSX
-
-### 프레임워크
-
 - Next.js 16
 - React 19
 - App Router
-
-### 패키지 매니저
-
 - npm
-
-### 주요 라이브러리
-
 - Tailwind CSS
 - lucide-react
 - shadcn / Base UI 기반 UI 컴포넌트
@@ -69,20 +57,13 @@ KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provi
 
 | Route | 설명 | 현재 상태 |
 | --- | --- | --- |
-| `/` | 로그인 페이지로 redirect | 사용 |
-| `/login` | 관리자 로그인 | 사용 |
-| `/login/mfa` | MFA 인증 | 준비 |
-| `/login/reset` | 비밀번호 재설정 | 준비 |
+| `/` | `/dashboard`로 redirect | 사용 |
 | `/dashboard` | Core Admin 대시보드, health/status 조회 | 사용 |
 | `/ai/settings` | AI Provider 설정 | 사용 |
-| `/ai/settings/azure` | Azure OpenAI 연동 설정 | 준비 |
-| `/ai/settings/prompts` | 프롬프트 목록 | 준비 |
-| `/ai/settings/prompts/[id]/[version]` | 프롬프트 버전 상세 | 준비 |
 | `/ai/settings/threshold` | AI 임계치 설정 | 준비 |
 | `/ai/status` | AI 처리 현황 | 개발중 |
 | `/ai/status/[id]` | AI 처리 상세 | 개발중 |
 | `/schema` | Schema 관리 | 개발중 |
-| `/schema/new` | Schema 등록 | 개발중 |
 | `/schema/[id]` | Schema 상세 | 개발중 |
 | `/vc` | VC 발급 관리 | 개발중 |
 | `/vc/detail` | VC 상세 | 개발중 |
@@ -100,7 +81,6 @@ KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provi
 | `/sdk/testvectors` | SDK 테스트 벡터 | 개발중 |
 | `/version` | 버전/배포 관리 | 개발중 |
 | `/version/[module]` | 모듈별 버전 상세 | 개발중 |
-| `/version/deploy-history` | 배포 이력 | 개발중 |
 | `/approval` | 설정 승인 | 개발중 |
 | `/audit-log` | 감사로그 | 개발중 |
 | `/api-docs` | API 문서 화면 | 준비 |
@@ -110,7 +90,6 @@ KYvC Core Admin API 프론트엔드는 Core 운영자가 Core 상태와 AI Provi
 ```text
 frontend_core_admin_api
 ├─ app
-│  ├─ login
 │  ├─ (admin)
 │  │  ├─ dashboard
 │  │  ├─ ai
@@ -135,9 +114,7 @@ frontend_core_admin_api
 ├─ lib
 │  ├─ api
 │  │  ├─ api-base.ts
-│  │  ├─ auth.ts
 │  │  └─ core-admin.ts
-│  ├─ auth-session.ts
 │  └─ utils.ts
 ├─ public
 └─ package.json
@@ -157,7 +134,6 @@ frontend_core_admin_api
 
 - Core Admin API: `/admin`
 - Health check: `/health`
-- 관리자 인증 API: `/api/admin/auth`
 
 `lib/api/core-admin.ts`의 주요 호출은 다음과 같습니다.
 
@@ -170,13 +146,12 @@ PUT /admin/provider-selections/{category}
 GET /admin/provider-selections/history
 ```
 
-### 인증/세션 처리
+### 인증 처리
 
-- 로그인 성공 시 access token은 `auth_token` cookie와 `localStorage`에 저장합니다.
-- refresh token은 `localStorage`에 저장합니다.
-- API 호출 시 `Authorization: Bearer {accessToken}` 헤더를 사용합니다.
-- `(admin)/layout.tsx`에서 `auth_token` cookie 존재 여부를 확인하고, 토큰이 없으면 `/login`으로 이동합니다.
-- 개발 편의를 위해 로그인 화면에 `dummy_token`을 저장하는 로그인 건너뛰기 기능이 있습니다.
+- 이 프론트 앱은 별도 로그인 화면을 제공하지 않습니다.
+- `/` 접속 시 바로 `/dashboard`로 이동합니다.
+- `(admin)` 라우트 그룹은 쿠키 기반 로그인 가드 없이 렌더링됩니다.
+- API 요청은 Next.js rewrite를 통해 `core_admin`으로 전달하며, 브라우저 요청에는 `credentials: "include"`를 사용합니다.
 
 ## 5. 환경 변수 구조
 
@@ -186,13 +161,11 @@ GET /admin/provider-selections/history
 CORE_ADMIN_API_URL=https://dev-admin-core-kyvc.khuoo.synology.me
 NEXT_PUBLIC_CORE_ADMIN_API_BASE_URL=
 NEXT_PUBLIC_API_BASE_URL=
-NEXT_PUBLIC_ADMIN_ACCESS_TOKEN=
 ```
 
 - `CORE_ADMIN_API_URL`: Next.js rewrite에서 사용하는 Core Admin API 서버 주소입니다.
 - `NEXT_PUBLIC_CORE_ADMIN_API_BASE_URL`: 브라우저에서 직접 사용하는 Core Admin API base URL입니다.
 - `NEXT_PUBLIC_API_BASE_URL`: 공통 API base fallback입니다.
-- `NEXT_PUBLIC_ADMIN_ACCESS_TOKEN`: 개발용 access token fallback입니다.
 
 ### dev 환경
 
@@ -202,7 +175,7 @@ NEXT_PUBLIC_ADMIN_ACCESS_TOKEN=
 ### prod 환경
 
 - prod 환경에서는 운영 Core Admin API 도메인을 사용합니다.
-- 운영 토큰은 로그인/세션 발급 흐름을 통해 관리하고, public 환경 변수에 고정하지 않습니다.
+- 접근 제어가 필요하면 이 앱 앞단의 프록시, 게이트웨이, 배포 환경 인증 정책에서 처리합니다.
 
 ## 6. 실행 구조
 
@@ -248,13 +221,6 @@ npm run start
 - API base URL 처리는 `lib/api/api-base.ts`를 사용합니다.
 - 화면 컴포넌트에서 API URL을 직접 반복 조립하지 않고 API 모듈 함수를 사용합니다.
 - Core Admin 프론트는 `core_admin` API만 호출하며 `backend_admin` 또는 `backend`를 우회 호출하지 않습니다.
-
-### 인증 처리 규칙
-
-- access token 조회는 `lib/auth-session.ts`의 `getAccessTokenForApi()`를 사용합니다.
-- 로그인/로그아웃/토큰 갱신은 `lib/api/auth.ts`를 통해 처리합니다.
-- 인증이 필요한 화면은 `(admin)` 라우트 그룹 아래에 배치합니다.
-- 운영 배포에서는 로그인 건너뛰기 기능을 제거하거나 비활성화해야 합니다.
 
 ### 화면/컴포넌트 작성 규칙
 

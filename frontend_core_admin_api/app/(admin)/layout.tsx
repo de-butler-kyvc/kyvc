@@ -29,14 +29,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   useEffect(() => {
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("auth_token="))
-      ?.split("=")[1];
-    if (!token) router.push("/login");
-  }, [router]);
-
-  useEffect(() => {
     if (!allowed) {
       showDevelopmentToast();
       router.replace("/dashboard");
