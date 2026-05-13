@@ -274,6 +274,12 @@ public enum ErrorCode {
     VP_CHALLENGE_INVALID(HttpStatus.BAD_REQUEST, "VP_CHALLENGE_INVALID", "VP challenge가 올바르지 않습니다."),
     // HTTP 400 - VP JWT 필요
     VP_JWT_REQUIRED(HttpStatus.BAD_REQUEST, "VP_JWT_REQUIRED", "VP JWT가 필요합니다."),
+    // HTTP 400 - Holder DID Document 필요
+    VP_DID_DOCUMENT_REQUIRED(HttpStatus.BAD_REQUEST, "VP_DID_DOCUMENT_REQUIRED", "Holder DID Document가 필요합니다."),
+    // HTTP 400 - Holder DID Document 오류
+    VP_DID_DOCUMENT_INVALID(HttpStatus.BAD_REQUEST, "VP_DID_DOCUMENT_INVALID", "Holder DID Document가 올바르지 않습니다."),
+    // HTTP 413 - Holder DID Document 크기 초과
+    VP_DID_DOCUMENT_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "VP_DID_DOCUMENT_TOO_LARGE", "Holder DID Document 크기가 허용 범위를 초과했습니다."),
     // HTTP 404 - 이메일 인증 요청 없음
     EMAIL_VERIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "EMAIL_VERIFICATION_NOT_FOUND", "이메일 인증 요청을 찾을 수 없습니다."),
     // HTTP 400 - 이메일 인증 이메일 불일치

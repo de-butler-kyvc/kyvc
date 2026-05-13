@@ -419,7 +419,8 @@ public class CoreHttpAdapter implements CoreAdapter {
     public CoreVpVerificationResponse requestVpVerification(
             CoreVpVerificationRequest request, // VP 검증 요청
             String format, // Presentation format
-            Object presentation // Presentation 원문 또는 객체
+            Object presentation, // Presentation 원문 또는 객체
+            Map<String, Object> didDocuments // DID document 목록
     ) {
         if (request == null || !StringUtils.hasText(request.coreRequestId())) {
             throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VP 검증 요청 필수 데이터가 부족합니다.");
@@ -434,7 +435,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         VerifyPresentationApiRequest apiRequest = new VerifyPresentationApiRequest(
                 format.trim(),
                 buildCorePresentation(request, format.trim(), presentation),
-                null,
+                didDocuments,
                 buildPolicy(parseRequiredClaims(request.requiredClaimsJson())),
                 true,
                 null,

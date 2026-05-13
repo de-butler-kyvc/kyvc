@@ -142,7 +142,8 @@ public class StubCoreAdapter implements CoreAdapter {
     public CoreVpVerificationResponse requestVpVerification(
             CoreVpVerificationRequest request, // VP 검증 요청
             String format, // Presentation format
-            Object presentation // Presentation 원문 또는 객체
+            Object presentation, // Presentation 원문 또는 객체
+            java.util.Map<String, Object> didDocuments // DID document 목록
     ) {
         return new CoreVpVerificationResponse(
                 request.coreRequestId(),

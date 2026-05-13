@@ -91,7 +91,12 @@ class VpVerificationServiceTest {
     @Captor
     private ArgumentCaptor<Object> presentationCaptor;
 
+    @Captor
+    private ArgumentCaptor<Map<String, Object>> didDocumentsCaptor;
+
     private VpVerificationService service;
+
+    private static final String HOLDER_DID = "did:xrpl:1:rHolder";
 
     @BeforeEach
     void setUp() {
@@ -276,7 +281,7 @@ class VpVerificationServiceTest {
         when(credentialRepository.getById(100L)).thenReturn(credential);
         when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
         when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
-        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt)))
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), any()))
                 .thenAnswer(invocation -> {
                     CoreVpVerificationRequest request = invocation.getArgument(0);
                     return new CoreVpVerificationResponse(
@@ -295,20 +300,24 @@ class VpVerificationServiceTest {
 
         VpPresentationResponse response = service.submitPresentation(
                 userDetails(),
-                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+                vpJwtRequest(vpJwt)
         );
 
         verify(coreRequestService).createVpVerificationRequest(21L, null);
         verify(coreRequestService).updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), requestPayloadCaptor.capture());
         verify(coreRequestService).markSuccess(eq(coreRequest.getCoreRequestId()), responsePayloadCaptor.capture());
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), didDocumentsCaptor.capture());
 
         String requestPayload = requestPayloadCaptor.getValue();
         String responsePayload = responsePayloadCaptor.getValue();
         VpVerification savedVpVerification = vpVerificationCaptor.getValue();
+        Map<String, Object> didDocuments = didDocumentsCaptor.getValue();
 
         assertThat(requestPayload).doesNotContain(vpJwt);
         assertThat(responsePayload).doesNotContain(vpJwt);
+        assertThat(didDocuments).containsKey(HOLDER_DID);
+        assertThat(map(didDocuments.get(HOLDER_DID)).get("id")).isEqualTo(HOLDER_DID);
         assertThat(savedVpVerification.getVpJwtHash()).isEqualTo(TokenHashUtil.sha256(vpJwt));
         assertThat(savedVpVerification.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID);
         assertThat(savedVpVerification.getCoreRequestId()).isEqualTo(coreRequest.getCoreRequestId());
@@ -326,12 +335,13 @@ class VpVerificationServiceTest {
 
         service.submitPresentation(
                 userDetails(),
-                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+                vpJwtRequest(vpJwt)
         );
 
-        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture(), didDocumentsCaptor.capture());
         assertThat(formatCaptor.getValue()).isEqualTo("vp+jwt");
         assertThat(presentationCaptor.getValue()).isEqualTo(vpJwt);
+        assertThat(didDocumentsCaptor.getValue()).containsKey(HOLDER_DID);
     }
 
     @Test
@@ -349,13 +359,15 @@ class VpVerificationServiceTest {
                         null,
                         "vp+jwt",
                         presentation,
+                        didDocument(),
                         null
                 )
         );
 
-        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture(), didDocumentsCaptor.capture());
         assertThat(formatCaptor.getValue()).isEqualTo("vp+jwt");
         assertThat(presentationCaptor.getValue()).isEqualTo(presentation);
+        assertThat(didDocumentsCaptor.getValue()).containsKey(HOLDER_DID);
     }
 
     @Test
@@ -377,13 +389,15 @@ class VpVerificationServiceTest {
                         null,
                         "kyvc-sd-jwt-presentation-v1",
                         presentation,
+                        didDocument(),
                         null
                 )
         );
 
-        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture(), didDocumentsCaptor.capture());
         assertThat(formatCaptor.getValue()).isEqualTo("kyvc-sd-jwt-presentation-v1");
         assertThat(presentationCaptor.getValue()).isEqualTo(presentation);
+        assertThat(didDocumentsCaptor.getValue()).containsKey(HOLDER_DID);
     }
 
     @Test
@@ -401,13 +415,15 @@ class VpVerificationServiceTest {
                         sdJwtKb,
                         "kyvc-sd-jwt-presentation-v1",
                         null,
+                        didDocument(),
                         null
                 )
         );
 
-        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture());
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture(), didDocumentsCaptor.capture());
         assertThat(formatCaptor.getValue()).isEqualTo("kyvc-sd-jwt-presentation-v1");
         assertThat(presentationCaptor.getValue()).isEqualTo(sdJwtKb);
+        assertThat(didDocumentsCaptor.getValue()).containsKey(HOLDER_DID);
     }
 
     @Test
@@ -417,7 +433,7 @@ class VpVerificationServiceTest {
 
         VpPresentationResponse response = service.submitPresentation(
                 userDetails(),
-                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+                vpJwtRequest(vpJwt)
         );
 
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
@@ -434,7 +450,7 @@ class VpVerificationServiceTest {
 
         VpPresentationResponse response = service.submitPresentation(
                 userDetails(),
-                new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+                vpJwtRequest(vpJwt)
         );
 
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
@@ -508,6 +524,38 @@ class VpVerificationServiceTest {
     }
 
     @Test
+    void submitPresentation_throwsWhenDidDocumentMissing() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.submitPresentation(
+                        userDetails(),
+                        new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", "vp.jwt.value")
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_DID_DOCUMENT_REQUIRED);
+        verify(coreRequestService, never()).createVpVerificationRequest(any(), any());
+    }
+
+    @Test
     void submitPresentation_throwsWhenReplayCandidateExists() {
         String vpJwt = "vp.jwt.value";
         VpVerification vpVerification = createRequestedVpVerification(
@@ -534,7 +582,7 @@ class VpVerificationServiceTest {
                 ApiException.class,
                 () -> service.submitPresentation(
                         userDetails(),
-                        new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", vpJwt)
+                        vpJwtRequest(vpJwt)
                 )
         );
 
@@ -691,10 +739,34 @@ class VpVerificationServiceTest {
         } else {
             when(coreRequestService.markFailed(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
         }
-        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), anyString(), any()))
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), anyString(), any(), any()))
                 .thenReturn(coreResponse);
         when(vpVerificationRepository.save(any(VpVerification.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private VpPresentationRequest vpJwtRequest(
+            String vpJwt // VP JWT 원문
+    ) {
+        return new VpPresentationRequest(
+                "vp-req-001",
+                100L,
+                "nonce-001",
+                "challenge-001",
+                vpJwt,
+                null,
+                null,
+                didDocument(),
+                null
+        );
+    }
+
+    private Map<String, Object> didDocument() {
+        Map<String, Object> didDocument = new LinkedHashMap<>();
+        didDocument.put("id", HOLDER_DID);
+        didDocument.put("verificationMethod", List.of());
+        didDocument.put("authentication", List.of());
+        return didDocument;
     }
 
     private CoreVpVerificationResponse coreResponse(
@@ -763,7 +835,14 @@ class VpVerificationServiceTest {
         ReflectionTestUtils.setField(credential, "issuedAt", LocalDateTime.now().minusDays(1));
         ReflectionTestUtils.setField(credential, "expiresAt", expiresAt);
         ReflectionTestUtils.setField(credential, "walletSavedYn", walletSavedYn);
+        ReflectionTestUtils.setField(credential, "holderDid", HOLDER_DID);
+        ReflectionTestUtils.setField(credential, "holderXrplAddress", "rHolder");
         return credential;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> map(Object value) {
+        return (Map<String, Object>) value;
     }
 
     private CredentialOffer createCredentialOffer(

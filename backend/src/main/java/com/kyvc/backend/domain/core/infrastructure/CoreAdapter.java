@@ -104,13 +104,31 @@ public interface CoreAdapter {
      * @param request VP 검증 요청
      * @param format Presentation format
      * @param presentation Presentation 원문 또는 객체
+     * @param didDocuments DID document 목록
      * @return VP 검증 요청 응답
      */
     CoreVpVerificationResponse requestVpVerification(
             CoreVpVerificationRequest request, // VP 검증 요청
             String format, // Presentation format
-            Object presentation // Presentation 원문 또는 객체
+            Object presentation, // Presentation 원문 또는 객체
+            java.util.Map<String, Object> didDocuments // DID document 목록
     );
+
+    /**
+     * VP 검증 요청
+     *
+     * @param request VP 검증 요청
+     * @param format Presentation format
+     * @param presentation Presentation 원문 또는 객체
+     * @return VP 검증 요청 응답
+     */
+    default CoreVpVerificationResponse requestVpVerification(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String format, // Presentation format
+            Object presentation // Presentation 원문 또는 객체
+    ) {
+        return requestVpVerification(request, format, presentation, null);
+    }
 
     /**
      * VP 검증 상태 조회

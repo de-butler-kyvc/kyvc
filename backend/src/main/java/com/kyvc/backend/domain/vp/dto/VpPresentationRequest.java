@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @param vpJwt VP JWT 원문
  * @param format Presentation format
  * @param presentation Presentation 원문 또는 객체
+ * @param didDocument Holder DID Document
  * @param deviceId 모바일 기기 ID
  */
 @Schema(description = "VP 제출 요청")
@@ -30,6 +31,8 @@ public record VpPresentationRequest(
         String format, // Presentation format
         @Schema(description = "Presentation 원문 또는 객체")
         Object presentation, // Presentation 원문 또는 객체
+        @Schema(description = "Holder DID Document")
+        Object didDocument, // Holder DID Document
         @Schema(description = "모바일 기기 ID", example = "device-001")
         String deviceId // 모바일 기기 ID
 ) {
@@ -39,9 +42,22 @@ public record VpPresentationRequest(
             String nonce, // VP 요청 nonce
             String challenge, // VP 요청 challenge
             String vpJwt, // VP JWT 원문
+            String format, // Presentation format
+            Object presentation, // Presentation 원문 또는 객체
             String deviceId // 모바일 기기 ID
     ) {
-        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, deviceId);
+        this(requestId, credentialId, nonce, challenge, vpJwt, format, presentation, null, deviceId);
+    }
+
+    public VpPresentationRequest(
+            String requestId, // VP 요청 ID
+            Long credentialId, // 제출할 Credential ID
+            String nonce, // VP 요청 nonce
+            String challenge, // VP 요청 challenge
+            String vpJwt, // VP JWT 원문
+            String deviceId // 모바일 기기 ID
+    ) {
+        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null, deviceId);
     }
 
     public VpPresentationRequest(
@@ -51,6 +67,6 @@ public record VpPresentationRequest(
             String challenge, // VP 요청 challenge
             String vpJwt // VP JWT 원문
     ) {
-        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null);
+        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null, null);
     }
 }
