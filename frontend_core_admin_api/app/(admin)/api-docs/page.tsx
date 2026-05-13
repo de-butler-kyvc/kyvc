@@ -125,8 +125,8 @@ export default function ApiDocsPage() {
           <p className="text-sm font-mono text-emerald-400">https://core.kyvc.io</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400 mb-0.5">인증</p>
-          <p className="text-xs font-mono text-slate-300">Authorization: Bearer &lt;token&gt;</p>
+          <p className="text-xs text-slate-400 mb-0.5">접근 제어</p>
+          <p className="text-xs font-mono text-slate-300">Gateway / deployment policy</p>
         </div>
       </div>
 

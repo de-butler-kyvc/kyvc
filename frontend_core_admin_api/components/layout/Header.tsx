@@ -16,11 +16,6 @@ export default function Header({ onBlockedNavigate }: HeaderProps) {
   const pathname = usePathname();
   const title = pageTitles[pathname] ?? "코어 어드민";
 
-  const handleLogout = () => {
-    document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    router.push("/login");
-  };
-
   return (
     <header className="h-13 bg-slate-900 text-white flex items-center justify-between px-5 border-b border-slate-700 flex-shrink-0">
       <span className="text-sm text-slate-300 font-medium">{title}</span>
@@ -43,9 +38,6 @@ export default function Header({ onBlockedNavigate }: HeaderProps) {
         >
           코
         </div>
-        <button onClick={handleLogout} className="text-xs text-slate-500 hover:text-white transition-colors">
-          로그아웃
-        </button>
       </div>
     </header>
   );
