@@ -23,17 +23,14 @@ export function formatCredentialDate(value?: string) {
   return value ? value.slice(0, 10).replaceAll("-", ".") : "-";
 }
 
-export function nativeCredentialTitle(summary: NativeCredentialSummary) {
-  if (summary.credentialKind?.includes("legal-entity-kyc")) {
-    return "법인 KYC 증명서";
-  }
-  return summary.credentialType ?? "법인 증명서";
+export function nativeCredentialTitle(_summary: NativeCredentialSummary) {
+  return "법인 KYC 증명서";
 }
 
 export function nativeCredentialIssuer(summary: NativeCredentialSummary) {
   return (
+    summary.issuerDid ??
     summary.issuerAccount ??
-    summary.issuerDid?.split(":").slice(-1)[0] ??
     "Issuer"
   );
 }
@@ -55,6 +52,7 @@ export function nativeSummaryToCert(
     title: nativeCredentialTitle(summary),
     status: nativeCredentialStatus(summary),
     id: summary.credentialId || `native-credential-${index}`,
+    holderDid: summary.holderDid,
     date: formatCredentialDate(summary.issuedAt),
     expiresAt: summary.expiresAt
       ? formatCredentialDate(summary.expiresAt)

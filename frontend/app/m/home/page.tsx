@@ -39,10 +39,11 @@ const PALETTES = [
 ];
 
 const TEST_CREDENTIAL: CertItem = {
-  issuer: "우리은행",
+  issuer: "did:xrpl:1:rIssuerTestWallet",
   title: "법인 KYC 증명서",
   status: "유효",
   id: "KYVC-CERT-240315",
+  holderDid: "did:xrpl:1:rKYvC1234567890TestWallet",
   date: "2026.05.03",
   expiresAt: "2026.05.07",
   gradient: PALETTES[0]!,
