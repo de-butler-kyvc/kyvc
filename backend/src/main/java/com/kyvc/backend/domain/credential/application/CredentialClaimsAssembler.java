@@ -12,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.time.temporal.TemporalAccessor;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -33,30 +32,12 @@ public class CredentialClaimsAssembler {
             throw new ApiException(ErrorCode.KYC_NOT_FOUND);
         }
 
-        Map<String, Object> aiReview = aiReviewClaims(kycApplication);
-        if (aiReview.isEmpty()) {
+        Map<String, Object> detail = parseAiReviewDetailJson(kycApplication.getAiReviewDetailJson());
+        Map<String, Object> claims = asObjectMap(detail.get("claims"));
+        if (claims.isEmpty()) {
             return fallbackClaimsIfEnabled(kycApplication.getKycId());
         }
-
-        Map<String, Object> claims = new LinkedHashMap<>();
-        claims.put("aiReview", aiReview);
         return claims;
-    }
-
-    private Map<String, Object> aiReviewClaims(
-            KycApplication kycApplication // KYC 신청
-    ) {
-        Map<String, Object> detail = parseAiReviewDetailJson(kycApplication.getAiReviewDetailJson());
-        Map<String, Object> aiReview = new LinkedHashMap<>();
-        putIfPresent(aiReview, "coreRequestId", detail.get("coreRequestId"));
-        putIfPresent(aiReview, "aiReviewStatus", firstPresent(kycApplication.getAiReviewStatus(), detail.get("status")));
-        putIfPresent(aiReview, "aiReviewResult", kycApplication.getAiReviewResult());
-        putIfPresent(aiReview, "assessmentStatus", detail.get("assessmentStatus"));
-        putIfPresent(aiReview, "assessmentId", detail.get("assessmentId"));
-        putIfPresent(aiReview, "confidenceScore", firstPresent(kycApplication.getAiConfidenceScore(), detail.get("confidenceScore")));
-        putIfPresent(aiReview, "summary", firstPresent(kycApplication.getAiReviewSummary(), detail.get("message")));
-        putIfPresent(aiReview, "requestedAt", detail.get("requestedAt"));
-        return aiReview;
     }
 
     private Map<String, Object> parseAiReviewDetailJson(
@@ -73,43 +54,19 @@ public class CredentialClaimsAssembler {
         }
     }
 
-    private void putIfPresent(
-            Map<String, Object> target, // claims Map
-            String key, // claims key
-            Object value // claims 값
+    private Map<String, Object> asObjectMap(
+            Object value // Map 변환 대상
     ) {
-        Object normalized = normalizeValue(value);
-        if (normalized != null) {
-            target.put(key, normalized);
+        if (!(value instanceof Map<?, ?> mapValue)) {
+            return Map.of();
         }
-    }
-
-    private Object firstPresent(
-            Object first, // 1순위 값
-            Object second // 2순위 값
-    ) {
-        if (normalizeValue(first) != null) {
-            return first;
-        }
-        return second;
-    }
-
-    private Object normalizeValue(
-            Object value // claims 값
-    ) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof String stringValue) {
-            return StringUtils.hasText(stringValue) ? stringValue : null;
-        }
-        if (value instanceof Enum<?> enumValue) {
-            return enumValue.name();
-        }
-        if (value instanceof TemporalAccessor) {
-            return value.toString();
-        }
-        return value;
+        Map<String, Object> result = new LinkedHashMap<>();
+        mapValue.forEach((key, mapEntryValue) -> {
+            if (key != null) {
+                result.put(String.valueOf(key), mapEntryValue);
+            }
+        });
+        return result;
     }
 
     private Map<String, Object> fallbackClaimsIfEnabled(

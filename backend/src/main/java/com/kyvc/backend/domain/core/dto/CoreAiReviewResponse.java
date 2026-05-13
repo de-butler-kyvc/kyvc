@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * Core AI 심사 요청 응답
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
  * @param confidenceScore AI 신뢰도 점수
  * @param message 처리 메시지
  * @param requestedAt 요청 시각
+ * @param claims AI 심사 결과 기반 VC claims
  */
 @Schema(description = "Core AI 심사 요청 응답")
 public record CoreAiReviewResponse(
@@ -31,6 +33,11 @@ public record CoreAiReviewResponse(
         @Schema(description = "처리 메시지", example = "Core AI 심사가 완료되었습니다.")
         String message, // 처리 메시지
         @Schema(description = "요청 시각", example = "2026-05-06T10:00:00")
-        LocalDateTime requestedAt // 요청 시각
+        LocalDateTime requestedAt, // 요청 시각
+        @Schema(description = "AI 심사 결과 기반 VC claims")
+        Map<String, Object> claims // AI 심사 결과 기반 VC claims
 ) {
+    public CoreAiReviewResponse {
+        claims = claims == null ? Map.of() : Map.copyOf(claims);
+    }
 }

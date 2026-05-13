@@ -786,8 +786,208 @@ public class CoreHttpAdapter implements CoreAdapter {
                 assessment.assessmentId(),
                 assessment.overallConfidence(),
                 resolveAiReviewMessage(assessment),
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                buildAiReviewClaims(assessment)
         );
+    }
+
+    private Map<String, Object> buildAiReviewClaims(
+            LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment // Core AI 심사 결과
+    ) {
+        Map<String, Object> extractedFields = safeDetails(assessment.extractedFields());
+        Map<String, Object> corporateProfile = asObjectMap(extractedFields.get("corporateProfile"));
+        Map<String, Object> representativeSource = asObjectMap(corporateProfile.get("representative"));
+        Map<String, Object> delegateSource = asObjectMap(extractedFields.get("delegate"));
+        Map<String, Object> delegationSource = asObjectMap(extractedFields.get("delegation"));
+        Map<String, Object> purposePayload = asObjectMap(extractedFields.get("purposeVerification"));
+
+        Map<String, Object> claims = new LinkedHashMap<>();
+        Map<String, Object> kyc = new LinkedHashMap<>();
+        putClaimIfPresent(kyc, "jurisdiction", "KR");
+        putClaimIfPresent(kyc, "assuranceLevel", "STANDARD");
+        putIfNotEmpty(claims, "kyc", kyc);
+
+        Map<String, Object> legalEntity = new LinkedHashMap<>();
+        putClaimIfPresent(legalEntity, "type", assessment.legalEntityType());
+        putClaimIfPresent(legalEntity, "name", fieldValue(corporateProfile.get("legalName")));
+        putClaimIfPresent(legalEntity, "registrationNumber", firstClaimValue(
+                fieldValue(corporateProfile.get("corporateRegistrationNumber")),
+                fieldValue(corporateProfile.get("businessRegistrationNumber"))
+        ));
+        putClaimIfPresent(legalEntity, "nonProfit", corporateProfile.get("nonProfit"));
+        putClaimIfPresent(legalEntity, "purposeCheckRequired", !asObjectList(purposePayload.get("documents")).isEmpty());
+        putIfNotEmpty(claims, "legalEntity", legalEntity);
+
+        Map<String, Object> representative = new LinkedHashMap<>();
+        putClaimIfPresent(representative, "name", fieldValue(representativeSource.get("name")));
+        putClaimIfPresent(representative, "birthDate", fieldValue(representativeSource.get("birthDate")));
+        putClaimIfPresent(representative, "nationality", fieldValue(representativeSource.get("nationality")));
+        putClaimIfPresent(representative, "englishName", fieldValue(representativeSource.get("englishName")));
+        putIfNotEmpty(claims, "representative", representative);
+
+        List<Map<String, Object>> beneficialOwners = buildBeneficialOwnerClaims(assessment, extractedFields);
+        if (!beneficialOwners.isEmpty()) {
+            claims.put("beneficialOwners", beneficialOwners);
+        }
+
+        Map<String, Object> delegate = new LinkedHashMap<>();
+        putClaimIfPresent(delegate, "name", delegateSource.get("name"));
+        putClaimIfPresent(delegate, "address", delegateSource.get("address"));
+        putClaimIfPresent(delegate, "contact", delegateSource.get("contact"));
+        putClaimIfPresent(delegate, "identityDigest", delegateSource.get("identityDigest"));
+        putClaimIfPresent(delegate, "identityDigestAlgorithm", delegateSource.get("identityDigestAlgorithm"));
+        putClaimIfPresent(delegate, "identityDigestVersion", delegateSource.get("identityDigestVersion"));
+        putIfNotEmpty(claims, "delegate", delegate);
+
+        Map<String, Object> delegation = new LinkedHashMap<>();
+        putClaimIfPresent(delegation, "kycApplication", delegationSource.get("kycApplication"));
+        putClaimIfPresent(delegation, "documentSubmission", delegationSource.get("documentSubmission"));
+        putClaimIfPresent(delegation, "vcReceipt", delegationSource.get("vcReceipt"));
+        putClaimIfPresent(delegation, "validFrom", delegationSource.get("validFrom"));
+        putClaimIfPresent(delegation, "validUntil", delegationSource.get("validUntil"));
+        putClaimIfPresent(delegation, "targetCorporateName", delegationSource.get("targetCorporateName"));
+        asObjectMap(assessment.delegation()).forEach((key, value) -> {
+            if (!delegation.containsKey(key)) {
+                putClaimIfPresent(delegation, key, value);
+            }
+        });
+        putIfNotEmpty(claims, "delegation", delegation);
+
+        putIfNotEmpty(claims, "establishmentPurpose", buildEstablishmentPurposeClaims(purposePayload));
+
+        Map<String, Object> aiAssessmentRef = new LinkedHashMap<>();
+        putClaimIfPresent(aiAssessmentRef, "assessmentId", assessment.assessmentId());
+        putClaimIfPresent(aiAssessmentRef, "applicationId", assessment.kycApplicationId());
+        putClaimIfPresent(aiAssessmentRef, "status", assessment.status());
+        Map<String, Object> extra = new LinkedHashMap<>();
+        putIfNotEmpty(extra, "aiAssessmentRef", aiAssessmentRef);
+        putIfNotEmpty(claims, "extra", extra);
+        return claims;
+    }
+
+    private List<Map<String, Object>> buildBeneficialOwnerClaims(
+            LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment, // Core AI 심사 결과
+            Map<String, Object> extractedFields // 추출 필드
+    ) {
+        List<Object> owners = asObjectList(asObjectMap(assessment.beneficialOwnership()).get("owners"));
+        if (owners.isEmpty()) {
+            owners = asObjectList(extractedFields.get("beneficialOwners"));
+        }
+        return owners.stream()
+                .map(this::asObjectMap)
+                .map(owner -> {
+                    Map<String, Object> ownerClaim = new LinkedHashMap<>();
+                    putClaimIfPresent(ownerClaim, "name", owner.get("name"));
+                    putClaimIfPresent(ownerClaim, "birthDate", owner.get("birthDate"));
+                    putClaimIfPresent(ownerClaim, "nationality", owner.get("nationality"));
+                    putClaimIfPresent(ownerClaim, "englishName", owner.get("englishName"));
+                    putClaimIfPresent(ownerClaim, "ownershipPercentage", owner.get("ownershipPercent"));
+                    return ownerClaim;
+                })
+                .filter(owner -> !owner.isEmpty())
+                .toList();
+    }
+
+    private Map<String, Object> buildEstablishmentPurposeClaims(
+            Map<String, Object> purposePayload // 목적 확인 결과
+    ) {
+        Map<String, Object> establishmentPurpose = new LinkedHashMap<>();
+        putClaimIfPresent(establishmentPurpose, "checked", purposePayload.get("satisfied"));
+        for (Object document : asObjectList(purposePayload.get("documents"))) {
+            Object purposeText = fieldValue(asObjectMap(document).get("establishmentPurpose"));
+            if (hasClaimValue(purposeText)) {
+                putClaimIfPresent(establishmentPurpose, "purposeText", purposeText);
+                break;
+            }
+        }
+        return establishmentPurpose;
+    }
+
+    private void putIfNotEmpty(
+            Map<String, Object> target, // claims Map
+            String key, // claims key
+            Map<String, Object> value // claims 값
+    ) {
+        if (!value.isEmpty()) {
+            target.put(key, value);
+        }
+    }
+
+    private void putClaimIfPresent(
+            Map<String, Object> target, // claims Map
+            String key, // claims key
+            Object value // claims 값
+    ) {
+        Object normalized = normalizeClaimValue(value);
+        if (normalized != null) {
+            target.put(key, normalized);
+        }
+    }
+
+    private Object firstClaimValue(
+            Object first, // 1순위 값
+            Object second // 2순위 값
+    ) {
+        return hasClaimValue(first) ? first : second;
+    }
+
+    private Object fieldValue(
+            Object value // AI 추출 필드 값
+    ) {
+        Map<String, Object> mapValue = asObjectMap(value);
+        if (mapValue.isEmpty()) {
+            return value;
+        }
+        Object normalized = mapValue.get("normalized");
+        return hasClaimValue(normalized) ? normalized : mapValue.get("raw");
+    }
+
+    private boolean hasClaimValue(
+            Object value // claims 값
+    ) {
+        return normalizeClaimValue(value) != null;
+    }
+
+    private Object normalizeClaimValue(
+            Object value // claims 값
+    ) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String stringValue) {
+            return StringUtils.hasText(stringValue) ? stringValue : null;
+        }
+        if (value instanceof Map<?, ?> mapValue && mapValue.isEmpty()) {
+            return null;
+        }
+        if (value instanceof List<?> listValue && listValue.isEmpty()) {
+            return null;
+        }
+        return value;
+    }
+
+    private Map<String, Object> asObjectMap(
+            Object value // Map 변환 대상
+    ) {
+        if (!(value instanceof Map<?, ?> mapValue)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        mapValue.forEach((key, mapEntryValue) -> {
+            if (key != null) {
+                result.put(String.valueOf(key), mapEntryValue);
+            }
+        });
+        return result;
+    }
+
+    private List<Object> asObjectList(
+            Object value // List 변환 대상
+    ) {
+        if (value instanceof List<?> listValue) {
+            return List.copyOf(listValue);
+        }
+        return List.of();
     }
 
     private CoreAiReviewResponse mapAiReviewResponseSafely(
