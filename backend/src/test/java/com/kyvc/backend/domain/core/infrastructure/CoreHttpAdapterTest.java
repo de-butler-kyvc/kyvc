@@ -4,16 +4,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CorePayloadSanitizer;
 import com.kyvc.backend.domain.core.config.CoreProperties;
+import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
+import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiRequest;
 import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiResponse;
+import com.kyvc.backend.domain.core.infrastructure.dto.LlmPrimaryAssessmentApiResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.VerifyPresentationApiRequest;
 import com.kyvc.backend.global.logging.LogEventLogger;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -199,6 +203,85 @@ class CoreHttpAdapterTest {
         assertThat(rootNode.has("challenge")).isFalse();
     }
 
+    @Test
+    void mapAiReviewResponse_buildsClaimsFromExtractedFields() {
+        CoreHttpAdapter adapter = new CoreHttpAdapter(
+                mock(RestClient.class),
+                mock(RestClient.class),
+                mock(CoreProperties.class),
+                mock(LogEventLogger.class),
+                objectMapper,
+                mock(CorePayloadSanitizer.class)
+        );
+        Map<String, Object> corporateProfile = new LinkedHashMap<>();
+        corporateProfile.put("legalName", "테스트 법인");
+        corporateProfile.put("corporateRegistrationNumber", "110111-1234567");
+        corporateProfile.put("representative", Map.of(
+                "name", "대표자명",
+                "birthDate", "1990-01-01",
+                "nationality", "KR"
+        ));
+        Map<String, Object> extractedFields = new LinkedHashMap<>();
+        extractedFields.put("corporateProfile", corporateProfile);
+        extractedFields.put("delegate", Map.of(
+                "name", "대리인명",
+                "contact", "010-1111-2222"
+        ));
+        extractedFields.put("delegation", Map.of(
+                "kycApplication", true,
+                "documentSubmission", true,
+                "vcReceipt", true,
+                "validFrom", "2026-01-01",
+                "validUntil", "2026-12-31"
+        ));
+        LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment =
+                new LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse(
+                        "assessment-001",
+                        "10",
+                        "STOCK_COMPANY",
+                        "DELEGATE",
+                        "NORMAL",
+                        new BigDecimal("0.95"),
+                        "AI 심사 요약",
+                        List.of(),
+                        extractedFields,
+                        List.of(),
+                        Map.of("owners", List.of(Map.of(
+                                "name", "실소유자명",
+                                "ownershipPercent", 75
+                        ))),
+                        Map.of("status", "VALID"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of(),
+                        "2026-05-13T10:00:00"
+                );
+        LlmPrimaryAssessmentApiResponse body = new LlmPrimaryAssessmentApiResponse(
+                "llm-primary",
+                "provider",
+                assessment,
+                List.of()
+        );
+
+        CoreAiReviewResponse response = ReflectionTestUtils.invokeMethod(
+                adapter,
+                "mapAiReviewResponse",
+                aiReviewRequest(),
+                body
+        );
+
+        Map<String, Object> claims = response.claims();
+        assertThat(map(claims.get("legalEntity")).get("name")).isEqualTo("테스트 법인");
+        assertThat(map(claims.get("legalEntity")).get("registrationNumber")).isEqualTo("110111-1234567");
+        assertThat(map(claims.get("representative")).get("name")).isEqualTo("대표자명");
+        assertThat(map(claims.get("delegate")).get("name")).isEqualTo("대리인명");
+        assertThat(map(claims.get("delegation")).get("kycApplication")).isEqualTo(true);
+        assertThat(map(claims.get("delegation")).get("status")).isEqualTo("VALID");
+        assertThat(claims).doesNotContainKey("aiReview");
+    }
+
     private CoreVcIssuanceResponse mapIssueResponse(
             IssueKycCredentialApiResponse body, // Core 발급 응답
             String requestIssuerDid // 요청 Issuer DID
@@ -257,6 +340,24 @@ class CoreHttpAdapterTest {
         );
     }
 
+    private CoreAiReviewRequest aiReviewRequest() {
+        return new CoreAiReviewRequest(
+                "core-request-id",
+                10L,
+                20L,
+                "123-45-67890",
+                "110111-1234567",
+                "테스트 법인",
+                "대표자명",
+                null,
+                null,
+                "대리인명",
+                "CORPORATION",
+                List.of(),
+                null
+        );
+    }
+
     private IssueKycCredentialApiResponse issueResponse(
             Map<String, Object> credentialCreateTransaction, // CredentialCreate 트랜잭션
             Map<String, Object> ledgerEntry, // Ledger entry
@@ -283,5 +384,10 @@ class CoreHttpAdapterTest {
                 null,
                 "xrpl"
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> map(Object value) {
+        return (Map<String, Object>) value;
     }
 }

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 // Core 미구현 API Mock 응답 팩토리
 @Component
@@ -31,7 +32,8 @@ public class CoreMockResponseFactory {
                 "mock-" + request.coreRequestId(),
                 BigDecimal.ZERO,
                 "Core AI API가 없어 개발용 Mock AI 심사 요청을 처리했습니다.",
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                Map.of()
         );
     }
 

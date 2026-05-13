@@ -10,7 +10,6 @@ import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.logging.LogEventLogger;
-import com.kyvc.backend.global.util.KyvcEnums;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,35 +57,45 @@ class CredentialClaimsAssemblerTest {
     }
 
     @Test
-    void assemble_returnsOnlyAiReviewResultClaims() {
-        KycApplication kycApplication = createApprovedKycWithAiReview();
+    void assemble_returnsAiReviewExtractedClaims() {
+        KycApplication kycApplication = createApprovedKycWithAiReviewClaims();
 
         Map<String, Object> claims = assembler.assemble(kycApplication);
 
-        assertThat(claims).containsOnlyKeys("aiReview");
-        Map<String, Object> aiReview = map(claims.get("aiReview"));
-        assertThat(aiReview.get("coreRequestId")).isEqualTo("core-request-001");
-        assertThat(aiReview.get("aiReviewStatus")).isEqualTo("SUCCESS");
-        assertThat(aiReview.get("aiReviewResult")).isEqualTo("PASS");
-        assertThat(aiReview.get("assessmentStatus")).isEqualTo("NORMAL");
-        assertThat(aiReview.get("assessmentId")).isEqualTo("assessment-001");
-        assertThat(aiReview.get("confidenceScore")).isEqualTo(new BigDecimal("0.95"));
-        assertThat(aiReview.get("summary")).isEqualTo("AI 심사 요약");
-        assertThat(aiReview.get("requestedAt")).isEqualTo("2026-05-13T10:00:00");
-
-        assertThat(claims).doesNotContainKeys(
+        assertThat(claims).containsKeys(
                 "kyc",
                 "legalEntity",
                 "representative",
                 "delegate",
                 "delegation",
-                "extra",
-                "documentEvidence",
-                "documents",
                 "beneficialOwners",
-                "establishmentPurpose",
-                "additionalProp1"
+                "extra"
         );
+        assertThat(claims).doesNotContainKeys("aiReview", "documents", "additionalProp1");
+
+        Map<String, Object> legalEntity = map(claims.get("legalEntity"));
+        assertThat(legalEntity.get("name")).isEqualTo("테스트 법인");
+        assertThat(legalEntity.get("registrationNumber")).isEqualTo("110111-1234567");
+
+        Map<String, Object> representative = map(claims.get("representative"));
+        assertThat(representative.get("name")).isEqualTo("대표자명");
+        assertThat(representative.get("birthDate")).isEqualTo("1990-01-01");
+        assertThat(representative.get("nationality")).isEqualTo("KR");
+
+        Map<String, Object> delegate = map(claims.get("delegate"));
+        assertThat(delegate.get("name")).isEqualTo("대리인명");
+        assertThat(delegate.get("contact")).isEqualTo("010-1111-2222");
+
+        Map<String, Object> delegation = map(claims.get("delegation"));
+        assertThat(delegation.get("kycApplication")).isEqualTo(true);
+        assertThat(delegation.get("documentSubmission")).isEqualTo(true);
+        assertThat(delegation.get("vcReceipt")).isEqualTo(true);
+
+        Map<String, Object> extra = map(claims.get("extra"));
+        Map<String, Object> aiAssessmentRef = map(extra.get("aiAssessmentRef"));
+        assertThat(aiAssessmentRef.get("assessmentId")).isEqualTo("assessment-001");
+        assertThat(aiAssessmentRef.get("status")).isEqualTo("NORMAL");
+
         verifyNoInteractions(
                 corporateRepository,
                 corporateRepresentativeRepository,
@@ -107,7 +116,7 @@ class CredentialClaimsAssemblerTest {
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CREDENTIAL_CLAIMS_REQUIRED_DATA_MISSING);
     }
 
-    private KycApplication createApprovedKycWithAiReview() {
+    private KycApplication createApprovedKycWithAiReviewClaims() {
         KycApplication kycApplication = KycApplication.createDraft(20L, 1L, "CORPORATION");
         ReflectionTestUtils.setField(kycApplication, "kycId", 10L);
         kycApplication.completeAiReviewAsApproved(
@@ -121,7 +130,47 @@ class CredentialClaimsAssemblerTest {
                           "assessmentId": "assessment-001",
                           "confidenceScore": 0.91,
                           "message": "AI 상세 메시지",
-                          "requestedAt": "2026-05-13T10:00:00"
+                          "requestedAt": "2026-05-13T10:00:00",
+                          "claims": {
+                            "kyc": {
+                              "jurisdiction": "KR",
+                              "assuranceLevel": "STANDARD"
+                            },
+                            "legalEntity": {
+                              "type": "STOCK_COMPANY",
+                              "name": "테스트 법인",
+                              "registrationNumber": "110111-1234567"
+                            },
+                            "representative": {
+                              "name": "대표자명",
+                              "birthDate": "1990-01-01",
+                              "nationality": "KR"
+                            },
+                            "beneficialOwners": [
+                              {
+                                "name": "실소유자명",
+                                "ownershipPercentage": 75
+                              }
+                            ],
+                            "delegate": {
+                              "name": "대리인명",
+                              "contact": "010-1111-2222"
+                            },
+                            "delegation": {
+                              "kycApplication": true,
+                              "documentSubmission": true,
+                              "vcReceipt": true,
+                              "validFrom": "2026-01-01",
+                              "validUntil": "2026-12-31"
+                            },
+                            "extra": {
+                              "aiAssessmentRef": {
+                                "assessmentId": "assessment-001",
+                                "applicationId": "10",
+                                "status": "NORMAL"
+                              }
+                            }
+                          }
                         }
                         """,
                 LocalDateTime.of(2026, 5, 13, 10, 0)
