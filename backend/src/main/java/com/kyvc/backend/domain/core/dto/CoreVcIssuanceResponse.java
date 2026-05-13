@@ -15,6 +15,7 @@ import java.util.Map;
  * @param credentialExternalId Core 외부 Credential ID
  * @param credentialType Core Credential 유형
  * @param issuerDid Issuer DID
+ * @param issuerAccount Issuer XRPL Account
  * @param format Core VC format
  * @param credentialPayloadJson Core credential JSON 원문
  * @param credentialJwt Core credential JWT 원문
@@ -41,6 +42,8 @@ public record CoreVcIssuanceResponse(
         String credentialType, // Core Credential 유형
         @Schema(description = "Issuer DID", example = "did:xrpl:1:rIssuer")
         String issuerDid, // Issuer DID
+        @Schema(description = "Issuer XRPL Account")
+        String issuerAccount, // Issuer XRPL Account
         @Schema(description = "Core VC format", example = "vc+jwt")
         String format, // Core VC format
         @Schema(description = "Core credential JSON 원문")

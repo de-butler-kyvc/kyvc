@@ -96,6 +96,7 @@ class CredentialIssuanceServiceTest {
                 "credential-external-id",
                 CoreMockSeedData.DEV_CREDENTIAL_TYPE,
                 CoreMockSeedData.DEV_ISSUER_DID,
+                CoreMockSeedData.DEV_ISSUER_ACCOUNT,
                 "dc+sd-jwt",
                 null,
                 "header.payload.signature~disclosure-001~",

@@ -1211,6 +1211,7 @@ public class CoreHttpAdapter implements CoreAdapter {
     ) {
         Map<String, Object> status = safeDetails(body.status());
         Map<String, Object> tx = safeDetails(body.credentialCreateTransaction());
+        Map<String, Object> ledgerEntry = safeDetails(body.ledgerEntry());
         String statusCode = mapCredentialStatusFromStatusObject(status);
         String credentialStatusId = extractString(status, "id", "status_id", "credentialStatusId");
         String credentialExternalId = StringUtils.hasText(body.credentialId())
@@ -1224,6 +1225,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String actualCredentialType = parsedStatusId == null
                 ? body.credentialType()
                 : parsedStatusId.credentialType();
+        String issuerAccount = resolveIssuerAccount(body, status, tx, ledgerEntry, actualIssuerDid);
         String vcHash = StringUtils.hasText(body.vcCoreHash()) ? body.vcCoreHash() : extractString(status, "vc_hash", "vcHash");
         String xrplTxHash = extractString(tx, "hash", "tx_hash", "transaction_hash");
         LocalDateTime issuedAt = parseDateTime(extractString(status, "issued_at", "issuedAt", "created_at"));
@@ -1246,6 +1248,7 @@ public class CoreHttpAdapter implements CoreAdapter {
                 credentialExternalId,
                 actualCredentialType,
                 StringUtils.hasText(actualIssuerDid) ? actualIssuerDid : request.issuerDid(),
+                issuerAccount,
                 format,
                 credentialPayloadJson,
                 credentialJwt,
@@ -1256,6 +1259,71 @@ public class CoreHttpAdapter implements CoreAdapter {
                 expiresAt,
                 body.selectiveDisclosure()
         );
+    }
+
+    private String resolveIssuerAccount(
+            IssueKycCredentialApiResponse body, // Core 발급 응답
+            Map<String, Object> status, // 상태 객체
+            Map<String, Object> tx, // CredentialCreate 트랜잭션 객체
+            Map<String, Object> ledgerEntry, // Ledger entry 객체
+            String issuerDid // Issuer DID
+    ) {
+        Map<String, Object> txJson = extractMap(tx, "tx_json");
+        return firstXrplClassicAddress(
+                extractString(tx, "Account"),
+                extractString(tx, "account"),
+                extractString(txJson, "Account"),
+                extractString(txJson, "account"),
+                extractString(ledgerEntry, "Issuer"),
+                extractString(ledgerEntry, "issuer"),
+                extractString(ledgerEntry, "Account"),
+                extractString(status, "issuer"),
+                extractString(status, "issuerAccount"),
+                extractString(status, "issuer_account"),
+                body.issuerAccount(),
+                body.issuerAccountSnake(),
+                body.issuer(),
+                accountFromDid(issuerDid)
+        );
+    }
+
+    private String firstXrplClassicAddress(
+            String... values // XRPL classic 주소 후보
+    ) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String normalized = normalizeOptional(value);
+            if (isXrplClassicAddress(normalized)) {
+                return normalized;
+            }
+        }
+        return null;
+    }
+
+    private String accountFromDid(
+            String did // DID 문자열
+    ) {
+        String normalizedDid = normalizeOptional(did);
+        String prefix = "did:xrpl:1:";
+        if (normalizedDid == null || !normalizedDid.startsWith(prefix)) {
+            return null;
+        }
+        String account = normalizedDid.substring(prefix.length());
+        return isXrplClassicAddress(account) ? account : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractMap(
+            Map<String, Object> source, // 원본 Map
+            String key // 조회 키
+    ) {
+        if (source == null) {
+            return Map.of();
+        }
+        Object value = source.get(key);
+        return value instanceof Map<?, ?> mapValue ? (Map<String, Object>) mapValue : Map.of();
     }
 
     private ParsedCredentialStatusId parseCredentialStatusId(
