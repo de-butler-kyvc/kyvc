@@ -3843,8 +3843,12 @@ html {
 
 /* ── Bottom nav ──────────────────────────────────────────────── */
 .bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
   height: 75px;
-  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 1fr 64px 1fr;
   align-items: center;
