@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -67,6 +68,7 @@ public class WebVpLoginService {
     private static final String ACCEPTED_JURISDICTION = "KR";
     private static final String MINIMUM_ASSURANCE_LEVEL = "STANDARD";
     private static final ZoneId KST_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int MAX_DID_DOCUMENT_BYTES = 64 * 1024;
     private static final List<String> REQUIRED_DISCLOSURES = List.of(
             "legalEntity.name",
             "legalEntity.registrationNumber"
@@ -172,13 +174,14 @@ public class WebVpLoginService {
         Credential credential = getCredentialForVpLogin(vpVerification.getVpRequestId(), request == null ? null : request.credentialId());
         validateCredential(vpVerification, credential);
         requirePresentation(request.vp());
+        Map<String, Map<String, Object>> didDocuments = buildDidDocuments(credential, request.didDocument());
 
         String vpHash = TokenHashUtil.sha256(toJson(request.vp()));
         LocalDateTime now = LocalDateTime.now();
         vpVerification.markWebVpLoginPresented(credential.getCorporateId(), credential.getCredentialId(), vpHash, now);
         vpVerificationRepository.save(vpVerification);
 
-        CorePresentationVerifyResponse coreResponse = requestCoreVerify(vpVerification, request.vp());
+        CorePresentationVerifyResponse coreResponse = requestCoreVerify(vpVerification, request.vp(), didDocuments);
         boolean verified = coreResponse != null && coreResponse.isVerified();
         if (!verified) {
             vpVerification.markInvalid(resolveCoreVerifySummary(coreResponse, "웹 VP 로그인 Core 검증 실패"), LocalDateTime.now());
@@ -300,10 +303,11 @@ public class WebVpLoginService {
     // Core Presentation 검증 요청
     private CorePresentationVerifyResponse requestCoreVerify(
             VpVerification vpVerification, // VP 로그인 요청
-            Object vp // Wallet 생성 VP 객체
+            Object vp, // Wallet 생성 VP 객체
+            Map<String, Map<String, Object>> didDocuments // DID document 목록
     ) {
         try {
-            return coreAdapter.verifyWebVpLoginPresentation(vp);
+            return coreAdapter.verifyWebVpLoginPresentation(vp, didDocuments);
         } catch (ApiException exception) {
             vpVerification.markFailed(exception.getMessage(), LocalDateTime.now());
             vpVerificationRepository.save(vpVerification);
@@ -314,6 +318,92 @@ public class WebVpLoginService {
             vpVerificationRepository.save(vpVerification);
             throw apiException;
         }
+    }
+
+    // Holder DID Document 목록 생성
+    private Map<String, Map<String, Object>> buildDidDocuments(
+            Credential credential, // 제출 Credential
+            Object didDocument // Holder DID Document
+    ) {
+        if (didDocument == null) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_REQUIRED);
+        }
+        if (!(didDocument instanceof Map<?, ?>)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        validateDidDocumentPayloadSize(didDocument);
+
+        String holderDid = normalizeRequiredHolderDid(credential);
+        Map<String, Object> document = resolveDidDocumentMap(asObjectMap(didDocument), holderDid);
+        if (document.isEmpty()) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+
+        Object idValue = document.get("id");
+        if (!(idValue instanceof String didDocumentId) || !StringUtils.hasText(didDocumentId)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        if (!holderDid.equals(didDocumentId.trim())) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+
+        Map<String, Map<String, Object>> didDocuments = new LinkedHashMap<>();
+        didDocuments.put(holderDid, document);
+        return didDocuments;
+    }
+
+    // Holder DID Document Map 조회
+    private Map<String, Object> resolveDidDocumentMap(
+            Map<String, Object> payload, // DID Document payload
+            String holderDid // Holder DID
+    ) {
+        if (payload.containsKey("id")) {
+            return payload;
+        }
+        Object nestedDocument = payload.get(holderDid);
+        if (nestedDocument instanceof Map<?, ?>) {
+            return asObjectMap(nestedDocument);
+        }
+        return Map.of();
+    }
+
+    // Holder DID 조회
+    private String normalizeRequiredHolderDid(
+            Credential credential // 제출 Credential
+    ) {
+        if (credential == null || !StringUtils.hasText(credential.getHolderDid())) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        return credential.getHolderDid().trim();
+    }
+
+    // Holder DID Document 크기 검증
+    private void validateDidDocumentPayloadSize(
+            Object didDocument // Holder DID Document
+    ) {
+        try {
+            int byteLength = objectMapper.writeValueAsString(didDocument).getBytes(StandardCharsets.UTF_8).length;
+            if (byteLength > MAX_DID_DOCUMENT_BYTES) {
+                throw new ApiException(ErrorCode.VP_DID_DOCUMENT_TOO_LARGE);
+            }
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID, exception);
+        }
+    }
+
+    private Map<String, Object> asObjectMap(
+            Object value // Map 변환 대상
+    ) {
+        if (!(value instanceof Map<?, ?> mapValue)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        mapValue.forEach((key, mapEntryValue) -> {
+            if (key != null) {
+                result.put(String.valueOf(key), mapEntryValue);
+            }
+        });
+        return result;
     }
 
     // Core challenge 응답 검증

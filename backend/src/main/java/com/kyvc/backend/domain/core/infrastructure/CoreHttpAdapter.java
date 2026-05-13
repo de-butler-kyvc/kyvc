@@ -550,6 +550,14 @@ public class CoreHttpAdapter implements CoreAdapter {
     public CorePresentationVerifyResponse verifyWebVpLoginPresentation(
             Object vp // Wallet 생성 VP 객체
     ) {
+        return verifyWebVpLoginPresentation(vp, Map.of());
+    }
+
+    @Override
+    public CorePresentationVerifyResponse verifyWebVpLoginPresentation(
+            Object vp, // Wallet 생성 VP 객체
+            Map<String, Map<String, Object>> didDocuments // DID document 목록
+    ) {
         if (vp == null || (vp instanceof String vpText && !StringUtils.hasText(vpText))) {
             throw new ApiException(ErrorCode.VP_LOGIN_PRESENTATION_REQUIRED);
         }
@@ -557,7 +565,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         CorePresentationVerifyRequest apiRequest = new CorePresentationVerifyRequest(
                 PRESENTATION_FORMAT_SD_JWT,
                 vp,
-                Map.<String, Map<String, Object>>of(),
+                didDocuments == null ? Map.of() : didDocuments,
                 null,
                 true,
                 null,
@@ -568,6 +576,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         String endpoint = VERIFY_PRESENTATION_ENDPOINT;
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         fields.put("presentationFormat", PRESENTATION_FORMAT_SD_JWT);
+        fields.put("didDocumentsCount", didDocuments == null ? 0 : didDocuments.size());
         long startedAt = System.currentTimeMillis();
         logEventLogger.info("core.call.started", "Core web VP login verify API call started", fields);
         try {
