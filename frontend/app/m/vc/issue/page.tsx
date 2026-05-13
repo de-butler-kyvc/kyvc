@@ -12,6 +12,8 @@ import {
   mobileWallet,
   type WalletCredentialOfferResponse,
   type WalletCredentialPayload,
+  type WalletCredentialPrepareRequest,
+  type WalletCredentialPrepareResponse,
 } from "@/lib/api";
 import { bridge, isBridgeAvailable, type SaveVcPayload } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
@@ -22,6 +24,11 @@ const QR_TYPE = {
 const SCAN_RESULT_KEY = "kyvc.m.scanResult";
 const PAYLOAD_NOT_REPLAYABLE_MESSAGE =
   "증명서 발급 응답은 재전송할 수 없습니다. PC 화면에서 QR을 다시 생성해 주세요.";
+const preparedCredentialByOffer = new Map<number, WalletCredentialPrepareResponse>();
+const preparingCredentialByOffer = new Map<
+  number,
+  Promise<WalletCredentialPrepareResponse>
+>();
 
 type IssueStep =
   | "qr"
@@ -263,6 +270,41 @@ function isNativeCancel(result: unknown, ok?: boolean) {
   return ok === false || result === "cancel";
 }
 
+async function prepareCredentialOnce(
+  offerId: number,
+  payload: WalletCredentialPrepareRequest,
+) {
+  const cached = preparedCredentialByOffer.get(offerId);
+  if (cached) return cached;
+
+  const pending = preparingCredentialByOffer.get(offerId);
+  if (pending) return pending;
+
+  const marker = mSession.readVcIssuePrepare();
+  if (marker?.offerId === offerId) {
+    throw new Error(PAYLOAD_NOT_REPLAYABLE_MESSAGE);
+  }
+
+  mSession.writeVcIssuePrepare({ offerId, requestedAt: Date.now() });
+
+  const pendingPrepare = mobileWallet
+    .prepare(offerId, payload)
+    .then((prepared) => {
+      if (!prepared.prepared || !prepared.credentialPayload) {
+        throw new Error("증명서 발급 준비에 실패했습니다.");
+      }
+
+      preparedCredentialByOffer.set(offerId, prepared);
+      return prepared;
+    })
+    .finally(() => {
+      preparingCredentialByOffer.delete(offerId);
+    });
+
+  preparingCredentialByOffer.set(offerId, pendingPrepare);
+  return pendingPrepare;
+}
+
 export default function MobileVcIssuePage() {
   const router = useRouter();
   const [step, setStep] = useState<IssueStep>("qr");
@@ -367,16 +409,13 @@ export default function MobileVcIssuePage() {
         }
 
         setStep("prepare");
-        const prepared = await mobileWallet.prepare(offerId, {
+        const prepared = await prepareCredentialOnce(offerId, {
           qrToken: parsedQr.qrToken,
           deviceId,
           holderDid,
           holderXrplAddress,
           accepted: true,
         });
-        if (!prepared.prepared || !prepared.credentialPayload) {
-          throw new Error("증명서 발급 준비에 실패했습니다.");
-        }
 
         deliveredPayload = true;
         setPayloadDelivered(true);
@@ -458,6 +497,8 @@ export default function MobileVcIssuePage() {
           receivedAt: Date.now(),
         });
         mSession.writeScanResult(null);
+        mSession.writeVcIssuePrepare(null);
+        preparedCredentialByOffer.delete(offerId);
         router.replace("/m/vc/celebration");
       } catch (e) {
         if (deliveredPayload) {
