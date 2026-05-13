@@ -1195,6 +1195,9 @@ html {
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
     #fff;
+  height: var(--m-visual-height, 100dvh);
+  min-height: var(--m-visual-height, 100dvh);
+  overflow: hidden;
 }
 
 .home-view .m-topbar {
@@ -1213,9 +1216,15 @@ html {
 }
 
 .home-scroll {
+  flex: 1 1 auto;
   position: relative;
-  min-height: calc(100dvh - 135px);
+  min-height: 0;
+  height: auto;
   padding-bottom: 108px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .home-figma-stage {
