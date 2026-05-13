@@ -54,6 +54,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CredentialRequestServiceTest {
 
+    private static final String ACTUAL_ISSUER_ACCOUNT = "rpseLKeHEoLDWBnTJvRJgh1mSNz7vJVENc";
+
     @Mock
     private CredentialRepository credentialRepository;
     @Mock
@@ -188,6 +190,31 @@ class CredentialRequestServiceTest {
 
         assertThat(saved.getVcFormat()).isEqualTo("dc+sd-jwt");
         assertThat(saved.getCredentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID);
+    }
+
+    @Test
+    void requestReissue_savesActualIssuerDidFromCredentialStatusId() {
+        Credential saved = executeReissueAndCaptureCredential(new CoreVcIssuanceResponse(
+                "core-request-id",
+                KyvcEnums.CredentialStatus.VALID.name(),
+                "issued",
+                LocalDateTime.now(),
+                "reissued-credential-external-id",
+                CoreMockSeedData.DEV_CREDENTIAL_TYPE,
+                "did:xrpl:1:rIssuer",
+                null,
+                "dc+sd-jwt",
+                null,
+                "header.payload.signature~disclosure-011~",
+                "vc-hash",
+                "tx-hash",
+                "xrpl:credential:" + ACTUAL_ISSUER_ACCOUNT + ":" + CoreMockSeedData.DEV_HOLDER_ACCOUNT + ":KYC_CREDENTIAL",
+                LocalDateTime.now(),
+                LocalDateTime.now().plusYears(1),
+                null
+        ));
+
+        assertThat(saved.getIssuerDid()).isEqualTo("did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT);
     }
 
     @Test

@@ -295,7 +295,7 @@ public class CredentialIssuanceService {
             credential.applyIssuanceMetadata(
                     response.credentialExternalId(),
                     response.credentialType(),
-                    response.issuerDid(),
+                    resolveIssuerDid(response),
                     credentialStatus,
                     response.vcHash(),
                     response.xrplTxHash(),
@@ -452,7 +452,7 @@ public class CredentialIssuanceService {
         return new CredentialIssuanceResult(
                 credential,
                 format,
-                response.issuerAccount(),
+                resolveIssuerAccount(response),
                 response.credentialJwt(),
                 parseCredentialObject(response.credentialPayloadJson()),
                 response.selectiveDisclosure()
@@ -469,7 +469,7 @@ public class CredentialIssuanceService {
         metadata.put("format", response.format());
         metadata.put("credentialExternalId", response.credentialExternalId());
         metadata.put("credentialType", response.credentialType());
-        metadata.put("issuerDid", response.issuerDid());
+        metadata.put("issuerDid", resolveIssuerDid(response));
         metadata.put("vcHash", response.vcHash());
         metadata.put("xrplTxHash", response.xrplTxHash());
         metadata.put("credentialStatusId", response.credentialStatusId());
@@ -489,6 +489,53 @@ public class CredentialIssuanceService {
             CoreVcIssuanceRequest request // Core 발급 요청
     ) {
         return StringUtils.hasText(response.format()) ? response.format() : request.format();
+    }
+
+    private String resolveIssuerDid(
+            CoreVcIssuanceResponse response // Core 발급 응답
+    ) {
+        String issuerAccount = resolveIssuerAccount(response);
+        if (StringUtils.hasText(issuerAccount)) {
+            return "did:xrpl:1:" + issuerAccount;
+        }
+        return response.issuerDid();
+    }
+
+    private String resolveIssuerAccount(
+            CoreVcIssuanceResponse response // Core 발급 응답
+    ) {
+        String issuerAccount = normalizeXrplAccount(response.issuerAccount());
+        if (StringUtils.hasText(issuerAccount)) {
+            return issuerAccount;
+        }
+        issuerAccount = issuerAccountFromCredentialStatusId(response.credentialStatusId());
+        if (StringUtils.hasText(issuerAccount)) {
+            return issuerAccount;
+        }
+        return normalizeXrplAccount(accountFromDid(response.issuerDid()));
+    }
+
+    private String issuerAccountFromCredentialStatusId(
+            String credentialStatusId // Credential Status ID
+    ) {
+        if (!StringUtils.hasText(credentialStatusId)) {
+            return null;
+        }
+        String[] parts = credentialStatusId.trim().split(":");
+        if (parts.length < 5 || !CORE_STATUS_MODE_XRPL.equalsIgnoreCase(parts[0]) || !"credential".equalsIgnoreCase(parts[1])) {
+            return null;
+        }
+        return normalizeXrplAccount(parts[2]);
+    }
+
+    private String normalizeXrplAccount(
+            String account // XRPL Account
+    ) {
+        if (!StringUtils.hasText(account)) {
+            return null;
+        }
+        String normalized = account.trim();
+        return normalized.startsWith("r") && normalized.length() >= 25 && normalized.length() <= 35 ? normalized : null;
     }
 
     // legacy credential object 변환

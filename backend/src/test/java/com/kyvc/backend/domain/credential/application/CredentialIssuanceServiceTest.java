@@ -40,6 +40,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CredentialIssuanceServiceTest {
 
+    private static final String ACTUAL_ISSUER_ACCOUNT = "rpseLKeHEoLDWBnTJvRJgh1mSNz7vJVENc";
+
     @Mock
     private CredentialRepository credentialRepository;
     @Mock
@@ -95,14 +97,14 @@ class CredentialIssuanceServiceTest {
                 LocalDateTime.now(),
                 "credential-external-id",
                 CoreMockSeedData.DEV_CREDENTIAL_TYPE,
-                CoreMockSeedData.DEV_ISSUER_DID,
-                CoreMockSeedData.DEV_ISSUER_ACCOUNT,
+                "did:xrpl:1:rIssuer",
+                null,
                 "dc+sd-jwt",
                 null,
                 "header.payload.signature~disclosure-001~",
                 "vc-hash",
                 "tx-hash",
-                "status-id",
+                "xrpl:credential:" + ACTUAL_ISSUER_ACCOUNT + ":" + CoreMockSeedData.DEV_HOLDER_ACCOUNT + ":KYC_CREDENTIAL",
                 LocalDateTime.now(),
                 LocalDateTime.now().plusYears(1),
                 null
@@ -129,5 +131,6 @@ class CredentialIssuanceServiceTest {
         verify(coreAdapter).requestVcIssuance(coreVcIssuanceRequestCaptor.capture());
         assertThat(coreVcIssuanceRequestCaptor.getValue().format()).isEqualTo("dc+sd-jwt");
         assertThat(credential.getVcFormat()).isEqualTo("dc+sd-jwt");
+        assertThat(credential.getIssuerDid()).isEqualTo("did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT);
     }
 }
