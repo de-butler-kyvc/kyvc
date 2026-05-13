@@ -2,7 +2,6 @@ package com.kyvc.backend.domain.auth.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -17,7 +16,7 @@ import java.util.Map;
  * @param domain Core domain
  * @param presentationDefinition Presentation Definition
  * @param requiredDisclosures 필수 disclosure 경로 목록
- * @param expiresAt 만료 일시
+ * @param expiresAt KST offset 포함 만료 일시
  */
 @Schema(description = "웹 VP 로그인 QR 해석 응답")
 public record WebVpLoginResolveResponse(
@@ -37,8 +36,8 @@ public record WebVpLoginResolveResponse(
         Map<String, Object> presentationDefinition, // Presentation Definition
         @Schema(description = "필수 disclosure 경로 목록")
         List<String> requiredDisclosures, // 필수 disclosure 경로 목록
-        @Schema(description = "만료 일시", example = "2026-05-13T15:30:00")
-        LocalDateTime expiresAt // 만료 일시
+        @Schema(description = "KST offset 포함 만료 일시", example = "2026-05-13T20:55:53+09:00")
+        String expiresAt // KST offset 포함 만료 일시
 ) {
 
     public WebVpLoginResolveResponse {
