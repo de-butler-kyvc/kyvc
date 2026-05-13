@@ -191,10 +191,12 @@ export default function ManagersPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedList.map((row) => (
-                <tr key={row.id} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${selectedIds.has(row.id) ? "bg-blue-50" : ""}`}>
-                  <td className="px-4 py-3 w-10"><input type="checkbox" checked={selectedIds.has(row.id)} onChange={() => toggleRow(row.id)} className="accent-blue-600 cursor-pointer" /></td>
-                  <td className="px-4 py-3 text-blue-600 font-medium">{row.id}</td>
+              {paginatedList.map((row, index) => {
+                const rowId = String(row.id ?? `manager-${currentPage}-${index}`);
+                return (
+                <tr key={rowId} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${selectedIds.has(rowId) ? "bg-blue-50" : ""}`}>
+                  <td className="px-4 py-3 w-10"><input type="checkbox" checked={selectedIds.has(rowId)} onChange={() => toggleRow(rowId)} className="accent-blue-600 cursor-pointer" /></td>
+                  <td className="px-4 py-3 text-blue-600 font-medium">{rowId}</td>
                   <td className="px-4 py-3 text-slate-700">{row.name}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleBadge[row.role]}`}>{row.role}</span>
@@ -207,10 +209,10 @@ export default function ManagersPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${mfaBadge[row.mfa]}`}>{row.mfa}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={managerDetailPath(row.id)} className="text-blue-600 hover:underline text-xs">수정</Link>
+                    <Link href={managerDetailPath(rowId)} className="text-blue-600 hover:underline text-xs">수정</Link>
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         )}

@@ -7,12 +7,17 @@ const NOTIF_BASE = `${API_BASE}/api/admin/backend/notification-templates`;
 
 export interface NotificationTemplate {
   templateId: string;
+  templateCode?: string;
   templateName: string;
   eventType?: string;
   channel?: string;
+  channelCode?: string;
   subject?: string;
+  titleTemplate?: string;
   body?: string;
+  messageTemplate?: string;
   enabled?: boolean;
+  enabledYn?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -29,6 +34,8 @@ export interface UpdateNotificationTemplateBody {
   templateName?: string;
   subject?: string;
   body?: string;
+  titleTemplate?: string;
+  messageTemplate?: string;
   enabled?: boolean;
 }
 
@@ -51,6 +58,18 @@ function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): T[] {
   if (Array.isArray(o.items)) return o.items;
   if (Array.isArray(o.list)) return o.list;
   return [];
+}
+
+function normalizeTemplate(template: NotificationTemplate): NotificationTemplate {
+  return {
+    ...template,
+    templateId: String(template.templateId),
+    eventType: template.eventType ?? template.templateCode,
+    channel: template.channel ?? template.channelCode,
+    subject: template.subject ?? template.titleTemplate,
+    body: template.body ?? template.messageTemplate,
+    enabled: template.enabled ?? template.enabledYn === "Y",
+  };
 }
 
 function getAuthHeaders() {
@@ -89,7 +108,7 @@ export async function getNotificationTemplates(filters?: {
   const response = await fetch(url, { method: "GET", headers: getAuthHeaders(), credentials: "include" });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<NotificationTemplate[] | PageLike<NotificationTemplate>>;
-  return unwrapListData(json.data);
+  return unwrapListData(json.data).map(normalizeTemplate);
 }
 
 /** POST /api/admin/backend/notification-templates */
@@ -100,11 +119,18 @@ export async function createNotificationTemplate(
     method: "POST",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      templateCode: data.eventType ?? data.templateName,
+      templateName: data.templateName,
+      channelCode: data.channel ?? "EMAIL",
+      titleTemplate: data.subject,
+      messageTemplate: data.body,
+      enabledYn: "Y",
+    }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<NotificationTemplate>;
-  return json.data;
+  return normalizeTemplate(json.data);
 }
 
 /** GET /api/admin/backend/notification-templates/{templateId} */
@@ -116,7 +142,7 @@ export async function getNotificationTemplate(templateId: string): Promise<Notif
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<NotificationTemplate>;
-  return json.data;
+  return normalizeTemplate(json.data);
 }
 
 /** PATCH /api/admin/backend/notification-templates/{templateId} */
@@ -128,11 +154,16 @@ export async function updateNotificationTemplate(
     method: "PATCH",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      templateName: data.templateName,
+      titleTemplate: data.subject ?? data.titleTemplate,
+      messageTemplate: data.body ?? data.messageTemplate,
+      enabledYn: data.enabled == null ? undefined : data.enabled ? "Y" : "N",
+    }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<NotificationTemplate>;
-  return json.data;
+  return normalizeTemplate(json.data);
 }
 
 /** DELETE /api/admin/backend/notification-templates/{templateId} */

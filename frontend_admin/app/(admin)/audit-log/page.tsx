@@ -11,6 +11,7 @@ const resultBadge: Record<string, string> = {
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [actionFilter, setActionFilter] = useState("전체 액션 유형");
   const [currentPage, setCurrentPage] = useState(1);
@@ -19,6 +20,7 @@ export default function AuditLogPage() {
 
   const fetchLogs = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getAuditLogs({
         search: searchTerm,
@@ -26,7 +28,8 @@ export default function AuditLogPage() {
       });
       setLogs(data);
     } catch (error) {
-      console.error("Failed to fetch audit logs:", error);
+      setError(error instanceof Error ? error.message : "감사로그를 불러오지 못했습니다.");
+      setLogs([]);
     } finally {
       setLoading(false);
     }
@@ -119,6 +122,12 @@ export default function AuditLogPage() {
           </label>
           <button onClick={handleExportCsv} className="ml-auto border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">CSV 내보내기</button>
         </div>
+
+        {error && (
+          <div className="mx-4 mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
 
         {/* 테이블 */}
         {loading ? (

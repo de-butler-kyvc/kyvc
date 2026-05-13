@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import MfaModal from "@/components/MfaModal";
 import {
   getVerifierList, getVerifierKeys, createVerifierKey, revokeVerifierKey,
   type Verifier, type VerifierApiKey,
@@ -27,7 +28,12 @@ export default function SdkPage() {
   const [keysLoading, setKeysLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showMfa, setShowMfa] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [keyName, setKeyName] = useState("운영 SDK Key");
+  const [keyExpiresAt, setKeyExpiresAt] = useState("");
+  const [issuedSecret, setIssuedSecret] = useState<VerifierApiKey | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ type: "issue" } | { type: "revoke"; keyId: string } | null>(null);
 
   useEffect(() => {
     getVerifierList()
@@ -50,28 +56,47 @@ export default function SdkPage() {
 
   const handleIssue = async () => {
     if (!selectedId) return;
+    if (!keyName.trim()) {
+      setError("키 이름을 입력해주세요.");
+      return;
+    }
+    setPendingAction({ type: "issue" });
+    setShowMfa(true);
+  };
+
+  const handleMfaConfirm = async (mfaToken: string) => {
+    if (!selectedId || !pendingAction) return;
+    setShowMfa(false);
     setIssuing(true);
     try {
-      await createVerifierKey(selectedId);
+      if (pendingAction.type === "issue") {
+        const created = await createVerifierKey(selectedId, {
+          name: keyName.trim(),
+          expiresAt: keyExpiresAt ? `${keyExpiresAt}T23:59:59` : undefined,
+          mfaToken,
+        });
+        setIssuedSecret(created);
+        setShowIssueModal(false);
+      } else {
+        await revokeVerifierKey(selectedId, pendingAction.keyId, {
+          reason: "관리자 요청",
+          mfaToken,
+        });
+      }
       const updated = await getVerifierKeys(selectedId);
       setKeys(updated);
-      setShowIssueModal(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "키 발급에 실패했습니다.");
+      setError(err instanceof Error ? err.message : "키 처리에 실패했습니다.");
     } finally {
       setIssuing(false);
+      setPendingAction(null);
     }
   };
 
   const handleRevoke = async (keyId: string) => {
     if (!selectedId || !confirm("키를 폐기하시겠습니까?")) return;
-    try {
-      await revokeVerifierKey(selectedId, keyId);
-      const updated = await getVerifierKeys(selectedId);
-      setKeys(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "키 폐기에 실패했습니다.");
-    }
+    setPendingAction({ type: "revoke", keyId });
+    setShowMfa(true);
   };
 
   const selectedVerifier = verifiers.find((v) => v.verifierId === selectedId);
@@ -108,6 +133,16 @@ export default function SdkPage() {
             <button onClick={() => setShowIssueModal(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">+ 신규 키 발급</button>
           </div>
 
+          {issuedSecret && (
+            <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+              <p className="text-sm font-semibold text-green-700">신규 API Key가 발급되었습니다.</p>
+              <p className="mt-1 text-xs text-green-700">secret은 최초 1회만 표시됩니다.</p>
+              <div className="mt-3 rounded border border-green-200 bg-white px-3 py-2 text-xs font-mono text-slate-700 break-all">
+                {issuedSecret.secret ?? "-"}
+              </div>
+            </div>
+          )}
+
           {keysLoading ? (
             <div className="py-8 text-center text-slate-400 text-sm">로딩 중...</div>
           ) : (
@@ -129,7 +164,7 @@ export default function SdkPage() {
                   <tr key={row.keyId} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="px-4 py-3 text-slate-700 font-mono text-xs">{row.keyId}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs font-mono">{row.keyPrefix ?? "-"}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">-</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{fmtDate(row.createdAt ?? row.issuedAt)}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs">{fmtDate(row.expiresAt)}</td>
                     <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${keyStatusBadge[row.status ?? ""] ?? "bg-slate-100 text-slate-500"}`}>{row.status ?? "-"}</span></td>
                     <td className="px-4 py-3">
@@ -155,12 +190,28 @@ export default function SdkPage() {
           <div className="bg-white rounded-lg border border-slate-200 w-full max-w-sm p-6 space-y-4">
             <h2 className="text-base font-semibold text-slate-800">신규 키 발급</h2>
             <div><label className="text-xs text-slate-500 mb-1 block">Verifier</label><p className="text-sm font-medium text-slate-700">{selectedVerifier?.name ?? "-"}</p></div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">키 이름</label>
+              <input value={keyName} onChange={(e) => setKeyName(e.target.value)} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">만료일</label>
+              <input type="date" value={keyExpiresAt} onChange={(e) => setKeyExpiresAt(e.target.value)} className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowIssueModal(false)} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
               <button onClick={handleIssue} disabled={issuing} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60">{issuing ? "발급 중..." : "발급"}</button>
             </div>
           </div>
         </div>
+      )}
+
+      {showMfa && (
+        <MfaModal
+          purpose="IMPORTANT_ACTION"
+          onConfirm={handleMfaConfirm}
+          onClose={() => { setShowMfa(false); setPendingAction(null); }}
+        />
       )}
     </div>
   );

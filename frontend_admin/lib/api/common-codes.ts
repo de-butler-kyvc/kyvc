@@ -137,7 +137,7 @@ export async function getCommonCode(codeId: string | number): Promise<CommonCode
 /** POST /api/admin/backend/common-codes/{codeId}/enable */
 export async function enableCommonCode(codeId: string | number): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/enable`, {
-    method: "POST",
+    method: "PATCH",
     headers: getAuthHeaders(),
     credentials: "include",
   });
@@ -147,7 +147,7 @@ export async function enableCommonCode(codeId: string | number): Promise<void> {
 /** POST /api/admin/backend/common-codes/{codeId}/disable */
 export async function disableCommonCode(codeId: string | number): Promise<void> {
   const response = await fetch(`${CODE_BASE}/${codeId}/disable`, {
-    method: "POST",
+    method: "PATCH",
     headers: getAuthHeaders(),
     credentials: "include",
   });
@@ -166,7 +166,13 @@ export async function createCommonCode(data: {
     method: "POST",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      codeGroupId: data.codeGroupId,
+      code: data.codeValue,
+      codeName: data.codeName,
+      description: data.description,
+      sortOrder: data.sortOrder,
+    }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCode>;
@@ -182,7 +188,11 @@ export async function updateCommonCode(
     method: "PATCH",
     headers: getAuthHeaders(),
     credentials: "include",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      codeName: data.codeName,
+      description: data.description,
+      sortOrder: data.sortOrder,
+    }),
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
   const json = (await response.json()) as CommonResponse<CommonCode>;

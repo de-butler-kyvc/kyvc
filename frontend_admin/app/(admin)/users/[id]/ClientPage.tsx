@@ -2,6 +2,7 @@
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import {
+  deleteUser,
   getUserDetail,
   updateUser,
   updateUserStatus,
@@ -113,9 +114,18 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const handleDelete = () => {
-    alert(`계정 ${id}이(가) 삭제되었습니다.`);
-    setShowDeleteConfirm(false);
+  const handleDelete = async () => {
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await deleteUser(id);
+      setShowDeleteConfirm(false);
+      window.location.href = "/users";
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "계정 삭제에 실패했습니다.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (loadingData) {
@@ -417,7 +427,9 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             </p>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowDeleteConfirm(false)} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
-              <button onClick={handleDelete} className="bg-red-500 text-white px-4 py-1.5 rounded text-sm hover:bg-red-600">삭제 확인</button>
+              <button onClick={handleDelete} disabled={actionLoading} className="bg-red-500 text-white px-4 py-1.5 rounded text-sm hover:bg-red-600 disabled:opacity-60">
+                {actionLoading ? "삭제 중..." : "삭제 확인"}
+              </button>
             </div>
           </div>
         </div>

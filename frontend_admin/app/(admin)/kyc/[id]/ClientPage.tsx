@@ -651,10 +651,16 @@ export default function KycDetailPage({ id }: { id: string }) {
                   새 탭으로 열기
                 </a>
               )}
-              <button className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 flex items-center gap-1.5">
-                <Download size={14} />
-                다운로드
-              </button>
+              {previewUrl && (
+                <a
+                  href={previewUrl}
+                  download={previewDoc.fileName}
+                  className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 flex items-center gap-1.5"
+                >
+                  <Download size={14} />
+                  다운로드
+                </a>
+              )}
             </div>
           </div>
         </div>

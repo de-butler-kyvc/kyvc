@@ -2,7 +2,7 @@
 import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getKycSupplements } from "@/lib/api/kyc";
+import { completeKycSupplement, getKycSupplements } from "@/lib/api/kyc";
 import {
   kycDetailPath,
   kycManualReviewPath,
@@ -18,6 +18,7 @@ export default function SupplementHistoryPage({ params }: { params: Promise<{ id
 
   const [supplements, setSupplements] = useState<SupplementRequest[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
@@ -27,12 +28,27 @@ export default function SupplementHistoryPage({ params }: { params: Promise<{ id
       .finally(() => setLoadingData(false));
   }, [id]);
 
-  const handleSubmit = () => {
-    setLoading(true);
-    setTimeout(() => { router.push(kycDetailPath(id)); }, 600);
-  };
-
   const latestSupplement = supplements[0];
+
+  const handleSubmit = async () => {
+    if (!latestSupplement) {
+      setSubmitError("처리할 보완 제출 내역이 없습니다.");
+      return;
+    }
+    setLoading(true);
+    setSubmitError(null);
+    try {
+      await completeKycSupplement(id, latestSupplement.supplementId, {
+        decision,
+        reason,
+      });
+      router.push(kycDetailPath(id));
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "보완 제출 처리에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -87,6 +103,11 @@ export default function SupplementHistoryPage({ params }: { params: Promise<{ id
           {loadError && (
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
               {loadError}
+            </div>
+          )}
+          {submitError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
+              {submitError}
             </div>
           )}
 

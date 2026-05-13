@@ -1,7 +1,17 @@
 "use client";
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
-import { getVerifier, updateVerifier, approveVerifier, suspendVerifier, type VerifierDetail } from "@/lib/api/verifier";
+import MfaModal from "@/components/MfaModal";
+import {
+  createVerifierKey,
+  getVerifier,
+  getVerifierKeys,
+  updateVerifier,
+  approveVerifier,
+  suspendVerifier,
+  type VerifierApiKey,
+  type VerifierDetail,
+} from "@/lib/api/verifier";
 
 const statusBadge: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-600",
@@ -16,6 +26,15 @@ export default function VerifierDetailPage({ params }: { params: Promise<{ id: s
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [keys, setKeys] = useState<VerifierApiKey[]>([]);
+  const [keysLoading, setKeysLoading] = useState(true);
+  const [keyName, setKeyName] = useState("운영 SDK Key");
+  const [keyExpiresAt, setKeyExpiresAt] = useState("");
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [showKeyMfa, setShowKeyMfa] = useState(false);
+  const [showVerifierMfa, setShowVerifierMfa] = useState(false);
+  const [verifierMfaAction, setVerifierMfaAction] = useState<"approve" | "suspend" | null>(null);
+  const [issuedSecret, setIssuedSecret] = useState<VerifierApiKey | null>(null);
 
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
@@ -35,13 +54,19 @@ export default function VerifierDetailPage({ params }: { params: Promise<{ id: s
       })
       .catch((err) => setError(err instanceof Error ? err.message : "불러오기 실패"))
       .finally(() => setLoading(false));
+
+    setKeysLoading(true);
+    getVerifierKeys(id)
+      .then(setKeys)
+      .catch((err) => setError(err instanceof Error ? err.message : "API Key 목록을 불러오지 못했습니다."))
+      .finally(() => setKeysLoading(false));
   }, [id]);
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
-      await updateVerifier(id, { name, domain, contactEmail, description });
+      await updateVerifier(id, { name, domain, callbackUrl: domain, contactEmail, description });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -53,12 +78,60 @@ export default function VerifierDetailPage({ params }: { params: Promise<{ id: s
 
   const handleApprove = async () => {
     if (!confirm("승인하시겠습니까?")) return;
-    try { await approveVerifier(id); setData((d) => d ? { ...d, status: "ACTIVE" } : d); } catch (err) { setError(err instanceof Error ? err.message : "승인 실패"); }
+    setVerifierMfaAction("approve");
+    setShowVerifierMfa(true);
   };
 
   const handleSuspend = async () => {
     if (!confirm("중지하시겠습니까?")) return;
-    try { await suspendVerifier(id); setData((d) => d ? { ...d, status: "SUSPENDED" } : d); } catch (err) { setError(err instanceof Error ? err.message : "중지 실패"); }
+    setVerifierMfaAction("suspend");
+    setShowVerifierMfa(true);
+  };
+
+  const handleVerifierMfaConfirm = async (mfaToken: string) => {
+    if (!verifierMfaAction) return;
+    setShowVerifierMfa(false);
+    try {
+      if (verifierMfaAction === "approve") {
+        await approveVerifier(id, { comment: "관리자 승인", mfaToken });
+        setData((d) => d ? { ...d, status: "ACTIVE" } : d);
+      } else {
+        await suspendVerifier(id, { reasonCode: "ADMIN_REQUEST", comment: "관리자 중지", mfaToken });
+        setData((d) => d ? { ...d, status: "SUSPENDED" } : d);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verifier 상태 변경에 실패했습니다.");
+    } finally {
+      setVerifierMfaAction(null);
+    }
+  };
+
+  const handleCreateKey = () => {
+    if (!keyName.trim()) {
+      setError("API Key 이름을 입력해주세요.");
+      return;
+    }
+    setShowKeyMfa(true);
+  };
+
+  const handleKeyMfaConfirm = async (mfaToken: string) => {
+    setShowKeyMfa(false);
+    setCreatingKey(true);
+    setError(null);
+    try {
+      const created = await createVerifierKey(id, {
+        name: keyName.trim(),
+        expiresAt: keyExpiresAt ? `${keyExpiresAt}T23:59:59` : undefined,
+        mfaToken,
+      });
+      setIssuedSecret(created);
+      const nextKeys = await getVerifierKeys(id);
+      setKeys(nextKeys);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "API Key 발급에 실패했습니다.");
+    } finally {
+      setCreatingKey(false);
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-slate-400">로딩 중...</div>;
@@ -121,6 +194,86 @@ export default function VerifierDetailPage({ params }: { params: Promise<{ id: s
               </div>
             </div>
           </div>
+
+          <div className="mt-4 bg-white rounded-lg border border-slate-200">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-700">SDK API Key</p>
+              <button
+                onClick={handleCreateKey}
+                disabled={creatingKey}
+                className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60"
+              >
+                {creatingKey ? "발급 중..." : "신규 키 발급"}
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {issuedSecret && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-green-700">신규 API Key가 발급되었습니다.</p>
+                  <p className="mt-1 text-xs text-green-700">secret은 최초 1회만 표시됩니다.</p>
+                  <div className="mt-3 rounded border border-green-200 bg-white px-3 py-2 text-xs font-mono text-slate-700 break-all">
+                    {issuedSecret.secret ?? "-"}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-[1fr_180px] gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm text-slate-600 font-medium">키 이름</label>
+                  <input
+                    type="text"
+                    value={keyName}
+                    onChange={(e) => setKeyName(e.target.value)}
+                    className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm text-slate-600 font-medium">만료일</label>
+                  <input
+                    type="date"
+                    value={keyExpiresAt}
+                    onChange={(e) => setKeyExpiresAt(e.target.value)}
+                    className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              {keysLoading ? (
+                <p className="text-sm text-slate-400 py-6 text-center">API Key 목록을 불러오는 중...</p>
+              ) : keys.length === 0 ? (
+                <p className="text-sm text-slate-400 py-6 text-center">발급된 API Key가 없습니다.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="text-left px-4 py-3 text-slate-500 font-medium">Key ID</th>
+                      <th className="text-left px-4 py-3 text-slate-500 font-medium">이름</th>
+                      <th className="text-left px-4 py-3 text-slate-500 font-medium">Prefix</th>
+                      <th className="text-left px-4 py-3 text-slate-500 font-medium">상태</th>
+                      <th className="text-left px-4 py-3 text-slate-500 font-medium">만료</th>
+                      <th className="text-left px-4 py-3 text-slate-500 font-medium">최근 사용</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {keys.map((key) => (
+                      <tr key={key.keyId} className="border-b border-slate-50 hover:bg-slate-50">
+                        <td className="px-4 py-3 text-xs font-mono text-slate-500">{key.keyId}</td>
+                        <td className="px-4 py-3 text-slate-700">{key.keyName ?? "-"}</td>
+                        <td className="px-4 py-3 text-xs font-mono text-blue-600">{key.keyPrefix ?? "-"}</td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            {key.status ?? key.keyStatusCode ?? "-"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{key.expiresAt?.slice(0, 10) ?? "-"}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{key.lastUsedAt?.slice(0, 16).replace("T", " ") ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -128,6 +281,21 @@ export default function VerifierDetailPage({ params }: { params: Promise<{ id: s
         <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
+
+      {showKeyMfa && (
+        <MfaModal
+          purpose="IMPORTANT_ACTION"
+          onConfirm={handleKeyMfaConfirm}
+          onClose={() => setShowKeyMfa(false)}
+        />
+      )}
+      {showVerifierMfa && (
+        <MfaModal
+          purpose="IMPORTANT_ACTION"
+          onConfirm={handleVerifierMfaConfirm}
+          onClose={() => { setShowVerifierMfa(false); setVerifierMfaAction(null); }}
+        />
+      )}
     </div>
   );
 }

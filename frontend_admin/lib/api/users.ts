@@ -72,6 +72,15 @@ export interface BackendUserDetail {
   }>;
 }
 
+export interface CorporateUserCreateRequest {
+  loginId?: string;
+  userId?: string;
+  name: string;
+  email: string;
+  corporateName?: string;
+  organization?: string;
+}
+
 const STATUS_KO_TO_API: Record<string, string> = {
   정상: "ACTIVE",
   잠금: "LOCKED",
@@ -168,6 +177,21 @@ export async function getUserDetail(userId: string): Promise<BackendUserDetail> 
   return json.data;
 }
 
+/** POST /api/admin/backend/users — 법인 사용자 계정 등록 */
+export async function createUser(data: CorporateUserCreateRequest): Promise<BackendUserDetail> {
+  const response = await fetch(USERS_URL, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+
+  const json = (await response.json()) as CommonResponse<BackendUserDetail>;
+  return json.data;
+}
+
 /** PATCH /api/admin/backend/users/{userId} — 법인 사용자 정보 수정 */
 export async function updateUser(
   userId: string,
@@ -178,6 +202,17 @@ export async function updateUser(
     headers: getAuthHeaders(),
     credentials: "include",
     body: JSON.stringify(data),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
+/** DELETE /api/admin/backend/users/{userId} — 법인 사용자 삭제 */
+export async function deleteUser(userId: string): Promise<void> {
+  const response = await fetch(`${USERS_URL}/${userId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+    credentials: "include",
   });
 
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));

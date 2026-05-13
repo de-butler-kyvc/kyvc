@@ -1,6 +1,11 @@
 "use client";
 import { useMemo, useState, useEffect } from "react";
-import { getAllAdminRoles, type AdminRole } from "@/lib/api/managers";
+import {
+  createAdminRole,
+  getAllAdminRoles,
+  updateAdminRole,
+  type AdminRole,
+} from "@/lib/api/managers";
 
 interface GroupItem {
   id: string;
@@ -27,6 +32,8 @@ export default function ManagerGroupsPage() {
   const [editing, setEditing] = useState(false);
   const [perms, setPerms] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
@@ -59,19 +66,52 @@ export default function ManagerGroupsPage() {
     setPerms(found?.permissions ?? []);
   };
 
-  const handleAddGroup = () => {
+  const handleAddGroup = async () => {
     if (!newGroupName.trim()) {
       alert("그룹명을 입력해주세요.");
       return;
     }
-    const newId = `new-${Date.now()}`;
-    const newGroup: GroupItem = { id: newId, name: newGroupName.trim(), members: 0, permissions: [] };
-    setGroupList((prev) => [...prev, newGroup]);
-    setSelected(newId);
-    setPerms([]);
-    setEditing(true);
-    setNewGroupName("");
-    setShowAddModal(false);
+    setSaving(true);
+    setActionError(null);
+    try {
+      const created = await createAdminRole({
+        roleName: newGroupName.trim(),
+        permissions: [],
+      });
+      const newGroup = roleToGroupItem(created);
+      setGroupList((prev) => [...prev, newGroup]);
+      setSelected(newGroup.id);
+      setPerms(newGroup.permissions);
+      setEditing(true);
+      setNewGroupName("");
+      setShowAddModal(false);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "권한 그룹 생성에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSavePermissions = async () => {
+    if (!group) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      const updated = await updateAdminRole(group.id, {
+        roleName: group.name,
+        permissions: perms,
+      });
+      const next = roleToGroupItem(updated);
+      setGroupList((prev) => prev.map((item) => (item.id === group.id ? next : item)));
+      setPerms(next.permissions);
+      setSaved(true);
+      setEditing(false);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "권한 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -86,6 +126,11 @@ export default function ManagerGroupsPage() {
       {loadError && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
           {loadError}
+        </div>
+      )}
+      {actionError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
+          {actionError}
         </div>
       )}
 
@@ -167,14 +212,11 @@ export default function ManagerGroupsPage() {
                   <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
                     <button onClick={() => setEditing(false)} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
                     <button
-                      onClick={() => {
-                        setSaved(true);
-                        setEditing(false);
-                        setTimeout(() => setSaved(false), 2000);
-                      }}
-                      className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700"
+                      onClick={handleSavePermissions}
+                      disabled={saving}
+                      className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60"
                     >
-                      {saved ? "저장됨 ✓" : "저장"}
+                      {saving ? "저장 중..." : saved ? "저장됨 ✓" : "저장"}
                     </button>
                   </div>
                 )}
@@ -206,7 +248,9 @@ export default function ManagerGroupsPage() {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => { setShowAddModal(false); setNewGroupName(""); }} className="border border-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm hover:bg-slate-50">취소</button>
-              <button onClick={handleAddGroup} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">추가</button>
+              <button onClick={handleAddGroup} disabled={saving} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-60">
+                {saving ? "추가 중..." : "추가"}
+              </button>
             </div>
           </div>
         </div>

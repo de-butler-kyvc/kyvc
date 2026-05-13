@@ -421,6 +421,25 @@ export async function getKycSupplements(kycId: string): Promise<SupplementReques
   return unwrapListData(json.data);
 }
 
+/** POST /api/admin/backend/kyc/applications/{kycId}/supplements/{supplementId}/complete — 보완 제출 처리 완료 */
+export async function completeKycSupplement(
+  kycId: string,
+  supplementId: string | number,
+  data: { decision: string; reason: string }
+): Promise<void> {
+  const response = await fetch(`${KYC_BASE}/${kycId}/supplements/${supplementId}/complete`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    credentials: "include",
+    body: JSON.stringify({
+      decision: data.decision,
+      reason: data.reason,
+    }),
+  });
+
+  if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+}
+
 export async function approveKycManualReview(
   kycId: string,
   data: { mfaToken: string; comment?: string }
