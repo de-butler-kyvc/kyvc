@@ -104,6 +104,34 @@ function requiredString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function preferredNativeAuthMethod(methods?: ("pin" | "pattern" | "biometric")[]) {
+  if (methods?.includes("biometric")) return "biometric";
+  if (methods?.includes("pin")) return "pin";
+  if (methods?.includes("pattern")) return "pattern";
+  return null;
+}
+
+async function ensureWalletSession() {
+  const status = await bridge.getAuthStatus();
+  if (!status.ok) {
+    throw new Error(status.error ?? "지갑 인증 상태를 확인할 수 없습니다.");
+  }
+  if (status.emailVerificationRequired) {
+    throw new Error("이메일 인증이 필요합니다. 인증을 완료한 뒤 다시 시도해주세요.");
+  }
+  if (status.sessionUnlocked) return;
+
+  const method = preferredNativeAuthMethod(status.availableMethods);
+  if (!method) {
+    throw new Error("사용 가능한 네이티브 인증 수단이 없습니다.");
+  }
+
+  const auth = await bridge.requestNativeAuth(method, "wallet-login");
+  if (!auth.ok || !auth.authenticated) {
+    throw new Error(auth.error ?? "네이티브 인증에 실패했습니다.");
+  }
+}
+
 function credentialStringFromPayload(payload: WalletCredentialPayload) {
   const record = payload as Record<string, unknown>;
   const format = requiredString(record.format);
@@ -279,13 +307,32 @@ export default function MobileVcIssuePage() {
         }
 
         setStep("wallet");
+        await ensureWalletSession();
         const wallet = await bridge.getWalletInfo();
-        const holderDid = requiredString(wallet.holderDid ?? wallet.did);
-        const holderXrplAddress = requiredString(
+        if (!wallet.ok) {
+          throw new Error(wallet.error ?? "지갑 정보를 확인할 수 없습니다. 다시 인증한 뒤 시도해주세요.");
+        }
+
+        let holderDid = requiredString(wallet.holderDid ?? wallet.did);
+        let holderXrplAddress = requiredString(
           wallet.holderAccount ?? wallet.account,
         );
-        if (!wallet.ok || !holderDid || !holderXrplAddress) {
-          throw new Error("활성화된 지갑을 찾을 수 없습니다. 지갑을 먼저 생성해주세요.");
+
+        if (!holderDid || !holderXrplAddress) {
+          const did = await bridge.checkHolderDidSet().catch(() => null);
+          if (did?.ok) {
+            holderDid = holderDid ?? requiredString(did.holderDid ?? did.did);
+            holderXrplAddress =
+              holderXrplAddress ??
+              requiredString(did.holderAccount ?? did.account);
+          }
+        }
+
+        if (!holderXrplAddress) {
+          throw new Error("지갑을 찾을 수 없습니다. 지갑을 먼저 생성해주세요.");
+        }
+        if (!holderDid) {
+          throw new Error("DID 등록이 필요합니다. 홈에서 DID 등록을 완료한 뒤 다시 시도해주세요.");
         }
 
         const device = await bridge.getDeviceInfo();
