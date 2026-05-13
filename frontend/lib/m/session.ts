@@ -15,7 +15,6 @@ const KEYS = {
   xrpTransferResult: "kyvc.m.xrpTransferResult",
   corporateProfile: "kyvc.m.corporateProfile",
   vcIssueResult: "kyvc.m.vcIssueResult",
-  vcIssuePrepare: "kyvc.m.vcIssuePrepare",
   walletAssets: "kyvc.m.walletAssets",
 } as const;
 
@@ -76,11 +75,6 @@ export type VcIssueResult = {
   receivedAt: number;
 };
 
-export type VcIssuePrepareMarker = {
-  offerId: number;
-  requestedAt: number;
-};
-
 export type CachedWalletAssets = {
   assets: WalletAssetsResult;
   cachedAt: number;
@@ -128,9 +122,6 @@ export const mSession = {
   readVcIssueResult: () => read<VcIssueResult>(KEYS.vcIssueResult),
   writeVcIssueResult: (v: VcIssueResult | null) =>
     write(KEYS.vcIssueResult, v),
-  readVcIssuePrepare: () => read<VcIssuePrepareMarker>(KEYS.vcIssuePrepare),
-  writeVcIssuePrepare: (v: VcIssuePrepareMarker | null) =>
-    write(KEYS.vcIssuePrepare, v),
   readWalletAssets: () => read<CachedWalletAssets>(KEYS.walletAssets),
   writeWalletAssets: (v: CachedWalletAssets | null) =>
     write(KEYS.walletAssets, v),
@@ -142,7 +133,6 @@ export const mSession = {
     write(KEYS.xrpTransferResult, null);
     write(KEYS.corporateProfile, null);
     write(KEYS.vcIssueResult, null);
-    write(KEYS.vcIssuePrepare, null);
     write(KEYS.walletAssets, null);
   },
 };
