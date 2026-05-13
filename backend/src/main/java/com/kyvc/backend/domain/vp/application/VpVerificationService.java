@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +56,7 @@ public class VpVerificationService {
     private static final String PRESENTATION_FORMAT_VP_JWT = "vp+jwt";
     private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
     private static final String PRESENTATION_FORMAT_JSONLD_VP = "kyvc-jsonld-vp-v1";
+    private static final int MAX_DID_DOCUMENT_BYTES = 64 * 1024;
 
     private final VpVerificationRepository vpVerificationRepository;
     private final CredentialRepository credentialRepository;
@@ -132,6 +134,7 @@ public class VpVerificationService {
         validateCredentialOwnership(authContext.corporateId(), credential);
         validateCredentialEligible(credential);
         validateNonceAndChallenge(vpVerification, request);
+        Map<String, Object> didDocuments = buildDidDocuments(credential, request.didDocument());
 
         String vpJwtHash = TokenHashUtil.sha256(resolvedPresentation.hashSource());
         if (vpVerificationRepository.existsReplayCandidate(vpVerification.getRequestNonce(), vpJwtHash)) {
@@ -156,7 +159,8 @@ public class VpVerificationService {
             CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerification(
                     coreRequestDto,
                     resolvedPresentation.format(),
-                    resolvedPresentation.presentation()
+                    resolvedPresentation.presentation(),
+                    didDocuments
             );
             logEventLogger.info(
                     "core.call.completed",
@@ -632,6 +636,76 @@ public class VpVerificationService {
         if (!vpVerification.matchesChallenge(request.challenge())) {
             throw new ApiException(ErrorCode.VP_CHALLENGE_INVALID);
         }
+    }
+
+    // Holder DID Document 목록 생성
+    private Map<String, Object> buildDidDocuments(
+            Credential credential, // 제출 Credential
+            Object didDocument // Holder DID Document
+    ) {
+        if (didDocument == null) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_REQUIRED);
+        }
+        if (!(didDocument instanceof Map<?, ?>)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        validateDidDocumentPayloadSize(didDocument);
+        Map<String, Object> document = asObjectMap(didDocument);
+        if (document.isEmpty()) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+
+        String holderDid = normalizeRequiredHolderDid(credential);
+        Object idValue = document.get("id");
+        if (!(idValue instanceof String didDocumentId) || !StringUtils.hasText(didDocumentId)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        if (!holderDid.equals(didDocumentId.trim())) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+
+        Map<String, Object> didDocuments = new LinkedHashMap<>();
+        didDocuments.put(holderDid, document);
+        return didDocuments;
+    }
+
+    // Holder DID 조회
+    private String normalizeRequiredHolderDid(
+            Credential credential // 제출 Credential
+    ) {
+        if (credential == null || !StringUtils.hasText(credential.getHolderDid())) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        return credential.getHolderDid().trim();
+    }
+
+    // Holder DID Document 크기 검증
+    private void validateDidDocumentPayloadSize(
+            Object didDocument // Holder DID Document
+    ) {
+        try {
+            int byteLength = objectMapper.writeValueAsString(didDocument).getBytes(StandardCharsets.UTF_8).length;
+            if (byteLength > MAX_DID_DOCUMENT_BYTES) {
+                throw new ApiException(ErrorCode.VP_DID_DOCUMENT_TOO_LARGE);
+            }
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID, exception);
+        }
+    }
+
+    private Map<String, Object> asObjectMap(
+            Object value // Map 변환 대상
+    ) {
+        if (!(value instanceof Map<?, ?> mapValue)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        mapValue.forEach((key, mapEntryValue) -> {
+            if (key != null) {
+                result.put(String.valueOf(key), mapEntryValue);
+            }
+        });
+        return result;
     }
 
     private void validateVpRequestSubmittable(
