@@ -31,6 +31,11 @@ const FALLBACK_PASS_ITEMS = [
   { code: "SANCTION_CHECK", label: "제재 명단 조회" }
 ];
 
+function formatConfidencePercent(value: number) {
+  const percent = value >= 0 && value <= 1 ? value * 100 : value;
+  return `${Math.round(percent)}%`;
+}
+
 function AiReviewView() {
   const params = useSearchParams();
   const kycId = Number(params.get("id"));
@@ -112,7 +117,7 @@ function AiReviewView() {
           <div className="form-card-header">
             <div className="form-card-title">자동 심사 통과 항목</div>
             {summary?.confidenceScore != null ? (
-              <Badge variant="outline">신뢰도 {summary.confidenceScore.toFixed(0)}%</Badge>
+              <Badge variant="outline">신뢰도 {formatConfidencePercent(summary.confidenceScore)}</Badge>
             ) : null}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

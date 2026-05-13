@@ -50,6 +50,11 @@ const STATUS_BADGE: Record<string, "default" | "secondary" | "warning" | "succes
   VC_ISSUED: "success"
 };
 
+function formatConfidencePercent(value: number) {
+  const percent = value >= 0 && value <= 1 ? value * 100 : value;
+  return `${Math.round(percent)}%`;
+}
+
 export default function CorporateKycDetailPage() {
   return (
     <Suspense>
@@ -498,7 +503,7 @@ function AiReviewSummary({
           <div style={{ marginTop: 12 }}>
             <InfoRow
               label="신뢰도"
-              value={`${Math.round(review.confidenceScore ?? 0)}%`}
+              value={formatConfidencePercent(review.confidenceScore ?? 0)}
             />
           </div>
         ) : null}
