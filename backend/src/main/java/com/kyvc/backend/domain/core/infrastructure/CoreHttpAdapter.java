@@ -1213,19 +1213,22 @@ public class CoreHttpAdapter implements CoreAdapter {
         Map<String, Object> tx = safeDetails(body.credentialCreateTransaction());
         Map<String, Object> ledgerEntry = safeDetails(body.ledgerEntry());
         String statusCode = mapCredentialStatusFromStatusObject(status);
-        String credentialStatusId = extractString(status, "id", "status_id", "credentialStatusId");
+        String credentialStatusId = firstText(
+                extractString(status, "id", "status_id", "statusId", "credentialStatusId", "credential_status_id"),
+                body.credentialStatusId(),
+                body.credentialStatusIdSnake(),
+                body.statusId()
+        );
         String credentialExternalId = StringUtils.hasText(body.credentialId())
                 ? body.credentialId()
                 : extractString(status, "credential_id", "credentialId", "jti");
         ParsedCredentialStatusId parsedStatusId = parseCredentialStatusId(credentialStatusId);
         String issuerDid = extractString(status, "issuer_did", "issuerDid");
-        String actualIssuerDid = parsedStatusId == null
-                ? issuerDid
-                : "did:xrpl:1:" + parsedStatusId.issuerAccount();
+        String issuerAccount = resolveIssuerAccount(body, status, tx, ledgerEntry, issuerDid, parsedStatusId);
+        String actualIssuerDid = resolveIssuerDid(issuerAccount, issuerDid, request.issuerDid());
         String actualCredentialType = parsedStatusId == null
                 ? body.credentialType()
                 : parsedStatusId.credentialType();
-        String issuerAccount = resolveIssuerAccount(body, status, tx, ledgerEntry, actualIssuerDid);
         String vcHash = StringUtils.hasText(body.vcCoreHash()) ? body.vcCoreHash() : extractString(status, "vc_hash", "vcHash");
         String xrplTxHash = extractString(tx, "hash", "tx_hash", "transaction_hash");
         LocalDateTime issuedAt = parseDateTime(extractString(status, "issued_at", "issuedAt", "created_at"));
@@ -1266,17 +1269,26 @@ public class CoreHttpAdapter implements CoreAdapter {
             Map<String, Object> status, // 상태 객체
             Map<String, Object> tx, // CredentialCreate 트랜잭션 객체
             Map<String, Object> ledgerEntry, // Ledger entry 객체
-            String issuerDid // Issuer DID
+            String issuerDid, // Issuer DID
+            ParsedCredentialStatusId parsedStatusId // Credential Status ID
     ) {
         Map<String, Object> txJson = extractMap(tx, "tx_json");
         return firstXrplClassicAddress(
+                parsedStatusId == null ? null : parsedStatusId.issuerAccount(),
                 extractString(tx, "Account"),
                 extractString(tx, "account"),
+                extractString(tx, "Issuer"),
+                extractString(tx, "issuer"),
                 extractString(txJson, "Account"),
                 extractString(txJson, "account"),
+                extractString(txJson, "Issuer"),
+                extractString(txJson, "issuer"),
                 extractString(ledgerEntry, "Issuer"),
                 extractString(ledgerEntry, "issuer"),
                 extractString(ledgerEntry, "Account"),
+                extractString(ledgerEntry, "issuerAccount"),
+                extractString(ledgerEntry, "issuer_account"),
+                extractString(status, "Issuer"),
                 extractString(status, "issuer"),
                 extractString(status, "issuerAccount"),
                 extractString(status, "issuer_account"),
@@ -1285,6 +1297,37 @@ public class CoreHttpAdapter implements CoreAdapter {
                 body.issuer(),
                 accountFromDid(issuerDid)
         );
+    }
+
+    private String resolveIssuerDid(
+            String issuerAccount, // Issuer XRPL Account
+            String issuerDid, // Core Issuer DID
+            String fallbackIssuerDid // 요청 Issuer DID
+    ) {
+        String normalizedIssuerAccount = firstXrplClassicAddress(issuerAccount);
+        if (StringUtils.hasText(normalizedIssuerAccount)) {
+            return "did:xrpl:1:" + normalizedIssuerAccount;
+        }
+        String normalizedIssuerDid = normalizeOptional(issuerDid);
+        if (StringUtils.hasText(accountFromDid(normalizedIssuerDid))) {
+            return normalizedIssuerDid;
+        }
+        return normalizeOptional(fallbackIssuerDid);
+    }
+
+    private String firstText(
+            String... values // 문자열 후보
+    ) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String normalized = normalizeOptional(value);
+            if (StringUtils.hasText(normalized)) {
+                return normalized;
+            }
+        }
+        return null;
     }
 
     private String firstXrplClassicAddress(

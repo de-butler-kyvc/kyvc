@@ -74,6 +74,7 @@ class CoreHttpAdapterTest {
         ), "did:xrpl:1:rIssuer");
 
         assertThat(response.issuerAccount()).isEqualTo(VALID_ISSUER_ACCOUNT);
+        assertThat(response.issuerDid()).isEqualTo("did:xrpl:1:" + VALID_ISSUER_ACCOUNT);
     }
 
     @Test
@@ -246,6 +247,9 @@ class CoreHttpAdapterTest {
                 "header.payload.signature~disclosure-001~",
                 "credential-external-id",
                 "KYC_CREDENTIAL",
+                null,
+                null,
+                null,
                 issuerAccount,
                 issuerAccountSnake,
                 issuer,
