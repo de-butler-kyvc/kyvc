@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: kyvc_back
       POSTGRES_USER: ${POSTGRES_BACK_DEV_USER}
       POSTGRES_PASSWORD: ${POSTGRES_BACK_DEV_PASSWORD}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
@@ -22,6 +24,8 @@ services:
       POSTGRES_DB: kyvc_back
       POSTGRES_USER: ${POSTGRES_BACK_PROD_USER}
       POSTGRES_PASSWORD: ${POSTGRES_BACK_PROD_PASSWORD}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
     ports:
       - "127.0.0.1:5434:5432"
     volumes:

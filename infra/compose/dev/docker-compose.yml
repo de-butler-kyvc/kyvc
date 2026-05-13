@@ -9,6 +9,8 @@ services:
         KYVC_ENV: dev
     container_name: kyvc-frontend-dev
     restart: unless-stopped
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "3001:80"
     volumes:
@@ -24,6 +26,8 @@ services:
     env_file:
       - .env.common
       - .env.backend
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8082:8080"
     volumes:
@@ -41,6 +45,8 @@ services:
     env_file:
       - .env.common
       - .env.core
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8092:8090"
     volumes:
@@ -57,6 +63,8 @@ services:
     env_file:
       - .env.common
       - .env.backend_admin
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8083:8080"
     volumes:
@@ -73,6 +81,8 @@ services:
     env_file:
       - .env.common
       - .env.core_admin
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8093:8091"
     volumes:
