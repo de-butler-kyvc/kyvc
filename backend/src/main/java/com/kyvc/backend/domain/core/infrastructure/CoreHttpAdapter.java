@@ -105,6 +105,8 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String CORE_ASSESSMENT_SUPPLEMENT_REQUIRED = "SUPPLEMENT_REQUIRED";
     private static final String CORE_ASSESSMENT_MANUAL_REVIEW_REQUIRED = "MANUAL_REVIEW_REQUIRED";
     private static final String CORE_ASSESSMENT_REJECTED = "REJECTED";
+    private static final String CORE_KYC_VCT = "https://kyvc.example/vct/legal-entity-kyc-v1";
+    private static final String DEFAULT_HOLDER_KEY_ID = "holder-key-1";
     private static final String CORE_DOCUMENT_TYPE_UNKNOWN = "UNKNOWN";
     private static final String BACKEND_CORPORATE_TYPE_CORPORATION = "CORPORATION";
     private static final String BACKEND_CORPORATE_TYPE_LIMITED_COMPANY = "LIMITED_COMPANY";
@@ -1422,10 +1424,10 @@ public class CoreHttpAdapter implements CoreAdapter {
             CoreVcIssuanceRequest request // VC 발급 요청
     ) {
         if (StringUtils.hasText(request.holderKeyId())) {
-            return request.holderKeyId().trim();
+            return normalizeHolderKeyFragment(request.holderKeyId());
         }
         if (StringUtils.hasText(request.holderDid())) {
-            return request.holderDid().trim() + "#holder-key-1";
+            return DEFAULT_HOLDER_KEY_ID;
         }
         if (coreProperties.isDevSeedEnabled()) {
             return CoreMockSeedData.DEV_HOLDER_KEY_ID;
@@ -1437,7 +1439,18 @@ public class CoreHttpAdapter implements CoreAdapter {
             CoreVcIssuanceRequest request // VC 발급 요청
     ) {
         String vct = normalizeOptional(request.vct());
-        return vct == null ? normalizeOptional(request.credentialType()) : vct;
+        return vct == null ? CORE_KYC_VCT : vct;
+    }
+
+    private String normalizeHolderKeyFragment(
+            String holderKeyId // Holder 키 ID
+    ) {
+        String normalized = holderKeyId.trim();
+        int fragmentIndex = normalized.lastIndexOf('#');
+        if (fragmentIndex >= 0 && fragmentIndex + 1 < normalized.length()) {
+            return normalized.substring(fragmentIndex + 1).trim();
+        }
+        return normalized;
     }
 
     private String normalizeOptional(

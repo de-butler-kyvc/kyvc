@@ -44,6 +44,8 @@ public class CredentialIssuanceService {
     private static final String CORE_STATUS_MODE_XRPL = "xrpl";
     private static final String CORE_CREDENTIAL_FORMAT_JWT = "jwt";
     private static final String CORE_VC_FORMAT_DC_SD_JWT = "dc+sd-jwt";
+    private static final String CORE_KYC_VCT = "https://kyvc.example/vct/legal-entity-kyc-v1";
+    private static final String DEFAULT_HOLDER_KEY_ID = "holder-key-1";
 
     private final CredentialRepository credentialRepository;
     private final CredentialRequestRepository credentialRequestRepository;
@@ -437,7 +439,7 @@ public class CredentialIssuanceService {
                 CORE_CREDENTIAL_FORMAT_JWT,
                 CORE_VC_FORMAT_DC_SD_JWT,
                 resolveHolderKeyId(holderKeyId, credential, issuer),
-                credentialType,
+                CORE_KYC_VCT,
                 validFrom
         );
     }
@@ -648,15 +650,26 @@ public class CredentialIssuanceService {
             ResolvedIssuer issuer // 발급 Issuer
     ) {
         if (StringUtils.hasText(holderKeyId)) {
-            return holderKeyId.trim();
+            return normalizeHolderKeyFragment(holderKeyId);
         }
         if (credential != null && StringUtils.hasText(credential.getHolderDid())) {
-            return credential.getHolderDid().trim() + "#holder-key-1";
+            return DEFAULT_HOLDER_KEY_ID;
         }
         if (issuer == null && coreProperties.isDevSeedEnabled()) {
             return CoreMockSeedData.DEV_HOLDER_KEY_ID;
         }
         throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 Holder 키 식별자가 없습니다.");
+    }
+
+    private String normalizeHolderKeyFragment(
+            String holderKeyId // Holder 키 ID
+    ) {
+        String normalized = holderKeyId.trim();
+        int fragmentIndex = normalized.lastIndexOf('#');
+        if (fragmentIndex >= 0 && fragmentIndex + 1 < normalized.length()) {
+            return normalized.substring(fragmentIndex + 1).trim();
+        }
+        return normalized;
     }
 
     private KyvcEnums.CredentialStatus resolveCredentialStatus(

@@ -43,6 +43,7 @@ public class CredentialOfferService {
     private static final Duration OFFER_TTL = Duration.ofMinutes(10);
     private static final String QR_TYPE = KyvcEnums.QrType.CREDENTIAL_OFFER.name();
     private static final String ACCEPT_DEPRECATED_MESSAGE = "Credential Offer 저장은 prepare/confirm API를 사용해야 합니다.";
+    private static final String DEFAULT_HOLDER_KEY_ID = "holder-key-1";
 
     private final CredentialOfferRepository credentialOfferRepository;
     private final CredentialRepository credentialRepository;
@@ -483,12 +484,23 @@ public class CredentialOfferService {
             WalletCredentialPrepareRequest request // 준비 요청
     ) {
         if (StringUtils.hasText(request.holderKeyId())) {
-            return request.holderKeyId().trim();
+            return normalizeHolderKeyFragment(request.holderKeyId());
         }
         if (StringUtils.hasText(request.holderDid())) {
-            return request.holderDid().trim() + "#holder-key-1";
+            return DEFAULT_HOLDER_KEY_ID;
         }
         throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VC 발급 Holder 키 식별자가 없습니다.");
+    }
+
+    private String normalizeHolderKeyFragment(
+            String holderKeyId // Holder 키 ID
+    ) {
+        String normalized = holderKeyId.trim();
+        int fragmentIndex = normalized.lastIndexOf('#');
+        if (fragmentIndex >= 0 && fragmentIndex + 1 < normalized.length()) {
+            return normalized.substring(fragmentIndex + 1).trim();
+        }
+        return normalized;
     }
 
     private void validateConfirmRequest(

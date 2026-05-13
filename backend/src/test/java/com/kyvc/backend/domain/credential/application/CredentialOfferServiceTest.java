@@ -188,7 +188,7 @@ class CredentialOfferServiceTest {
                 any(),
                 any(ResolvedIssuer.class)
         );
-        assertThat(holderKeyIdCaptor.getValue()).isEqualTo(ACTUAL_HOLDER_DID + "#holder-key-1");
+        assertThat(holderKeyIdCaptor.getValue()).isEqualTo("holder-key-1");
     }
 
     @Test
@@ -217,7 +217,7 @@ class CredentialOfferServiceTest {
                 any(),
                 any(ResolvedIssuer.class)
         );
-        assertThat(holderKeyIdCaptor.getValue()).isEqualTo(ACTUAL_HOLDER_DID + "#custom-key");
+        assertThat(holderKeyIdCaptor.getValue()).isEqualTo("custom-key");
     }
 
     @Test
@@ -426,7 +426,7 @@ class CredentialOfferServiceTest {
                 eq(1L),
                 eq(holderDid),
                 eq(ACTUAL_HOLDER_ACCOUNT),
-                eq(holderKeyId == null ? holderDid + "#holder-key-1" : holderKeyId),
+                eq(holderKeyId == null ? "holder-key-1" : normalizeHolderKeyFragment(holderKeyId)),
                 any(),
                 eq(issuer)
         )).thenReturn(new CredentialIssuanceResult(
@@ -437,6 +437,16 @@ class CredentialOfferServiceTest {
                 null,
                 Map.of("disclosablePaths", List.of("$.legalEntity.corporateName"))
         ));
+    }
+
+    private String normalizeHolderKeyFragment(
+            String holderKeyId // Holder 키 ID
+    ) {
+        int fragmentIndex = holderKeyId.lastIndexOf('#');
+        if (fragmentIndex >= 0 && fragmentIndex + 1 < holderKeyId.length()) {
+            return holderKeyId.substring(fragmentIndex + 1);
+        }
+        return holderKeyId;
     }
 
     private Credential createValidCredential(
