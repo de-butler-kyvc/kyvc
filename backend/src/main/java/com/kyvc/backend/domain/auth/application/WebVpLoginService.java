@@ -40,6 +40,9 @@ import org.springframework.util.StringUtils;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,6 +66,7 @@ public class WebVpLoginService {
     private static final String ACCEPTED_VCT = "https://kyvc.example/vct/legal-entity-kyc-v1";
     private static final String ACCEPTED_JURISDICTION = "KR";
     private static final String MINIMUM_ASSURANCE_LEVEL = "STANDARD";
+    private static final ZoneId KST_ZONE = ZoneId.of("Asia/Seoul");
     private static final List<String> REQUIRED_DISCLOSURES = List.of(
             "legalEntity.name",
             "legalEntity.registrationNumber"
@@ -120,7 +124,7 @@ public class WebVpLoginService {
         return new WebVpLoginStartResponse(
                 saved.getVpRequestId(),
                 new WebVpLoginStartResponse.QrPayload(QR_PAYLOAD_TYPE, saved.getVpRequestId(), qrToken),
-                saved.getExpiresAt()
+                toKstOffsetString(saved.getExpiresAt())
         );
     }
 
@@ -147,7 +151,7 @@ public class WebVpLoginService {
                 resolveText(metadata.get("domain"), DOMAIN),
                 resolvePresentationDefinition(metadata),
                 REQUIRED_DISCLOSURES,
-                vpVerification.getExpiresAt()
+                toKstOffsetString(vpVerification.getExpiresAt())
         );
     }
 
@@ -228,7 +232,7 @@ public class WebVpLoginService {
                 vpVerification.getVpRequestId(),
                 vpVerification.getVpVerificationStatus().name(),
                 canComplete,
-                vpVerification.getExpiresAt()
+                toKstOffsetString(vpVerification.getExpiresAt())
         );
     }
 
@@ -498,6 +502,19 @@ public class WebVpLoginService {
     }
 
     // 불투명 토큰 생성
+    // KST offset 만료 일시 문자열 변환
+    private String toKstOffsetString(
+            LocalDateTime value // 만료 일시
+    ) {
+        if (value == null) {
+            return null;
+        }
+        return value.truncatedTo(ChronoUnit.SECONDS)
+                .atZone(KST_ZONE)
+                .toOffsetDateTime()
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    }
+
     private String createOpaqueToken() {
         byte[] bytes = new byte[32]; // 난수 바이트
         SECURE_RANDOM.nextBytes(bytes);

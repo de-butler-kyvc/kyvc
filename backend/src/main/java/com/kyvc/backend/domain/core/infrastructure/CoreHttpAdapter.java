@@ -60,8 +60,10 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
 import java.net.SocketTimeoutException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
@@ -88,6 +90,7 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
     private static final String PRESENTATION_DEFINITION_ID_KYC = "kyvc-kyc-presentation-v1";
     private static final String PRESENTATION_CHALLENGE_FORMAT_SD_JWT = "dc+sd-jwt";
+    private static final ZoneId KST_ZONE = ZoneId.of("Asia/Seoul");
     private static final String CORE_API_KEY_HEADER = "X-API-Key";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
     private static final String CORE_LEGAL_ENTITY_STOCK_COMPANY = "STOCK_COMPANY";
@@ -534,7 +537,7 @@ public class CoreHttpAdapter implements CoreAdapter {
                     body.nonce(),
                     body.domain(),
                     body.aud(),
-                    parseDateTime(StringUtils.hasText(body.expiresAtCamelCase()) ? body.expiresAtCamelCase() : body.expiresAtSnakeCase()),
+                    parsePresentationChallengeExpiresAt(StringUtils.hasText(body.expiresAtCamelCase()) ? body.expiresAtCamelCase() : body.expiresAtSnakeCase()),
                     body.presentationDefinition()
             );
         } catch (RestClientException exception) {
@@ -1785,6 +1788,32 @@ public class CoreHttpAdapter implements CoreAdapter {
             return errors.get(0);
         }
         return defaultSummary;
+    }
+
+    private LocalDateTime parsePresentationChallengeExpiresAt(
+            String value // VP Challenge 만료 일시 문자열
+    ) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = value.trim();
+        try {
+            return Instant.parse(normalized)
+                    .atZone(KST_ZONE)
+                    .toLocalDateTime();
+        } catch (DateTimeParseException ignoreInstant) {
+            try {
+                return OffsetDateTime.parse(normalized)
+                        .atZoneSameInstant(KST_ZONE)
+                        .toLocalDateTime();
+            } catch (DateTimeParseException ignoreOffsetDateTime) {
+                try {
+                    return LocalDateTime.parse(normalized);
+                } catch (DateTimeParseException ignoreLocalDateTime) {
+                    return null;
+                }
+            }
+        }
     }
 
     private LocalDateTime parseDateTime(

@@ -2,14 +2,12 @@ package com.kyvc.backend.domain.auth.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDateTime;
-
 /**
  * 웹 VP 로그인 시작 응답
  *
  * @param requestId VP 로그인 요청 ID
  * @param qrPayload QR 표시 payload
- * @param expiresAt 만료 일시
+ * @param expiresAt KST offset 포함 만료 일시
  */
 @Schema(description = "웹 VP 로그인 시작 응답")
 public record WebVpLoginStartResponse(
@@ -17,8 +15,8 @@ public record WebVpLoginStartResponse(
         String requestId, // VP 로그인 요청 ID
         @Schema(description = "QR 표시 payload")
         QrPayload qrPayload, // QR 표시 payload
-        @Schema(description = "만료 일시", example = "2026-05-13T15:30:00")
-        LocalDateTime expiresAt // 만료 일시
+        @Schema(description = "KST offset 포함 만료 일시", example = "2026-05-13T20:55:53+09:00")
+        String expiresAt // KST offset 포함 만료 일시
 ) {
 
     /**
