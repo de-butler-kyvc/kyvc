@@ -50,8 +50,8 @@ class CoreHttpAdapterTest {
                 "xrpl",
                 "jwt",
                 "vc+jwt",
-                "did:xrpl:1:rHolder#holder-key-1",
-                "KYC_CREDENTIAL"
+                "holder-key-1",
+                "https://kyvc.example/vct/legal-entity-kyc-v1"
         );
 
         JsonNode rootNode = objectMapper.readTree(objectMapper.writeValueAsString(request));
@@ -64,7 +64,8 @@ class CoreHttpAdapterTest {
         assertThat(rootNode.has("store_issuer_did_document")).isFalse();
         assertThat(rootNode.get("holder_account").asText()).isEqualTo("rHolder");
         assertThat(rootNode.get("holder_did").asText()).isEqualTo("did:xrpl:1:rHolder");
-        assertThat(rootNode.get("holder_key_id").asText()).isEqualTo("did:xrpl:1:rHolder#holder-key-1");
+        assertThat(rootNode.get("holder_key_id").asText()).isEqualTo("holder-key-1");
+        assertThat(rootNode.get("vct").asText()).isEqualTo("https://kyvc.example/vct/legal-entity-kyc-v1");
     }
 
     @Test

@@ -56,6 +56,8 @@ public class CredentialRequestService {
     private static final String CORE_STATUS_MODE_XRPL = "xrpl";
     private static final String CORE_CREDENTIAL_FORMAT_JWT = "jwt";
     private static final String CORE_VC_FORMAT_DC_SD_JWT = "dc+sd-jwt";
+    private static final String CORE_KYC_VCT = "https://kyvc.example/vct/legal-entity-kyc-v1";
+    private static final String DEFAULT_HOLDER_KEY_ID = "holder-key-1";
 
     private final CredentialRepository credentialRepository;
     private final CredentialRequestRepository credentialRequestRepository;
@@ -400,8 +402,8 @@ public class CredentialRequestService {
                 CORE_STATUS_MODE_XRPL,
                 CORE_CREDENTIAL_FORMAT_JWT,
                 CORE_VC_FORMAT_DC_SD_JWT,
-                coreProperties.isDevSeedEnabled() ? CoreMockSeedData.DEV_HOLDER_KEY_ID : null,
-                credentialType,
+                DEFAULT_HOLDER_KEY_ID,
+                CORE_KYC_VCT,
                 validFrom
         );
     }
