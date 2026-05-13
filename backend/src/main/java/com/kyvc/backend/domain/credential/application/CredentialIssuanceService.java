@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.credential.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.config.CoreProperties;
@@ -29,6 +30,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,7 +43,7 @@ public class CredentialIssuanceService {
     private static final String PENDING_EXTERNAL_ID_PREFIX = "pending-kyc-";
     private static final String CORE_STATUS_MODE_XRPL = "xrpl";
     private static final String CORE_CREDENTIAL_FORMAT_JWT = "jwt";
-    private static final String CORE_VC_FORMAT_JWT = "vc+jwt";
+    private static final String CORE_VC_FORMAT_DC_SD_JWT = "dc+sd-jwt";
 
     private final CredentialRepository credentialRepository;
     private final CredentialRequestRepository credentialRequestRepository;
@@ -87,6 +89,27 @@ public class CredentialIssuanceService {
             Map<String, Object> claims, // VC claims
             ResolvedIssuer issuer // 발급 Issuer
     ) {
+        return issueKycCredentialForHolderPayload(
+                kycApplication,
+                requestedByUserId,
+                holderDid,
+                holderXrplAddress,
+                holderKeyId,
+                claims,
+                issuer
+        ).credential();
+    }
+
+    // Holder 전달용 KYC Credential 발급 결과
+    public CredentialIssuanceResult issueKycCredentialForHolderPayload(
+            KycApplication kycApplication, // KYC 신청
+            Long requestedByUserId, // 요청 사용자 ID
+            String holderDid, // Holder DID
+            String holderXrplAddress, // Holder XRPL 주소
+            String holderKeyId, // Holder 키 ID
+            Map<String, Object> claims, // VC claims
+            ResolvedIssuer issuer // 발급 Issuer
+    ) {
         validateHolderIssuanceInput(kycApplication, holderDid, holderXrplAddress, holderKeyId, claims, issuer);
         Credential credential = createIssuingCredentialForHolder(
                 kycApplication,
@@ -95,7 +118,7 @@ public class CredentialIssuanceService {
                 holderXrplAddress,
                 issuer
         );
-        return requestVcIssuance(
+        return requestVcIssuancePayload(
                 kycApplication,
                 credential,
                 KyvcEnums.ActorType.USER,
@@ -202,7 +225,7 @@ public class CredentialIssuanceService {
             KyvcEnums.ActorType actorType, // 요청자 유형
             Long actorId // 요청자 ID
     ) {
-        return requestVcIssuance(kycApplication, credential, actorType, actorId, null, null);
+        return requestVcIssuancePayload(kycApplication, credential, actorType, actorId, null, null, null).credential();
     }
 
     private Credential requestVcIssuance(
@@ -213,10 +236,10 @@ public class CredentialIssuanceService {
             Map<String, Object> claims, // VC claims
             ResolvedIssuer issuer // 발급 Issuer
     ) {
-        return requestVcIssuance(kycApplication, credential, actorType, actorId, claims, issuer, null);
+        return requestVcIssuancePayload(kycApplication, credential, actorType, actorId, claims, issuer, null).credential();
     }
 
-    private Credential requestVcIssuance(
+    private CredentialIssuanceResult requestVcIssuancePayload(
             KycApplication kycApplication, // KYC 신청
             Credential credential, // 발급 대상 Credential
             KyvcEnums.ActorType actorType, // 요청자 유형
@@ -282,12 +305,8 @@ public class CredentialIssuanceService {
             );
 
             if (KyvcEnums.CredentialStatus.VALID == credentialStatus) {
-                credential.applyCredentialPayload(
-                        response.format(),
-                        response.credentialPayloadJson(),
-                        response.credentialJwt()
-                );
-                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(response));
+                credential.applyCredentialFormat(resolveCredentialFormat(response, request));
+                coreRequestService.markSuccess(coreRequest.getCoreRequestId(), toJson(toStoredCoreIssuanceMetadata(response)));
                 credentialRequest.markCompleted(null);
                 kycApplication.markVcIssued(response.issuedAt() == null ? LocalDateTime.now() : response.issuedAt());
                 kycApplicationRepository.save(kycApplication);
@@ -315,7 +334,10 @@ public class CredentialIssuanceService {
                             "kycId", kycApplication.getKycId()
                     )
             );
-            return credentialRepository.save(credential);
+            Credential savedCredential = credentialRepository.save(credential);
+            return KyvcEnums.CredentialStatus.VALID == credentialStatus
+                    ? toIssuanceResult(savedCredential, request, response)
+                    : new CredentialIssuanceResult(savedCredential, null, null, null, null);
         } catch (ApiException exception) {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
             credentialRequest.markFailed(exception.getErrorCode().getCode());
@@ -339,7 +361,7 @@ public class CredentialIssuanceService {
                             "kycId", kycApplication.getKycId()
                     )
             );
-            return credentialRepository.save(credential);
+            return new CredentialIssuanceResult(credentialRepository.save(credential), null, null, null, null);
         } catch (Exception exception) {
             coreRequestService.markFailed(coreRequest.getCoreRequestId(), "VC 발급 Core 요청 처리 중 오류가 발생했습니다.");
             credentialRequest.markFailed(ErrorCode.CORE_API_CALL_FAILED.getCode());
@@ -364,7 +386,7 @@ public class CredentialIssuanceService {
                     ),
                     exception
             );
-            return credentialRepository.save(credential);
+            return new CredentialIssuanceResult(credentialRepository.save(credential), null, null, null, null);
         }
     }
 
@@ -413,11 +435,74 @@ public class CredentialIssuanceService {
                 false,
                 CORE_STATUS_MODE_XRPL,
                 CORE_CREDENTIAL_FORMAT_JWT,
-                CORE_VC_FORMAT_JWT,
+                CORE_VC_FORMAT_DC_SD_JWT,
                 resolveHolderKeyId(holderKeyId, credential, issuer),
                 credentialType,
                 validFrom
         );
+    }
+
+    // Holder 전달용 발급 결과 생성
+    private CredentialIssuanceResult toIssuanceResult(
+            Credential credential, // 저장된 Credential 메타데이터
+            CoreVcIssuanceRequest request, // Core 발급 요청
+            CoreVcIssuanceResponse response // Core 발급 응답
+    ) {
+        String format = resolveCredentialFormat(response, request); // VC format
+        return new CredentialIssuanceResult(
+                credential,
+                format,
+                response.credentialJwt(),
+                parseCredentialObject(response.credentialPayloadJson()),
+                response.selectiveDisclosure()
+        );
+    }
+
+    // Core 발급 저장용 메타데이터 생성
+    private Map<String, Object> toStoredCoreIssuanceMetadata(
+            CoreVcIssuanceResponse response // Core 발급 응답
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("coreRequestId", response.coreRequestId());
+        metadata.put("status", response.status());
+        metadata.put("format", response.format());
+        metadata.put("credentialExternalId", response.credentialExternalId());
+        metadata.put("credentialType", response.credentialType());
+        metadata.put("issuerDid", response.issuerDid());
+        metadata.put("vcHash", response.vcHash());
+        metadata.put("xrplTxHash", response.xrplTxHash());
+        metadata.put("credentialStatusId", response.credentialStatusId());
+        metadata.put("issuedAt", response.issuedAt());
+        metadata.put("expiresAt", response.expiresAt());
+        metadata.put("hasCredentialPayload",
+                StringUtils.hasText(response.credentialJwt())
+                        || StringUtils.hasText(response.credentialPayloadJson()));
+        metadata.put("hasSelectiveDisclosure",
+                response.selectiveDisclosure() != null && !response.selectiveDisclosure().isEmpty());
+        return metadata;
+    }
+
+    // Core 발급 format 결정
+    private String resolveCredentialFormat(
+            CoreVcIssuanceResponse response, // Core 발급 응답
+            CoreVcIssuanceRequest request // Core 발급 요청
+    ) {
+        return StringUtils.hasText(response.format()) ? response.format() : request.format();
+    }
+
+    // legacy credential object 변환
+    private Map<String, Object> parseCredentialObject(
+            String credentialPayloadJson // Core credential JSON 원문
+    ) {
+        if (!StringUtils.hasText(credentialPayloadJson)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(credentialPayloadJson, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, exception);
+        }
     }
 
     private IssuanceSeed resolveIssuanceSeed(

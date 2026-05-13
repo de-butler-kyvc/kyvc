@@ -1253,7 +1253,8 @@ public class CoreHttpAdapter implements CoreAdapter {
                 xrplTxHash,
                 credentialStatusId,
                 issuedAt,
-                expiresAt
+                expiresAt,
+                body.selectiveDisclosure()
         );
     }
 

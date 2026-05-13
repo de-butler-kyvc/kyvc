@@ -1,6 +1,5 @@
 package com.kyvc.backend.domain.credential.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
@@ -102,7 +101,6 @@ class CredentialOfferServiceTest {
                 credentialIssuerResolver,
                 credentialIssuanceService,
                 auditLogService,
-                new ObjectMapper().findAndRegisterModules(),
                 logEventLogger
         );
     }
@@ -181,7 +179,7 @@ class CredentialOfferServiceTest {
                 )
         );
 
-        verify(credentialIssuanceService).issueKycCredentialForHolder(
+        verify(credentialIssuanceService).issueKycCredentialForHolderPayload(
                 any(KycApplication.class),
                 eq(1L),
                 eq(ACTUAL_HOLDER_DID),
@@ -210,7 +208,7 @@ class CredentialOfferServiceTest {
                 )
         );
 
-        verify(credentialIssuanceService).issueKycCredentialForHolder(
+        verify(credentialIssuanceService).issueKycCredentialForHolderPayload(
                 any(KycApplication.class),
                 eq(1L),
                 eq(ACTUAL_HOLDER_DID),
@@ -240,11 +238,62 @@ class CredentialOfferServiceTest {
         );
 
         Map<String, Object> metadata = metadata(response.credentialPayload());
+        assertThat(response.credentialPayload().get("format")).isEqualTo("dc+sd-jwt");
+        assertThat(response.credentialPayload().get("sdJwt")).isEqualTo("header.payload.signature~disclosure-001~");
+        assertThat(response.credentialPayload().get("credentialJwt")).isEqualTo("header.payload.signature~disclosure-001~");
+        assertThat(response.credentialPayload().get("credential")).isNull();
+        assertThat(response.credentialPayload().get("selectiveDisclosure")).isEqualTo(Map.of(
+                "disclosablePaths",
+                List.of("$.legalEntity.corporateName")
+        ));
         assertThat(metadata.get("issuerAccount")).isEqualTo(ACTUAL_ISSUER_ACCOUNT);
         assertThat(metadata.get("issuerAccount")).isNotEqualTo("rIssuer");
         assertThat(metadata.get("issuerDid")).isEqualTo("did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT);
         assertThat(metadata.get("credentialType")).isEqualTo(ACTUAL_CREDENTIAL_TYPE);
         assertThat(metadata.get("holderXrplAddress")).isEqualTo(ACTUAL_HOLDER_ACCOUNT);
+    }
+
+    @Test
+    void prepareWalletCredential_rejectsPreparedOfferPayloadReplay() {
+        Corporate corporate = createCorporate();
+        CredentialOffer offer = CredentialOffer.create(
+                10L,
+                20L,
+                TokenHashUtil.sha256("qr-token-001"),
+                LocalDateTime.now().plusMinutes(10)
+        );
+        ReflectionTestUtils.setField(offer, "credentialOfferId", 100L);
+        offer.bindPreparedCredential(200L, "device-001", ACTUAL_HOLDER_DID, ACTUAL_HOLDER_ACCOUNT);
+
+        when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
+        when(credentialOfferRepository.getById(100L)).thenReturn(offer);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.prepareWalletCredential(
+                        1L,
+                        100L,
+                        new WalletCredentialPrepareRequest(
+                                "qr-token-001",
+                                "device-001",
+                                ACTUAL_HOLDER_DID,
+                                ACTUAL_HOLDER_ACCOUNT,
+                                null,
+                                true
+                        )
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.WALLET_CREDENTIAL_PAYLOAD_NOT_REPLAYABLE);
+        verify(credentialIssuanceService, never()).issueKycCredentialForHolderPayload(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
     }
 
     private Corporate createCorporate() {
@@ -307,7 +356,7 @@ class CredentialOfferServiceTest {
         when(kycApplicationRepository.findById(10L)).thenReturn(Optional.of(kycApplication));
         when(credentialIssuerResolver.resolveKycIssuer()).thenReturn(issuer);
         when(credentialClaimsAssembler.assemble(kycApplication)).thenReturn(Map.of("corporateName", "KYVC Corp"));
-        when(credentialIssuanceService.issueKycCredentialForHolder(
+        when(credentialIssuanceService.issueKycCredentialForHolderPayload(
                 any(KycApplication.class),
                 eq(1L),
                 eq(holderDid),
@@ -315,7 +364,13 @@ class CredentialOfferServiceTest {
                 eq(holderKeyId == null ? holderDid + "#holder-key-1" : holderKeyId),
                 any(),
                 eq(issuer)
-        )).thenReturn(credential);
+        )).thenReturn(new CredentialIssuanceResult(
+                credential,
+                "dc+sd-jwt",
+                "header.payload.signature~disclosure-001~",
+                null,
+                Map.of("disclosablePaths", List.of("$.legalEntity.corporateName"))
+        ));
     }
 
     private Credential createValidCredential(
@@ -346,7 +401,7 @@ class CredentialOfferServiceTest {
                 LocalDateTime.now(),
                 LocalDateTime.now().plusYears(1)
         );
-        credential.applyCredentialPayload("vc+jwt", null, "vc.jwt.001");
+        credential.applyCredentialFormat("dc+sd-jwt");
         return credential;
     }
 

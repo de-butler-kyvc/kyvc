@@ -24,7 +24,7 @@ import java.util.Map;
  * @param credentialStatusPurposeCode Credential 상태 목적 코드
  * @param kycLevelCode KYC 레벨 코드
  * @param jurisdictionCode 관할 코드
- * @param credentialPayload format, credentialJwt, credential, metadata 포함 Credential payload
+ * @param credentialPayload Backend Credential 원문 미저장으로 항상 null
  */
 @Schema(description = "Wallet Credential 상세 응답")
 public record WalletCredentialDetailResponse(
@@ -60,8 +60,8 @@ public record WalletCredentialDetailResponse(
         String kycLevelCode, // KYC 레벨 코드
         @Schema(description = "관할 코드", example = "KR")
         String jurisdictionCode, // 관할 코드
-        @Schema(description = "format, credentialJwt, credential, metadata 포함 Credential payload")
-        Map<String, Object> credentialPayload // Wallet 표시용 Credential payload
+        @Schema(description = "Backend는 Credential 원문을 저장하지 않으므로 항상 null")
+        Map<String, Object> credentialPayload // Credential payload 미반환
 ) {
 }
 
