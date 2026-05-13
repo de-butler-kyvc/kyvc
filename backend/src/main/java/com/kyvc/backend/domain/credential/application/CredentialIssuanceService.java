@@ -337,7 +337,7 @@ public class CredentialIssuanceService {
             Credential savedCredential = credentialRepository.save(credential);
             return KyvcEnums.CredentialStatus.VALID == credentialStatus
                     ? toIssuanceResult(savedCredential, request, response)
-                    : new CredentialIssuanceResult(savedCredential, null, null, null, null);
+                    : new CredentialIssuanceResult(savedCredential, null, null, null, null, null);
         } catch (ApiException exception) {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
             credentialRequest.markFailed(exception.getErrorCode().getCode());
@@ -361,7 +361,7 @@ public class CredentialIssuanceService {
                             "kycId", kycApplication.getKycId()
                     )
             );
-            return new CredentialIssuanceResult(credentialRepository.save(credential), null, null, null, null);
+            return new CredentialIssuanceResult(credentialRepository.save(credential), null, null, null, null, null);
         } catch (Exception exception) {
             coreRequestService.markFailed(coreRequest.getCoreRequestId(), "VC 발급 Core 요청 처리 중 오류가 발생했습니다.");
             credentialRequest.markFailed(ErrorCode.CORE_API_CALL_FAILED.getCode());
@@ -386,7 +386,7 @@ public class CredentialIssuanceService {
                     ),
                     exception
             );
-            return new CredentialIssuanceResult(credentialRepository.save(credential), null, null, null, null);
+            return new CredentialIssuanceResult(credentialRepository.save(credential), null, null, null, null, null);
         }
     }
 
@@ -452,6 +452,7 @@ public class CredentialIssuanceService {
         return new CredentialIssuanceResult(
                 credential,
                 format,
+                response.issuerAccount(),
                 response.credentialJwt(),
                 parseCredentialObject(response.credentialPayloadJson()),
                 response.selectiveDisclosure()

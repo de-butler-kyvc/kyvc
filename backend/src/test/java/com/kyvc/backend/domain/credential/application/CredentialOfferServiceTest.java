@@ -221,7 +221,7 @@ class CredentialOfferServiceTest {
     }
 
     @Test
-    void prepareWalletCredential_usesCredentialStatusIdForMetadataIssuer() {
+    void prepareWalletCredential_usesIssuanceResultIssuerAccountForMetadata() {
         mockPrepareCredential(ACTUAL_HOLDER_DID, null);
 
         WalletCredentialPrepareResponse response = service.prepareWalletCredential(
@@ -277,6 +277,28 @@ class CredentialOfferServiceTest {
         assertThat(metadata.get("issuerAccount")).isEqualTo(ACTUAL_ISSUER_ACCOUNT);
         assertThat(metadata.get("holderXrplAddress")).isEqualTo(ACTUAL_HOLDER_ACCOUNT);
         assertThat(metadata.get("credentialType")).isEqualTo(ACTUAL_CREDENTIAL_TYPE);
+    }
+
+    @Test
+    void prepareWalletCredential_doesNotExposePlaceholderIssuerAccount() {
+        mockPrepareCredential(ACTUAL_HOLDER_DID, null, null, "rIssuer");
+
+        WalletCredentialPrepareResponse response = service.prepareWalletCredential(
+                1L,
+                100L,
+                new WalletCredentialPrepareRequest(
+                        "qr-token-001",
+                        "device-001",
+                        ACTUAL_HOLDER_DID,
+                        ACTUAL_HOLDER_ACCOUNT,
+                        null,
+                        true
+                )
+        );
+
+        Map<String, Object> metadata = metadata(response.credentialPayload());
+        assertThat(response.credentialPayload().get("sdJwt")).isEqualTo("header.payload.signature~disclosure-001~");
+        assertThat(metadata.get("issuerAccount")).isNull();
     }
 
     @Test
@@ -367,6 +389,15 @@ class CredentialOfferServiceTest {
             String holderKeyId, // Holder 키 ID
             String credentialStatusId // Credential Status ID
     ) {
+        mockPrepareCredential(holderDid, holderKeyId, credentialStatusId, ACTUAL_ISSUER_ACCOUNT);
+    }
+
+    private void mockPrepareCredential(
+            String holderDid, // Holder DID
+            String holderKeyId, // Holder 키 ID
+            String credentialStatusId, // Credential Status ID
+            String issuerAccount // Issuer XRPL Account
+    ) {
         Corporate corporate = createCorporate();
         KycApplication kycApplication = createApprovedKyc();
         CredentialOffer offer = CredentialOffer.create(
@@ -401,6 +432,7 @@ class CredentialOfferServiceTest {
         )).thenReturn(new CredentialIssuanceResult(
                 credential,
                 "dc+sd-jwt",
+                issuerAccount,
                 "header.payload.signature~disclosure-001~",
                 null,
                 Map.of("disclosablePaths", List.of("$.legalEntity.corporateName"))

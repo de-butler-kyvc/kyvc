@@ -14,6 +14,12 @@ public record IssueKycCredentialApiResponse(
         String credentialId, // Core 외부 Credential ID
         @JsonProperty("credential_type")
         String credentialType, // Credential 유형
+        @JsonProperty("issuerAccount")
+        String issuerAccount, // Issuer XRPL Account
+        @JsonProperty("issuer_account")
+        String issuerAccountSnake, // Issuer XRPL Account
+        @JsonProperty("issuer")
+        String issuer, // Issuer XRPL Account
         @JsonProperty("vc_core_hash")
         String vcCoreHash, // VC 해시
         @JsonProperty("status")

@@ -400,18 +400,19 @@ public class CredentialOfferService {
             payload.put("credential", result.credentialObject());
         }
         payload.put("selectiveDisclosure", result.selectiveDisclosure());
-        payload.put("metadata", createCredentialMetadata(credential));
+        payload.put("metadata", createCredentialMetadata(credential, result.issuerAccount()));
         return payload;
     }
 
     private Map<String, Object> createCredentialMetadata(
-            Credential credential // Credential 엔티티
+            Credential credential, // Credential 엔티티
+            String issuerAccount // Issuer XRPL Account
     ) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("credentialId", credential.getCredentialId());
         metadata.put("credentialType", normalizeNullableText(credential.getCredentialTypeCode()));
         metadata.put("issuerDid", normalizeNullableText(credential.getIssuerDid()));
-        metadata.put("issuerAccount", accountFromDid(credential.getIssuerDid()));
+        metadata.put("issuerAccount", normalizeIssuerAccount(issuerAccount));
         metadata.put("holderDid", normalizeNullableText(credential.getHolderDid()));
         metadata.put("holderXrplAddress", normalizeNullableText(credential.getHolderXrplAddress()));
         metadata.put("vcHash", normalizeNullableText(credential.getVcHash()));
@@ -601,15 +602,20 @@ public class CredentialOfferService {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
-    private String accountFromDid(
-            String did // DID 문자열
+    private String normalizeIssuerAccount(
+            String issuerAccount // Issuer XRPL Account
     ) {
-        String normalizedDid = normalizeNullableText(did);
-        String prefix = "did:xrpl:1:";
-        if (normalizedDid == null || !normalizedDid.startsWith(prefix)) {
-            return null;
-        }
-        return normalizeNullableText(normalizedDid.substring(prefix.length()));
+        String normalizedIssuerAccount = normalizeNullableText(issuerAccount);
+        return isXrplClassicAddress(normalizedIssuerAccount) ? normalizedIssuerAccount : null;
+    }
+
+    private boolean isXrplClassicAddress(
+            String value // XRPL classic 주소
+    ) {
+        return StringUtils.hasText(value)
+                && value.startsWith("r")
+                && value.length() >= 25
+                && value.length() <= 35;
     }
 
     private void saveAuditLog(

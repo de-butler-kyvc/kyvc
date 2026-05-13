@@ -79,6 +79,7 @@ public class StubCoreAdapter implements CoreAdapter {
                 "mock-" + request.coreRequestId(),
                 request.credentialType() == null ? CoreMockSeedData.DEV_CREDENTIAL_TYPE : request.credentialType(),
                 request.issuerDid() == null ? CoreMockSeedData.DEV_ISSUER_DID : request.issuerDid(),
+                request.issuerAccount(),
                 request.format() == null ? "dc+sd-jwt" : request.format(),
                 null,
                 "mock-header.mock-payload.mock-signature~mock-disclosure-" + request.credentialId() + "~",
