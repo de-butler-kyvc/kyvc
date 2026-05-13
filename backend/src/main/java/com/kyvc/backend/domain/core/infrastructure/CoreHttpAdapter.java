@@ -577,6 +577,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         Map<String, Object> fields = createHttpLogFields(endpoint, null, null, null);
         fields.put("presentationFormat", PRESENTATION_FORMAT_SD_JWT);
         fields.put("didDocumentsCount", didDocuments == null ? 0 : didDocuments.size());
+        fields.put("didDocumentIds", didDocuments == null ? List.of() : List.copyOf(didDocuments.keySet()));
         long startedAt = System.currentTimeMillis();
         logEventLogger.info("core.call.started", "Core web VP login verify API call started", fields);
         try {

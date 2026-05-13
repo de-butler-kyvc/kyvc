@@ -66,9 +66,11 @@ class WebVpLoginServiceTest {
     private LogEventLogger logEventLogger;
 
     private WebVpLoginService service;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
+        objectMapper = new ObjectMapper();
         service = new WebVpLoginService(
                 vpVerificationRepository,
                 credentialRepository,
@@ -77,7 +79,7 @@ class WebVpLoginServiceTest {
                 coreAdapter,
                 authService,
                 tokenCookieUtil,
-                new ObjectMapper(),
+                objectMapper,
                 logEventLogger
         );
     }
@@ -190,6 +192,113 @@ class WebVpLoginServiceTest {
         ));
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_DID_DOCUMENT_REQUIRED);
+    }
+
+    @Test
+    void submit_acceptsAndroidDidDocumentAliases() throws Exception {
+        String requestId = "vp-login-req-001";
+        String qrToken = "raw-qr-token";
+        Map<String, Object> vp = Map.of(
+                "format", "kyvc-sd-jwt-presentation-v1",
+                "sdJwtKb", "masked-test-presentation"
+        );
+        VpVerification vpVerification = VpVerification.createWebVpLoginRequest(
+                requestId,
+                TokenHashUtil.sha256(qrToken),
+                "browser-session-hash",
+                "nonce-001",
+                "challenge-001",
+                "kyvc-corporate-web-login",
+                "[]",
+                LocalDateTime.now().plusMinutes(5),
+                "{}"
+        );
+        Credential credential = Credential.createIssuing(
+                6L,
+                10L,
+                "credential-external-id",
+                "4DF08F86334AB5C5CD4551A9685E27CB1063CF5E3102E30E5F123AFDE2904C8E",
+                "did:xrpl:1:rIssuer",
+                KyvcEnums.CredentialStatusPurpose.revocation.name(),
+                "STANDARD",
+                "KR",
+                HOLDER_DID,
+                "rHolder"
+        );
+        ReflectionTestUtils.setField(credential, "credentialId", 25L);
+        credential.refreshStatus(KyvcEnums.CredentialStatus.VALID);
+        credential.acceptToWallet("android-device-id", HOLDER_DID, "rHolder", LocalDateTime.now());
+
+        WebVpLoginSubmitRequest request = objectMapper.readValue(
+                """
+                        {
+                          "qrToken": "raw-qr-token",
+                          "credentialId": 25,
+                          "vp": {
+                            "format": "kyvc-sd-jwt-presentation-v1",
+                            "sdJwtKb": "masked-test-presentation"
+                          },
+                          "didDocument": {
+                            "id": "did:xrpl:1:rHolder",
+                            "verificationMethod": [
+                              {
+                                "id": "did:xrpl:1:rHolder#holder-key-1"
+                              }
+                            ],
+                            "authentication": [
+                              "did:xrpl:1:rHolder#holder-key-1"
+                            ]
+                          },
+                          "didDocuments": {
+                            "did:xrpl:1:rHolder": {
+                              "id": "did:xrpl:1:rHolder",
+                              "verificationMethod": [
+                                {
+                                  "id": "did:xrpl:1:rHolder#holder-key-1"
+                                }
+                              ],
+                              "authentication": [
+                                "did:xrpl:1:rHolder#holder-key-1"
+                              ]
+                            }
+                          },
+                          "did_documents": {
+                            "did:xrpl:1:rHolder": {
+                              "id": "did:xrpl:1:rHolder",
+                              "verificationMethod": [
+                                {
+                                  "id": "did:xrpl:1:rHolder#holder-key-1"
+                                }
+                              ],
+                              "authentication": [
+                                "did:xrpl:1:rHolder#holder-key-1"
+                              ]
+                            }
+                          },
+                          "deviceId": "android-device-id"
+                        }
+                        """,
+                WebVpLoginSubmitRequest.class
+        );
+
+        when(vpVerificationRepository.findByRequestId(requestId)).thenReturn(Optional.of(vpVerification));
+        when(credentialRepository.findById(25L)).thenReturn(Optional.of(credential));
+        when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(coreAdapter.verifyWebVpLoginPresentation(any(), any())).thenReturn(new CorePresentationVerifyResponse(
+                true,
+                null,
+                null,
+                List.of(),
+                Map.of(),
+                "Core 검증 성공"
+        ));
+
+        service.submit(requestId, request);
+
+        ArgumentCaptor<Map<String, Map<String, Object>>> didDocumentsCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(coreAdapter).verifyWebVpLoginPresentation(any(), didDocumentsCaptor.capture());
+        assertThat(didDocumentsCaptor.getValue()).containsKey(HOLDER_DID);
+        assertThat(didDocumentsCaptor.getValue().get(HOLDER_DID).get("id")).isEqualTo(HOLDER_DID);
     }
 
     private Map<String, Object> didDocument() {

@@ -6,6 +6,7 @@ import com.kyvc.backend.domain.core.application.CorePayloadSanitizer;
 import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
+import com.kyvc.backend.domain.core.dto.CorePresentationVerifyRequest;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceRequest;
 import com.kyvc.backend.domain.core.dto.CoreVcIssuanceResponse;
 import com.kyvc.backend.domain.core.infrastructure.dto.IssueKycCredentialApiRequest;
@@ -201,6 +202,35 @@ class CoreHttpAdapterTest {
         assertThat(rootNode.has("sdJwtKb")).isFalse();
         assertThat(rootNode.has("requiredClaims")).isFalse();
         assertThat(rootNode.has("challenge")).isFalse();
+    }
+
+    @Test
+    void corePresentationVerifyRequest_serializesDidDocumentsForWebVpLogin() throws Exception {
+        String holderDid = "did:xrpl:1:rHolder";
+        Map<String, Object> didDocument = new LinkedHashMap<>();
+        didDocument.put("id", holderDid);
+        didDocument.put("verificationMethod", List.of());
+        didDocument.put("authentication", List.of());
+        Map<String, Map<String, Object>> didDocuments = Map.of(holderDid, didDocument);
+
+        CorePresentationVerifyRequest request = new CorePresentationVerifyRequest(
+                "kyvc-sd-jwt-presentation-v1",
+                Map.of("format", "kyvc-sd-jwt-presentation-v1", "sdJwtKb", "sd-jwt-kb"),
+                didDocuments,
+                null,
+                true,
+                null,
+                false,
+                "xrpl"
+        );
+
+        JsonNode rootNode = objectMapper.readTree(objectMapper.writeValueAsString(request));
+
+        assertThat(rootNode.has("did_documents")).isTrue();
+        assertThat(rootNode.get("did_documents").has(holderDid)).isTrue();
+        assertThat(rootNode.get("did_documents").get(holderDid).get("id").asText()).isEqualTo(holderDid);
+        assertThat(rootNode.get("presentation").get("sdJwtKb").asText()).isEqualTo("sd-jwt-kb");
+        assertThat(rootNode.get("status_mode").asText()).isEqualTo("xrpl");
     }
 
     @Test

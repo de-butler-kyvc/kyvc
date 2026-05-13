@@ -650,12 +650,12 @@ public class VpVerificationService {
             throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
         }
         validateDidDocumentPayloadSize(didDocument);
-        Map<String, Object> document = asObjectMap(didDocument);
+        String holderDid = normalizeRequiredHolderDid(credential);
+        Map<String, Object> document = resolveDidDocumentMap(asObjectMap(didDocument), holderDid);
         if (document.isEmpty()) {
             throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
         }
 
-        String holderDid = normalizeRequiredHolderDid(credential);
         Object idValue = document.get("id");
         if (!(idValue instanceof String didDocumentId) || !StringUtils.hasText(didDocumentId)) {
             throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
@@ -667,6 +667,21 @@ public class VpVerificationService {
         Map<String, Object> didDocuments = new LinkedHashMap<>();
         didDocuments.put(holderDid, document);
         return didDocuments;
+    }
+
+    // Holder DID Document Map 조회
+    private Map<String, Object> resolveDidDocumentMap(
+            Map<String, Object> payload, // DID Document payload
+            String holderDid // Holder DID
+    ) {
+        if (payload.containsKey("id")) {
+            return payload;
+        }
+        Object nestedDocument = payload.get(holderDid);
+        if (nestedDocument instanceof Map<?, ?>) {
+            return asObjectMap(nestedDocument);
+        }
+        return Map.of();
     }
 
     // Holder DID 조회
