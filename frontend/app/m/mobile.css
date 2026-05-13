@@ -1215,13 +1215,15 @@ html {
 .home-scroll {
   position: relative;
   min-height: calc(100dvh - 135px);
-  padding-bottom: 0;
+  padding-bottom: 108px;
 }
 
 .home-figma-stage {
   position: relative;
-  min-height: 678px;
+  min-height: calc(100dvh - 135px);
   width: 100%;
+  padding-top: 267px;
+  padding-bottom: 18px;
 }
 
 .home-wallet-state.ready,
@@ -1537,10 +1539,7 @@ html {
 }
 
 .home-view .stack-section {
-  position: absolute;
-  top: 267px;
-  left: 0;
-  right: 0;
+  position: relative;
   margin-top: 0;
 }
 
@@ -1557,10 +1556,13 @@ html {
 }
 
 .credential-stack {
-  height: 374px;
-  overflow-y: auto;
-  padding: 0 19px 126px;
-  scroll-snap-type: y proximity;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: auto;
+  overflow: visible;
+  padding: 0 19px;
+  scroll-snap-type: none;
   scrollbar-width: none;
 }
 
@@ -1913,10 +1915,10 @@ html {
 }
 
 .credential-card.stacked {
-  position: sticky;
-  top: 0;
-  margin-bottom: 20px;
-  transform: translateY(calc(var(--i) * 14px)) scale(calc(1 - var(--i) * .025));
+  position: relative;
+  top: auto;
+  margin-bottom: 0;
+  transform: none;
   transform-origin: top center;
   scroll-snap-align: start;
   animation: stackIn .5s ease both;
@@ -1927,7 +1929,7 @@ html {
   width: 100%;
   height: 195.84px;
   min-height: 195.84px;
-  margin: 0 0 20px;
+  margin: 0;
   padding: 18.75px;
   border-radius: 22px;
   display: flex;
@@ -1957,10 +1959,14 @@ html {
 }
 
 .home-view .credential-card.stacked .card-top p {
+  max-width: 220px;
   font-size: 11.5px;
   line-height: normal;
   font-weight: 800;
   opacity: .76;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .home-view .credential-card.stacked .card-top h3 {
@@ -2027,6 +2033,7 @@ html {
   align-self: flex-end;
   white-space: nowrap;
   min-width: 0;
+  max-width: 190px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

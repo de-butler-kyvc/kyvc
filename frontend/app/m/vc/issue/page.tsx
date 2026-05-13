@@ -601,6 +601,6 @@ export default function MobileVcIssuePage() {
 }
 
 function credentialTitle(offer: WalletCredentialOfferResponse) {
-  if (offer.credentialTypeCode === "KYC_CREDENTIAL") return "법인등록증명서";
-  return offer.credentialTypeCode ?? "법인등록증명서";
+  void offer;
+  return "법인 KYC 증명서";
 }

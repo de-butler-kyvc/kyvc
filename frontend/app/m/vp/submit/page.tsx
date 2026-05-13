@@ -41,7 +41,7 @@ function apiCredentialToTarget(credential: EligibleCredentialResponse): SubmitTa
   return {
     credentialId: String(credential.credentialId),
     issuerName: credential.issuerDid?.split(":").slice(-1)[0] ?? "Issuer",
-    credentialTitle: credential.credentialTypeCode ?? "법인 증명서",
+    credentialTitle: "법인 KYC 증명서",
     expiresAt: credential.expiresAt,
   };
 }

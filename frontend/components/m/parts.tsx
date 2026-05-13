@@ -156,6 +156,7 @@ export type CertItem = {
   title: string;
   status: string;
   id: string;
+  holderDid?: string;
   date: string;
   expiresAt?: string;
   gradient: string;
@@ -196,7 +197,7 @@ export function MCertCard({
         <small>Verified Credential</small>
       </div>
       <div className="card-bottom">
-        <span>{cert.id}</span>
+        <span>{cert.holderDid ?? cert.id}</span>
         {showDateLabels ? (
           <span className="card-dates">
             <em>발급일 {cert.date}</em>
