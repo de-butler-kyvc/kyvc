@@ -254,6 +254,32 @@ class CredentialOfferServiceTest {
     }
 
     @Test
+    void prepareWalletCredential_allowsMissingCredentialStatusIdInMetadata() {
+        mockPrepareCredential(ACTUAL_HOLDER_DID, null, null);
+
+        WalletCredentialPrepareResponse response = service.prepareWalletCredential(
+                1L,
+                100L,
+                new WalletCredentialPrepareRequest(
+                        "qr-token-001",
+                        "device-001",
+                        ACTUAL_HOLDER_DID,
+                        ACTUAL_HOLDER_ACCOUNT,
+                        null,
+                        true
+                )
+        );
+
+        Map<String, Object> metadata = metadata(response.credentialPayload());
+        assertThat(response.credentialPayload().get("format")).isEqualTo("dc+sd-jwt");
+        assertThat(response.credentialPayload().get("sdJwt")).isEqualTo("header.payload.signature~disclosure-001~");
+        assertThat(metadata.get("credentialStatusId")).isNull();
+        assertThat(metadata.get("issuerAccount")).isEqualTo(ACTUAL_ISSUER_ACCOUNT);
+        assertThat(metadata.get("holderXrplAddress")).isEqualTo(ACTUAL_HOLDER_ACCOUNT);
+        assertThat(metadata.get("credentialType")).isEqualTo(ACTUAL_CREDENTIAL_TYPE);
+    }
+
+    @Test
     void prepareWalletCredential_rejectsPreparedOfferPayloadReplay() {
         Corporate corporate = createCorporate();
         CredentialOffer offer = CredentialOffer.create(
@@ -333,6 +359,14 @@ class CredentialOfferServiceTest {
             String holderDid, // Holder DID
             String holderKeyId // Holder 키 ID
     ) {
+        mockPrepareCredential(holderDid, holderKeyId, ACTUAL_CREDENTIAL_STATUS_ID);
+    }
+
+    private void mockPrepareCredential(
+            String holderDid, // Holder DID
+            String holderKeyId, // Holder 키 ID
+            String credentialStatusId // Credential Status ID
+    ) {
         Corporate corporate = createCorporate();
         KycApplication kycApplication = createApprovedKyc();
         CredentialOffer offer = CredentialOffer.create(
@@ -349,7 +383,7 @@ class CredentialOfferServiceTest {
                 "issuer-key-1",
                 KyvcEnums.CredentialType.KYC_CREDENTIAL.name()
         );
-        Credential credential = createValidCredential(holderDid, ACTUAL_HOLDER_ACCOUNT);
+        Credential credential = createValidCredential(holderDid, ACTUAL_HOLDER_ACCOUNT, credentialStatusId);
 
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
         when(credentialOfferRepository.getById(100L)).thenReturn(offer);
@@ -377,6 +411,14 @@ class CredentialOfferServiceTest {
             String holderDid, // Holder DID
             String holderXrplAddress // Holder XRPL 주소
     ) {
+        return createValidCredential(holderDid, holderXrplAddress, ACTUAL_CREDENTIAL_STATUS_ID);
+    }
+
+    private Credential createValidCredential(
+            String holderDid, // Holder DID
+            String holderXrplAddress, // Holder XRPL 주소
+            String credentialStatusId // Credential Status ID
+    ) {
         Credential credential = Credential.createIssuing(
                 20L,
                 10L,
@@ -397,7 +439,7 @@ class CredentialOfferServiceTest {
                 KyvcEnums.CredentialStatus.VALID,
                 "vc-hash-001",
                 "tx-hash-001",
-                ACTUAL_CREDENTIAL_STATUS_ID,
+                credentialStatusId,
                 LocalDateTime.now(),
                 LocalDateTime.now().plusYears(1)
         );
