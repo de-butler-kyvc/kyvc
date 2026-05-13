@@ -280,13 +280,6 @@ async function prepareCredentialOnce(
   const pending = preparingCredentialByOffer.get(offerId);
   if (pending) return pending;
 
-  const marker = mSession.readVcIssuePrepare();
-  if (marker?.offerId === offerId) {
-    throw new Error(PAYLOAD_NOT_REPLAYABLE_MESSAGE);
-  }
-
-  mSession.writeVcIssuePrepare({ offerId, requestedAt: Date.now() });
-
   const pendingPrepare = mobileWallet
     .prepare(offerId, payload)
     .then((prepared) => {
@@ -497,14 +490,9 @@ export default function MobileVcIssuePage() {
           receivedAt: Date.now(),
         });
         mSession.writeScanResult(null);
-        mSession.writeVcIssuePrepare(null);
         preparedCredentialByOffer.delete(offerId);
         router.replace("/m/vc/celebration");
       } catch (e) {
-        if (deliveredPayload) {
-          setError(PAYLOAD_NOT_REPLAYABLE_MESSAGE);
-          return;
-        }
         if (e instanceof ApiError) {
           setError(apiErrorMessage(e));
           return;
