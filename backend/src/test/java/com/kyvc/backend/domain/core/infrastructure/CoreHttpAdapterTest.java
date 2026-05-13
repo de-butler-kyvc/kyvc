@@ -120,6 +120,29 @@ class CoreHttpAdapterTest {
     }
 
     @Test
+    void mapVcIssuanceResponse_prefersValidCredentialStatusIdOverGenericId() {
+        String holderAccount = "rHolder111111111111111111111111";
+        String credentialStatusId = "xrpl:credential:" + VALID_ISSUER_ACCOUNT + ":" + holderAccount + ":KYC_CREDENTIAL";
+
+        CoreVcIssuanceResponse response = mapIssueResponse(issueResponse(
+                Map.of(),
+                Map.of(),
+                Map.of(
+                        "id", "generic-status-row-id",
+                        "status_id", credentialStatusId,
+                        "issuer_did", "did:xrpl:1:rIssuer"
+                ),
+                null,
+                null,
+                null
+        ), "did:xrpl:1:rIssuer");
+
+        assertThat(response.credentialStatusId()).isEqualTo(credentialStatusId);
+        assertThat(response.issuerAccount()).isEqualTo(VALID_ISSUER_ACCOUNT);
+        assertThat(response.issuerDid()).isEqualTo("did:xrpl:1:" + VALID_ISSUER_ACCOUNT);
+    }
+
+    @Test
     void verifyPresentationApiRequest_serializesVpJwtPayload() throws Exception {
         VerifyPresentationApiRequest request = new VerifyPresentationApiRequest(
                 "vp+jwt",

@@ -1213,12 +1213,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         Map<String, Object> tx = safeDetails(body.credentialCreateTransaction());
         Map<String, Object> ledgerEntry = safeDetails(body.ledgerEntry());
         String statusCode = mapCredentialStatusFromStatusObject(status);
-        String credentialStatusId = firstText(
-                extractString(status, "id", "status_id", "statusId", "credentialStatusId", "credential_status_id"),
-                body.credentialStatusId(),
-                body.credentialStatusIdSnake(),
-                body.statusId()
-        );
+        String credentialStatusId = resolveCredentialStatusId(body, status);
         String credentialExternalId = StringUtils.hasText(body.credentialId())
                 ? body.credentialId()
                 : extractString(status, "credential_id", "credentialId", "jti");
@@ -1315,6 +1310,29 @@ public class CoreHttpAdapter implements CoreAdapter {
         return normalizeOptional(fallbackIssuerDid);
     }
 
+    private String resolveCredentialStatusId(
+            IssueKycCredentialApiResponse body, // Core 발급 응답
+            Map<String, Object> status // Credential status 객체
+    ) {
+        String[] candidates = new String[]{
+                body.credentialStatusId(),
+                body.credentialStatusIdSnake(),
+                body.statusId(),
+                extractString(status, "credentialStatusId"),
+                extractString(status, "credential_status_id"),
+                extractString(status, "status_id"),
+                extractString(status, "statusId"),
+                extractString(status, "id")
+        };
+        for (String candidate : candidates) {
+            String normalized = normalizeOptional(candidate);
+            if (parseCredentialStatusId(normalized) != null) {
+                return normalized;
+            }
+        }
+        return firstText(candidates);
+    }
+
     private String firstText(
             String... values // 문자열 후보
     ) {
@@ -1380,7 +1398,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (parts.length < 5
                 || !DEFAULT_STATUS_MODE.equalsIgnoreCase(parts[0])
                 || !CREDENTIAL_STATUS_ID_TYPE.equalsIgnoreCase(parts[1])) {
-            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core Credential Status ID 형식이 올바르지 않습니다.");
+            return null;
         }
 
         String issuerAccount = parts[2].trim(); // Issuer XRPL 계정
@@ -1389,7 +1407,7 @@ public class CoreHttpAdapter implements CoreAdapter {
         if (!isXrplClassicAddress(issuerAccount)
                 || !isXrplClassicAddress(holderAccount)
                 || !StringUtils.hasText(credentialType)) {
-            throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core Credential Status ID 데이터가 올바르지 않습니다.");
+            return null;
         }
         return new ParsedCredentialStatusId(issuerAccount, holderAccount, credentialType);
     }
