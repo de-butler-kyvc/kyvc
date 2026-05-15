@@ -7,12 +7,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * VP 제출 요청
  *
  * @param requestId VP 요청 ID
- * @param credentialId 제출할 Credential ID
+ * @param credentialId 제출 Credential ID
  * @param nonce VP 요청 nonce
  * @param challenge VP 요청 challenge
  * @param vpJwt VP JWT 원문
  * @param format Presentation format
  * @param presentation Presentation 원문 또는 객체
+ * @param attachmentManifest 원본 첨부 manifest
  * @param didDocument Holder DID Document
  * @param deviceId 모바일 기기 ID
  */
@@ -20,8 +21,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record VpPresentationRequest(
         @Schema(description = "VP 요청 ID", example = "vp-req-001")
         String requestId, // VP 요청 ID
-        @Schema(description = "제출할 Credential ID", example = "1")
-        Long credentialId, // 제출할 Credential ID
+        @Schema(description = "제출 Credential ID", example = "1")
+        Long credentialId, // 제출 Credential ID
         @Schema(description = "VP 요청 nonce", example = "nonce-001")
         String nonce, // VP 요청 nonce
         @Schema(description = "VP 요청 challenge", example = "challenge-001")
@@ -32,6 +33,9 @@ public record VpPresentationRequest(
         String format, // Presentation format
         @Schema(description = "Presentation 원문 또는 객체")
         Object presentation, // Presentation 원문 또는 객체
+        @JsonAlias({"attachment_manifest", "attachmentManifest"})
+        @Schema(description = "원본 첨부 manifest")
+        Object attachmentManifest, // 원본 첨부 manifest
         @JsonAlias({"did_document", "didDocuments", "did_documents"})
         @Schema(description = "Holder DID Document")
         Object didDocument, // Holder DID Document
@@ -40,7 +44,7 @@ public record VpPresentationRequest(
 ) {
     public VpPresentationRequest(
             String requestId, // VP 요청 ID
-            Long credentialId, // 제출할 Credential ID
+            Long credentialId, // 제출 Credential ID
             String nonce, // VP 요청 nonce
             String challenge, // VP 요청 challenge
             String vpJwt, // VP JWT 원문
@@ -48,27 +52,41 @@ public record VpPresentationRequest(
             Object presentation, // Presentation 원문 또는 객체
             String deviceId // 모바일 기기 ID
     ) {
-        this(requestId, credentialId, nonce, challenge, vpJwt, format, presentation, null, deviceId);
+        this(requestId, credentialId, nonce, challenge, vpJwt, format, presentation, null, null, deviceId);
     }
 
     public VpPresentationRequest(
             String requestId, // VP 요청 ID
-            Long credentialId, // 제출할 Credential ID
+            Long credentialId, // 제출 Credential ID
+            String nonce, // VP 요청 nonce
+            String challenge, // VP 요청 challenge
+            String vpJwt, // VP JWT 원문
+            String format, // Presentation format
+            Object presentation, // Presentation 원문 또는 객체
+            Object didDocument, // Holder DID Document
+            String deviceId // 모바일 기기 ID
+    ) {
+        this(requestId, credentialId, nonce, challenge, vpJwt, format, presentation, null, didDocument, deviceId);
+    }
+
+    public VpPresentationRequest(
+            String requestId, // VP 요청 ID
+            Long credentialId, // 제출 Credential ID
             String nonce, // VP 요청 nonce
             String challenge, // VP 요청 challenge
             String vpJwt, // VP JWT 원문
             String deviceId // 모바일 기기 ID
     ) {
-        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null, deviceId);
+        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null, null, deviceId);
     }
 
     public VpPresentationRequest(
             String requestId, // VP 요청 ID
-            Long credentialId, // 제출할 Credential ID
+            Long credentialId, // 제출 Credential ID
             String nonce, // VP 요청 nonce
             String challenge, // VP 요청 challenge
             String vpJwt // VP JWT 원문
     ) {
-        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null, null);
+        this(requestId, credentialId, nonce, challenge, vpJwt, null, null, null, null, null);
     }
 }

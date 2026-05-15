@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.vp.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
+import com.kyvc.backend.domain.core.dto.CoreAttachmentPart;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
@@ -12,10 +13,12 @@ import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.domain.CredentialOffer;
 import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
 import com.kyvc.backend.domain.vp.domain.VpVerification;
 import com.kyvc.backend.domain.vp.dto.EligibleCredentialListResponse;
 import com.kyvc.backend.domain.vp.dto.QrResolveRequest;
 import com.kyvc.backend.domain.vp.dto.QrResolveResponse;
+import com.kyvc.backend.domain.vp.dto.VpAttachmentPart;
 import com.kyvc.backend.domain.vp.dto.VpPresentationRequest;
 import com.kyvc.backend.domain.vp.dto.VpPresentationResponse;
 import com.kyvc.backend.domain.vp.dto.VpPresentationResultResponse;
@@ -108,6 +111,7 @@ class VpVerificationServiceTest {
                 coreRequestService,
                 coreAdapter,
                 new ObjectMapper().findAndRegisterModules(),
+                new DocumentStorageProperties("./target/test-kyc-documents", 10, "pdf", "application/pdf"),
                 logEventLogger
         );
 
@@ -427,6 +431,69 @@ class VpVerificationServiceTest {
     }
 
     @Test
+    void submitPresentationWithAttachments_callsCoreMultipartVerification() {
+        String sdJwtKb = "sd-jwt-kb";
+        mockSuccessfulMultipartSubmit(sdJwtKb, coreResponse(true, false));
+        String manifestJson = """
+                {
+                  "attachments": [
+                    {
+                      "requirementId": "registry-evidence",
+                      "documentId": "urn:kyvc:doc:101",
+                      "attachmentRef": "doc-1",
+                      "documentType": "KR_CORPORATE_REGISTER_FULL_CERTIFICATE",
+                      "digestSRI": "sha384-digest",
+                      "mediaType": "application/pdf",
+                      "byteSize": 12
+                    }
+                  ]
+                }
+                """;
+        List<VpAttachmentPart> attachments = List.of(new VpAttachmentPart(
+                "attachments",
+                "registry.pdf",
+                "application/pdf",
+                12L,
+                "registry-pdf".getBytes()
+        ));
+        ArgumentCaptor<Object> manifestCaptor = ArgumentCaptor.forClass(Object.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<CoreAttachmentPart>> attachmentsCaptor = ArgumentCaptor.forClass(List.class);
+
+        service.submitPresentationWithAttachments(
+                userDetails(),
+                new VpPresentationRequest(
+                        "vp-req-001",
+                        100L,
+                        "nonce-001",
+                        "challenge-001",
+                        sdJwtKb,
+                        "kyvc-sd-jwt-presentation-v1",
+                        null,
+                        didDocument(),
+                        null
+                ),
+                manifestJson,
+                attachments
+        );
+
+        verify(coreAdapter).requestVpVerificationWithAttachments(
+                any(CoreVpVerificationRequest.class),
+                formatCaptor.capture(),
+                presentationCaptor.capture(),
+                didDocumentsCaptor.capture(),
+                manifestCaptor.capture(),
+                attachmentsCaptor.capture()
+        );
+        assertThat(formatCaptor.getValue()).isEqualTo("kyvc-sd-jwt-presentation-v1");
+        assertThat(presentationCaptor.getValue()).isEqualTo(sdJwtKb);
+        assertThat(didDocumentsCaptor.getValue()).containsKey(HOLDER_DID);
+        assertThat((List<?>) manifestCaptor.getValue()).hasSize(1);
+        assertThat(attachmentsCaptor.getValue()).hasSize(1);
+        assertThat(attachmentsCaptor.getValue().get(0).partName()).isEqualTo("doc-1");
+    }
+
+    @Test
     void submitPresentation_marksInvalid_whenCoreVerificationFails() {
         String vpJwt = "vp.jwt.invalid";
         mockSuccessfulSubmit(vpJwt, coreResponse(false, false));
@@ -737,9 +804,48 @@ class VpVerificationServiceTest {
         if (Boolean.TRUE.equals(coreResponse.valid())) {
             when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
         } else {
-            when(coreRequestService.markFailed(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+            when(coreRequestService.markFailed(eq(coreRequest.getCoreRequestId()), any(), any())).thenReturn(coreRequest);
         }
         when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), anyString(), any(), any()))
+                .thenReturn(coreResponse);
+        when(vpVerificationRepository.save(any(VpVerification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private void mockSuccessfulMultipartSubmit(
+            String hashSource, // Replay 해시 대상 원문
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                21L,
+                null
+        );
+
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
+        when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(hashSource))).thenReturn(false);
+        when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
+        when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreRequestService.markRunning(coreRequest.getCoreRequestId())).thenReturn(coreRequest);
+        when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreAdapter.requestVpVerificationWithAttachments(any(CoreVpVerificationRequest.class), anyString(), any(), any(), any(), any()))
                 .thenReturn(coreResponse);
         when(vpVerificationRepository.save(any(VpVerification.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

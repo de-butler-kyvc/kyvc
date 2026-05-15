@@ -160,6 +160,20 @@ public class CoreRequestService {
         return coreRequestRepository.save(coreRequest);
     }
 
+    // 응답 Payload 포함 실패 상태 반영
+    public CoreRequest markFailed(
+            String coreRequestId, // Core 요청 ID
+            String errorMessage, // 실패 메시지
+            String responsePayloadJson // 응답 Payload JSON
+    ) {
+        CoreRequest coreRequest = coreRequestRepository.getById(coreRequestId);
+        coreRequest.markFailed(
+                corePayloadSanitizer.sanitizeText(errorMessage),
+                corePayloadSanitizer.sanitizePayload(responsePayloadJson)
+        );
+        return coreRequestRepository.save(coreRequest);
+    }
+
     // Timeout 상태 반영
     public CoreRequest markTimeout(
             String coreRequestId, // Core 요청 ID

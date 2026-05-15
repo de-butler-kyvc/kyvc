@@ -86,6 +86,28 @@ class LogMaskingUtilTest {
     }
 
     @Test
+    void maskBodyMasksDocumentAttachmentBase64Fields() {
+        String body = """
+                {
+                  "data": {
+                    "documentAttachments": [
+                      {
+                        "fileName": "business_registration.pdf",
+                        "contentBase64": "JVBERi0xLjQKraw-pdf"
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        String maskedBody = LogMaskingUtil.maskBody(body, 2000);
+
+        assertThat(maskedBody)
+                .contains("\"contentBase64\":\"***\"")
+                .doesNotContain("JVBERi0xLjQKraw-pdf");
+    }
+
+    @Test
     void maskTextMasksFormStyleSensitiveValues() {
         String text = "email=user@example.com&password=plain-password&refreshToken=refresh-token-raw&X-API-Key=api-key-raw";
 

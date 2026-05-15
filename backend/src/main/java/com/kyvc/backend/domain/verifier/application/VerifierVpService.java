@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.verifier.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kyvc.backend.domain.core.application.CoreDocumentEvidencePolicy;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
@@ -885,6 +886,8 @@ public class VerifierVpService {
         definition.put("acceptedFormat", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         definition.put("format", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         definition.put("requiredClaims", requestedClaims == null ? List.of() : requestedClaims);
+        definition.put("requiredDisclosures", CoreDocumentEvidencePolicy.requiredDisclosures(requestedClaims));
+        definition.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requestedClaims));
         return definition;
     }
 

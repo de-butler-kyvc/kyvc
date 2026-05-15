@@ -26,10 +26,10 @@ public final class LogMaskingUtil {
             "([A-Za-z0-9._%+-])([A-Za-z0-9._%+-]*)(@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})"
     );
     private static final Pattern JSON_SENSITIVE_VALUE_PATTERN = Pattern.compile(
-            "(?i)(\"(?:[^\"]*(?:password|token|authorization|cookie|jwt|secret|privateKey|apiKey|api[-_]?key|x[-_]?api[-_]?key|verificationCode)[^\"]*|presentation|credentialJwt|credential|vc|vp|file|document|documentContent|originalContent)\"\\s*:\\s*\")([^\"]*)(\")"
+            "(?i)(\"(?:[^\"]*(?:password|token|authorization|cookie|jwt|secret|privateKey|apiKey|api[-_]?key|x[-_]?api[-_]?key|verificationCode|contentBase64|documentContentBase64|attachmentContentBase64)[^\"]*|presentation|credentialJwt|credential|vc|vp|file|document|documentContent|originalContent)\"\\s*:\\s*\")([^\"]*)(\")"
     );
     private static final Pattern FORM_SENSITIVE_VALUE_PATTERN = Pattern.compile(
-            "(?i)((?:[A-Za-z0-9_-]*(?:password|token|authorization|cookie|jwt|secret|privateKey|apiKey|api[-_]?key|x[-_]?api[-_]?key|verificationCode)[A-Za-z0-9_-]*|presentation|credentialJwt|credential|vc|vp|file|document|documentContent|originalContent)=)([^&\\s]*)"
+            "(?i)((?:[A-Za-z0-9_-]*(?:password|token|authorization|cookie|jwt|secret|privateKey|apiKey|api[-_]?key|x[-_]?api[-_]?key|verificationCode|contentBase64|documentContentBase64|attachmentContentBase64)[A-Za-z0-9_-]*|presentation|credentialJwt|credential|vc|vp|file|document|documentContent|originalContent)=)([^&\\s]*)"
     );
     private static final Set<String> SENSITIVE_FIELD_NAMES = Set.of(
             "password",
@@ -56,7 +56,10 @@ public final class LogMaskingUtil {
             "file",
             "document",
             "documentcontent",
-            "originalcontent"
+            "originalcontent",
+            "contentbase64",
+            "documentcontentbase64",
+            "attachmentcontentbase64"
     );
 
     public static String maskBody(
