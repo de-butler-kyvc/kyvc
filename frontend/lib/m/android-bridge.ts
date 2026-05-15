@@ -21,6 +21,8 @@ export type SaveVcPayload = {
   sdJwt?: string;
   vcJwt?: string;
   metadata?: Record<string, unknown>;
+  documentAttachments?: Record<string, unknown>[];
+  documentAttachmentManifest?: unknown;
   selectiveDisclosure?: {
     disclosablePaths?: string[];
     [key: string]: unknown;
