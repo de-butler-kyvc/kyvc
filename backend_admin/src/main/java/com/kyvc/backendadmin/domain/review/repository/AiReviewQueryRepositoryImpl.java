@@ -33,6 +33,7 @@ public class AiReviewQueryRepositoryImpl implements AiReviewQueryRepository {
                        kyc.ai_confidence_score,
                        kyc.ai_review_summary,
                        kyc.ai_review_detail_json,
+                       kyc.core_ai_assessment_json,
                        kyc.manual_review_reason,
                        kyc.ai_review_reason_code,
                        kyc.updated_at
@@ -94,7 +95,8 @@ public class AiReviewQueryRepositoryImpl implements AiReviewQueryRepository {
                 toString(row[5]),
                 toString(row[6]),
                 toString(row[7]),
-                toLocalDateTime(row[8])
+                toString(row[8]),
+                toLocalDateTime(row[9])
         );
     }
 

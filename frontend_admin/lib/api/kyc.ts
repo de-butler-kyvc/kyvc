@@ -524,6 +524,7 @@ export interface AiReviewResult {
   summaryReason?: string;
   manualReviewReason?: string;
   detailJson?: string;
+  coreAiAssessmentJson?: string;
 }
 
 export interface AiMismatch {
@@ -593,6 +594,7 @@ export async function getAiReview(kycId: string): Promise<AiReviewResult> {
     summaryReason: (d.summary ?? d.summaryReason ?? d.aiReviewSummary) as string | undefined,
     manualReviewReason: d.manualReviewReason as string | undefined,
     detailJson: (d.detailJson ?? d.aiReviewDetailJson) as string | undefined,
+    coreAiAssessmentJson: d.coreAiAssessmentJson as string | undefined,
     modelVersion: d.modelVersion as string | undefined,
     reviewedAt: (d.reviewedAt ?? d.updatedAt) as string | undefined,
   };
