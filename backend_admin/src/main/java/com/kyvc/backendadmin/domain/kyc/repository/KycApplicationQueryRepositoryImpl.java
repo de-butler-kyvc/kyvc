@@ -12,7 +12,9 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -56,6 +58,10 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                        kyc.corporate_id,
                        c.corporate_name,
                        c.business_registration_no,
+                       kyc.corporate_type_code,
+                       corporate_type_common_code.code_name as corporate_type_name,
+                       c.corporate_registration_no,
+                       c.established_date,
                        kyc.applicant_user_id,
                        u.email,
                        kyc.kyc_status_code,
@@ -70,6 +76,8 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 from kyc_applications kyc
                 join corporates c on c.corporate_id = kyc.corporate_id
                 join users u on u.user_id = kyc.applicant_user_id
+                left join common_codes corporate_type_common_code on corporate_type_common_code.code_group_id = 2
+                       and corporate_type_common_code.code = kyc.corporate_type_code
                 left join latest_supplement ls on ls.kyc_id = kyc.kyc_id
                 %s
                 order by coalesce(kyc.submitted_at, kyc.created_at) desc, kyc.kyc_id desc
@@ -105,11 +113,13 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 select kyc.kyc_id,
                        kyc.kyc_status_code,
                        kyc.corporate_type_code,
+                       corporate_type_common_code.code_name as corporate_type_name,
                        c.corporate_id,
                        c.corporate_name,
                        c.corporate_phone,
                        c.business_registration_no,
                        c.corporate_registration_no,
+                       c.established_date,
                        c.representative_name,
                        c.representative_phone,
                        c.representative_email,
@@ -126,6 +136,8 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 from kyc_applications kyc
                 join corporates c on c.corporate_id = kyc.corporate_id
                 join users u on u.user_id = kyc.applicant_user_id
+                left join common_codes corporate_type_common_code on corporate_type_common_code.code_group_id = 2
+                       and corporate_type_common_code.code = kyc.corporate_type_code
                 where kyc.kyc_id = :kycId
                 """);
         query.setParameter("kycId", kycId);
@@ -281,17 +293,21 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toLong(row[1]),
                 toString(row[2]),
                 toString(row[3]),
-                toLong(row[4]),
+                toString(row[4]),
                 toString(row[5]),
                 toString(row[6]),
-                toString(row[7]),
-                toString(row[8]),
-                toBigDecimal(row[9]),
+                toLocalDate(row[7]),
+                toLong(row[8]),
+                toString(row[9]),
                 toString(row[10]),
                 toString(row[11]),
-                toLocalDateTime(row[12]),
-                toLocalDateTime(row[13]),
-                toLocalDateTime(row[14])
+                toString(row[12]),
+                toBigDecimal(row[13]),
+                toString(row[14]),
+                toString(row[15]),
+                toLocalDateTime(row[16]),
+                toLocalDateTime(row[17]),
+                toLocalDateTime(row[18])
         );
     }
 
@@ -300,13 +316,13 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toLong(row[0]),
                 toString(row[1]),
                 toString(row[2]),
-                toLong(row[3]),
-                toString(row[4]),
+                toString(row[3]),
+                toLong(row[4]),
                 toString(row[5]),
                 toString(row[6]),
                 toString(row[7]),
                 toString(row[8]),
-                toString(row[9]),
+                toLocalDate(row[9]),
                 toString(row[10]),
                 toString(row[11]),
                 toString(row[12]),
@@ -315,9 +331,11 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
                 toString(row[15]),
                 toString(row[16]),
                 toString(row[17]),
-                toLong(row[18]),
+                toString(row[18]),
                 toString(row[19]),
-                toLocalDateTime(row[20])
+                toLong(row[20]),
+                toString(row[21]),
+                toLocalDateTime(row[22])
         );
     }
 
@@ -366,6 +384,13 @@ public class KycApplicationQueryRepositoryImpl implements KycApplicationQueryRep
 
     private BigDecimal toBigDecimal(Object value) {
         return value == null ? null : (BigDecimal) value;
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof Date date) {
+            return date.toLocalDate();
+        }
+        return (LocalDate) value;
     }
 
     private LocalDateTime toLocalDateTime(Object value) {

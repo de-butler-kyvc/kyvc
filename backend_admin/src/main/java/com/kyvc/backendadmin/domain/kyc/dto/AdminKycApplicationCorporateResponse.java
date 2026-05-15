@@ -2,6 +2,7 @@ package com.kyvc.backendadmin.domain.kyc.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -20,6 +21,10 @@ public record AdminKycApplicationCorporateResponse(
         /** 법인 유형 코드 */
         @Schema(description = "법인 유형 코드", example = "CORPORATION")
         String corporateType,
+
+        /** 법인 유형명 */
+        @Schema(description = "법인 유형명", example = "주식회사")
+        String corporateTypeName,
 
         /** 법인 ID */
         @Schema(description = "법인 ID", example = "10")
@@ -40,6 +45,10 @@ public record AdminKycApplicationCorporateResponse(
         /** 법인등록번호 */
         @Schema(description = "법인등록번호", example = "110111-1234567")
         String corporateRegistrationNo,
+
+        /** 설립일 */
+        @Schema(description = "설립일", example = "2020-01-01")
+        LocalDate establishedDate,
 
         /** 대표자명 */
         @Schema(description = "대표자명", example = "홍길동")

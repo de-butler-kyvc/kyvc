@@ -13,6 +13,8 @@ import {
   getKycCorporate,
   getKycDocuments,
   getKycDocumentPreview,
+  formatConfidence,
+  formatCorporateType,
   issueKycCredential,
   type BackendKycDetail,
   type BackendKycCorporate,
@@ -27,6 +29,7 @@ const STATUS_BADGE: Record<string, string> = {
   보완필요: "bg-orange-100 text-orange-600",
   심사중: "bg-blue-100 text-blue-600",
   정상: "bg-green-100 text-green-600",
+  "VC 발급완료": "bg-green-100 text-green-600",
   불충족: "bg-slate-100 text-slate-500",
 };
 
@@ -55,8 +58,6 @@ const HISTORY_TYPE_COLOR: Record<string, string> = {
 };
 
 const STATUS_KO: Record<string, string> = {
-  NEEDS_MANUAL_REVIEW: "수동심사필요",
-  NEED_MANUAL_REVIEW: "수동심사필요",
   MANUAL_REVIEW: "수동심사필요",
   NEEDS_SUPPLEMENT: "보완필요",
   NEED_SUPPLEMENT: "보완필요",
@@ -66,6 +67,7 @@ const STATUS_KO: Record<string, string> = {
   DRAFT: "심사중",
   NORMAL: "정상",
   APPROVED: "정상",
+  VC_ISSUED: "VC 발급완료",
   UNSATISFACTORY: "불충족",
   REJECTED: "불충족",
 };
@@ -82,6 +84,7 @@ const AI_KO: Record<string, string> = {
   FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
   NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_APPROVAL_REQUIRED: "수동심사필요",
 };
 const CHANNEL_KO: Record<string, string> = { WEB: "웹", FINANCIAL: "금융사" };
 
@@ -214,17 +217,22 @@ export default function KycDetailPage({ id }: { id: string }) {
 
   // ── 파생 표시값 ──────────────────────────────────────────────
   const statusKo = detail ? toKo(STATUS_KO, detail.kycStatus ?? detail.status) : "-";
-  const aiKo = detail ? toKo(AI_KO, detail.aiJudgment ?? detail.aiReviewResult ?? detail.aiReviewResultCode) : "-";
+  const aiKo = detail ? toKo(AI_KO, detail.aiReviewResult ?? detail.aiReviewResultCode) : "-";
   const channelKo = detail ? toKo(CHANNEL_KO, detail.channel) : "-";
   const histories = detail?.recentHistories ?? [];
   const canManualReview = (detail?.kycStatus ?? detail?.status) === "MANUAL_REVIEW";
+  const corporateRegistrationNo = corporate?.corporateRegistrationNo ?? corporate?.corporateRegistrationNumber ?? "-";
+  const corporateTypeLabel = formatCorporateType(
+    corporate?.corporateType ?? corporate?.corporateTypeCode ?? corporate?.corporationType,
+    corporate?.corporateTypeName
+  );
 
   const corpFields = corporate
     ? [
         { label: "법인명", value: corporate.corporationName ?? corporate.corporateName ?? "-" },
         { label: "사업자등록번호", value: corporate.businessRegistrationNumber ?? corporate.businessRegistrationNo ?? "-" },
-        { label: "법인등록번호", value: corporate.corporateRegistrationNumber ?? "-" },
-        { label: "법인 유형", value: corporate.corporationType ?? corporate.corporateType ?? "-" },
+        { label: "법인등록번호", value: corporateRegistrationNo },
+        { label: "법인 유형", value: corporateTypeLabel },
         { label: "대표자명", value: corporate.representativeName ?? "-" },
         { label: "설립일", value: fmtDate(corporate.establishedDate) },
         { label: "주소", value: corporate.address ?? "-" },
@@ -436,8 +444,8 @@ export default function KycDetailPage({ id }: { id: string }) {
                     </span>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                    <p className="text-xs text-slate-400 mb-1">처리 모델</p>
-                    <p className="text-sm font-medium text-slate-700">{detail?.aiConfidenceScore != null ? `${detail.aiConfidenceScore}%` : "-"}</p>
+                    <p className="text-xs text-slate-400 mb-1">AI 신뢰도</p>
+                    <p className="text-sm font-medium text-slate-700">{formatConfidence(detail?.aiConfidenceScore)}</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                     <p className="text-xs text-slate-400 mb-1">상세 분석</p>

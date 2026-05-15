@@ -84,10 +84,12 @@ function toKo(map: Record<string, string>, value?: string) {
   return map[value] ?? value;
 }
 
-function formatConfidence(value?: number) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "-";
-  const normalized = value <= 1 ? value * 100 : value;
-  return `${normalized.toFixed(1)}%`;
+function formatConfidence(value?: number | string | null) {
+  if (value === null || value === undefined) return "-";
+  const numeric = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(numeric)) return "-";
+  const normalized = numeric <= 1 ? numeric * 100 : numeric;
+  return `${Math.round(normalized)}%`;
 }
 
 function getCorporateName(detail: BackendKycDetail | null) {
