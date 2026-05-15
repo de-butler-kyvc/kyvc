@@ -231,6 +231,12 @@ public class FinanceKycReviewService {
     ) {
         KyvcEnums.AiReviewStatus aiReviewStatus = resolveAiReviewStatus(coreResponse); // AI 심사 상태
         String detailJson = toJson(coreResponse); // AI 심사 상세 JSON
+        if (coreResponse != null) {
+            kycApplication.updateCoreAiReviewDetails(
+                    coreResponse.coreAiAssessmentJson(),
+                    coreResponse.coreAiReviewRawJson()
+            );
+        }
         BigDecimal confidenceScore = coreResponse == null || coreResponse.confidenceScore() == null
                 ? DEFAULT_CONFIDENCE_SCORE
                 : coreResponse.confidenceScore(); // AI 신뢰도 점수

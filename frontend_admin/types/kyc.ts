@@ -1,4 +1,4 @@
-export type KycStatus = "수동심사필요" | "보완필요" | "심사중" | "정상" | "불충족";
+export type KycStatus = "작성중" | "제출완료" | "AI 심사중" | "수동심사" | "보완요청" | "승인완료" | "반려" | "VC 발급완료";
 export type KycChannel = "웹" | "금융사";
 
 export interface KycItem {

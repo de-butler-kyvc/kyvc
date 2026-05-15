@@ -47,6 +47,31 @@ const AGENT_JUDGMENT_KO: Record<string, string> = {
   ...JUDGMENT_KO,
 };
 
+const ASSESSMENT_STATUS_KO: Record<string, string> = {
+  NORMAL: "정상",
+  SUPPLEMENT_REQUIRED: "보완필요",
+  MANUAL_REVIEW_REQUIRED: "수동심사필요",
+  REJECTED: "반려",
+};
+
+const CHECK_STATUS_KO: Record<string, string> = {
+  PASS: "일치",
+  MATCH: "일치",
+  FAILED: "불일치",
+  FAIL: "불일치",
+  MISMATCH: "불일치",
+  WARNING: "검토필요",
+  REVIEW_REQUIRED: "검토필요",
+};
+
+const SEVERITY_KO: Record<string, string> = {
+  INFO: "낮음",
+  LOW: "낮음",
+  MEDIUM: "중간",
+  HIGH: "높음",
+  CRITICAL: "긴급",
+};
+
 const judgmentBadge: Record<string, string> = {
   정상: "bg-green-100 text-green-600",
   유효: "bg-green-100 text-green-600",
@@ -82,6 +107,37 @@ function formatPercent(value?: number | string | null) {
 }
 
 type DetailRecord = Record<string, unknown>;
+
+type AssessmentIssue = {
+  code: string;
+  message: string;
+  evidenceRefs: string[];
+};
+
+type CrossDocumentCheck = {
+  checkCode: string;
+  status: string;
+  severity?: string;
+  message: string;
+  confidence?: number;
+  evidenceRefs: string[];
+};
+
+type AssessmentDetail = {
+  assessmentId?: string;
+  assessmentStatus?: string;
+  confidenceScore?: number;
+  message?: string;
+  createdAt?: string;
+  supplementRequests: AssessmentIssue[];
+  manualReviewReasons: AssessmentIssue[];
+  crossDocumentChecks: CrossDocumentCheck[];
+};
+
+type ClaimSection = {
+  title: string;
+  rows: Array<{ label: string; value: string }>;
+};
 
 function isRecord(value: unknown): value is DetailRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -295,8 +351,246 @@ function mergeAgentFallback(agents: AgentAuthority[], corporate: BackendKycCorpo
         authorityScope: corporateScope,
         authorityType: corporateScope,
         judgment: "NEEDS_REVIEW",
-      }]
+    }]
     : [];
+}
+
+function stringListValue(source: DetailRecord | null | undefined, ...keys: string[]) {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => typeof item === "string" || typeof item === "number" ? String(item) : undefined)
+        .filter((item): item is string => !!item?.trim());
+    }
+    if (typeof value === "string" && value.trim()) return [value.trim()];
+  }
+  return [];
+}
+
+function normalizeIssue(source: DetailRecord): AssessmentIssue | null {
+  const code = textValue(source, "code", "issueCode", "reasonCode");
+  const message = textValue(source, "message", "reason", "summary");
+  const evidenceRefs = stringListValue(source, "evidenceRefs", "evidence_refs", "refs");
+  if (!code && !message && evidenceRefs.length === 0) return null;
+  return {
+    code: code ?? "-",
+    message: message ?? "-",
+    evidenceRefs,
+  };
+}
+
+function normalizeCrossCheck(source: DetailRecord): CrossDocumentCheck | null {
+  const checkCode = textValue(source, "checkCode", "code", "type");
+  const status = textValue(source, "status", "result", "judgment");
+  const message = textValue(source, "message", "reason", "summary");
+  const evidenceRefs = stringListValue(source, "evidenceRefs", "evidence_refs", "refs");
+  if (!checkCode && !status && !message && evidenceRefs.length === 0) return null;
+  return {
+    checkCode: checkCode ?? "-",
+    status: status ?? "-",
+    severity: textValue(source, "severity", "level"),
+    message: message ?? "-",
+    confidence: numberValue(source, "confidence", "confidenceScore"),
+    evidenceRefs,
+  };
+}
+
+function extractAssessmentDetail(raw?: string): AssessmentDetail | null {
+  const parsed = parseDetailJson(raw);
+  const assessment = asRecord(parsed, "assessment") ?? parsed;
+  if (!assessment) return null;
+
+  const supplementRequests = asRecordArray(assessment, "supplementRequests")
+    .map(normalizeIssue)
+    .filter((issue): issue is AssessmentIssue => issue !== null);
+  const manualReviewReasons = asRecordArray(assessment, "manualReviewReasons")
+    .map(normalizeIssue)
+    .filter((issue): issue is AssessmentIssue => issue !== null);
+  const crossDocumentChecks = asRecordArray(assessment, "crossDocumentChecks")
+    .map(normalizeCrossCheck)
+    .filter((check): check is CrossDocumentCheck => check !== null);
+
+  const detail = {
+    assessmentId: textValue(assessment, "assessmentId"),
+    assessmentStatus: textValue(assessment, "status", "assessmentStatus"),
+    confidenceScore: numberValue(assessment, "overallConfidence", "confidenceScore", "confidence"),
+    message: textValue(assessment, "message", "summary"),
+    createdAt: textValue(assessment, "createdAt"),
+    supplementRequests,
+    manualReviewReasons,
+    crossDocumentChecks,
+  };
+  const hasData = detail.assessmentId || detail.assessmentStatus || detail.confidenceScore != null ||
+    detail.message || detail.createdAt || supplementRequests.length > 0 ||
+    manualReviewReasons.length > 0 || crossDocumentChecks.length > 0;
+  return hasData ? detail : null;
+}
+
+const CLAIM_LABELS: Record<string, string> = {
+  jurisdiction: "관할",
+  assuranceLevel: "보증 수준",
+  type: "유형",
+  name: "이름",
+  registrationNumber: "등록번호",
+  nonProfit: "비영리 여부",
+  purposeCheckRequired: "목적 확인 필요",
+  birthDate: "생년월일",
+  nationality: "국적",
+  englishName: "영문명",
+  ownershipPercent: "지분율",
+  basis: "판단 기준",
+  contact: "연락처",
+  address: "주소",
+  identityDigest: "신원 식별 해시",
+  identityDigestAlgorithm: "해시 알고리즘",
+  identityDigestVersion: "해시 버전",
+  kycApplication: "KYC 신청 권한",
+  documentSubmission: "서류 제출 권한",
+  vcReceipt: "VC 수령 권한",
+  validFrom: "유효 시작",
+  validUntil: "유효 종료",
+  status: "상태",
+};
+
+function claimLabel(key: string) {
+  return CLAIM_LABELS[key] ?? key;
+}
+
+function claimValue(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "boolean") return value ? "Y" : "N";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return value.trim() || undefined;
+  return undefined;
+}
+
+function claimRows(source: DetailRecord | null | undefined) {
+  if (!source) return [];
+  return Object.entries(source)
+    .filter(([key]) => key !== "coreRequestId")
+    .map(([key, value]) => ({ label: claimLabel(key), value: claimValue(value) }))
+    .filter((row): row is { label: string; value: string } => !!row.value);
+}
+
+function extractClaimSections(raw?: string): ClaimSection[] {
+  const detail = parseDetailJson(raw);
+  const claims = asRecord(detail, "claims");
+  if (!claims) return [];
+
+  const sections: ClaimSection[] = [];
+  [
+    ["KYC", asRecord(claims, "kyc")],
+    ["법인", asRecord(claims, "legalEntity")],
+    ["대표자", asRecord(claims, "representative")],
+    ["대리인", asRecord(claims, "delegate")],
+    ["위임권한", asRecord(claims, "delegation")],
+  ].forEach(([title, source]) => {
+    const rows = claimRows(source as DetailRecord | null);
+    if (rows.length > 0) sections.push({ title: title as string, rows });
+  });
+
+  asRecordArray(claims, "beneficialOwners").forEach((owner, index) => {
+    const rows = claimRows(owner);
+    if (rows.length > 0) sections.push({ title: `실소유자 ${index + 1}`, rows });
+  });
+  return sections;
+}
+
+function EvidenceRefs({ refs }: { refs: string[] }) {
+  if (refs.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5 pt-2">
+      {refs.map((ref) => (
+        <span key={ref} className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{ref}</span>
+      ))}
+    </div>
+  );
+}
+
+function InfoGrid({ items }: { items: Array<{ label: string; value?: string }> }) {
+  const rows = items.filter((item) => hasText(item.value));
+  if (rows.length === 0) return null;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {rows.map((item) => (
+        <div key={item.label} className="rounded border border-slate-100 bg-slate-50 px-3 py-2">
+          <p className="text-[11px] text-slate-400">{item.label}</p>
+          <p className="text-sm text-slate-700 break-words">{item.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IssueList({ title, issues }: { title: string; issues: AssessmentIssue[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 mb-2">{title}</p>
+      <div className="space-y-2">
+        {issues.map((issue, index) => (
+          <div key={`${issue.code}-${index}`} className="rounded border border-slate-100 bg-white px-3 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{issue.code}</span>
+              <p className="text-sm text-slate-700">{issue.message}</p>
+            </div>
+            <EvidenceRefs refs={issue.evidenceRefs} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CrossCheckList({ checks }: { checks: CrossDocumentCheck[] }) {
+  if (checks.length === 0) return null;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 mb-2">문서 간 검증</p>
+      <div className="space-y-2">
+        {checks.map((check, index) => {
+          const status = toKo(CHECK_STATUS_KO, check.status);
+          return (
+            <div key={`${check.checkCode}-${index}`} className="rounded border border-slate-100 bg-white px-3 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{check.checkCode}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeClass(status)}`}>{status}</span>
+                {check.severity && <span className="text-[11px] text-slate-400">{toKo(SEVERITY_KO, check.severity)}</span>}
+                {check.confidence != null && <span className="text-[11px] text-slate-400">{formatPercent(check.confidence)}</span>}
+              </div>
+              <p className="mt-2 text-sm text-slate-700">{check.message}</p>
+              <EvidenceRefs refs={check.evidenceRefs} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ClaimSectionList({ sections }: { sections: ClaimSection[] }) {
+  if (sections.length === 0) return null;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 mb-2">Claims 판단 데이터</p>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        {sections.map((section) => (
+          <div key={section.title} className="rounded border border-slate-100 bg-white px-3 py-3">
+            <p className="text-xs font-semibold text-slate-600 mb-2">{section.title}</p>
+            <div className="space-y-1.5">
+              {section.rows.map((row) => (
+                <div key={`${section.title}-${row.label}`} className="flex gap-3 text-xs">
+                  <span className="w-24 shrink-0 text-slate-400">{row.label}</span>
+                  <span className="min-w-0 text-slate-700 break-words">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function AiResultPage({ params }: { params: Promise<{ id: string }> }) {
@@ -334,14 +628,20 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
         if (mismatchResult.status === "fulfilled") setMismatches(mismatchResult.value);
         else nextErrors.mismatches = mismatchResult.reason instanceof Error ? mismatchResult.reason.message : "불일치 항목 로드 실패";
 
-        const detailOwners = extractOwnersFromDetail(reviewValue?.detailJson);
+        const detailOwners = uniqueOwners([
+          ...extractOwnersFromDetail(reviewValue?.detailJson),
+          ...extractOwnersFromDetail(reviewValue?.coreAiAssessmentJson),
+        ]);
         if (ownerResult.status === "fulfilled") {
           setOwners(ownerResult.value.some(hasOwnerData) ? ownerResult.value : detailOwners);
         } else if (detailOwners.length > 0) {
           setOwners(detailOwners);
         } else nextErrors.owners = ownerResult.reason instanceof Error ? ownerResult.reason.message : "실소유자 로드 실패";
 
-        const detailAgents = extractAgentsFromDetail(reviewValue?.detailJson);
+        const detailAgents = [
+          ...extractAgentsFromDetail(reviewValue?.detailJson),
+          ...extractAgentsFromDetail(reviewValue?.coreAiAssessmentJson),
+        ];
         if (agentResult.status === "fulfilled") {
           const sourceAgents = agentResult.value.some(hasAgentData) ? agentResult.value : detailAgents;
           const mergedAgents = mergeAgentFallback(
@@ -376,6 +676,16 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
       manualReviewReason: review?.manualReviewReason,
     };
   }, [review]);
+
+  const assessmentDetail = useMemo(
+    () => extractAssessmentDetail(review?.coreAiAssessmentJson || review?.detailJson),
+    [review?.coreAiAssessmentJson, review?.detailJson]
+  );
+  const claimSections = useMemo(
+    () => extractClaimSections(review?.detailJson),
+    [review?.detailJson]
+  );
+  const hasGrounds = !!summary.summaryReason || !!summary.manualReviewReason || !!assessmentDetail || claimSections.length > 0;
 
   return (
     <div className="space-y-6">
@@ -536,9 +846,36 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
               )}
             </div>
 
-            {(summary.summaryReason || summary.manualReviewReason) && (
+            {hasGrounds && (
               <div className="bg-white rounded-lg border border-slate-200 p-5 space-y-4">
                 <h2 className="text-sm font-semibold text-slate-700">AI 판단 근거</h2>
+                {assessmentDetail && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-slate-500">Core 판정 정보</p>
+                    <InfoGrid
+                      items={[
+                        { label: "Assessment ID", value: assessmentDetail.assessmentId },
+                        {
+                          label: "Assessment Status",
+                          value: assessmentDetail.assessmentStatus
+                            ? toKo(ASSESSMENT_STATUS_KO, assessmentDetail.assessmentStatus)
+                            : undefined,
+                        },
+                        { label: "Confidence Score", value: formatPercent(assessmentDetail.confidenceScore) },
+                        { label: "Message", value: assessmentDetail.message },
+                        { label: "Created At", value: fmtDt(assessmentDetail.createdAt) },
+                      ]}
+                    />
+                  </div>
+                )}
+                {assessmentDetail && (
+                  <>
+                    <IssueList title="보완 요청" issues={assessmentDetail.supplementRequests} />
+                    <IssueList title="수동심사 사유" issues={assessmentDetail.manualReviewReasons} />
+                    <CrossCheckList checks={assessmentDetail.crossDocumentChecks} />
+                  </>
+                )}
+                <ClaimSectionList sections={claimSections} />
                 {summary.summaryReason && (
                   <div>
                     <p className="text-xs text-slate-400 mb-1">요약 사유</p>

@@ -1,5 +1,6 @@
 package com.kyvc.backend.domain.core.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -17,6 +18,8 @@ import java.util.Map;
  * @param message 처리 메시지
  * @param requestedAt 요청 시각
  * @param claims AI 심사 결과 기반 VC claims
+ * @param coreAiAssessmentJson Core AI assessment 상세 JSON
+ * @param coreAiReviewRawJson Core AI review 원본 응답 JSON
  */
 @Schema(description = "Core AI 심사 요청 응답")
 public record CoreAiReviewResponse(
@@ -35,8 +38,38 @@ public record CoreAiReviewResponse(
         @Schema(description = "요청 시각", example = "2026-05-06T10:00:00")
         LocalDateTime requestedAt, // 요청 시각
         @Schema(description = "AI 심사 결과 기반 VC claims")
-        Map<String, Object> claims // AI 심사 결과 기반 VC claims
+        Map<String, Object> claims, // AI 심사 결과 기반 VC claims
+        @JsonIgnore
+        @Schema(hidden = true)
+        String coreAiAssessmentJson, // Core AI assessment 상세 JSON
+        @JsonIgnore
+        @Schema(hidden = true)
+        String coreAiReviewRawJson // Core AI review 원본 응답 JSON
 ) {
+    public CoreAiReviewResponse(
+            String coreRequestId, // Core 요청 ID
+            String status, // 처리 상태
+            String assessmentStatus, // Core 심사 상태
+            String assessmentId, // Core 심사 결과 ID
+            BigDecimal confidenceScore, // AI 신뢰도 점수
+            String message, // 처리 메시지
+            LocalDateTime requestedAt, // 요청 시각
+            Map<String, Object> claims // AI 심사 결과 기반 VC claims
+    ) {
+        this(
+                coreRequestId,
+                status,
+                assessmentStatus,
+                assessmentId,
+                confidenceScore,
+                message,
+                requestedAt,
+                claims,
+                null,
+                null
+        );
+    }
+
     public CoreAiReviewResponse {
         claims = claims == null ? Map.of() : Map.copyOf(claims);
     }

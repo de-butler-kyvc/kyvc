@@ -3,27 +3,23 @@
 import { getKycList } from "@/lib/api/kyc";
 import { kycDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
-import type { KycChannel } from "@/types/kyc";
 import { useState, useEffect } from "react";
 
 const statusBadge: Record<string, string> = {
-  "수동심사필요": "bg-red-100 text-red-600",
-  "보완필요": "bg-orange-100 text-orange-600",
-  "심사중": "bg-blue-100 text-blue-600",
-  "정상": "bg-green-100 text-green-600",
+  "작성중": "bg-slate-100 text-slate-500",
+  "제출완료": "bg-blue-100 text-blue-600",
+  "AI 심사중": "bg-blue-100 text-blue-600",
+  "수동심사": "bg-red-100 text-red-600",
+  "보완요청": "bg-orange-100 text-orange-600",
+  "승인완료": "bg-green-100 text-green-600",
   "VC 발급완료": "bg-green-100 text-green-600",
-  "불충족": "bg-slate-100 text-slate-500",
+  "반려": "bg-slate-100 text-slate-500",
 };
 
 const aiBadge: Record<string, string> = {
   "보완필요": "bg-orange-100 text-orange-600",
   "불충족": "bg-red-100 text-red-600",
   "정상": "bg-green-100 text-green-600",
-};
-
-const channelBadge: Record<KycChannel, string> = {
-  "웹": "bg-slate-100 text-slate-600",
-  "금융사": "bg-blue-100 text-blue-600",
 };
 
 export default function KycPage() {
@@ -82,10 +78,14 @@ export default function KycPage() {
             className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none"
           >
             <option>전체 상태</option>
-            <option>수동심사필요</option>
-            <option>보완필요</option>
-            <option>심사중</option>
-            <option>정상</option>
+            <option>작성중</option>
+            <option>제출완료</option>
+            <option>AI 심사중</option>
+            <option>수동심사</option>
+            <option>보완요청</option>
+            <option>승인완료</option>
+            <option>반려</option>
+            <option>VC 발급완료</option>
           </select>
           <select
             value={channelFilter}
@@ -122,7 +122,6 @@ export default function KycPage() {
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">사업자등록번호</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">법인 유형</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">신청일시</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">채널</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">KYC 상태</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">AI 판단(참고)</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">심사자</th>
@@ -138,9 +137,6 @@ export default function KycPage() {
                   <td className="px-4 py-3 text-slate-500">{row.biz}</td>
                   <td className="px-4 py-3 text-slate-500">{row.type}</td>
                   <td className="px-4 py-3 text-slate-500">{row.date}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${channelBadge[row.channel as KycChannel]}`}>{row.channel}</span>
-                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
                   </td>

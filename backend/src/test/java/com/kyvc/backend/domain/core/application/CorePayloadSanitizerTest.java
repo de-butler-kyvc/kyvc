@@ -37,4 +37,27 @@ class CorePayloadSanitizerTest {
         assertThat(rootNode.get("vpJwt").asText()).isEqualTo("[MASKED]");
         assertThat(rootNode.get("sdJwtKb").asText()).isEqualTo("[MASKED]");
     }
+
+    @Test
+    void sanitizeAiReviewResponsePayload_preservesClaimsAndMasksRawSensitiveValues() throws Exception {
+        String sanitized = sanitizer.sanitizeAiReviewResponsePayload("""
+                {
+                  "assessment": {
+                    "claims": {
+                      "legalEntity": {
+                        "name": "KYVC Corp"
+                      }
+                    },
+                    "documentContent": "raw-document-text",
+                    "jwt": "header.payload.signature"
+                  }
+                }
+                """);
+
+        JsonNode assessmentNode = objectMapper.readTree(sanitized).get("assessment");
+
+        assertThat(assessmentNode.get("claims").get("legalEntity").get("name").asText()).isEqualTo("KYVC Corp");
+        assertThat(assessmentNode.get("documentContent").asText()).isEqualTo("[MASKED]");
+        assertThat(assessmentNode.get("jwt").asText()).isEqualTo("[MASKED]");
+    }
 }

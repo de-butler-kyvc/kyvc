@@ -35,6 +35,10 @@ public record AdminAiReviewDetailResponse(
         @Schema(description = "민감정보가 마스킹된 AI 심사 상세 JSON")
         String aiReviewDetailJson,
 
+        /** Core AI assessment 상세 JSON */
+        @Schema(description = "Core AI assessment 상세 JSON")
+        String coreAiAssessmentJson,
+
         /** 수동심사 사유 */
         @Schema(description = "수동심사 사유", example = "관리자 확인이 필요한 신청입니다.")
         String manualReviewReason,
