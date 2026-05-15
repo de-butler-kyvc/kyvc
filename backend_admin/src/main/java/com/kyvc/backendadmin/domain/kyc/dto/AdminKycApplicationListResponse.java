@@ -3,6 +3,7 @@ package com.kyvc.backendadmin.domain.kyc.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -38,6 +39,14 @@ public record AdminKycApplicationListResponse(
             String corporateName,
             @Schema(description = "사업자등록번호", example = "123-45-67890")
             String businessRegistrationNo,
+            @Schema(description = "법인 유형 코드", example = "CORPORATION")
+            String corporateTypeCode,
+            @Schema(description = "법인 유형명", example = "주식회사")
+            String corporateTypeName,
+            @Schema(description = "법인등록번호", example = "110111-1234567")
+            String corporateRegistrationNo,
+            @Schema(description = "설립일", example = "2020-01-01")
+            LocalDate establishedDate,
             @Schema(description = "신청 사용자 ID", example = "1")
             Long applicantUserId,
             @Schema(description = "신청 사용자 이메일", example = "corp@kyvc.local")

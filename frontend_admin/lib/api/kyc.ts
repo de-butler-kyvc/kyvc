@@ -14,9 +14,7 @@ const STATUS_KO_TO_API: Record<string, string> = {
   불충족: "REJECTED",
 };
 
-const STATUS_API_TO_KO: Record<string, KycStatus> = {
-  NEEDS_MANUAL_REVIEW: "수동심사필요",
-  NEED_MANUAL_REVIEW: "수동심사필요",
+const STATUS_API_TO_KO: Record<string, string> = {
   MANUAL_REVIEW: "수동심사필요",
   NEEDS_SUPPLEMENT: "보완필요",
   NEED_SUPPLEMENT: "보완필요",
@@ -27,6 +25,7 @@ const STATUS_API_TO_KO: Record<string, KycStatus> = {
   DRAFT: "심사중",
   NORMAL: "정상",
   APPROVED: "정상",
+  VC_ISSUED: "VC 발급완료",
   UNSATISFACTORY: "불충족",
   REJECTED: "불충족",
   수동심사필요: "수동심사필요",
@@ -49,6 +48,7 @@ const AI_JUDGMENT_KO: Record<string, string> = {
   FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
   NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_APPROVAL_REQUIRED: "수동심사필요",
 };
 
 const CHANNEL_KO_TO_API: Record<string, string> = {
@@ -63,6 +63,29 @@ const CHANNEL_API_TO_KO: Record<string, KycChannel> = {
   금융사: "금융사",
 };
 
+const CORPORATE_TYPE_LABELS: Record<string, string> = {
+  CORPORATION: "주식회사",
+  SOLE_PROPRIETOR: "개인사업자",
+  LIMITED_COMPANY: "유한회사",
+  NON_PROFIT: "비영리법인",
+  ASSOCIATION: "조합·단체",
+  FOREIGN_COMPANY: "외국기업",
+};
+
+export function formatCorporateType(codeOrName?: string | null, name?: string | null) {
+  if (name) return name;
+  if (!codeOrName) return "-";
+  return CORPORATE_TYPE_LABELS[codeOrName] ?? codeOrName;
+}
+
+export function formatConfidence(value?: number | string | null) {
+  if (value === null || value === undefined) return "-";
+  const numeric = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(numeric)) return "-";
+  const percent = numeric <= 1 ? numeric * 100 : numeric;
+  return `${Math.round(percent)}%`;
+}
+
 // ── KYC 신청 관련 API 타입 ────────────────────────────────────
 
 interface BackendKycItem {
@@ -73,8 +96,13 @@ interface BackendKycItem {
   corporationName?: string;
   businessRegistrationNumber?: string;
   businessRegistrationNo?: string;
+  corporateType?: string;
   corporateTypeCode?: string;
+  corporateTypeName?: string;
   corporationType?: string;
+  corporateRegistrationNo?: string;
+  corporateRegistrationNumber?: string;
+  establishedDate?: string;
   applicationDate?: string;
   submittedAt?: string;
   channel?: string;
@@ -103,6 +131,10 @@ export interface BackendKycDetail {
   corporationName?: string;
   businessRegistrationNumber?: string;
   businessRegistrationNo?: string;
+  corporateTypeCode?: string;
+  corporateTypeName?: string;
+  corporateRegistrationNo?: string;
+  establishedDate?: string;
   applicationDate?: string;
   submittedAt?: string;
   channel?: string;
@@ -112,7 +144,7 @@ export interface BackendKycDetail {
   aiReviewResult?: string;
   aiReviewStatus?: string;
   aiReviewResultCode?: string;
-  aiConfidenceScore?: number;
+  aiConfidenceScore?: number | string;
   aiReviewSummary?: string;
   reviewerName?: string;
   documents?: KycDocument[];
@@ -128,8 +160,11 @@ export interface BackendKycCorporate {
   corporationName?: string;
   businessRegistrationNumber?: string;
   businessRegistrationNo?: string;
+  corporateRegistrationNo?: string;
   corporateRegistrationNumber?: string;
   corporateType?: string;
+  corporateTypeCode?: string;
+  corporateTypeName?: string;
   corporationType?: string;
   representativeName?: string;
   agentName?: string;
@@ -229,12 +264,13 @@ export async function getKycList(filters?: {
   const rows = unwrapListData(json.data);
   return rows.map((row) => {
     const statusCode = row.kycStatus ?? row.status ?? "";
-    const aiCode = row.aiJudgment ?? row.aiReviewResult ?? row.aiReviewResultCode ?? row.aiReviewStatus ?? row.aiReviewStatusCode ?? "";
+    const aiCode = row.aiReviewResult ?? row.aiReviewResultCode ?? "";
+    const corporateType = row.corporationType ?? row.corporateType ?? row.corporateTypeCode;
     return {
       id: String(row.kycId ?? row.applicationId ?? row.id ?? ""),
       corp: row.corporateName ?? row.corporationName ?? "-",
       biz: row.businessRegistrationNumber ?? row.businessRegistrationNo ?? "-",
-      type: row.corporationType ?? row.corporateTypeCode ?? "-",
+      type: formatCorporateType(corporateType, row.corporateTypeName),
       date: fmtDt(row.applicationDate ?? row.submittedAt),
       channel: (CHANNEL_API_TO_KO[row.channel ?? ""] ?? row.channel ?? "-") as KycChannel,
       status: (STATUS_API_TO_KO[statusCode] ?? statusCode) as KycStatus,
@@ -477,7 +513,7 @@ export async function rejectKycManualReview(
 export interface AiReviewResult {
   status?: string;
   overallJudgment: string;
-  confidenceScore: number;
+  confidenceScore: number | string;
   modelVersion?: string;
   reviewedAt?: string;
   summaryReason?: string;

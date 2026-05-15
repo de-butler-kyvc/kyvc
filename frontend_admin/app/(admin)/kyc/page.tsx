@@ -3,14 +3,15 @@
 import { getKycList } from "@/lib/api/kyc";
 import { kycDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
-import type { KycStatus, KycChannel } from "@/types/kyc";
+import type { KycChannel } from "@/types/kyc";
 import { useState, useEffect } from "react";
 
-const statusBadge: Record<KycStatus, string> = {
+const statusBadge: Record<string, string> = {
   "수동심사필요": "bg-red-100 text-red-600",
   "보완필요": "bg-orange-100 text-orange-600",
   "심사중": "bg-blue-100 text-blue-600",
   "정상": "bg-green-100 text-green-600",
+  "VC 발급완료": "bg-green-100 text-green-600",
   "불충족": "bg-slate-100 text-slate-500",
 };
 
@@ -141,7 +142,7 @@ export default function KycPage() {
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${channelBadge[row.channel as KycChannel]}`}>{row.channel}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status as KycStatus]}`}>{row.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${aiBadge[row.ai] || "bg-slate-100 text-slate-500"}`}>{row.ai}</span>

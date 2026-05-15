@@ -29,6 +29,7 @@ const JUDGMENT_KO: Record<string, string> = {
   FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
   NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_APPROVAL_REQUIRED: "수동심사필요",
 };
 
 const MISMATCH_KO: Record<string, string> = {
@@ -72,10 +73,12 @@ function fmtDt(iso?: string) {
   return iso.slice(0, 16).replace("T", " ").replaceAll("-", ".");
 }
 
-function formatPercent(value?: number) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "-";
-  const normalized = value <= 1 ? value * 100 : value;
-  return `${normalized.toFixed(1)}%`;
+function formatPercent(value?: number | string | null) {
+  if (value === null || value === undefined) return "-";
+  const numeric = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(numeric)) return "-";
+  const normalized = numeric <= 1 ? numeric * 100 : numeric;
+  return `${Math.round(normalized)}%`;
 }
 
 type DetailRecord = Record<string, unknown>;
@@ -368,7 +371,6 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
     return {
       judgment,
       confidence: formatPercent(review?.confidenceScore),
-      modelVersion: review?.modelVersion ?? "-",
       reviewedAt: fmtDt(review?.reviewedAt),
       summaryReason: review?.summaryReason,
       manualReviewReason: review?.manualReviewReason,
@@ -405,10 +407,6 @@ export default function AiResultPage({ params }: { params: Promise<{ id: string 
                 <div>
                   <p className="text-xs text-slate-400">신뢰도</p>
                   <p className="text-slate-700 font-bold text-lg">{summary.confidence}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">처리 모델</p>
-                  <p className="text-slate-700 text-xs">{summary.modelVersion}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">처리 시각</p>
