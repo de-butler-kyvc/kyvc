@@ -10,6 +10,9 @@ import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareRequest;
 import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareResponse;
 import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.document.domain.KycDocument;
+import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
+import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.domain.mobile.application.MobileDeviceService;
@@ -25,10 +28,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -59,6 +65,12 @@ class CredentialOfferServiceTest {
 
     @Mock
     private KycApplicationRepository kycApplicationRepository;
+
+    @Mock
+    private KycDocumentRepository kycDocumentRepository;
+
+    @Mock
+    private DocumentStorage documentStorage;
 
     @Mock
     private CorporateRepository corporateRepository;
@@ -95,6 +107,8 @@ class CredentialOfferServiceTest {
                 credentialOfferRepository,
                 credentialRepository,
                 kycApplicationRepository,
+                kycDocumentRepository,
+                documentStorage,
                 corporateRepository,
                 mobileDeviceService,
                 credentialClaimsAssembler,
@@ -251,6 +265,64 @@ class CredentialOfferServiceTest {
         assertThat(metadata.get("issuerDid")).isEqualTo("did:xrpl:1:" + ACTUAL_ISSUER_ACCOUNT);
         assertThat(metadata.get("credentialType")).isEqualTo(ACTUAL_CREDENTIAL_TYPE);
         assertThat(metadata.get("holderXrplAddress")).isEqualTo(ACTUAL_HOLDER_ACCOUNT);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void prepareWalletCredential_includesKycDocumentAttachmentsForWalletStorage() {
+        mockPrepareCredential(ACTUAL_HOLDER_DID, null);
+        byte[] content = "business-registration-pdf".getBytes();
+        KycDocument document = KycDocument.createUploaded(
+                10L,
+                "BUSINESS_REGISTRATION",
+                "business_registration.pdf",
+                "10/BUSINESS_REGISTRATION/business_registration.pdf",
+                "application/pdf",
+                (long) content.length,
+                "sha256-hash",
+                null,
+                1L
+        );
+        ReflectionTestUtils.setField(document, "documentId", 101L);
+        when(kycDocumentRepository.findByKycId(10L)).thenReturn(List.of(document));
+        when(documentStorage.load(anyString()))
+                .thenReturn(new DocumentStorage.StoredContent(new ByteArrayResource(content), content.length));
+
+        WalletCredentialPrepareResponse response = service.prepareWalletCredential(
+                1L,
+                100L,
+                new WalletCredentialPrepareRequest(
+                        "qr-token-001",
+                        "device-001",
+                        ACTUAL_HOLDER_DID,
+                        ACTUAL_HOLDER_ACCOUNT,
+                        null,
+                        true
+                )
+        );
+
+        List<Map<String, Object>> attachments = response.documentAttachments();
+        Map<String, Object> attachment = attachments.getFirst();
+        Map<String, Object> manifest = response.documentAttachmentManifest();
+        List<Map<String, Object>> manifestAttachments = (List<Map<String, Object>>) manifest.get("attachments");
+        Map<String, Object> manifestAttachment = manifestAttachments.getFirst();
+
+        assertThat(attachments).hasSize(1);
+        assertThat(response.credentialPayload()).doesNotContainKeys("documentAttachments", "documentAttachmentManifest");
+        assertThat(attachment.get("documentId")).isEqualTo("urn:kyvc:doc:101");
+        assertThat(attachment.get("documentType")).isEqualTo("KR_BUSINESS_REGISTRATION_CERTIFICATE");
+        assertThat(attachment.get("documentTypeCode")).isEqualTo("BUSINESS_REGISTRATION");
+        assertThat(attachment.get("attachmentRef")).isEqualTo("doc-101");
+        assertThat(attachment.get("fileName")).isEqualTo("business_registration.pdf");
+        assertThat(attachment.get("mediaType")).isEqualTo("application/pdf");
+        assertThat(attachment.get("byteSize")).isEqualTo((long) content.length);
+        assertThat(attachment.get("digestSRI")).asString().startsWith("sha384-");
+        assertThat(attachment.get("contentEncoding")).isEqualTo("base64");
+        assertThat(attachment.get("contentBase64")).isEqualTo(Base64.getEncoder().encodeToString(content));
+        assertThat(attachment).doesNotContainKeys("filePath");
+        assertThat(manifestAttachment.get("attachmentRef")).isEqualTo("doc-101");
+        assertThat(manifestAttachment.get("requirementId")).isEqualTo("entity-realname-evidence");
+        assertThat(manifestAttachment).doesNotContainKeys("contentBase64", "contentEncoding", "filePath");
     }
 
     @Test

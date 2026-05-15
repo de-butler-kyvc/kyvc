@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.core.infrastructure;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreAttachmentPart;
 import com.kyvc.backend.domain.core.dto.CoreCredentialSchemaResponse;
 import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationRequest;
@@ -22,6 +23,7 @@ import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreXrplTransactionResponse;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -130,6 +132,28 @@ public interface CoreAdapter {
             Object presentation // Presentation 원문 또는 객체
     ) {
         return requestVpVerification(request, format, presentation, null);
+    }
+
+    /**
+     * 첨부 파일 포함 VP 검증 요청
+     *
+     * @param request VP 검증 요청
+     * @param format Presentation format
+     * @param presentation Presentation 원문 또는 객체
+     * @param didDocuments DID document 목록
+     * @param attachmentManifest attachmentManifest 목록
+     * @param attachments 원본 첨부 파일 목록
+     * @return VP 검증 요청 응답
+     */
+    default CoreVpVerificationResponse requestVpVerificationWithAttachments(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String format, // Presentation format
+            Object presentation, // Presentation 원문 또는 객체
+            Map<String, Object> didDocuments, // DID document 목록
+            Object attachmentManifest, // attachmentManifest 목록
+            List<CoreAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        return requestVpVerification(request, format, presentation, didDocuments);
     }
 
     /**
