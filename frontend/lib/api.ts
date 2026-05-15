@@ -943,6 +943,8 @@ export type WalletCredentialPrepareResponse = {
   credentialId: number;
   prepared: boolean;
   credentialPayload: WalletCredentialPayload;
+  documentAttachments?: Record<string, unknown>[];
+  documentAttachmentManifest?: unknown;
 };
 
 export type WalletCredentialConfirmRequest = {

@@ -258,6 +258,10 @@ function debugMissingScanResult() {
 function buildSavePayload(
   credentialId: number,
   credentialPayload: WalletCredentialPayload,
+  options?: {
+    documentAttachments?: Record<string, unknown>[];
+    documentAttachmentManifest?: unknown;
+  },
 ): SaveVcPayload {
   const metadata = credentialPayload.metadata ?? {};
   const format = requiredString(credentialPayload.format);
@@ -278,6 +282,8 @@ function buildSavePayload(
     sdJwt: format === "dc+sd-jwt" ? credential : undefined,
     vcJwt: format === "vc+jwt" ? credential : undefined,
     metadata,
+    documentAttachments: options?.documentAttachments,
+    documentAttachmentManifest: options?.documentAttachmentManifest,
     selectiveDisclosure: credentialPayload.selectiveDisclosure,
   };
 }
@@ -459,10 +465,22 @@ export default function MobileVcIssuePage() {
         const savePayload = buildSavePayload(
           prepared.credentialId,
           prepared.credentialPayload,
+          {
+            documentAttachments: prepared.documentAttachments,
+            documentAttachmentManifest: prepared.documentAttachmentManifest,
+          },
         );
         const saveResult = await bridge.saveVC(savePayload);
         if (!saveResult.ok) {
           throw new Error(saveResult.error ?? "증명서를 지갑에 저장하지 못했습니다.");
+        }
+        const expectedDocumentAttachments = prepared.documentAttachments?.length ?? 0;
+        const savedDocumentAttachments = Number(saveResult.documentAttachmentsSaved ?? 0);
+        if (
+          expectedDocumentAttachments > 0 &&
+          savedDocumentAttachments !== expectedDocumentAttachments
+        ) {
+          throw new Error("Document attachments were not saved to the wallet.");
         }
         const issuerAccount =
           xrplClassicAddressFrom(saveResult.issuerAccount) ??
