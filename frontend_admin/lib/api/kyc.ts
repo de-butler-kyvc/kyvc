@@ -132,6 +132,10 @@ export interface BackendKycCorporate {
   corporateType?: string;
   corporationType?: string;
   representativeName?: string;
+  agentName?: string;
+  agentAuthorityScope?: string;
+  agentPhone?: string;
+  agentEmail?: string;
   establishedDate?: string;
   address?: string;
   businessType?: string;
