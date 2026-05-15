@@ -7,11 +7,14 @@ import { useState, useEffect } from "react";
 import type { KycStatus, KycChannel } from "@/types/kyc";
 
 const statusBadge: Record<KycStatus, string> = {
-  "수동심사필요": "bg-red-100 text-red-600",
-  "보완필요": "bg-orange-100 text-orange-600",
-  "심사중": "bg-blue-100 text-blue-600",
-  "정상": "bg-green-100 text-green-600",
-  "불충족": "bg-slate-100 text-slate-500",
+  "작성중": "bg-slate-100 text-slate-500",
+  "제출완료": "bg-blue-100 text-blue-600",
+  "AI 심사중": "bg-blue-100 text-blue-600",
+  "수동심사": "bg-red-100 text-red-600",
+  "보완요청": "bg-orange-100 text-orange-600",
+  "승인완료": "bg-green-100 text-green-600",
+  "반려": "bg-slate-100 text-slate-500",
+  "VC 발급완료": "bg-green-100 text-green-600",
 };
 
 export default function DashboardPage() {
@@ -110,10 +113,14 @@ export default function DashboardPage() {
             className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none"
           >
             <option>전체 상태</option>
-            <option>수동심사필요</option>
-            <option>보완필요</option>
-            <option>심사중</option>
-            <option>정상</option>
+            <option>작성중</option>
+            <option>제출완료</option>
+            <option>AI 심사중</option>
+            <option>수동심사</option>
+            <option>보완요청</option>
+            <option>승인완료</option>
+            <option>반려</option>
+            <option>VC 발급완료</option>
           </select>
           <select className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none">
             <option>오늘</option>
