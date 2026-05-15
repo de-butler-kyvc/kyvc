@@ -2,6 +2,7 @@ package com.kyvc.backend.domain.core.infrastructure;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CorePayloadSanitizer;
 import com.kyvc.backend.domain.core.config.CoreProperties;
@@ -223,6 +224,7 @@ public class CoreHttpAdapter implements CoreAdapter {
                     .retrieve()
                     .toEntity(String.class);
             logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            String responseBody = responseEntity.getBody(); // Core AI 심사 원본 응답 body
             LlmPrimaryAssessmentApiResponse body = parseAiReviewResponseBody(
                     request,
                     endpoint,
@@ -230,7 +232,18 @@ public class CoreHttpAdapter implements CoreAdapter {
                     startedAt,
                     fields
             );
-            CoreAiReviewResponse mapped = mapAiReviewResponseSafely(request, endpoint, body, startedAt, fields);
+            String coreAiReviewRawJson = sanitizeAiReviewResponsePayload(responseBody);
+            String coreAiAssessmentJson = extractSanitizedAssessmentJson(responseBody);
+            CoreAiReviewResponse mapped = mapAiReviewResponseSafely(
+                    request,
+                    endpoint,
+                    body,
+                    startedAt,
+                    fields,
+                    coreAiAssessmentJson,
+                    coreAiReviewRawJson
+            );
+            logAiReviewAssessmentDetails(mapped, body.assessment(), fields);
             logEventLogger.info("core.response.mapped", "Core AI review response mapped", fields);
             return mapped;
         } catch (CoreAiReviewException exception) {
@@ -787,6 +800,15 @@ public class CoreHttpAdapter implements CoreAdapter {
             CoreAiReviewRequest request, // AI 심사 요청
             LlmPrimaryAssessmentApiResponse body // Core AI 심사 응답
     ) {
+        return mapAiReviewResponse(request, body, null, null);
+    }
+
+    private CoreAiReviewResponse mapAiReviewResponse(
+            CoreAiReviewRequest request, // AI 심사 요청
+            LlmPrimaryAssessmentApiResponse body, // Core AI 심사 응답
+            String coreAiAssessmentJson, // Core AI assessment 상세 JSON
+            String coreAiReviewRawJson // Core AI review 원본 응답 JSON
+    ) {
         LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment = body.assessment();
         if (assessment == null || !StringUtils.hasText(assessment.status())) {
             throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core AI 심사 응답 필수 필드가 부족합니다.");
@@ -800,7 +822,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                 assessment.overallConfidence(),
                 resolveAiReviewMessage(assessment),
                 LocalDateTime.now(),
-                buildAiReviewClaims(assessment)
+                buildAiReviewClaims(assessment),
+                coreAiAssessmentJson,
+                coreAiReviewRawJson
         );
     }
 
@@ -1008,13 +1032,59 @@ public class CoreHttpAdapter implements CoreAdapter {
             String endpoint, // 호출 endpoint
             LlmPrimaryAssessmentApiResponse body, // Core AI 심사 응답
             long startedAt, // 시작 시각
-            Map<String, Object> fields // 로그 필드
+            Map<String, Object> fields, // 로그 필드
+            String coreAiAssessmentJson, // Core AI assessment 상세 JSON
+            String coreAiReviewRawJson // Core AI review 원본 응답 JSON
     ) {
         try {
-            return mapAiReviewResponse(request, body);
+            return mapAiReviewResponse(request, body, coreAiAssessmentJson, coreAiReviewRawJson);
         } catch (ApiException exception) {
             throw buildAiReviewInvalidResponseException(request, endpoint, startedAt, fields, exception);
         }
+    }
+
+    private String sanitizeAiReviewResponsePayload(
+            String responseBody // Core AI 심사 원본 응답 body
+    ) {
+        return corePayloadSanitizer.sanitizeAiReviewResponsePayload(responseBody);
+    }
+
+    private String extractSanitizedAssessmentJson(
+            String responseBody // Core AI 심사 원본 응답 body
+    ) {
+        if (!StringUtils.hasText(responseBody)) {
+            return null;
+        }
+        try {
+            JsonNode assessmentNode = objectMapper.readTree(responseBody).get("assessment");
+            if (assessmentNode == null || assessmentNode.isNull()) {
+                return null;
+            }
+            return corePayloadSanitizer.sanitizeAiReviewResponsePayload(objectMapper.writeValueAsString(assessmentNode));
+        } catch (JsonProcessingException exception) {
+            return null;
+        }
+    }
+
+    private void logAiReviewAssessmentDetails(
+            CoreAiReviewResponse response, // Core AI 심사 매핑 응답
+            LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment, // Core AI assessment 응답
+            Map<String, Object> baseFields // 로그 기본 필드
+    ) {
+        if (response == null || assessment == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
+        fields.put("assessmentId", response.assessmentId());
+        fields.put("assessmentStatus", response.assessmentStatus());
+        fields.put("confidenceScore", response.confidenceScore());
+        fields.put("supplementRequestsCount", assessment.supplementRequests().size());
+        fields.put("manualReviewReasonsCount", assessment.manualReviewReasons().size());
+        logEventLogger.info(
+                "core.ai_review.assessment_details.saved",
+                "Core AI review assessment details captured",
+                fields
+        );
     }
 
     private LlmPrimaryAssessmentApiResponse parseAiReviewResponseBody(

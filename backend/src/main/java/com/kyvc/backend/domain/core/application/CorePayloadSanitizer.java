@@ -66,13 +66,26 @@ public class CorePayloadSanitizer {
     public String sanitizePayload(
             String payloadJson // 저장 대상 Payload JSON
     ) {
+        return sanitizePayload(payloadJson, true);
+    }
+
+    public String sanitizeAiReviewResponsePayload(
+            String payloadJson // Core AI 심사 응답 JSON
+    ) {
+        return sanitizePayload(payloadJson, false);
+    }
+
+    private String sanitizePayload(
+            String payloadJson, // 저장 대상 Payload JSON
+            boolean maskClaims // claims 마스킹 여부
+    ) {
         if (!StringUtils.hasText(payloadJson)) {
             return payloadJson;
         }
 
         try {
             JsonNode rootNode = objectMapper.readTree(payloadJson);
-            sanitizeNode(rootNode);
+            sanitizeNode(rootNode, maskClaims);
             return objectMapper.writeValueAsString(rootNode);
         } catch (JsonProcessingException exception) {
             return UNPARSABLE_PAYLOAD;
@@ -92,34 +105,36 @@ public class CorePayloadSanitizer {
     }
 
     private void sanitizeNode(
-            JsonNode node // 마스킹 대상 JSON 노드
+            JsonNode node, // 마스킹 대상 JSON 노드
+            boolean maskClaims // claims 마스킹 여부
     ) {
         if (node == null) {
             return;
         }
         if (node.isObject()) {
-            sanitizeObjectNode((ObjectNode) node);
+            sanitizeObjectNode((ObjectNode) node, maskClaims);
             return;
         }
         if (node.isArray()) {
-            sanitizeArrayNode((ArrayNode) node);
+            sanitizeArrayNode((ArrayNode) node, maskClaims);
         }
     }
 
     private void sanitizeObjectNode(
-            ObjectNode objectNode // 마스킹 대상 Object 노드
+            ObjectNode objectNode, // 마스킹 대상 Object 노드
+            boolean maskClaims // claims 마스킹 여부
     ) {
         Iterator<Map.Entry<String, JsonNode>> fields = objectNode.fields();
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> entry = fields.next();
             String fieldName = entry.getKey();
             JsonNode fieldValue = entry.getValue();
-            if (isSensitiveField(fieldName)) {
+            if (isSensitiveField(fieldName, maskClaims)) {
                 objectNode.put(fieldName, MASKED_VALUE);
                 continue;
             }
             if (fieldValue != null && (fieldValue.isObject() || fieldValue.isArray())) {
-                sanitizeNode(fieldValue);
+                sanitizeNode(fieldValue, maskClaims);
                 continue;
             }
             if (fieldValue != null && fieldValue.isTextual()) {
@@ -129,7 +144,8 @@ public class CorePayloadSanitizer {
     }
 
     private void sanitizeArrayNode(
-            ArrayNode arrayNode // 마스킹 대상 Array 노드
+            ArrayNode arrayNode, // 마스킹 대상 Array 노드
+            boolean maskClaims // claims 마스킹 여부
     ) {
         for (int index = 0; index < arrayNode.size(); index++) {
             JsonNode itemNode = arrayNode.get(index);
@@ -137,18 +153,19 @@ public class CorePayloadSanitizer {
                 arrayNode.set(index, objectMapper.getNodeFactory().textNode(truncateIfNeeded(itemNode.asText())));
                 continue;
             }
-            sanitizeNode(itemNode);
+            sanitizeNode(itemNode, maskClaims);
         }
     }
 
     private boolean isSensitiveField(
-            String fieldName // JSON 필드명
+            String fieldName, // JSON 필드명
+            boolean maskClaims // claims 마스킹 여부
     ) {
         String normalized = normalizeFieldName(fieldName);
         if (normalized == null) {
             return true;
         }
-        return EXACT_SENSITIVE_FIELDS.contains(normalized)
+        return isExactSensitiveField(normalized, maskClaims)
                 || normalized.contains("token")
                 || normalized.contains("authorization")
                 || normalized.contains("cookie")
@@ -161,6 +178,16 @@ public class CorePayloadSanitizer {
                 || normalized.contains("filecontent")
                 || normalized.contains("rawpayload")
                 || normalized.contains("rawdocument");
+    }
+
+    private boolean isExactSensitiveField(
+            String normalizedFieldName, // 정규화 필드명
+            boolean maskClaims // claims 마스킹 여부
+    ) {
+        if (!maskClaims && "claims".equals(normalizedFieldName)) {
+            return false;
+        }
+        return EXACT_SENSITIVE_FIELDS.contains(normalizedFieldName);
     }
 
     private String normalizeFieldName(

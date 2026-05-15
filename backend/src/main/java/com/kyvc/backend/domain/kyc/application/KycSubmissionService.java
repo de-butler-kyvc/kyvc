@@ -492,9 +492,16 @@ public class KycSubmissionService {
     ) {
         KyvcEnums.AiReviewStatus aiReviewStatus = resolveAiReviewStatus(coreAiReviewResponse);
         String detailJson = toJson(coreAiReviewResponse); // AI 심사 메타데이터 JSON
-        BigDecimal confidenceScore = coreAiReviewResponse.confidenceScore() == null
+        if (coreAiReviewResponse != null) {
+            kycApplication.updateCoreAiReviewDetails(
+                    coreAiReviewResponse.coreAiAssessmentJson(),
+                    coreAiReviewResponse.coreAiReviewRawJson()
+            );
+        }
+        BigDecimal confidenceScore = coreAiReviewResponse == null || coreAiReviewResponse.confidenceScore() == null
                 ? DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE
                 : coreAiReviewResponse.confidenceScore(); // AI 신뢰도 점수
+        String summary = coreAiReviewResponse == null ? null : coreAiReviewResponse.message(); // AI 심사 요약
         if (KyvcEnums.AiReviewStatus.FAILED == aiReviewStatus) {
             kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
             return;
@@ -502,7 +509,7 @@ public class KycSubmissionService {
         if (KyvcEnums.AiReviewStatus.SUCCESS == aiReviewStatus) {
             kycApplication.completeAiReviewAsManualReview(
                     confidenceScore,
-                    coreAiReviewResponse.message(),
+                    summary,
                     detailJson,
                     AI_REVIEW_MANUAL_REASON
             );
@@ -510,7 +517,7 @@ public class KycSubmissionService {
         }
         kycApplication.completeAiReviewAsLowConfidenceManualReview(
                 confidenceScore,
-                coreAiReviewResponse.message(),
+                summary,
                 detailJson,
                 AI_REVIEW_MANUAL_REASON
         );
