@@ -3135,11 +3135,11 @@ html {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--mobile-process-bg);
+  background: transparent;
 }
 
 .mobile-process-view .bottom-action {
-  background: var(--mobile-process-bg);
+  background: transparent;
   border-top: 0;
 }
 
