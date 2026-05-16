@@ -2,27 +2,47 @@ export const CORPORATE_TYPE_OPTIONS = [
   {
     value: "CORPORATION",
     label: "주식회사",
-    docs: "사업자등록증 · 등기사항전부증명서 · 주주명부",
+    docs: "1차 MVP 지원 법인 유형",
+  },
+  {
+    value: "JOINT_STOCK_COMPANY",
+    label: "주식회사",
+    docs: "사업자등록증 · 등기사항전부증명서 · 주주명부 또는 주식변동상황명세서",
   },
   {
     value: "LIMITED_COMPANY",
     label: "유한회사",
-    docs: "사업자등록증 · 등기사항전부증명서 · 출자자명부",
+    docs: "사업자등록증 · 등기사항전부증명서 · 투자자명부/사원명부/정관 중 1개",
+  },
+  {
+    value: "LIMITED_PARTNERSHIP",
+    label: "합자회사",
+    docs: "사업자등록증 · 등기사항전부증명서 · 투자자명부/사원명부/정관 중 1개",
+  },
+  {
+    value: "GENERAL_PARTNERSHIP",
+    label: "합명회사",
+    docs: "사업자등록증 · 등기사항전부증명서 · 투자자명부/사원명부/정관 중 1개",
   },
   {
     value: "NON_PROFIT",
     label: "비영리법인",
-    docs: "정관 · 설립허가증 · 등기사항전부증명서",
+    docs: "정관 · 설립목적 증빙서류 · 등기사항전부증명서",
   },
   {
     value: "ASSOCIATION",
     label: "조합·단체",
-    docs: "규약 · 고유번호증 · 대표자 확인서류",
+    docs: "고유번호증 · 대표자 확인서류 · 규약 문서 중 1개",
   },
   {
     value: "FOREIGN_COMPANY",
     label: "외국기업",
-    docs: "국내 사업자등록증 · 등기 · 본국 설립서류",
+    docs: "국내 사업자등록증 · 등기 · 본국 설립서류 · 외국인투자등록증명서",
+  },
+  {
+    value: "SOLE_PROPRIETOR",
+    label: "개인사업자",
+    docs: "후속 확장 회사 유형",
   },
 ];
 
