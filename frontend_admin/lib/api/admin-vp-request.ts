@@ -175,16 +175,28 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
       ...buildHeaders(),
       ...(init.headers ?? {}),
     },
-    credentials: "include",
+    credentials: "omit",
   });
 
   if (!response.ok) {
     const error = await readError(response);
+    if (response.status === 401 || response.status === 403) {
+      throw new AdminVpApiError(
+        "backend VP 요청 API 인증 설정을 확인해야 합니다.",
+        response.status,
+        error.code
+      );
+    }
     throw new AdminVpApiError(error.message, response.status, error.code);
   }
 
-  const json = (await response.json()) as CommonResponse<T>;
-  if (json.success === false) {
+  const json = (await response.json()) as CommonResponse<T> | T;
+  if (
+    json &&
+    typeof json === "object" &&
+    "success" in json &&
+    json.success === false
+  ) {
     throw new AdminVpApiError(
       json.message || "요청 처리에 실패했습니다.",
       response.status,
@@ -192,7 +204,11 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
     );
   }
 
-  return json.data;
+  if (json && typeof json === "object" && "data" in json) {
+    return json.data as T;
+  }
+
+  return json as T;
 }
 
 function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): {

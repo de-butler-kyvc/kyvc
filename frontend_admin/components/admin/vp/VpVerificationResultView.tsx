@@ -98,6 +98,12 @@ function ResultBadge({ resultCode }: { resultCode: string }) {
       : resultCode === "FAILED"
         ? "red"
         : "orange";
+  const label =
+    resultCode === "PASSED"
+      ? "성공"
+      : resultCode === "FAILED"
+        ? "실패"
+        : "확인 필요";
 
   return (
     <span
@@ -110,12 +116,47 @@ function ResultBadge({ resultCode }: { resultCode: string }) {
           "border-orange-200 bg-orange-50 text-orange-700"
       )}
     >
-      {resultCode}
+      {label}
     </span>
   );
 }
 
 function fallbackChecks(status: AdminVpRequestStatus): AdminVpRequestCheck[] {
+  if (status === "REPLAY_SUSPECTED") {
+    return [
+      {
+        checkType: "VP_FORMAT",
+        checkName: "VP 형식 검증",
+        resultCode: "CHECK_REQUIRED",
+        message: "상세 검증 항목 확인이 필요합니다.",
+      },
+      {
+        checkType: "VC_SIGNATURE",
+        checkName: "VC 서명 검증",
+        resultCode: "CHECK_REQUIRED",
+        message: "상세 검증 항목 확인이 필요합니다.",
+      },
+      {
+        checkType: "VC_STATUS",
+        checkName: "VC 상태 조회",
+        resultCode: "CHECK_REQUIRED",
+        message: "상세 검증 항목 확인이 필요합니다.",
+      },
+      {
+        checkType: "ISSUER_TRUST",
+        checkName: "Issuer 신뢰 확인",
+        resultCode: "CHECK_REQUIRED",
+        message: "상세 검증 항목 확인이 필요합니다.",
+      },
+      {
+        checkType: "NONCE",
+        checkName: "Nonce 검증",
+        resultCode: "FAILED",
+        message: "재사용 또는 nonce 불일치가 의심됩니다.",
+      },
+    ];
+  }
+
   const isValid = status === "VALID";
   const resultCode = isValid ? "PASSED" : "CHECK_REQUIRED";
   const message = isValid
@@ -123,14 +164,14 @@ function fallbackChecks(status: AdminVpRequestStatus): AdminVpRequestCheck[] {
     : "상세 검증 항목 확인이 필요합니다.";
 
   return [
-    "VP 형식 검증",
-    "VC 서명 검증",
-    "VC 상태 조회",
-    "Issuer 신뢰 확인",
-    "Nonce 검증",
-  ].map((checkName) => ({
-    checkType: checkName,
-    checkName,
+    { checkType: "VP_FORMAT", checkName: "VP 형식 검증" },
+    { checkType: "VC_SIGNATURE", checkName: "VC 서명 검증" },
+    { checkType: "VC_STATUS", checkName: "VC 상태 조회" },
+    { checkType: "ISSUER_TRUST", checkName: "Issuer 신뢰 확인" },
+    { checkType: "NONCE", checkName: "Nonce 검증" },
+  ].map((check) => ({
+    checkType: check.checkType,
+    checkName: check.checkName,
     resultCode,
     message,
   }));
