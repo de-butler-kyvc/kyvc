@@ -99,8 +99,9 @@ public class VerifierVpService {
     ) {
         validateFinanceCreateRequest(request);
         List<String> requestedClaims = normalizeRequiredClaims(request.requestedClaims());
+        List<String> requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(requestedClaims);
         LocalDateTime fallbackExpiresAt = LocalDateTime.now().plusSeconds(resolveExpiresInSeconds(request.expiresInSeconds()));
-        ChallengeContext challengeContext = issuePresentationChallenge(requestedClaims, fallbackExpiresAt);
+        ChallengeContext challengeContext = issuePresentationChallenge(requiredDisclosures, fallbackExpiresAt);
         String qrToken = createRandomValue();
         VpVerification vpVerification = VpVerification.createRequest(
                 null,

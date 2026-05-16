@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
+import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeResponse;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
@@ -177,6 +178,15 @@ class VerifierVpServiceTest {
         assertThat(saved.getRequestTypeCode()).isEqualTo(KyvcEnums.VpRequestType.FINANCE_VERIFY);
         assertThat(saved.getFinanceInstitutionCode()).isEqualTo("FINANCE_PUBLIC");
         assertThat(saved.getCorporateId()).isNull();
+
+        ArgumentCaptor<CorePresentationChallengeRequest> challengeRequestCaptor =
+                ArgumentCaptor.forClass(CorePresentationChallengeRequest.class);
+        verify(coreAdapter).issuePresentationChallenge(challengeRequestCaptor.capture());
+        Map<String, Object> presentationDefinition = challengeRequestCaptor.getValue().presentationDefinition();
+        assertThat(presentationDefinition.get("requiredDisclosures"))
+                .isEqualTo(List.of("legalEntity.name", "legalEntity.registrationNumber", "representative.name"));
+        assertThat(presentationDefinition.get("requiredClaims"))
+                .isEqualTo(List.of("legalEntity.name", "legalEntity.registrationNumber", "representative.name"));
     }
 
     @Test

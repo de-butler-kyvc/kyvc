@@ -270,6 +270,41 @@ class VpVerificationServiceTest {
     }
 
     @Test
+    void getVpRequest_financeRequestReturnsDisclosurePathsForKycVc() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                null,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        ReflectionTestUtils.setField(
+                vpVerification,
+                "requiredClaimsJson",
+                "[\"corporateName\",\"businessRegistrationNo\",\"corporateRegistrationNo\",\"representativeName\",\"kycStatus\",\"credentialIssuedAt\",\"credentialExpiresAt\"]"
+        );
+        ReflectionTestUtils.setField(
+                vpVerification,
+                "permissionResultJson",
+                "{\"coreChallenge\":{\"domain\":\"kyvc-finance-vp\",\"aud\":\"kyvc-finance-vp\",\"presentationDefinition\":{\"requiredDisclosures\":[\"businessRegistrationNo\",\"kycStatus\"]}}}"
+        );
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+
+        VpRequestResponse response = service.getVpRequest("vp-req-001");
+
+        assertThat(response.requiredDisclosures())
+                .containsExactly("legalEntity.name", "legalEntity.registrationNumber", "representative.name");
+        assertThat(response.requiredDisclosures())
+                .doesNotContain("businessRegistrationNo", "kycStatus", "credentialIssuedAt", "credentialExpiresAt");
+        assertThat(response.presentationDefinition().get("requiredDisclosures"))
+                .isEqualTo(List.of("legalEntity.name", "legalEntity.registrationNumber", "representative.name"));
+        assertThat(response.presentationDefinition().get("requiredClaims"))
+                .isEqualTo(List.of("legalEntity.name", "legalEntity.registrationNumber", "representative.name"));
+    }
+
+    @Test
     void getVpRequest_throwsWhenRequestDoesNotExist() {
         when(vpVerificationRepository.getByRequestId("missing"))
                 .thenThrow(new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND));
@@ -411,6 +446,16 @@ class VpVerificationServiceTest {
                 LocalDateTime.now().plusMinutes(30)
         );
         ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        ReflectionTestUtils.setField(
+                vpVerification,
+                "requiredClaimsJson",
+                "[\"corporateName\",\"businessRegistrationNo\",\"representativeName\",\"kycStatus\",\"credentialIssuedAt\",\"credentialExpiresAt\"]"
+        );
+        ReflectionTestUtils.setField(
+                vpVerification,
+                "permissionResultJson",
+                "{\"coreChallenge\":{\"domain\":\"kyvc-finance-vp\",\"aud\":\"kyvc-finance-vp\",\"presentationDefinition\":{\"requiredDisclosures\":[\"businessRegistrationNo\"]}}}"
+        );
         Credential credential = createCredential(
                 100L,
                 10L,
@@ -439,6 +484,11 @@ class VpVerificationServiceTest {
 
         service.submitPresentation(vpJwtRequest(vpJwt));
 
+        ArgumentCaptor<CoreVpVerificationRequest> coreRequestCaptor = ArgumentCaptor.forClass(CoreVpVerificationRequest.class);
+        verify(coreAdapter).requestVpVerification(coreRequestCaptor.capture(), eq("vp+jwt"), eq(vpJwt), any());
+        assertThat(coreRequestCaptor.getValue().requiredClaimsJson())
+                .contains("legalEntity.name", "legalEntity.registrationNumber", "representative.name")
+                .doesNotContain("businessRegistrationNo", "kycStatus", "credentialIssuedAt", "credentialExpiresAt");
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
         VpVerification saved = vpVerificationCaptor.getValue();
         assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID);

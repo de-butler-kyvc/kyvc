@@ -115,6 +115,19 @@ public final class CoreDocumentEvidencePolicy {
         );
     }
 
+    public static List<String> financeKycRequiredDisclosures(
+            List<String> requestedClaims // 금융사 요청 Claim 목록
+    ) {
+        if (requestedClaims == null) {
+            return List.of();
+        }
+        return requestedClaims.stream()
+                .map(CoreDocumentEvidencePolicy::toFinanceKycDisclosurePath)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+    }
+
     private static Map<String, Object> documentRule(
             String id, // Core document rule ID
             List<String> oneOf // 허용 Core 문서 유형 목록
@@ -131,5 +144,20 @@ public final class CoreDocumentEvidencePolicy {
             String claim // 요청 claim path
     ) {
         return StringUtils.hasText(claim) ? claim.trim() : null;
+    }
+    private static String toFinanceKycDisclosurePath(
+            String claim // 금융사 요청 Claim
+    ) {
+        String normalized = normalizeClaim(claim);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        return switch (normalized.toLowerCase(java.util.Locale.ROOT)) {
+            case "corporatename", "legalentity.name" -> "legalEntity.name";
+            case "businessregistrationno", "businessregistrationnumber", "legalentity.registrationnumber" ->
+                    "legalEntity.registrationNumber";
+            case "representativename", "representative.name" -> "representative.name";
+            default -> null;
+        };
     }
 }
