@@ -14,7 +14,11 @@ import com.kyvc.backend.domain.corporate.domain.CorporateRepresentative;
 import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
+import com.kyvc.backend.domain.document.application.DocumentRequirementValidationService;
 import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementGroup;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementItem;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementValidationResult;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.dto.KycDocumentResponse;
 import com.kyvc.backend.domain.document.dto.RequiredDocumentResponse;
@@ -56,6 +60,7 @@ public class KycSubmissionService {
     private static final String BUSINESS_REGISTRATION_NO_REQUIRED = "BUSINESS_REGISTRATION_NO_REQUIRED"; // 사업자등록번호 누락 코드
     private static final String REPRESENTATIVE_REQUIRED = "REPRESENTATIVE_REQUIRED"; // 대표자 정보 누락 코드
     private static final String CORPORATE_TYPE_REQUIRED = "CORPORATE_TYPE_REQUIRED"; // 법인 유형 누락 코드
+    private static final String CORPORATE_TYPE_UNSUPPORTED = "CORPORATE_TYPE_UNSUPPORTED"; // 미지원 법인 유형 코드
     private static final String DOCUMENT_STORE_OPTION_REQUIRED = "DOCUMENT_STORE_OPTION_REQUIRED"; // 원본 문서 저장 옵션 누락 코드
     private static final String DOCUMENT_REQUIRED = "DOCUMENT_REQUIRED"; // 필수서류 누락 코드
     private static final String AI_REVIEW_COMPLETED_MESSAGE = "KYC 신청이 제출되었고 수동 심사로 전환되었습니다.";
@@ -70,6 +75,7 @@ public class KycSubmissionService {
     private final CorporateAgentRepository corporateAgentRepository;
     private final KycDocumentRepository kycDocumentRepository;
     private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
+    private final DocumentRequirementValidationService documentRequirementValidationService;
     private final DocumentStorage documentStorage;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
@@ -237,7 +243,8 @@ public class KycSubmissionService {
                 corporate,
                 representativeName,
                 kycApplication,
-                documents
+                documents,
+                isAgentApplication(agentName, agentPhone, agentEmail, agentAuthorityScope)
         ); // 누락 항목 목록
         boolean submittable = kycApplication.isDraft() && isSubmittable(missingItems); // 제출 가능 여부
 
@@ -291,7 +298,8 @@ public class KycSubmissionService {
             Corporate corporate, // 법인 정보
             String representativeName, // 대표자명
             KycApplication kycApplication, // KYC 신청 정보
-            List<KycDocument> documents // 업로드 문서 목록
+            List<KycDocument> documents, // 업로드 문서 목록
+            boolean agentApplication // 대리인 신청 여부
     ) {
         Set<KycMissingItemResponse> missingItems = new LinkedHashSet<>(); // 누락 항목 목록
 
@@ -331,16 +339,31 @@ public class KycSubmissionService {
             ));
         }
 
-        Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // 업로드 문서 유형 코드 목록
-        for (RequiredDocumentPolicyProvider.RequiredDocumentPolicy policy
-                : requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode())) {
-            if (!uploadedDocumentTypeCodes.contains(policy.documentTypeCode())) {
-                missingItems.add(new KycMissingItemResponse(
-                        DOCUMENT_REQUIRED,
-                        policy.documentTypeName() + " 업로드 필요",
-                        policy.documentTypeCode()
-                ));
-            }
+        DocumentRequirementValidationResult documentValidationResult = documentRequirementValidationService.validate(
+                kycApplication.getCorporateTypeCode(),
+                getUploadedDocumentTypeCodes(documents),
+                agentApplication
+        ); // 제출 문서 정책 검증 결과
+        if (!documentValidationResult.supported()) {
+            missingItems.add(new KycMissingItemResponse(
+                    CORPORATE_TYPE_UNSUPPORTED,
+                    "지원하지 않는 법인 유형",
+                    "corporateTypeCode"
+            ));
+        }
+        for (DocumentRequirementItem missingItem : documentValidationResult.missingRequiredItems()) {
+            missingItems.add(new KycMissingItemResponse(
+                    DOCUMENT_REQUIRED,
+                    missingItem.documentTypeName() + " 업로드 필요",
+                    missingItem.documentTypeCode()
+            ));
+        }
+        for (DocumentRequirementGroup group : documentValidationResult.unsatisfiedGroups()) {
+            missingItems.add(new KycMissingItemResponse(
+                    DOCUMENT_REQUIRED,
+                    group.groupName() + " 중 " + group.minRequiredCount() + "개 이상 업로드 필요",
+                    group.groupCode()
+            ));
         }
 
         return List.copyOf(missingItems);
@@ -369,8 +392,21 @@ public class KycSubmissionService {
             List<KycDocument> documents // 업로드 문서 목록
     ) {
         return documents == null ? Set.of() : documents.stream()
+                .filter(document -> KyvcEnums.DocumentUploadStatus.UPLOADED == document.getUploadStatus())
                 .map(KycDocument::getDocumentTypeCode)
                 .collect(Collectors.toSet());
+    }
+
+    private boolean isAgentApplication(
+            String agentName, // 대리인명
+            String agentPhone, // 대리인 연락처
+            String agentEmail, // 대리인 이메일
+            String agentAuthorityScope // 대리인 권한 범위
+    ) {
+        return StringUtils.hasText(agentName)
+                || StringUtils.hasText(agentPhone)
+                || StringUtils.hasText(agentEmail)
+                || StringUtils.hasText(agentAuthorityScope);
     }
 
     // 사용자 소유 KYC 조회
