@@ -31,7 +31,7 @@ public final class KyvcEnums {
 
     // 회사 유형
     public enum CorporateType {
-        JOINT_STOCK_COMPANY("주식회사"), // 주식회사
+        CORPORATION("주식회사"), // 주식회사
         LIMITED_COMPANY("유한회사"), // 유한회사
         LIMITED_PARTNERSHIP("합자회사"), // 합자회사
         GENERAL_PARTNERSHIP("합명회사"), // 합명회사

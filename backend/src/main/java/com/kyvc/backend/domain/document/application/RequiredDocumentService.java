@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.document.application;
 
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.dto.RequiredDocumentResponse;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
@@ -96,7 +97,11 @@ public class RequiredDocumentService {
                         uploadedDocumentTypes.contains(policy.documentTypeCode()),
                         policy.description(),
                         policy.allowedExtensions(),
-                        policy.maxFileSizeMb()
+                        policy.maxFileSizeMb(),
+                        policy.groupCode(),
+                        policy.groupName(),
+                        policy.minRequiredCount(),
+                        policy.groupCandidate()
                 ))
                 .toList();
     }
@@ -117,7 +122,7 @@ public class RequiredDocumentService {
         if (!StringUtils.hasText(corporateTypeCode)) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
-        return corporateTypeCode.trim();
+        return CorporateTypeCodeNormalizer.normalize(corporateTypeCode);
     }
 
     // 사용자 ID 검증

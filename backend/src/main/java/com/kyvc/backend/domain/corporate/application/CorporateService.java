@@ -41,7 +41,7 @@ public class CorporateService {
             throw new ApiException(ErrorCode.DUPLICATE_RESOURCE);
         }
 
-        String corporateTypeCode = normalizeOptional(request.corporateTypeCode()); // 법인 유형 코드
+        String corporateTypeCode = normalizeCorporateTypeCode(request.corporateTypeCode()); // 법인 유형 코드
         validateCorporateTypeCode(corporateTypeCode);
         Corporate corporate = Corporate.create(
                 userId,
@@ -89,7 +89,7 @@ public class CorporateService {
             throw new ApiException(ErrorCode.DUPLICATE_RESOURCE);
         }
 
-        String corporateTypeCode = normalizeOptional(request.corporateTypeCode()); // 법인 유형 코드
+        String corporateTypeCode = normalizeCorporateTypeCode(request.corporateTypeCode()); // 법인 유형 코드
         validateCorporateTypeCode(corporateTypeCode);
         corporate.updateBasicInfo(
                 normalizeRequired(request.corporateName()),
@@ -183,6 +183,12 @@ public class CorporateService {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeCorporateTypeCode(
+            String value // 원본 회사 유형 코드
+    ) {
+        return CorporateTypeCodeNormalizer.normalize(value);
     }
 
     // 사용자 ID 검증

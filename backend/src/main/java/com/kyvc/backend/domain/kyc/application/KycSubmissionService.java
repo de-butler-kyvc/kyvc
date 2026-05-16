@@ -288,7 +288,11 @@ public class KycSubmissionService {
                         uploadedDocumentTypeCodes.contains(policy.documentTypeCode()),
                         policy.description(),
                         policy.allowedExtensions(),
-                        policy.maxFileSizeMb()
+                        policy.maxFileSizeMb(),
+                        policy.groupCode(),
+                        policy.groupName(),
+                        policy.minRequiredCount(),
+                        policy.groupCandidate()
                 ))
                 .toList();
     }

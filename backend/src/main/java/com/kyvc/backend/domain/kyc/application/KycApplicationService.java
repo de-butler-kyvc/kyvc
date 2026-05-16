@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.kyc.application;
 
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
@@ -40,7 +41,7 @@ public class KycApplicationService {
         validateUserId(userId);
         validateKycStartRequest(request);
 
-        String corporateTypeCode = normalizeRequired(request.corporateTypeCode()); // 법인 유형 코드
+        String corporateTypeCode = normalizeCorporateTypeCode(request.corporateTypeCode()); // 법인 유형 코드
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
 
         Corporate corporate = findMyCorporate(userId);
@@ -63,7 +64,7 @@ public class KycApplicationService {
         validateKycId(kycId);
         validateCorporateTypeRequest(request);
 
-        String corporateTypeCode = normalizeRequired(request.corporateTypeCode()); // 법인 유형 코드
+        String corporateTypeCode = normalizeCorporateTypeCode(request.corporateTypeCode()); // 법인 유형 코드
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
 
         KycApplication kycApplication = findOwnedKyc(userId, kycId);
@@ -240,6 +241,12 @@ public class KycApplicationService {
             String value // 원본 문자열
     ) {
         return value.trim();
+    }
+
+    private String normalizeCorporateTypeCode(
+            String value // 원본 회사 유형 코드
+    ) {
+        return CorporateTypeCodeNormalizer.normalize(value);
     }
 
     // 사용자 ID 검증

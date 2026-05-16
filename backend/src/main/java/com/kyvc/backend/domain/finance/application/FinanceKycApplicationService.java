@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.finance.application;
 import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.finance.domain.FinanceCorporateCustomer;
@@ -57,7 +58,7 @@ public class FinanceKycApplicationService {
 
         String financeCustomerNo = normalizeRequired(request.financeCustomerNo()); // 금융사 고객번호
         String financeBranchCode = normalizeRequired(request.financeBranchCode()); // 금융사 지점 코드
-        String corporateTypeCode = normalizeRequired(request.corporateTypeCode()); // 법인 유형 코드
+        String corporateTypeCode = normalizeCorporateTypeCode(request.corporateTypeCode()); // 법인 유형 코드
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
 
         Corporate corporate = corporateRepository.findById(request.corporateId())
@@ -173,7 +174,7 @@ public class FinanceKycApplicationService {
             throw new ApiException(ErrorCode.DUPLICATE_RESOURCE);
         }
 
-        String corporateTypeCode = normalizeRequired(request.corporateTypeCode()); // 법인 유형 코드
+        String corporateTypeCode = normalizeCorporateTypeCode(request.corporateTypeCode()); // 법인 유형 코드
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
         corporate.updateFinanceVisitInfo(
                 normalizeRequired(request.corporateName()),
@@ -276,6 +277,12 @@ public class FinanceKycApplicationService {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeCorporateTypeCode(
+            String value // 원본 회사 유형 코드
+    ) {
+        return CorporateTypeCodeNormalizer.normalize(value);
     }
 
     // 페이지 번호 정규화

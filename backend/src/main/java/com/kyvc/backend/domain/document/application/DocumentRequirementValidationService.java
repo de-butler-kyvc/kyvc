@@ -94,23 +94,22 @@ public class DocumentRequirementValidationService {
         for (String documentTypeCode : documentTypeCodes) {
             if (StringUtils.hasText(documentTypeCode)) {
                 String code = documentTypeCode.trim().toUpperCase(Locale.ROOT); // 정규화 문서 유형 코드
-                normalized.add(code);
-                legacyDocumentTypeAlias(code).forEach(normalized::add);
+                normalized.add(normalizeDocumentTypeAlias(code));
             }
         }
         return normalized;
     }
 
-    private List<String> legacyDocumentTypeAlias(
+    private String normalizeDocumentTypeAlias(
             String documentTypeCode // 기존 문서 유형 코드
     ) {
         return switch (documentTypeCode) {
-            case "CORPORATE_REGISTRATION" -> List.of("CORPORATE_REGISTRY");
-            case "SHAREHOLDER_LIST" -> List.of("SHAREHOLDER_REGISTRY");
-            case "ARTICLES_OF_INCORPORATION" -> List.of("ARTICLES_OF_ASSOCIATION");
-            case "CORPORATE_SEAL_CERTIFICATE" -> List.of("SEAL_CERTIFICATE");
-            case "REPRESENTATIVE_ID" -> List.of("REPRESENTATIVE_PROOF_DOCUMENT");
-            default -> List.of();
+            case "CORPORATE_REGISTRATION" -> "CORPORATE_REGISTRY";
+            case "SHAREHOLDER_LIST" -> "SHAREHOLDER_REGISTRY";
+            case "ARTICLES_OF_INCORPORATION" -> "ARTICLES_OF_ASSOCIATION";
+            case "CORPORATE_SEAL_CERTIFICATE" -> "SEAL_CERTIFICATE";
+            case "REPRESENTATIVE_ID" -> "REPRESENTATIVE_PROOF_DOCUMENT";
+            default -> documentTypeCode;
         };
     }
 }
