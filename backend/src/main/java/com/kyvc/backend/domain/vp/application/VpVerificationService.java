@@ -800,6 +800,15 @@ public class VpVerificationService {
             VpVerification vpVerification, // VP 검증 요청
             CoreVpVerificationResponse coreResponse // Core 검증 응답
     ) {
+        if (coreResponse != null && Boolean.TRUE.equals(coreResponse.replaySuspected())) {
+            return "VP 재사용 의심이 탐지되었습니다.";
+        }
+        if (coreResponse != null && Boolean.TRUE.equals(coreResponse.valid())) {
+            return "VP 검증이 완료되었습니다.";
+        }
+        if (coreResponse != null && Boolean.TRUE.equals(coreResponse.completed())) {
+            return "VP 검증 결과가 유효하지 않습니다.";
+        }
         if (coreResponse != null && StringUtils.hasText(coreResponse.resultSummary())) {
             return coreResponse.resultSummary().trim();
         }
@@ -1145,7 +1154,7 @@ public class VpVerificationService {
                 || !Boolean.TRUE.equals(coreResponse.valid())) {
             return;
         }
-        if (credential == null || !credential.isValid(LocalDateTime.now()) || credential.getCorporateId() == null) {
+        if (credential == null || credential.getCorporateId() == null) {
             vpVerification.markInvalid("Credential 매핑을 확인할 수 없습니다.", LocalDateTime.now());
         }
     }

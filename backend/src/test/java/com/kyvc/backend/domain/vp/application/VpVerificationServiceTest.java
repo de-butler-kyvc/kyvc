@@ -746,6 +746,8 @@ class VpVerificationServiceTest {
         VpVerification saved = vpVerificationCaptor.getValue();
         assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.INVALID);
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.INVALID.name());
+        assertThat(response.message()).isEqualTo("VP 검증 결과가 유효하지 않습니다.");
+        assertThat(response.message()).doesNotContain("성공");
         assertThat(response.result().signatureValid()).isFalse();
     }
 
