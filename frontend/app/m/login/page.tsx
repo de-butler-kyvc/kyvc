@@ -145,8 +145,13 @@ export default function MobileLoginPage() {
             email: session.email,
           });
         } else {
-          setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
-          return;
+          const autoLogin = await tryMobileAutoLogin({ requireEnabled: false }).catch(
+            () => null,
+          );
+          if (!autoLogin?.autoLogin) {
+            setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
+            return;
+          }
         }
         await ensureMobileWallet().catch(() => null);
         router.replace("/m/home");
