@@ -3133,6 +3133,16 @@ html {
   justify-content: center;
 }
 
+.mobile-process-view .bottom-action {
+  background: transparent;
+  border-top: 0;
+}
+
+.mobile-process-view .bottom-action .primary {
+  background: var(--m-ink);
+  box-shadow: none;
+}
+
 .process-panel {
   width: 100%;
   min-height: 392px;
