@@ -1,72 +1,298 @@
+const rawBackendApiBase = process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ?? "";
+
+const BACKEND_API_BASE = rawBackendApiBase.replace(/\/+$/, "");
+const FINANCE_VP_BASE = `${BACKEND_API_BASE}/api/finance/verifier/vp-requests`;
+
 export type AdminVpRequestStatus =
   | "REQUESTED"
   | "PRESENTED"
   | "VALID"
   | "INVALID"
+  | "REPLAY_SUSPECTED"
   | "EXPIRED"
   | "CANCELLED";
 
-export interface AdminVpRequestPayload {
-  type: "VP_REQUEST";
-  requestType: "FINANCIAL_KYC_CHECK";
-  vpRequestId: number;
-  qrToken: string;
-  nonce: string;
-  purpose: string;
-  expiresAt: string;
-}
+export type AdminVpRequestCheck = {
+  checkType: string;
+  checkName: string;
+  resultCode: "PASSED" | "FAILED" | "UNKNOWN" | "CHECK_REQUIRED" | string;
+  message: string;
+};
 
-export interface AdminVpRequestSession {
-  payload: AdminVpRequestPayload;
-  status: AdminVpRequestStatus;
-  requestedAt: string;
-  submittedAt: string | null;
+export type AdminVpRequestResult = {
+  corporateName: string | null;
+  businessRegistrationNo: string | null;
   verifiedAt: string | null;
-}
+  corporateRegistrationNo?: string | null;
+  representativeName?: string | null;
+  kycStatus?: string | null;
+  credentialStatus?: string | null;
+  credentialIssuedAt?: string | null;
+  credentialExpiresAt?: string | null;
+};
 
-export interface AdminVpSubmittedClaim {
+export type AdminVpRequestDetail = {
+  requestId: string;
+  status: AdminVpRequestStatus;
+  verificationStatus?: AdminVpRequestStatus | string | null;
+  purpose: string;
+  requestedClaims: string[];
+  qrPayload: string;
+  corporateId?: number | null;
+  corporateName?: string | null;
+  result?: AdminVpRequestResult | null;
+  checks?: AdminVpRequestCheck[];
+  expiresAt: string;
+  createdAt?: string | null;
+  submittedAt?: string | null;
+  verifiedAt?: string | null;
+};
+
+export type AdminVpRequestCreateResponse = {
+  requestId: string;
+  status: AdminVpRequestStatus;
+  qrPayload: string;
+  expiresAt: string;
+};
+
+export type AdminVpRequestCancelResponse = {
+  requestId: string;
+  status: AdminVpRequestStatus;
+};
+
+export type AdminVpSubmittedClaim = {
   label: string;
   value: string;
   source: string;
+};
+
+export type AdminVpRequestListParams = {
+  status?: AdminVpRequestStatus | string;
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
+};
+
+export type AdminVpRequestSummary = {
+  requestId: string;
+  status: AdminVpRequestStatus | string;
+  purpose?: string | null;
+  requestedClaims?: string[] | null;
+  corporateId?: number | null;
+  corporateName?: string | null;
+  requestedAt?: string | null;
+  createdAt?: string | null;
+  expiresAt?: string | null;
+  verifiedAt?: string | null;
+};
+
+export type AdminVpRequestListResponse = {
+  items: AdminVpRequestSummary[];
+  page?: number;
+  size?: number;
+  totalElements?: number;
+  totalPages?: number;
+};
+
+type CommonResponse<T> = {
+  success: boolean;
+  code: string;
+  message: string;
+  data: T;
+};
+
+type PageLike<T> = {
+  content?: T[];
+  items?: T[];
+  list?: T[];
+  requests?: T[];
+  totalElements?: number;
+  totalPages?: number;
+  page?: number;
+  size?: number;
+};
+
+const DEFAULT_REQUESTED_CLAIMS = [
+  "corporateName",
+  "businessRegistrationNo",
+  "corporateRegistrationNo",
+  "representativeName",
+  "kycStatus",
+  "credentialIssuedAt",
+  "credentialExpiresAt",
+];
+
+export class AdminVpApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "AdminVpApiError";
+    this.status = status;
+    this.code = code;
+  }
 }
 
-const MOCK_VP_REQUEST_ID = 100;
-const MOCK_QR_TOKEN = "mock-qr-token";
-const MOCK_NONCE = "mock-nonce";
-const FIVE_MINUTES_MS = 5 * 60 * 1000;
-
-export function buildMockAdminVpRequest(now = new Date()): AdminVpRequestSession {
+function buildHeaders() {
   return {
-    payload: {
-      type: "VP_REQUEST",
-      requestType: "FINANCIAL_KYC_CHECK",
-      vpRequestId: MOCK_VP_REQUEST_ID,
-      qrToken: MOCK_QR_TOKEN,
-      nonce: MOCK_NONCE,
-      purpose: "KYC 인증 확인",
-      expiresAt: new Date(now.getTime() + FIVE_MINUTES_MS).toISOString(),
+    "Content-Type": "application/json",
+  };
+}
+
+async function readError(response: Response) {
+  try {
+    const text = await response.text();
+    if (!text.trim()) {
+      return {
+        message: `API Error: ${response.status} ${response.statusText}`,
+      };
+    }
+    const parsed = JSON.parse(text) as Partial<CommonResponse<unknown>> & {
+      error?: string;
+    };
+    return {
+      code: parsed.code,
+      message:
+        parsed.message ??
+        (typeof parsed.error === "string" ? parsed.error : undefined) ??
+        `API Error: ${response.status} ${response.statusText}`,
+    };
+  } catch {
+    return {
+      message: `API Error: ${response.status} ${response.statusText}`,
+    };
+  }
+}
+
+async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...buildHeaders(),
+      ...(init.headers ?? {}),
     },
-    status: "REQUESTED",
-    requestedAt: now.toISOString(),
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await readError(response);
+    throw new AdminVpApiError(error.message, response.status, error.code);
+  }
+
+  const json = (await response.json()) as CommonResponse<T>;
+  if (json.success === false) {
+    throw new AdminVpApiError(
+      json.message || "요청 처리에 실패했습니다.",
+      response.status,
+      json.code
+    );
+  }
+
+  return json.data;
+}
+
+function unwrapListData<T>(data: T[] | PageLike<T> | null | undefined): {
+  items: T[];
+  page?: number;
+  size?: number;
+  totalElements?: number;
+  totalPages?: number;
+} {
+  if (Array.isArray(data)) {
+    return { items: data };
+  }
+  if (!data || typeof data !== "object") {
+    return { items: [] };
+  }
+  return {
+    items:
+      data.content ??
+      data.items ??
+      data.list ??
+      data.requests ??
+      [],
+    page: data.page,
+    size: data.size,
+    totalElements: data.totalElements,
+    totalPages: data.totalPages,
+  };
+}
+
+function toDetailFromCreate(
+  created: AdminVpRequestCreateResponse
+): AdminVpRequestDetail {
+  return {
+    requestId: created.requestId,
+    status: created.status,
+    verificationStatus: created.status,
+    purpose: "ACCOUNT_OPENING",
+    requestedClaims: DEFAULT_REQUESTED_CLAIMS,
+    qrPayload: created.qrPayload,
+    result: null,
+    checks: [],
+    expiresAt: created.expiresAt,
+    createdAt: null,
     submittedAt: null,
     verifiedAt: null,
   };
 }
 
-export async function createMockAdminVpRequest(): Promise<AdminVpRequestSession> {
-  return buildMockAdminVpRequest();
+export async function createFinanceVpRequest(): Promise<AdminVpRequestDetail> {
+  const created = await requestJson<AdminVpRequestCreateResponse>(
+    FINANCE_VP_BASE,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        purpose: "ACCOUNT_OPENING",
+        requestedClaims: DEFAULT_REQUESTED_CLAIMS,
+        expiresInSeconds: 300,
+      }),
+    }
+  );
+
+  return toDetailFromCreate(created);
 }
 
-export async function getMockAdminVpSubmittedClaims(): Promise<
-  AdminVpSubmittedClaim[]
-> {
-  return [
-    { label: "법인명", value: "한국무역(주)", source: "KYC VC" },
-    { label: "사업자등록번호", value: "123-45-67890", source: "KYC VC" },
-    { label: "법인번호", value: "110111-1234567", source: "KYC VC" },
-    { label: "대표자명", value: "김대표", source: "KYC VC" },
-    { label: "KYC 상태", value: "PASSED", source: "KYC VC" },
-    { label: "VC 발급일", value: "2026.05.16", source: "KYC VC" },
-    { label: "VC 만료일", value: "2026.12.31", source: "KYC VC" },
-  ];
+export async function getFinanceVpRequestDetail(
+  requestId: string
+): Promise<AdminVpRequestDetail> {
+  return requestJson<AdminVpRequestDetail>(
+    `${FINANCE_VP_BASE}/${encodeURIComponent(requestId)}`,
+    { method: "GET" }
+  );
+}
+
+export async function getFinanceVpRequestList(
+  params?: AdminVpRequestListParams
+): Promise<AdminVpRequestListResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set("status", params.status);
+  if (params?.from) searchParams.set("from", params.from);
+  if (params?.to) searchParams.set("to", params.to);
+  if (params?.page !== undefined) searchParams.set("page", String(params.page));
+  if (params?.size !== undefined) searchParams.set("size", String(params.size));
+
+  const url = searchParams.toString()
+    ? `${FINANCE_VP_BASE}?${searchParams}`
+    : FINANCE_VP_BASE;
+  const data = await requestJson<
+    AdminVpRequestSummary[] | PageLike<AdminVpRequestSummary>
+  >(url, { method: "GET" });
+  const listData = unwrapListData(data);
+
+  return {
+    ...listData,
+    totalElements: listData.totalElements ?? listData.items.length,
+  };
+}
+
+export async function cancelFinanceVpRequest(
+  requestId: string
+): Promise<AdminVpRequestCancelResponse> {
+  return requestJson<AdminVpRequestCancelResponse>(
+    `${FINANCE_VP_BASE}/${encodeURIComponent(requestId)}/cancel`,
+    { method: "POST" }
+  );
 }

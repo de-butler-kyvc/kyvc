@@ -16,10 +16,12 @@ export default function VpPage() {
   const [resultFilter, setResultFilter] = useState("전체 검증 결과");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const ITEMS_PER_PAGE = 3;
 
   const fetchVpList = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const data = await getVpList({
         search: searchTerm,
@@ -27,7 +29,11 @@ export default function VpPage() {
       });
       setVpList(data);
     } catch (error) {
-      console.error("Failed to fetch VP list:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "VP 검증 이력을 불러오지 못했습니다."
+      );
     } finally {
       setLoading(false);
     }
@@ -67,6 +73,11 @@ export default function VpPage() {
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200">
+        {errorMessage ? (
+          <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
         <div className="flex items-center gap-2 p-4 border-b border-slate-100 flex-wrap">
           <input
             type="text"
