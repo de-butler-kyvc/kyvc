@@ -8,16 +8,17 @@ import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 // 제출 문서 요구사항 검증 서비스
 @Service
+@Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class DocumentRequirementValidationService {
 
@@ -93,23 +94,9 @@ public class DocumentRequirementValidationService {
         Set<String> normalized = new LinkedHashSet<>(); // 정규화 문서 유형 코드 목록
         for (String documentTypeCode : documentTypeCodes) {
             if (StringUtils.hasText(documentTypeCode)) {
-                String code = documentTypeCode.trim().toUpperCase(Locale.ROOT); // 정규화 문서 유형 코드
-                normalized.add(normalizeDocumentTypeAlias(code));
+                normalized.add(DocumentTypeCodeNormalizer.normalize(documentTypeCode));
             }
         }
         return normalized;
-    }
-
-    private String normalizeDocumentTypeAlias(
-            String documentTypeCode // 기존 문서 유형 코드
-    ) {
-        return switch (documentTypeCode) {
-            case "CORPORATE_REGISTRATION" -> "CORPORATE_REGISTRY";
-            case "SHAREHOLDER_LIST" -> "SHAREHOLDER_REGISTRY";
-            case "ARTICLES_OF_INCORPORATION" -> "ARTICLES_OF_ASSOCIATION";
-            case "CORPORATE_SEAL_CERTIFICATE" -> "SEAL_CERTIFICATE";
-            case "REPRESENTATIVE_ID" -> "REPRESENTATIVE_PROOF_DOCUMENT";
-            default -> documentTypeCode;
-        };
     }
 }

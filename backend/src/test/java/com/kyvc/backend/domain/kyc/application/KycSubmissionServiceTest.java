@@ -12,7 +12,7 @@ import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
 import com.kyvc.backend.domain.document.application.DocumentRequirementValidationService;
-import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
+import com.kyvc.backend.domain.document.application.RequiredDocumentService;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementValidationResult;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
@@ -67,7 +67,7 @@ class KycSubmissionServiceTest {
     @Mock
     private KycDocumentRepository kycDocumentRepository;
     @Mock
-    private RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
+    private RequiredDocumentService requiredDocumentService;
     @Mock
     private DocumentRequirementValidationService documentRequirementValidationService;
     @Mock
@@ -91,7 +91,7 @@ class KycSubmissionServiceTest {
                 corporateRepresentativeRepository,
                 corporateAgentRepository,
                 kycDocumentRepository,
-                requiredDocumentPolicyProvider,
+                requiredDocumentService,
                 documentRequirementValidationService,
                 documentStorage,
                 coreRequestService,
@@ -221,7 +221,7 @@ class KycSubmissionServiceTest {
         when(corporateRepresentativeRepository.findByCorporateId(CORPORATE_ID)).thenReturn(Optional.empty());
         when(corporateAgentRepository.findByCorporateId(CORPORATE_ID)).thenReturn(List.of());
         when(kycDocumentRepository.findByKycId(KYC_ID)).thenReturn(List.of());
-        when(requiredDocumentPolicyProvider.getRequiredDocuments(CORPORATE_TYPE_CODE)).thenReturn(List.of());
+        when(requiredDocumentService.buildRequiredDocumentResponses(CORPORATE_TYPE_CODE, Set.of())).thenReturn(List.of());
         when(documentRequirementValidationService.validate(CORPORATE_TYPE_CODE, Set.of(), false))
                 .thenReturn(new DocumentRequirementValidationResult(true, List.of(), List.of()));
         when(coreRequestService.createAiReviewRequest(KYC_ID, null)).thenReturn(coreRequest);

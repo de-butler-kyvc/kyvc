@@ -11,11 +11,13 @@ import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.domain.CorporateAgent;
 import com.kyvc.backend.domain.corporate.domain.CorporateRepresentative;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
 import com.kyvc.backend.domain.document.application.DocumentRequirementValidationService;
-import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
+import com.kyvc.backend.domain.document.application.DocumentTypeCodeNormalizer;
+import com.kyvc.backend.domain.document.application.RequiredDocumentService;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementGroup;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementItem;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementValidationResult;
@@ -75,7 +77,7 @@ public class KycSubmissionService {
     private final CorporateRepresentativeRepository corporateRepresentativeRepository;
     private final CorporateAgentRepository corporateAgentRepository;
     private final KycDocumentRepository kycDocumentRepository;
-    private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
+    private final RequiredDocumentService requiredDocumentService;
     private final DocumentRequirementValidationService documentRequirementValidationService;
     private final DocumentStorage documentStorage;
     private final CoreRequestService coreRequestService;
@@ -268,6 +270,7 @@ public class KycSubmissionService {
                 .map(this::toDocumentResponse)
                 .toList();
         List<RequiredDocumentResponse> requiredDocuments = buildRequiredDocuments(kycApplication, documents); // 필수서류 충족 여부 목록
+        String normalizedCorporateTypeCode = CorporateTypeCodeNormalizer.normalize(kycApplication.getCorporateTypeCode()); // 정규화 법인 유형 코드
         List<KycMissingItemResponse> missingItems = buildMissingItems(
                 corporate,
                 representativeName,
@@ -291,7 +294,7 @@ public class KycSubmissionService {
                 agentPhone,
                 agentEmail,
                 agentAuthorityScope,
-                kycApplication.getCorporateTypeCode(),
+                normalizedCorporateTypeCode,
                 enumName(kycApplication.getOriginalDocumentStoreOption()),
                 documentResponses,
                 requiredDocuments,
@@ -309,21 +312,10 @@ public class KycSubmissionService {
             List<KycDocument> documents // 업로드 문서 목록
     ) {
         Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // 업로드 문서 유형 코드 목록
-        return requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode()).stream()
-                .map(policy -> new RequiredDocumentResponse(
-                        policy.documentTypeCode(),
-                        policy.documentTypeName(),
-                        policy.required(),
-                        uploadedDocumentTypeCodes.contains(policy.documentTypeCode()),
-                        policy.description(),
-                        policy.allowedExtensions(),
-                        policy.maxFileSizeMb(),
-                        policy.groupCode(),
-                        policy.groupName(),
-                        policy.minRequiredCount(),
-                        policy.groupCandidate()
-                ))
-                .toList();
+        return requiredDocumentService.buildRequiredDocumentResponses(
+                kycApplication.getCorporateTypeCode(),
+                uploadedDocumentTypeCodes
+        );
     }
 
     // 누락 항목 목록 생성
@@ -466,6 +458,7 @@ public class KycSubmissionService {
         return documents == null ? Set.of() : documents.stream()
                 .filter(document -> KyvcEnums.DocumentUploadStatus.UPLOADED == document.getUploadStatus())
                 .map(KycDocument::getDocumentTypeCode)
+                .map(DocumentTypeCodeNormalizer::normalize)
                 .collect(Collectors.toSet());
     }
 

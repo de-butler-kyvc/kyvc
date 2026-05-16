@@ -1,61 +1,86 @@
 package com.kyvc.backend.domain.document.application;
 
+import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
+import com.kyvc.backend.domain.commoncode.dto.CommonCodeItem;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
+import com.kyvc.backend.domain.document.domain.DocumentRequirement;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementGroup;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementItem;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementPolicy;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
-import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
-import com.kyvc.backend.global.util.KyvcEnums;
+import com.kyvc.backend.domain.document.repository.DocumentRequirementRepository;
+import com.kyvc.backend.global.exception.ApiException;
+import com.kyvc.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 // KYC 필수서류 정책 Provider
 @Component
+@Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class RequiredDocumentPolicyProvider {
 
-    private static final String OWNERSHIP_DOC_GROUP = "OWNERSHIP_DOC"; // 소유구조 문서 그룹
-    private static final String RULE_DOC_GROUP = "RULE_DOC"; // 규약 문서 그룹
-    private static final int MIN_ONE = 1; // 최소 1개 기준
+    private static final String CORPORATE_TYPE_GROUP = "CORPORATE_TYPE"; // 회사 유형 공통코드 그룹
+    private static final String DOCUMENT_TYPE_GROUP = "DOCUMENT_TYPE"; // 문서 유형 공통코드 그룹
+    private static final int DEFAULT_MIN_REQUIRED_COUNT = 1; // 기본 그룹 최소 제출 개수
+    private static final Set<String> AGENT_REQUIRED_DOCUMENT_TYPES = Set.of(
+            "POWER_OF_ATTORNEY",
+            "SEAL_CERTIFICATE"
+    ); // 대리 신청 조건부 필수 문서 유형 목록
 
+    private final DocumentRequirementRepository documentRequirementRepository;
+    private final CommonCodeProvider commonCodeProvider;
     private final DocumentStorageProperties documentStorageProperties;
 
     // 법인 유형 기준 필수서류 정책 목록 조회
     public List<RequiredDocumentPolicy> getRequiredDocuments(
             String corporateTypeCode // 법인 유형 코드
     ) {
-        DocumentRequirementPolicy policy = getPolicy(corporateTypeCode); // 회사 유형별 문서 정책
-        if (!policy.supported()) {
-            return List.of();
-        }
-        Map<String, RequiredDocumentPolicy> policies = new LinkedHashMap<>(); // 문서 유형별 안내 정책
-        policy.requiredItems().forEach(item -> addPolicy(policies, item, true, null));
-        policy.requiredGroups().forEach(group -> group.items()
-                .forEach(item -> addPolicy(policies, item, false, group)));
-        policy.agentRequiredItems().forEach(item -> addPolicy(policies, item, false, null));
-        return List.copyOf(policies.values());
+        return getPolicyRequirements(corporateTypeCode).stream()
+                .map(this::toRequiredDocumentPolicy)
+                .toList();
     }
 
     // 회사 유형별 제출 문서 정책 조회
     public DocumentRequirementPolicy getPolicy(
             String corporateTypeCode // 회사 유형 코드
     ) {
-        KyvcEnums.CorporateType corporateType = resolveCorporateType(corporateTypeCode); // 정규화 회사 유형
-        return switch (corporateType) {
-            case CORPORATION -> corporationPolicy();
-            case LIMITED_COMPANY -> limitedCompanyPolicy(KyvcEnums.CorporateType.LIMITED_COMPANY);
-            case LIMITED_PARTNERSHIP -> limitedCompanyPolicy(KyvcEnums.CorporateType.LIMITED_PARTNERSHIP);
-            case GENERAL_PARTNERSHIP -> limitedCompanyPolicy(KyvcEnums.CorporateType.GENERAL_PARTNERSHIP);
-            case NON_PROFIT -> nonProfitPolicy();
-            case ASSOCIATION -> associationPolicy();
-            case FOREIGN_COMPANY -> foreignCompanyPolicy();
-            case SOLE_PROPRIETOR -> unsupportedPolicy(KyvcEnums.CorporateType.SOLE_PROPRIETOR);
-        };
+        String normalizedCorporateTypeCode = normalizeCorporateTypeCode(corporateTypeCode); // 정규화 회사 유형 코드
+        if (!StringUtils.hasText(normalizedCorporateTypeCode)) {
+            return unsupportedPolicy(null);
+        }
+
+        List<ResolvedDocumentRequirement> requirements = getPolicyRequirements(normalizedCorporateTypeCode);
+        if (requirements.isEmpty()) {
+            return unsupportedPolicy(normalizedCorporateTypeCode);
+        }
+
+        List<DocumentRequirementItem> requiredItems = requirements.stream()
+                .filter(requirement -> isSingleRequired(requirement.requirement()))
+                .map(this::toItem)
+                .toList();
+        List<DocumentRequirementGroup> requiredGroups = buildGroups(requirements);
+        List<DocumentRequirementItem> agentRequiredItems = requirements.stream()
+                .filter(requirement -> isAgentConditionalRequirement(requirement.requirement()))
+                .map(this::toItem)
+                .toList();
+
+        return new DocumentRequirementPolicy(
+                normalizedCorporateTypeCode,
+                true,
+                requiredItems,
+                requiredGroups,
+                agentRequiredItems
+        );
     }
 
     // 법인 유형 기준 필수 문서 유형 코드 목록 조회
@@ -72,38 +97,111 @@ public class RequiredDocumentPolicyProvider {
             String corporateTypeCode, // 법인 유형 코드
             String documentTypeCode // 문서 유형 코드
     ) {
-        return getRequiredDocumentTypeCodes(corporateTypeCode).contains(documentTypeCode);
+        String normalizedDocumentTypeCode = DocumentTypeCodeNormalizer.normalize(documentTypeCode); // 정규화 문서 유형 코드
+        return getRequiredDocumentTypeCodes(corporateTypeCode).contains(normalizedDocumentTypeCode);
     }
 
-    // 필수서류 정책 생성
-    private RequiredDocumentPolicy createPolicy(
-            String documentTypeCode, // 문서 유형 코드
-            String documentTypeName, // 문서 유형 표시명
-            String description // 제출 안내 문구
+    private List<ResolvedDocumentRequirement> getPolicyRequirements(
+            String corporateTypeCode // 회사 유형 코드
     ) {
-        return new RequiredDocumentPolicy(
-                documentTypeCode,
-                documentTypeName,
-                true,
-                description,
-                documentStorageProperties.getAllowedExtensions(),
-                documentStorageProperties.getMaxFileSizeMb()
+        String normalizedCorporateTypeCode = normalizeCorporateTypeCode(corporateTypeCode); // 정규화 회사 유형 코드
+        if (!StringUtils.hasText(normalizedCorporateTypeCode)) {
+            return List.of();
+        }
+
+        commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, normalizedCorporateTypeCode);
+        Map<String, CommonCodeItem> enabledDocumentTypeMap = getEnabledDocumentTypeMap(); // 활성 문서 유형 공통코드 맵
+        return documentRequirementRepository.findEnabledByCorporateTypeCode(normalizedCorporateTypeCode).stream()
+                .map(requirement -> resolveRequirement(requirement, enabledDocumentTypeMap))
+                .filter(resolved -> resolved != null && isPolicyRequirement(resolved.requirement()))
+                .toList();
+    }
+
+    private ResolvedDocumentRequirement resolveRequirement(
+            DocumentRequirement requirement, // 제출 문서 요구사항
+            Map<String, CommonCodeItem> enabledDocumentTypeMap // 활성 문서 유형 공통코드 맵
+    ) {
+        CommonCodeItem documentType = enabledDocumentTypeMap.get(requirement.getDocumentTypeCode());
+        if (documentType != null) {
+            return new ResolvedDocumentRequirement(requirement, documentType);
+        }
+        if (commonCodeProvider.existsCode(DOCUMENT_TYPE_GROUP, requirement.getDocumentTypeCode())) {
+            return null;
+        }
+        throw new ApiException(
+                ErrorCode.COMMON_CODE_NOT_FOUND,
+                DOCUMENT_TYPE_GROUP + ":" + requirement.getDocumentTypeCode() + " 공통 코드를 찾을 수 없습니다."
         );
     }
 
-    private void addPolicy(
-            Map<String, RequiredDocumentPolicy> policies, // 문서 유형별 안내 정책
-            DocumentRequirementItem item, // 정책 문서 항목
-            boolean required, // 단일 필수 여부
-            DocumentRequirementGroup group // 선택 필수 그룹
+    private Map<String, CommonCodeItem> getEnabledDocumentTypeMap() {
+        return commonCodeProvider.getEnabledCodes(DOCUMENT_TYPE_GROUP).stream()
+                .collect(Collectors.toMap(
+                        CommonCodeItem::code,
+                        Function.identity(),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private RequiredDocumentPolicy toRequiredDocumentPolicy(
+            ResolvedDocumentRequirement resolvedRequirement // 공통코드가 반영된 제출 문서 요구사항
     ) {
-        policies.putIfAbsent(
-                item.documentTypeCode(),
-                createPolicy(item.documentTypeCode(), item.documentTypeName(), item.description(), required, group)
+        DocumentRequirement requirement = resolvedRequirement.requirement(); // 제출 문서 요구사항
+        DocumentRequirementGroup group = isGroupCandidate(requirement)
+                ? toGroup(requirement, List.of(toItem(resolvedRequirement)))
+                : null; // 선택 필수 그룹
+        return createPolicy(
+                requirement.getDocumentTypeCode(),
+                resolvedRequirement.documentType().codeName(),
+                resolveGuideMessage(resolvedRequirement),
+                isSingleRequired(requirement),
+                group
         );
     }
 
-    // 필수서류 정책 생성
+    private List<DocumentRequirementGroup> buildGroups(
+            List<ResolvedDocumentRequirement> requirements // 공통코드가 반영된 제출 문서 요구사항 목록
+    ) {
+        Map<String, GroupBuilder> groups = new LinkedHashMap<>(); // 선택 필수 그룹 조립 맵
+        requirements.stream()
+                .filter(requirement -> isGroupCandidate(requirement.requirement()))
+                .forEach(requirement -> groups.computeIfAbsent(
+                        requirement.requirement().getRequirementGroupCode(),
+                        groupCode -> new GroupBuilder(
+                                groupCode,
+                                resolveGroupName(requirement.requirement()),
+                                resolveMinRequiredCount(requirement.requirement())
+                        )
+                ).add(toItem(requirement)));
+
+        return groups.values().stream()
+                .map(GroupBuilder::toGroup)
+                .toList();
+    }
+
+    private DocumentRequirementGroup toGroup(
+            DocumentRequirement requirement, // 제출 문서 요구사항
+            List<DocumentRequirementItem> items // 그룹 문서 목록
+    ) {
+        return new DocumentRequirementGroup(
+                requirement.getRequirementGroupCode(),
+                resolveGroupName(requirement),
+                resolveMinRequiredCount(requirement),
+                items
+        );
+    }
+
+    private DocumentRequirementItem toItem(
+            ResolvedDocumentRequirement resolvedRequirement // 공통코드가 반영된 제출 문서 요구사항
+    ) {
+        return new DocumentRequirementItem(
+                resolvedRequirement.requirement().getDocumentTypeCode(),
+                resolvedRequirement.documentType().codeName(),
+                resolveGuideMessage(resolvedRequirement)
+        );
+    }
+
     private RequiredDocumentPolicy createPolicy(
             String documentTypeCode, // 문서 유형 코드
             String documentTypeName, // 문서 유형 표시명
@@ -125,104 +223,71 @@ public class RequiredDocumentPolicyProvider {
         );
     }
 
-    private DocumentRequirementPolicy corporationPolicy() {
-        return new DocumentRequirementPolicy(
-                KyvcEnums.CorporateType.CORPORATION.name(),
-                true,
-                List.of(
-                        item(KyvcEnums.DocumentType.BUSINESS_REGISTRATION),
-                        item(KyvcEnums.DocumentType.CORPORATE_REGISTRY)
-                ),
-                List.of(group(
-                        OWNERSHIP_DOC_GROUP,
-                        "소유구조 확인 문서",
-                        KyvcEnums.DocumentType.SHAREHOLDER_REGISTRY,
-                        KyvcEnums.DocumentType.STOCK_CHANGE_STATEMENT
-                )),
-                agentRequiredItems()
-        );
-    }
-
-    private DocumentRequirementPolicy limitedCompanyPolicy(
-            KyvcEnums.CorporateType corporateType // 회사 유형
+    private String resolveGuideMessage(
+            ResolvedDocumentRequirement resolvedRequirement // 공통코드가 반영된 제출 문서 요구사항
     ) {
-        return new DocumentRequirementPolicy(
-                corporateType.name(),
-                true,
-                List.of(
-                        item(KyvcEnums.DocumentType.BUSINESS_REGISTRATION),
-                        item(KyvcEnums.DocumentType.CORPORATE_REGISTRY)
-                ),
-                List.of(group(
-                        OWNERSHIP_DOC_GROUP,
-                        "소유구조 확인 문서",
-                        KyvcEnums.DocumentType.INVESTOR_REGISTRY,
-                        KyvcEnums.DocumentType.MEMBER_REGISTRY,
-                        KyvcEnums.DocumentType.ARTICLES_OF_ASSOCIATION
-                )),
-                agentRequiredItems()
-        );
+        if (StringUtils.hasText(resolvedRequirement.requirement().getGuideMessage())) {
+            return resolvedRequirement.requirement().getGuideMessage();
+        }
+        return resolvedRequirement.documentType().codeName() + "을 제출해 주세요.";
     }
 
-    private DocumentRequirementPolicy nonProfitPolicy() {
-        return new DocumentRequirementPolicy(
-                KyvcEnums.CorporateType.NON_PROFIT.name(),
-                true,
-                List.of(
-                        item(KyvcEnums.DocumentType.ARTICLES_OF_ASSOCIATION),
-                        item(KyvcEnums.DocumentType.PURPOSE_PROOF_DOCUMENT),
-                        item(KyvcEnums.DocumentType.CORPORATE_REGISTRY)
-                ),
-                List.of(),
-                agentRequiredItems()
-        );
+    private String resolveGroupName(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        if (StringUtils.hasText(requirement.getRequirementGroupName())) {
+            return requirement.getRequirementGroupName();
+        }
+        return requirement.getRequirementGroupCode();
     }
 
-    private DocumentRequirementPolicy associationPolicy() {
-        return new DocumentRequirementPolicy(
-                KyvcEnums.CorporateType.ASSOCIATION.name(),
-                true,
-                List.of(
-                        item(KyvcEnums.DocumentType.ORGANIZATION_IDENTITY_CERTIFICATE),
-                        item(KyvcEnums.DocumentType.REPRESENTATIVE_PROOF_DOCUMENT)
-                ),
-                List.of(group(
-                        RULE_DOC_GROUP,
-                        "규약 문서",
-                        KyvcEnums.DocumentType.OPERATING_RULES,
-                        KyvcEnums.DocumentType.REGULATIONS,
-                        KyvcEnums.DocumentType.ARTICLES_OF_ASSOCIATION
-                )),
-                agentRequiredItems()
-        );
+    private int resolveMinRequiredCount(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        return requirement.getMinRequiredCount() == null
+                ? DEFAULT_MIN_REQUIRED_COUNT
+                : requirement.getMinRequiredCount();
     }
 
-    private DocumentRequirementPolicy foreignCompanyPolicy() {
-        return new DocumentRequirementPolicy(
-                KyvcEnums.CorporateType.FOREIGN_COMPANY.name(),
-                true,
-                List.of(
-                        item(KyvcEnums.DocumentType.BUSINESS_REGISTRATION),
-                        item(KyvcEnums.DocumentType.CORPORATE_REGISTRY),
-                        item(KyvcEnums.DocumentType.PURPOSE_PROOF_DOCUMENT),
-                        item(KyvcEnums.DocumentType.INVESTMENT_REGISTRATION_CERTIFICATE)
-                ),
-                List.of(group(
-                        OWNERSHIP_DOC_GROUP,
-                        "소유구조 확인 문서",
-                        KyvcEnums.DocumentType.SHAREHOLDER_REGISTRY,
-                        KyvcEnums.DocumentType.STOCK_CHANGE_STATEMENT,
-                        KyvcEnums.DocumentType.INVESTOR_REGISTRY
-                )),
-                agentRequiredItems()
-        );
+    private boolean isPolicyRequirement(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        return isSingleRequired(requirement)
+                || isGroupCandidate(requirement)
+                || isAgentConditionalRequirement(requirement);
+    }
+
+    private boolean isSingleRequired(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        return requirement.isRequired() && !hasGroup(requirement);
+    }
+
+    private boolean isGroupCandidate(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        return hasGroup(requirement);
+    }
+
+    private boolean isAgentConditionalRequirement(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        return !requirement.isRequired()
+                && !hasGroup(requirement)
+                && AGENT_REQUIRED_DOCUMENT_TYPES.contains(requirement.getDocumentTypeCode());
+    }
+
+    private boolean hasGroup(
+            DocumentRequirement requirement // 제출 문서 요구사항
+    ) {
+        return StringUtils.hasText(requirement.getRequirementGroupCode());
     }
 
     private DocumentRequirementPolicy unsupportedPolicy(
-            KyvcEnums.CorporateType corporateType // 회사 유형
+            String corporateTypeCode // 회사 유형 코드
     ) {
         return new DocumentRequirementPolicy(
-                corporateType.name(),
+                corporateTypeCode,
                 false,
                 List.of(),
                 List.of(),
@@ -230,49 +295,41 @@ public class RequiredDocumentPolicyProvider {
         );
     }
 
-    private List<DocumentRequirementItem> agentRequiredItems() {
-        return List.of(
-                item(KyvcEnums.DocumentType.POWER_OF_ATTORNEY),
-                item(KyvcEnums.DocumentType.SEAL_CERTIFICATE)
-        );
+    private String normalizeCorporateTypeCode(
+            String corporateTypeCode // 원본 회사 유형 코드
+    ) {
+        return CorporateTypeCodeNormalizer.normalize(corporateTypeCode);
     }
 
-    private DocumentRequirementGroup group(
-            String groupCode, // 그룹 코드
-            String groupName, // 그룹 표시명
-            KyvcEnums.DocumentType... documentTypes // 그룹 문서 유형
+    private record ResolvedDocumentRequirement(
+            DocumentRequirement requirement, // 제출 문서 요구사항
+            CommonCodeItem documentType // 문서 유형 공통코드
     ) {
-        return new DocumentRequirementGroup(
-                groupCode,
-                groupName,
-                MIN_ONE,
-                List.of(documentTypes).stream()
-                        .map(this::item)
-                        .toList()
-        );
     }
 
-    private DocumentRequirementItem item(
-            KyvcEnums.DocumentType documentType // 문서 유형
+    private record GroupBuilder(
+            String groupCode, // 선택 필수 그룹 코드
+            String groupName, // 선택 필수 그룹 표시명
+            int minRequiredCount, // 그룹 최소 제출 개수
+            List<DocumentRequirementItem> items // 그룹 문서 목록
     ) {
-        return new DocumentRequirementItem(
-                documentType.name(),
-                documentType.displayName(),
-                documentType.displayName() + "를 제출해 주세요."
-        );
-    }
 
-    private KyvcEnums.CorporateType resolveCorporateType(
-            String corporateTypeCode // 회사 유형 코드
-    ) {
-        if (!StringUtils.hasText(corporateTypeCode)) {
-            return KyvcEnums.CorporateType.SOLE_PROPRIETOR;
+        private GroupBuilder(
+                String groupCode, // 선택 필수 그룹 코드
+                String groupName, // 선택 필수 그룹 표시명
+                int minRequiredCount // 그룹 최소 제출 개수
+        ) {
+            this(groupCode, groupName, minRequiredCount, new java.util.ArrayList<>());
         }
-        String normalized = CorporateTypeCodeNormalizer.normalize(corporateTypeCode); // 정규화 회사 유형 코드
-        try {
-            return KyvcEnums.CorporateType.valueOf(normalized);
-        } catch (IllegalArgumentException exception) {
-            return KyvcEnums.CorporateType.SOLE_PROPRIETOR;
+
+        private void add(
+                DocumentRequirementItem item // 그룹 문서 항목
+        ) {
+            items.add(item);
+        }
+
+        private DocumentRequirementGroup toGroup() {
+            return new DocumentRequirementGroup(groupCode, groupName, minRequiredCount, items);
         }
     }
 
