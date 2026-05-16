@@ -1,16 +1,14 @@
 "use client";
 
 import type {
-  AdminVpRequestSession,
+  AdminVpRequestDetail,
   AdminVpRequestStatus,
 } from "@/lib/api/admin-vp-request";
 import { cn } from "@/lib/utils";
 
-import { VpStatusDevControls } from "./VpStatusDevControls";
-
 type VpRequestInfoCardProps = {
-  session: AdminVpRequestSession;
-  onStatusChange: (status: AdminVpRequestStatus) => void;
+  detail: AdminVpRequestDetail;
+  status: AdminVpRequestStatus;
 };
 
 const requestStatusLabel: Record<AdminVpRequestStatus, string> = {
@@ -18,6 +16,7 @@ const requestStatusLabel: Record<AdminVpRequestStatus, string> = {
   PRESENTED: "제출 완료",
   VALID: "검증 완료",
   INVALID: "검증 완료",
+  REPLAY_SUSPECTED: "검증 실패",
   EXPIRED: "만료",
   CANCELLED: "취소",
 };
@@ -40,6 +39,10 @@ const verificationStatusMeta: Record<
   },
   INVALID: {
     label: "VP 검증 실패",
+    className: "bg-red-50 text-red-700 border-red-100",
+  },
+  REPLAY_SUSPECTED: {
+    label: "재사용 의심",
     className: "bg-red-50 text-red-700 border-red-100",
   },
   EXPIRED: {
@@ -80,11 +83,19 @@ function InfoRow({
   );
 }
 
+function displayPurpose(purpose: string) {
+  return purpose === "ACCOUNT_OPENING" ? "KYC 인증 확인" : purpose;
+}
+
+function formatClaims(claims: string[]) {
+  return claims.length > 0 ? "KYC VC" : "-";
+}
+
 export function VpRequestInfoCard({
-  session,
-  onStatusChange,
+  detail,
+  status,
 }: VpRequestInfoCardProps) {
-  const verificationStatus = verificationStatusMeta[session.status];
+  const verificationStatus = verificationStatusMeta[status];
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
@@ -94,11 +105,30 @@ export function VpRequestInfoCard({
       </div>
 
       <div className="divide-y divide-slate-100">
-        <InfoRow label="요청 목적">{session.payload.purpose}</InfoRow>
-        <InfoRow label="요청 Credential">KYC VC</InfoRow>
+        <InfoRow label="요청 목적">
+          <span>{displayPurpose(detail.purpose)}</span>
+          {detail.purpose !== "ACCOUNT_OPENING" ? null : (
+            <span className="ml-2 font-mono text-xs text-slate-400">
+              ACCOUNT_OPENING
+            </span>
+          )}
+        </InfoRow>
+        <InfoRow label="요청 Credential">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>{formatClaims(detail.requestedClaims)}</span>
+            {detail.requestedClaims.slice(0, 3).map((claim) => (
+              <span
+                key={claim}
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500"
+              >
+                {claim}
+              </span>
+            ))}
+          </div>
+        </InfoRow>
         <InfoRow label="요청 상태">
           <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-            {requestStatusLabel[session.status]}
+            {requestStatusLabel[status]}
           </span>
         </InfoRow>
         <InfoRow label="검증 상태">
@@ -113,12 +143,17 @@ export function VpRequestInfoCard({
         </InfoRow>
         <InfoRow label="제출 일시">
           <span className="font-mono text-xs">
-            {formatDateTime(session.submittedAt)}
+            {formatDateTime(detail.submittedAt ?? null)}
           </span>
         </InfoRow>
         <InfoRow label="검증 일시">
           <span className="font-mono text-xs">
-            {formatDateTime(session.verifiedAt)}
+            {formatDateTime(detail.verifiedAt ?? null)}
+          </span>
+        </InfoRow>
+        <InfoRow label="만료 일시">
+          <span className="font-mono text-xs">
+            {formatDateTime(detail.expiresAt)}
           </span>
         </InfoRow>
       </div>
@@ -130,11 +165,6 @@ export function VpRequestInfoCard({
             VP 제출이 완료되면 검증 결과가 자동으로 표시됩니다.
           </p>
         </div>
-
-        <VpStatusDevControls
-          status={session.status}
-          onStatusChange={onStatusChange}
-        />
       </div>
     </section>
   );

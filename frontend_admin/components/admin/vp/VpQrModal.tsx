@@ -1,19 +1,17 @@
 "use client";
 
-import type { AdminVpRequestPayload } from "@/lib/api/admin-vp-request";
-
 import { VpQrPattern } from "./VpQrPattern";
 
 type VpQrModalProps = {
   open: boolean;
-  payload: AdminVpRequestPayload;
+  qrPayload: string;
   statusText: string;
   onClose: () => void;
 };
 
 export function VpQrModal({
   open,
-  payload,
+  qrPayload,
   statusText,
   onClose,
 }: VpQrModalProps) {
@@ -42,7 +40,7 @@ export function VpQrModal({
         </p>
 
         <div className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-white p-4">
-          <VpQrPattern payload={payload} className="w-56" />
+          <VpQrPattern qrPayload={qrPayload} className="w-56" size={224} />
         </div>
 
         <p

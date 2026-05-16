@@ -1,22 +1,20 @@
 "use client";
 
-import { CheckCircle2, XCircle } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import type {
-  AdminVpSubmittedClaim,
-  AdminVpRequestSession,
+  AdminVpRequestCheck,
+  AdminVpRequestDetail,
   AdminVpRequestStatus,
+  AdminVpSubmittedClaim,
 } from "@/lib/api/admin-vp-request";
-import { getMockAdminVpSubmittedClaims } from "@/lib/api/admin-vp-request";
 import { cn } from "@/lib/utils";
 
 import { VpClaimsModal } from "./VpClaimsModal";
-import { VpStatusDevControls } from "./VpStatusDevControls";
 
 type VpVerificationResultViewProps = {
-  session: AdminVpRequestSession;
-  onStatusChange: (status: AdminVpRequestStatus) => void;
+  detail: AdminVpRequestDetail;
 };
 
 const resultStatusMeta = {
@@ -32,6 +30,12 @@ const resultStatusMeta = {
     className: "border-red-200 bg-red-50 text-red-700",
     icon: XCircle,
   },
+  REPLAY_SUSPECTED: {
+    label: "VP 검증 실패",
+    description: "재사용 또는 nonce 불일치가 의심됩니다.",
+    className: "border-red-200 bg-red-50 text-red-700",
+    icon: AlertTriangle,
+  },
 } as const;
 
 const verificationStatusLabel: Record<AdminVpRequestStatus, string> = {
@@ -39,6 +43,7 @@ const verificationStatusLabel: Record<AdminVpRequestStatus, string> = {
   PRESENTED: "VP 제출 완료 / 검증중",
   VALID: "VP 검증 성공",
   INVALID: "VP 검증 실패",
+  REPLAY_SUSPECTED: "재사용 의심",
   EXPIRED: "QR 만료",
   CANCELLED: "요청 취소",
 };
@@ -48,11 +53,12 @@ const requestStatusLabel: Record<AdminVpRequestStatus, string> = {
   PRESENTED: "제출 완료",
   VALID: "검증 완료",
   INVALID: "검증 완료",
+  REPLAY_SUSPECTED: "검증 실패",
   EXPIRED: "만료",
   CANCELLED: "취소",
 };
 
-function formatDateTime(value: string | null) {
+function formatDateTime(value?: string | null) {
   if (!value) return "-";
 
   return new Intl.DateTimeFormat("ko-KR", {
@@ -64,6 +70,10 @@ function formatDateTime(value: string | null) {
     second: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function displayPurpose(purpose: string) {
+  return purpose === "ACCOUNT_OPENING" ? "KYC 인증 확인" : purpose;
 }
 
 function SummaryRow({
@@ -81,52 +91,110 @@ function SummaryRow({
   );
 }
 
-function ResultBadge({
-  children,
-  tone = "green",
-}: {
-  children: React.ReactNode;
-  tone?: "green" | "red";
-}) {
+function ResultBadge({ resultCode }: { resultCode: string }) {
+  const tone =
+    resultCode === "PASSED"
+      ? "green"
+      : resultCode === "FAILED"
+        ? "red"
+        : "orange";
+
   return (
     <span
       className={cn(
         "inline-flex rounded-full border px-2.5 py-1 text-xs font-medium",
-        tone === "green"
-          ? "border-green-200 bg-green-50 text-green-700"
-          : "border-red-200 bg-red-50 text-red-700"
+        tone === "green" &&
+          "border-green-200 bg-green-50 text-green-700",
+        tone === "red" && "border-red-200 bg-red-50 text-red-700",
+        tone === "orange" &&
+          "border-orange-200 bg-orange-50 text-orange-700"
       )}
     >
-      {children}
+      {resultCode}
     </span>
   );
 }
 
+function fallbackChecks(status: AdminVpRequestStatus): AdminVpRequestCheck[] {
+  const isValid = status === "VALID";
+  const resultCode = isValid ? "PASSED" : "CHECK_REQUIRED";
+  const message = isValid
+    ? "검증이 정상 처리되었습니다."
+    : "상세 검증 항목 확인이 필요합니다.";
+
+  return [
+    "VP 형식 검증",
+    "VC 서명 검증",
+    "VC 상태 조회",
+    "Issuer 신뢰 확인",
+    "Nonce 검증",
+  ].map((checkName) => ({
+    checkType: checkName,
+    checkName,
+    resultCode,
+    message,
+  }));
+}
+
+function buildSubmittedClaims(
+  detail: AdminVpRequestDetail
+): AdminVpSubmittedClaim[] {
+  const result = detail.result;
+
+  return [
+    { label: "법인명", value: result?.corporateName ?? "-", source: "KYC VC" },
+    {
+      label: "사업자등록번호",
+      value: result?.businessRegistrationNo ?? "-",
+      source: "KYC VC",
+    },
+    {
+      label: "법인번호",
+      value: result?.corporateRegistrationNo ?? "-",
+      source: "KYC VC",
+    },
+    {
+      label: "대표자명",
+      value: result?.representativeName ?? "-",
+      source: "KYC VC",
+    },
+    { label: "KYC 상태", value: result?.kycStatus ?? "-", source: "KYC VC" },
+    {
+      label: "VC 상태",
+      value: result?.credentialStatus ?? "-",
+      source: "KYC VC",
+    },
+    {
+      label: "VC 발급일",
+      value: formatDateTime(result?.credentialIssuedAt),
+      source: "KYC VC",
+    },
+    {
+      label: "VC 만료일",
+      value: formatDateTime(result?.credentialExpiresAt),
+      source: "KYC VC",
+    },
+  ];
+}
+
 export function VpVerificationResultView({
-  session,
-  onStatusChange,
+  detail,
 }: VpVerificationResultViewProps) {
   const [claimsModalOpen, setClaimsModalOpen] = useState(false);
-  const [submittedClaims, setSubmittedClaims] = useState<
-    AdminVpSubmittedClaim[]
-  >([]);
-  const isValid = session.status === "VALID";
-  const meta = isValid ? resultStatusMeta.VALID : resultStatusMeta.INVALID;
+  const status =
+    detail.status === "REPLAY_SUSPECTED" ? "REPLAY_SUSPECTED" : detail.status;
+  const meta =
+    status === "VALID"
+      ? resultStatusMeta.VALID
+      : status === "REPLAY_SUSPECTED"
+        ? resultStatusMeta.REPLAY_SUSPECTED
+        : resultStatusMeta.INVALID;
   const Icon = meta.icon;
-  const resultRows = [
-    { label: "VP 형식 검증", value: isValid ? "통과" : "실패" },
-    { label: "VC 서명 검증", value: isValid ? "유효" : "서명 불일치" },
-    { label: "VC 상태 조회", value: isValid ? "유효" : "확인 필요" },
-    { label: "Issuer 신뢰 확인", value: isValid ? "화이트리스트 포함" : "확인 필요" },
-    { label: "Nonce 검증", value: isValid ? "일치" : "불일치" },
-  ];
-
-  const handleClaimsOpen = async () => {
-    const claims = await getMockAdminVpSubmittedClaims();
-
-    setSubmittedClaims(claims);
-    setClaimsModalOpen(true);
-  };
+  const checks =
+    detail.checks && detail.checks.length > 0
+      ? detail.checks
+      : fallbackChecks(status);
+  const submittedClaims = useMemo(() => buildSubmittedClaims(detail), [detail]);
 
   return (
     <>
@@ -137,24 +205,18 @@ export function VpVerificationResultView({
               VP 요청 정보
             </h2>
             <dl className="space-y-3">
-              <SummaryRow
-                label="요청 목적"
-                value={session.payload.purpose}
-              />
+              <SummaryRow label="요청 목적" value={displayPurpose(detail.purpose)} />
               <SummaryRow label="요청 Credential" value="KYC VC" />
-              <SummaryRow
-                label="요청 상태"
-                value={requestStatusLabel[session.status]}
-              />
+              <SummaryRow label="요청 상태" value={requestStatusLabel[status]} />
               <SummaryRow
                 label="검증 상태"
-                value={verificationStatusLabel[session.status]}
+                value={verificationStatusLabel[status]}
               />
               <SummaryRow
                 label="제출 일시"
                 value={
                   <span className="font-mono text-xs">
-                    {formatDateTime(session.submittedAt)}
+                    {formatDateTime(detail.submittedAt)}
                   </span>
                 }
               />
@@ -162,7 +224,7 @@ export function VpVerificationResultView({
                 label="검증 일시"
                 value={
                   <span className="font-mono text-xs">
-                    {formatDateTime(session.verifiedAt)}
+                    {formatDateTime(detail.verifiedAt)}
                   </span>
                 }
               />
@@ -172,13 +234,14 @@ export function VpVerificationResultView({
           <button
             type="button"
             className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white"
-            onClick={handleClaimsOpen}
+            onClick={() => setClaimsModalOpen(true)}
           >
             VP 검증 상세
           </button>
           <button
             type="button"
-            className="w-full rounded border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600"
+            disabled
+            className="w-full rounded border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-400 disabled:cursor-not-allowed"
           >
             법인 고객 연결
           </button>
@@ -214,21 +277,25 @@ export function VpVerificationResultView({
                     <th className="px-4 py-3 text-left font-medium text-slate-500">
                       결과
                     </th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-500">
+                      상세 메시지
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {resultRows.map((row) => (
+                  {checks.map((check) => (
                     <tr
-                      key={row.label}
+                      key={`${check.checkType}-${check.checkName}`}
                       className="border-b border-slate-100 last:border-0"
                     >
                       <td className="px-4 py-3 text-slate-700">
-                        {row.label}
+                        {check.checkName}
                       </td>
                       <td className="px-4 py-3">
-                        <ResultBadge tone={isValid ? "green" : "red"}>
-                          {row.value}
-                        </ResultBadge>
+                        <ResultBadge resultCode={check.resultCode} />
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {check.message}
                       </td>
                     </tr>
                   ))}
@@ -239,13 +306,23 @@ export function VpVerificationResultView({
 
           <div className="mt-3 rounded-lg bg-slate-50 px-4 py-3">
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
-              <SummaryRow label="요청 목적" value={session.payload.purpose} />
+              <SummaryRow label="요청 목적" value={displayPurpose(detail.purpose)} />
               <SummaryRow label="요청 Credential" value="KYC VC" />
               <SummaryRow
                 label="VP 요청 ID"
                 value={
+                  <span className="font-mono text-xs">{detail.requestId}</span>
+                }
+              />
+              <SummaryRow
+                label="법인명"
+                value={detail.result?.corporateName ?? detail.corporateName ?? "-"}
+              />
+              <SummaryRow
+                label="제출 일시"
+                value={
                   <span className="font-mono text-xs">
-                    {session.payload.vpRequestId}
+                    {formatDateTime(detail.submittedAt)}
                   </span>
                 }
               />
@@ -253,18 +330,11 @@ export function VpVerificationResultView({
                 label="검증 일시"
                 value={
                   <span className="font-mono text-xs">
-                    {formatDateTime(session.verifiedAt)}
+                    {formatDateTime(detail.verifiedAt)}
                   </span>
                 }
               />
             </dl>
-          </div>
-
-          <div className="mt-4">
-            <VpStatusDevControls
-              status={session.status}
-              onStatusChange={onStatusChange}
-            />
           </div>
         </section>
       </div>
