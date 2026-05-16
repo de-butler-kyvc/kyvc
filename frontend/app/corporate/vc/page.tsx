@@ -6,11 +6,16 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/design/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError, credentials as credentialsApi, type CredentialDetailResponse, type CredentialSummary } from "@/lib/api";
+import {
+  ApiError,
+  credentials as credentialsApi,
+  didInstitutions,
+  type CredentialSummary
+} from "@/lib/api";
 
 export default function CorporateVcHistoryPage() {
   const [rows, setRows] = useState<CredentialSummary[]>([]);
-  const [detail, setDetail] = useState<CredentialDetailResponse | null>(null);
+  const [issuerNames, setIssuerNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +24,12 @@ export default function CorporateVcHistoryPage() {
     credentialsApi
       .list()
       .then((res) => {
-        if (!cancelled) setRows(res.credentials ?? []);
+        const credentials = res.credentials ?? [];
+        if (!cancelled) setRows(credentials);
+        return resolveIssuerNames(credentials);
+      })
+      .then((names) => {
+        if (!cancelled) setIssuerNames(names);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -34,17 +44,8 @@ export default function CorporateVcHistoryPage() {
     };
   }, []);
 
-  const loadDetail = async (credentialId: number) => {
-    setError(null);
-    try {
-      setDetail(await credentialsApi.detail(credentialId));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "상세 조회에 실패했습니다.");
-    }
-  };
-
   return (
-    <div className="mx-auto flex w-full max-w-[1040px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">VC 발급 이력 조회</h1>
@@ -64,62 +65,47 @@ export default function CorporateVcHistoryPage() {
         </div>
       ) : null}
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Credential 유형</th>
-            <th>발급자</th>
-            <th>KYC 신청번호</th>
-            <th>발급일</th>
-            <th>만료일</th>
-            <th>상태</th>
-            <th className="text-right">상세</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <Empty text="불러오는 중..." />
-          ) : rows.length === 0 ? (
-            <Empty text="발급된 VC가 없습니다." />
-          ) : (
-            rows.map((row) => (
-              <tr key={row.credentialId}>
-                <td className="font-semibold">{row.credentialTypeCode ?? "KYC_CREDENTIAL"}</td>
-                <td className="text-muted-foreground">{row.issuerDid ?? "KYvC Platform"}</td>
-                <td className="mono text-[12.5px] text-muted-foreground">
-                  {row.kycId ? `KYC-${row.kycId}` : "-"}
-                </td>
-                <td>{formatDate(row.issuedAt)}</td>
-                <td>{formatDate(row.expiresAt)}</td>
-                <td>
-                  <Badge variant={row.credentialStatusCode === "VALID" ? "success" : "secondary"}>
-                    {row.credentialStatusCode ?? "-"}
-                  </Badge>
-                </td>
-                <td className="text-right">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => loadDetail(row.credentialId)}>
-                    <Icon.Eye size={14} />
-                  </Button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table className="table history-table">
+          <thead>
+            <tr>
+              <th>XRPL CredentialType</th>
+              <th>발급기관명</th>
+              <th>발급기관 DID</th>
+              <th>KYC 신청번호</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <Empty text="불러오는 중..." />
+            ) : rows.length === 0 ? (
+              <Empty text="발급된 VC가 없습니다." />
+            ) : (
+              rows.map((row) => (
+                <tr key={row.credentialId}>
+                  <td className="font-semibold" title={row.credentialTypeCode ?? "KYC_CREDENTIAL"}>
+                    {truncateMiddle(row.credentialTypeCode ?? "KYC_CREDENTIAL")}
+                  </td>
+                  <td className="font-semibold">{issuerName(row.issuerDid, issuerNames)}</td>
+                  <td className="mono text-[12.5px] text-muted-foreground" title={row.issuerDid}>
+                    {row.issuerDid ? truncateMiddle(row.issuerDid) : "-"}
+                  </td>
+                  <td className="mono text-[12.5px] text-muted-foreground">
+                    {row.kycId ? `KYC-${row.kycId}` : "-"}
+                  </td>
+                  <td>
+                    <Badge variant={row.credentialStatusCode === "VALID" ? "success" : "secondary"}>
+                      {row.credentialStatusCode ?? "-"}
+                    </Badge>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-      {detail ? (
-        <section className="form-card mt-5 max-w-[720px]">
-          <div className="form-card-header">
-            <div className="form-card-title">Credential 상세</div>
-            <div className="form-card-meta">#{detail.credentialId}</div>
-          </div>
-          <Row label="외부 ID" value={detail.credentialExternalId ?? "-"} mono />
-          <Row label="VC Hash" value={detail.vcHash ?? "-"} mono />
-          <Row label="XRPL Tx" value={detail.xrplTxHash ?? "-"} mono />
-          <Row label="Holder DID" value={detail.holderDid ?? "-"} mono />
-          <Row label="Wallet 저장" value={detail.walletSaved || detail.walletSavedYn === "Y" ? "Y" : "N"} />
-        </section>
-      ) : null}
     </div>
   );
 }
@@ -127,22 +113,35 @@ export default function CorporateVcHistoryPage() {
 function Empty({ text }: { text: string }) {
   return (
     <tr>
-      <td colSpan={7} className="empty-state">
+      <td colSpan={5} className="empty-state">
         {text}
       </td>
     </tr>
   );
 }
 
-function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="kv-row">
-      <div className="kv-key">{label}</div>
-      <div className={`kv-val${mono ? " mono" : ""}`}>{value}</div>
-    </div>
-  );
+function truncateMiddle(value: string) {
+  return value.length > 11 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
 }
 
-function formatDate(value?: string | null) {
-  return value ? value.slice(0, 10).replace(/-/g, ".") : "-";
+async function resolveIssuerNames(rows: CredentialSummary[]) {
+  const issuerDids = Array.from(
+    new Set(rows.map((row) => row.issuerDid).filter((did): did is string => !!did))
+  );
+  const pairs = await Promise.all(
+    issuerDids.map(async (did) => {
+      try {
+        const institution = await didInstitutions.get(did);
+        return [did, institution.institutionName] as const;
+      } catch {
+        return [did, ""] as const;
+      }
+    })
+  );
+  return Object.fromEntries(pairs.filter(([, name]) => name));
+}
+
+function issuerName(issuerDid: string | undefined, issuerNames: Record<string, string>) {
+  if (!issuerDid) return "-";
+  return issuerNames[issuerDid] ?? "미등록 기관";
 }

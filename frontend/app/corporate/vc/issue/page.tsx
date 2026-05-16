@@ -189,7 +189,7 @@ export default function CorporateVcIssuePage() {
         </div>
       </div>
 
-      <section className="form-card" style={{ maxWidth: 560 }}>
+      <section className="form-card">
         <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[rgba(42,91,255,0.2)] bg-[var(--accent-soft)] px-5 py-4">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-[10px] bg-[var(--accent)] text-white">
             <Icon.Shield size={22} />

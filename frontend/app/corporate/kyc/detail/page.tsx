@@ -120,7 +120,7 @@ function KycDetail() {
 
   if (!valid) {
     return (
-      <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+      <div className="mx-auto flex w-full max-w-[920px] flex-col">
         <div className="page-head">
           <div>
             <h1 className="page-head-title">KYC 진행상태 조회</h1>
@@ -150,7 +150,7 @@ function KycDetail() {
   const progressPct = computeProgressPct(stepStates);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">KYC 진행상태 조회</h1>

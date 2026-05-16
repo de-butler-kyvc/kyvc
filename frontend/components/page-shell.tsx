@@ -5,6 +5,7 @@ type PageShellProps = {
   description?: string;
   module?: string;
   actions?: React.ReactNode;
+  contentClassName?: string;
   children?: React.ReactNode;
 };
 
@@ -13,9 +14,10 @@ export function PageShell({
   description,
   module,
   actions,
+  contentClassName,
   children
 }: PageShellProps) {
-  return (
+  const content = (
     <>
       <div className="page-head">
         <div>
@@ -43,4 +45,10 @@ export function PageShell({
       {children}
     </>
   );
+
+  if (contentClassName) {
+    return <div className={contentClassName}>{content}</div>;
+  }
+
+  return content;
 }

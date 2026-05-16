@@ -6,27 +6,23 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/design/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError, kyc as kycApi, type KycApplicationResponse, type KycDocument } from "@/lib/api";
+import { ApiError, kyc as kycApi, userDocuments, type UserDocumentItem } from "@/lib/api";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "https://dev-api-kyvc.khuoo.synology.me";
 
 export default function CorporateDocumentsPage() {
-  const [application, setApplication] = useState<KycApplicationResponse | null>(null);
-  const [docs, setDocs] = useState<KycDocument[]>([]);
+  const [docs, setDocs] = useState<UserDocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    kycApi
-      .current()
-      .then(async (current) => {
-        const documents = await kycApi.documents(current.kycId);
-        if (!cancelled) {
-          setApplication(current);
-          setDocs(documents.filter((doc) => doc.uploadStatus !== "DELETED"));
-        }
+    userDocuments
+      .list({ page: 0, size: 100 })
+      .then((res) => {
+        if (cancelled) return;
+        setDocs((res.items ?? []).filter((doc) => doc.uploadStatusCode !== "DELETED"));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -42,10 +38,11 @@ export default function CorporateDocumentsPage() {
   }, []);
 
   const preview = async (documentId: number) => {
-    if (!application?.kycId) return;
+    const doc = docs.find((item) => item.documentId === documentId);
+    if (!doc?.kycId) return;
     setError(null);
     try {
-      const res = await kycApi.documentPreview(application.kycId, documentId);
+      const res = await kycApi.documentPreview(doc.kycId, documentId);
       const url = res.previewUrl.startsWith("http") ? res.previewUrl : `${API_BASE}${res.previewUrl}`;
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
@@ -54,11 +51,11 @@ export default function CorporateDocumentsPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1040px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">제출서류 관리</h1>
-          <p className="page-head-desc">현재 KYC 신청에 업로드된 제출서류를 확인합니다.</p>
+          <p className="page-head-desc">전체 KYC 신청에 업로드된 제출서류를 확인합니다.</p>
         </div>
         <div className="page-head-actions">
           <Button asChild variant="ghost">
@@ -95,13 +92,13 @@ export default function CorporateDocumentsPage() {
             docs.map((doc) => (
               <tr key={doc.documentId}>
                 <td className="mono text-[13px]">{doc.fileName ?? `document-${doc.documentId}`}</td>
-                <td>{doc.documentTypeCode ?? "-"}</td>
+                <td>{doc.documentTypeName ?? doc.documentTypeCode ?? "-"}</td>
                 <td className="mono text-[12.5px] text-muted-foreground">
-                  {doc.kycId ? `KYC-${doc.kycId}` : application?.kycId ? `KYC-${application.kycId}` : "-"}
+                  {doc.kycId ? `KYC-${doc.kycId}` : "-"}
                 </td>
                 <td>
-                  <Badge variant={doc.uploadStatus === "UPLOADED" ? "success" : "secondary"}>
-                    {doc.uploadStatus === "UPLOADED" ? "업로드 완료" : doc.uploadStatus ?? "-"}
+                  <Badge variant={doc.uploadStatusCode === "UPLOADED" ? "success" : "secondary"}>
+                    {doc.uploadStatusCode === "UPLOADED" ? "업로드 완료" : doc.uploadStatusCode ?? "-"}
                   </Badge>
                 </td>
                 <td className="text-muted-foreground">{formatSize(doc.fileSize)}</td>
