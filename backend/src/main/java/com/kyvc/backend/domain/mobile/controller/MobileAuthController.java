@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.mobile.controller;
 
 import com.kyvc.backend.domain.mobile.application.MobileAuthService;
+import com.kyvc.backend.domain.mobile.dto.MobileAutoLoginResponse;
 import com.kyvc.backend.domain.mobile.dto.MobileLoginRequest;
 import com.kyvc.backend.domain.mobile.dto.MobileLoginResponse;
 import com.kyvc.backend.global.response.CommonResponse;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +61,32 @@ public class MobileAuthController {
     ) {
         return ResponseEntity.ok(CommonResponseFactory.success(
                 mobileAuthService.login(request, response)
+        ));
+    }
+
+    /**
+     * 모바일 자동로그인
+     *
+     * @param request HTTP 요청 객체
+     * @param response HTTP 응답 객체
+     * @return 모바일 자동로그인 응답
+     */
+    @Operation(
+            summary = "모바일 자동로그인",
+            description = "Refresh Token Cookie를 검증하고 Access Token과 Refresh Token Cookie를 재발급합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "모바일 자동로그인 응답 반환",
+            content = @Content(schema = @Schema(implementation = MobileAutoLoginResponse.class))
+    )
+    @PostMapping("/auto-login")
+    public ResponseEntity<CommonResponse<MobileAutoLoginResponse>> autoLogin(
+            HttpServletRequest request, // HTTP 요청 객체
+            HttpServletResponse response // HTTP 응답 객체
+    ) {
+        return ResponseEntity.ok(CommonResponseFactory.success(
+                mobileAuthService.autoLogin(request, response)
         ));
     }
 }

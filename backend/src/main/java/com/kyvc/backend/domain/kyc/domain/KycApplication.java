@@ -438,6 +438,12 @@ public class KycApplication {
         return KyvcEnums.KycStatus.DRAFT == kycStatus;
     }
 
+    // KYC 제출 가능 상태 여부
+    public boolean isSubmitAllowed() {
+        return KyvcEnums.KycStatus.DRAFT == kycStatus
+                || KyvcEnums.KycStatus.NEED_SUPPLEMENT == kycStatus;
+    }
+
     // 금융사 방문 신청 여부
     public boolean isFinanceVisit() {
         return KyvcEnums.ApplicationChannel.FINANCE_VISIT == applicationChannelCode;

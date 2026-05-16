@@ -43,6 +43,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/api/auth/dev/token".equals(path)
                 || isWebVpLoginPath(path)
                 || "/api/mobile/auth/login".equals(path)
+                || "/api/mobile/auth/auto-login".equals(path)
                 || "/api/mobile/auth/vp-login/challenge".equals(path)
                 || "/api/mobile/auth/vp-login".equals(path)
                 || isMobileWebVpLoginPath(path)

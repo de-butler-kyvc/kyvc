@@ -29,6 +29,7 @@ import com.kyvc.backend.domain.kyc.dto.KycApplicationSummaryResponse;
 import com.kyvc.backend.domain.kyc.dto.KycMissingItemResponse;
 import com.kyvc.backend.domain.kyc.dto.KycSubmitResponse;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
+import com.kyvc.backend.domain.kyc.repository.KycReviewHistoryRepository;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.logging.LogEventLogger;
@@ -81,6 +82,7 @@ public class KycSubmissionService {
     private final CoreAdapter coreAdapter;
     private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
+    private final KycReviewHistoryRepository kycReviewHistoryRepository;
 
     // KYC 제출 전 요약 조회
     @Transactional(readOnly = true)
@@ -102,14 +104,13 @@ public class KycSubmissionService {
         validateKycId(kycId);
 
         KycApplication kycApplication = findOwnedKyc(userId, kycId); // 사용자 소유 KYC
-        if (!kycApplication.isDraft()) {
-            throw new ApiException(ErrorCode.KYC_INVALID_STATUS);
-        }
+        validateSubmitAllowed(kycApplication);
 
         KycApplicationSummaryResponse summary = buildSummary(userId, kycApplication); // KYC 제출 전 요약
         validateSubmittable(summary);
 
         LocalDateTime submittedAt = LocalDateTime.now(); // 제출 일시
+        KyvcEnums.KycStatus beforeSubmitStatus = kycApplication.getKycStatus(); // 제출 전 KYC 상태
         String coreRequestId = null; // Core 요청 ID
 
         logEventLogger.info(
@@ -119,12 +120,22 @@ public class KycSubmissionService {
         );
 
         try {
+            kycApplication.startAiReview(submittedAt);
+            kycApplicationRepository.save(kycApplication);
+            saveStatusHistory(
+                    kycApplication.getKycId(),
+                    resolveSubmitActionType(beforeSubmitStatus),
+                    beforeSubmitStatus,
+                    kycApplication.getKycStatus(),
+                    "KYC 제출 완료",
+                    submittedAt
+            );
+
             CoreRequest coreRequest = coreRequestService.createAiReviewRequest(
                     kycApplication.getKycId(),
                     null
             );
             coreRequestId = coreRequest.getCoreRequestId();
-            kycApplication.submit(submittedAt);
 
             List<KycDocument> reviewDocuments = kycDocumentRepository.findByKycId(
                     kycApplication.getKycId()
@@ -159,8 +170,17 @@ public class KycSubmissionService {
                     createSubmitLogFields(kycApplication, coreRequestId)
             );
 
+            KyvcEnums.KycStatus beforeAiReviewResultStatus = kycApplication.getKycStatus(); // AI 심사 반영 전 KYC 상태
             applyAiReviewResult(kycApplication, coreAiReviewResponse);
             KycApplication savedApplication = kycApplicationRepository.save(kycApplication); // 저장된 KYC
+            saveStatusHistory(
+                    savedApplication.getKycId(),
+                    KyvcEnums.ReviewActionType.AI_COMPLETE,
+                    beforeAiReviewResultStatus,
+                    savedApplication.getKycStatus(),
+                    "AI 심사 완료",
+                    savedApplication.getUpdatedAt() == null ? submittedAt : savedApplication.getUpdatedAt()
+            );
 
             logEventLogger.info(
                     "kyc.submit.completed",
@@ -181,8 +201,17 @@ public class KycSubmissionService {
         } catch (ApiException exception) {
             if (coreRequestId != null && isCoreAiReviewFailure(exception)) {
                 markCoreRequestFailure(coreRequestId, exception);
+                KyvcEnums.KycStatus beforeFailureStatus = kycApplication.getKycStatus(); // AI 심사 실패 전 KYC 상태
                 kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
                 KycApplication savedApplication = kycApplicationRepository.save(kycApplication);
+                saveStatusHistory(
+                        savedApplication.getKycId(),
+                        KyvcEnums.ReviewActionType.AI_FAILED,
+                        beforeFailureStatus,
+                        savedApplication.getKycStatus(),
+                        "AI 심사 실패",
+                        savedApplication.getUpdatedAt() == null ? submittedAt : savedApplication.getUpdatedAt()
+                );
                 logEventLogger.warn(
                         "kyc.ai_review.fallback_manual_review",
                         exception.getMessage(),
@@ -246,7 +275,7 @@ public class KycSubmissionService {
                 documents,
                 isAgentApplication(agentName, agentPhone, agentEmail, agentAuthorityScope)
         ); // 누락 항목 목록
-        boolean submittable = kycApplication.isDraft() && isSubmittable(missingItems); // 제출 가능 여부
+        boolean submittable = kycApplication.isSubmitAllowed() && isSubmittable(missingItems); // 제출 가능 여부
 
         return new KycApplicationSummaryResponse(
                 kycApplication.getKycId(),
@@ -389,6 +418,45 @@ public class KycSubmissionService {
                     .anyMatch(item -> DOCUMENT_REQUIRED.equals(item.code())); // 필수서류 누락 여부
             throw new ApiException(documentMissing ? ErrorCode.DOCUMENT_REQUIRED_MISSING : ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    // KYC 제출 가능 상태 검증
+    private void validateSubmitAllowed(
+            KycApplication kycApplication // KYC 신청 정보
+    ) {
+        if (kycApplication.isSubmitAllowed()) {
+            return;
+        }
+        throw new ApiException(ErrorCode.KYC_ALREADY_SUBMITTED);
+    }
+
+    // 제출 이력 유형 결정
+    private KyvcEnums.ReviewActionType resolveSubmitActionType(
+            KyvcEnums.KycStatus beforeStatus // 제출 전 KYC 상태
+    ) {
+        if (KyvcEnums.KycStatus.NEED_SUPPLEMENT == beforeStatus) {
+            return KyvcEnums.ReviewActionType.SUPPLEMENT_SUBMIT;
+        }
+        return KyvcEnums.ReviewActionType.SUBMIT;
+    }
+
+    // KYC 상태 변경 이력 저장
+    private void saveStatusHistory(
+            Long kycId, // KYC 신청 ID
+            KyvcEnums.ReviewActionType actionType, // 심사 처리 유형
+            KyvcEnums.KycStatus beforeStatus, // 변경 전 KYC 상태
+            KyvcEnums.KycStatus afterStatus, // 변경 후 KYC 상태
+            String comment, // 처리 의견
+            LocalDateTime createdAt // 생성 일시
+    ) {
+        kycReviewHistoryRepository.saveStatusChange(
+                kycId,
+                actionType,
+                beforeStatus,
+                afterStatus,
+                comment,
+                createdAt
+        );
     }
 
     // 업로드 문서 유형 코드 목록 생성

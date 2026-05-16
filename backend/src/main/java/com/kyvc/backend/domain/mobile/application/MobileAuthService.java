@@ -3,8 +3,11 @@ package com.kyvc.backend.domain.mobile.application;
 import com.kyvc.backend.domain.auth.application.AuthService;
 import com.kyvc.backend.domain.auth.dto.LoginRequest;
 import com.kyvc.backend.domain.auth.dto.LoginResponse;
+import com.kyvc.backend.domain.auth.dto.TokenRefreshResponse;
+import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.mobile.domain.MobileDeviceBinding;
+import com.kyvc.backend.domain.mobile.dto.MobileAutoLoginResponse;
 import com.kyvc.backend.domain.mobile.dto.MobileLoginRequest;
 import com.kyvc.backend.domain.mobile.dto.MobileLoginResponse;
 import com.kyvc.backend.domain.mobile.repository.MobileDeviceBindingRepository;
@@ -12,6 +15,7 @@ import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.jwt.JwtTokenProvider;
 import com.kyvc.backend.global.jwt.TokenCookieUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -72,6 +76,35 @@ public class MobileAuthService {
                 request.deviceId(),
                 deviceRegistered,
                 toLocalDateTime(jwtTokenProvider.getExpiration(result.accessToken()))
+        );
+    }
+
+    // Refresh Token 기반 모바일 자동로그인
+    public MobileAutoLoginResponse autoLogin(
+            HttpServletRequest request, // HTTP 요청 객체
+            HttpServletResponse response // HTTP 응답 객체
+    ) {
+        String refreshToken = tokenCookieUtil.resolveRefreshToken(request); // Refresh Token 원문
+        if (!StringUtils.hasText(refreshToken)) {
+            throw new ApiException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND);
+        }
+
+        AuthService.TokenIssueResult<TokenRefreshResponse> result = authService.refresh(refreshToken);
+        addCookie(response, tokenCookieUtil.createAccessTokenCookie(result.accessToken()));
+        addCookie(response, tokenCookieUtil.createRefreshTokenCookie(result.refreshToken()));
+
+        Long userId = jwtTokenProvider.getUserId(result.accessToken()); // 사용자 ID
+        Corporate corporate = corporateRepository.findByUserId(userId).orElse(null); // 법인 정보
+
+        return new MobileAutoLoginResponse(
+                true,
+                userId,
+                corporate == null ? null : corporate.getCorporateId(),
+                jwtTokenProvider.getEmail(result.accessToken()),
+                corporate == null ? null : corporate.getCorporateName(),
+                jwtTokenProvider.getUserType(result.accessToken()),
+                toLocalDateTime(jwtTokenProvider.getExpiration(result.accessToken())),
+                toLocalDateTime(jwtTokenProvider.getExpiration(result.refreshToken()))
         );
     }
 

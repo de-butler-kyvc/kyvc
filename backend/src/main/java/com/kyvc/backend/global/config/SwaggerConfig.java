@@ -96,7 +96,8 @@ public class SwaggerConfig {
                  "/api/auth/password-reset/request",
                  "/api/auth/password-reset/confirm",
                  "/api/auth/dev/token",
-                 "/api/mobile/auth/login" -> true;
+                 "/api/mobile/auth/login",
+                 "/api/mobile/auth/auto-login" -> true;
             default -> false;
         };
     }

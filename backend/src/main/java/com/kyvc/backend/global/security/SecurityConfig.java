@@ -64,6 +64,7 @@ public class SecurityConfig {
                                 "/api/auth/vp-login-requests",
                                 "/api/auth/vp-login-requests/*/complete",
                                 "/api/mobile/auth/login",
+                                "/api/mobile/auth/auto-login",
                                 "/api/mobile/auth/vp-login/challenge",
                                 "/api/mobile/auth/vp-login",
                                 "/api/mobile/auth/vp-login-requests/resolve",
