@@ -3116,7 +3116,7 @@ html {
 /* ── Mobile process screens ─────────────────────────────────── */
 .mobile-process-view {
   background:
-    radial-gradient(circle at 84% 12%, rgba(124, 58, 237, .12), transparent 30%),
+    radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
     #fff;
 }
 
