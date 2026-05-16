@@ -184,6 +184,7 @@ public class VpVerificationService {
             applyCoreVerificationResult(vpVerification, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
             VpVerification saved = vpVerificationRepository.save(vpVerification);
+            logPresentationVerified(authContext, credential, saved);
             return new VpPresentationResponse(
                     saved.getVpVerificationId(),
                     saved.getVpRequestId(),
@@ -198,6 +199,7 @@ public class VpVerificationService {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
             vpVerification.markInvalid(exception.getMessage(), LocalDateTime.now());
             vpVerificationRepository.save(vpVerification);
+            logPresentationFailed(authContext, credential, vpVerification, exception);
             throw exception;
         }
     }
@@ -255,6 +257,7 @@ public class VpVerificationService {
             applyCoreVerificationResult(vpVerification, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
             VpVerification saved = vpVerificationRepository.save(vpVerification);
+            logPresentationVerified(authContext, credential, saved);
             return new VpPresentationResponse(
                     saved.getVpVerificationId(),
                     saved.getVpRequestId(),
@@ -269,6 +272,7 @@ public class VpVerificationService {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
             vpVerification.markInvalid(exception.getMessage(), LocalDateTime.now());
             vpVerificationRepository.save(vpVerification);
+            logPresentationFailed(authContext, credential, vpVerification, exception);
             throw exception;
         }
     }
@@ -484,6 +488,8 @@ public class VpVerificationService {
                 presentationDefinition,
                 vpVerification.getChallenge(),
                 vpVerification.getRequestNonce(),
+                resolveVpAud(vpVerification),
+                resolveVpDomain(vpVerification),
                 vpVerification.getExpiresAt(),
                 vpVerification.isExpired(LocalDateTime.now()),
                 !vpVerification.isRequested(),
@@ -637,6 +643,7 @@ public class VpVerificationService {
     ) {
         String requestId = extractTextField(rootNode, "requestId");
         VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), requestId);
+        validateQrTokenIfPresent(vpVerification, extractOptionalTextField(rootNode, "qrToken"));
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
         return new QrResolveResponse(
@@ -687,6 +694,25 @@ public class VpVerificationService {
             return CoreMockSeedData.DEV_VP_AUD;
         }
         return CoreMockSeedData.DEV_VP_AUD;
+    }
+
+    private String resolveVpDomain(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (!StringUtils.hasText(vpVerification.getPermissionResultJson())) {
+            return "kyvc-backend";
+        }
+        try {
+            JsonNode rootNode = objectMapper.readTree(vpVerification.getPermissionResultJson());
+            JsonNode coreChallengeNode = rootNode.get("coreChallenge");
+            JsonNode domainNode = coreChallengeNode == null ? rootNode.get("domain") : coreChallengeNode.get("domain");
+            if (domainNode != null && StringUtils.hasText(domainNode.asText())) {
+                return domainNode.asText().trim();
+            }
+        } catch (JsonProcessingException exception) {
+            return "kyvc-backend";
+        }
+        return "kyvc-backend";
     }
 
     private void applyCoreVerificationResult(
@@ -893,6 +919,17 @@ public class VpVerificationService {
         return fieldNode.asText().trim();
     }
 
+    private String extractOptionalTextField(
+            JsonNode rootNode, // QR Payload JSON
+            String fieldName // 필드명
+    ) {
+        JsonNode fieldNode = rootNode.get(fieldName);
+        if (fieldNode == null || !StringUtils.hasText(fieldNode.asText())) {
+            return null;
+        }
+        return fieldNode.asText().trim();
+    }
+
     private Long extractLongField(
             JsonNode rootNode, // QR Payload JSON
             String fieldName // 필드명
@@ -931,6 +968,16 @@ public class VpVerificationService {
     ) {
         if (vpVerification.isExpired(now)) {
             throw new ApiException(ErrorCode.VP_REQUEST_EXPIRED);
+        }
+    }
+
+    private void validateQrTokenIfPresent(
+            VpVerification vpVerification, // VP 검증 요청
+            String qrToken // QR 토큰 원문
+    ) {
+        if (StringUtils.hasText(vpVerification.getQrTokenHash())
+                && !vpVerification.matchesQrTokenHash(TokenHashUtil.sha256(qrToken == null ? "" : qrToken))) {
+            throw new ApiException(ErrorCode.QR_PAYLOAD_INVALID);
         }
     }
 
@@ -1141,6 +1188,33 @@ public class VpVerificationService {
                 || !StringUtils.hasText(request.challenge())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    private void logPresentationVerified(
+            AuthContext authContext, // 인증 컨텍스트
+            Credential credential, // 제출 Credential
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        logEventLogger.info(
+                isFinanceVpRequest(vpVerification) ? "finance.vp.request.verified" : "mobile.vp.presentation.verified",
+                "Mobile VP presentation verified",
+                createBaseLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), enumName(vpVerification.getVpVerificationStatus()))
+        );
+    }
+
+    private void logPresentationFailed(
+            AuthContext authContext, // 인증 컨텍스트
+            Credential credential, // 제출 Credential
+            VpVerification vpVerification, // VP 검증 요청
+            ApiException exception // 검증 예외
+    ) {
+        Map<String, Object> fields = createBaseLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), exception.getErrorCode().getCode());
+        fields.put("exceptionType", exception.getClass().getSimpleName());
+        logEventLogger.warn(
+                isFinanceVpRequest(vpVerification) ? "finance.vp.request.verify.failed" : "mobile.vp.presentation.failed",
+                "Mobile VP presentation verification failed",
+                fields
+        );
     }
 
     private void validateQrResolveRequest(

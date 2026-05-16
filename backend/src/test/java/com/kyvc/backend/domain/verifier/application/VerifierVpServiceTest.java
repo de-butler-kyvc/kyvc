@@ -1,5 +1,6 @@
 package com.kyvc.backend.domain.verifier.application;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
@@ -13,9 +14,13 @@ import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.finance.application.FinanceContextService;
 import com.kyvc.backend.domain.finance.repository.FinanceCorporateCustomerRepository;
+import com.kyvc.backend.domain.kyc.domain.KycApplication;
+import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.domain.verifier.domain.Verifier;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCancelResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestDetailResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationResponse;
 import com.kyvc.backend.domain.verifier.repository.VerifierRepository;
@@ -49,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,6 +73,9 @@ class VerifierVpServiceTest {
 
     @Mock
     private CorporateRepository corporateRepository;
+
+    @Mock
+    private KycApplicationRepository kycApplicationRepository;
 
     @Mock
     private FinanceContextService financeContextService;
@@ -107,6 +116,7 @@ class VerifierVpServiceTest {
                 vpVerificationQueryRepository,
                 credentialRepository,
                 corporateRepository,
+                kycApplicationRepository,
                 financeContextService,
                 financeCorporateCustomerRepository,
                 verifierRepository,
@@ -118,7 +128,7 @@ class VerifierVpServiceTest {
     }
 
     @Test
-    void createFinanceVpRequest_createsRequestWithoutCoreCall() {
+    void createFinanceVpRequest_createsRequestWithoutCoreCall() throws Exception {
         Corporate corporate = createCorporate(10L, 1L);
         mockFinanceContext();
         when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
@@ -136,7 +146,15 @@ class VerifierVpServiceTest {
                 userDetails(),
                 new FinanceVpRequestCreateRequest(
                         "ACCOUNT_OPENING",
-                        List.of("corporateName", "businessRegistrationNo"),
+                        List.of(
+                                "corporateName",
+                                "businessRegistrationNo",
+                                "corporateRegistrationNo",
+                                "representativeName",
+                                "kycStatus",
+                                "credentialIssuedAt",
+                                "credentialExpiresAt"
+                        ),
                         600L
                 )
         );
@@ -147,7 +165,18 @@ class VerifierVpServiceTest {
         VpVerification saved = vpVerificationCaptor.getValue();
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.REQUESTED.name());
         assertThat(response.requestId()).isEqualTo(saved.getVpRequestId());
-        assertThat(response.qrPayload()).contains(KyvcEnums.QrType.VP_REQUEST.name());
+        JsonNode qrPayload = new ObjectMapper().findAndRegisterModules().readTree(response.qrPayload());
+        assertThat(qrPayload.path("type").asText()).isEqualTo(KyvcEnums.QrType.VP_REQUEST.name());
+        assertThat(qrPayload.path("requestType").asText()).isEqualTo("FINANCIAL_KYC_CHECK");
+        assertThat(qrPayload.path("requestId").asText()).isEqualTo(saved.getVpRequestId());
+        assertThat(qrPayload.path("qrToken").asText()).isNotBlank();
+        assertThat(saved.matchesQrTokenHash(TokenHashUtil.sha256(qrPayload.path("qrToken").asText()))).isTrue();
+        assertThat(response.qrPayload()).doesNotContain("VP_LOGIN_REQUEST").doesNotContain("LOGIN");
+        assertThat(qrPayload.has("corporateId")).isFalse();
+        assertThat(qrPayload.has("kycId")).isFalse();
+        assertThat(qrPayload.has("corporateName")).isFalse();
+        assertThat(qrPayload.has("businessNumber")).isFalse();
+        assertThat(qrPayload.has("visitorName")).isFalse();
         assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.REQUESTED);
         assertThat(saved.getRequestTypeCode()).isEqualTo(KyvcEnums.VpRequestType.FINANCE_VERIFY);
         assertThat(saved.getFinanceInstitutionCode()).isEqualTo("FINANCE_USER_1");
@@ -319,7 +348,8 @@ class VerifierVpServiceTest {
         assertThat(saved.getRequestNonce()).isEqualTo("nonce-core");
         assertThat(saved.getChallenge()).isEqualTo("challenge-core");
         assertThat(saved.getPermissionResultJson()).contains("https://aud.example");
-        assertThat(response.qrPayload()).contains("nonce-core").contains("challenge-core");
+        assertThat(response.qrPayload()).contains(KyvcEnums.QrType.VP_REQUEST.name());
+        assertThat(response.qrPayload()).doesNotContain("VP_LOGIN_REQUEST").doesNotContain("LOGIN");
     }
 
     @Test
@@ -339,7 +369,95 @@ class VerifierVpServiceTest {
         VpVerification saved = vpVerificationCaptor.getValue();
         assertThat(saved.getRequestNonce()).isNotBlank();
         assertThat(saved.getChallenge()).isNotBlank();
-        assertThat(response.qrPayload()).contains(saved.getRequestNonce()).contains(saved.getChallenge());
+        assertThat(response.qrPayload()).contains(KyvcEnums.QrType.VP_REQUEST.name());
+        assertThat(response.qrPayload()).doesNotContain("VP_LOGIN_REQUEST").doesNotContain("LOGIN");
+    }
+
+    @Test
+    void getFinanceVpRequest_returnsExtendedDetailFields() {
+        Corporate corporate = createCorporate(10L, 1L);
+        Credential credential = createCredential(100L, 10L);
+        KycApplication kycApplication = createKycApplication(300L, 10L, KyvcEnums.KycStatus.APPROVED);
+        VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.REQUESTED);
+        vpVerification.markPresentedForCorporate(
+                10L,
+                100L,
+                TokenHashUtil.sha256("vp.jwt.value"),
+                "core-request-id",
+                LocalDateTime.now().minusSeconds(5)
+        );
+        vpVerification.markValid("VP 검증 성공", LocalDateTime.now());
+        mockFinanceContext();
+        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "vp-req-001"))
+                .thenReturn(Optional.of(vpVerification));
+        when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
+        when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
+        when(kycApplicationRepository.findById(300L)).thenReturn(Optional.of(kycApplication));
+
+        FinanceVpRequestDetailResponse response = service.getFinanceVpRequest(userDetails(), "vp-req-001");
+
+        assertThat(response.requestId()).isEqualTo("vp-req-001");
+        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
+        assertThat(response.verificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
+        assertThat(response.requestedClaims()).contains("corporateName");
+        assertThat(response.qrPayload()).contains(KyvcEnums.QrType.VP_REQUEST.name());
+        assertThat(response.qrPayload()).doesNotContain("qrToken");
+        assertThat(response.corporateId()).isEqualTo(10L);
+        assertThat(response.corporateName()).isEqualTo("KYVC Corp");
+        assertThat(response.submittedAt()).isNotNull();
+        assertThat(response.checks()).hasSize(5).allMatch(check -> "PASSED".equals(check.resultCode()));
+        assertThat(response.result().corporateName()).isEqualTo("KYVC Corp");
+        assertThat(response.result().businessRegistrationNo()).isEqualTo("123-45-67890");
+        assertThat(response.result().corporateRegistrationNo()).isEqualTo("110111-1234567");
+        assertThat(response.result().representativeName()).isNotBlank();
+        assertThat(response.result().kycStatus()).isEqualTo(KyvcEnums.KycStatus.APPROVED.name());
+        assertThat(response.result().credentialStatus()).isEqualTo(KyvcEnums.CredentialStatus.VALID.name());
+        assertThat(response.result().credentialIssuedAt()).isNotNull();
+        assertThat(response.result().credentialExpiresAt()).isNotNull();
+    }
+
+    @Test
+    void cancelFinanceVpRequest_cancelsRequestedRequest() {
+        VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.REQUESTED);
+        mockFinanceContext();
+        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "vp-req-001"))
+                .thenReturn(Optional.of(vpVerification));
+        when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        FinanceVpRequestCancelResponse response = service.cancelFinanceVpRequest(userDetails(), "vp-req-001");
+
+        assertThat(response.requestId()).isEqualTo("vp-req-001");
+        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.CANCELLED.name());
+        assertThat(vpVerification.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.CANCELLED);
+    }
+
+    @Test
+    void cancelFinanceVpRequest_throwsConflictWhenAlreadyCompleted() {
+        VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.VALID);
+        mockFinanceContext();
+        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "vp-req-001"))
+                .thenReturn(Optional.of(vpVerification));
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.cancelFinanceVpRequest(userDetails(), "vp-req-001")
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_INVALID_STATUS);
+    }
+
+    @Test
+    void cancelFinanceVpRequest_throwsNotFoundWhenMissing() {
+        mockFinanceContext();
+        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "missing"))
+                .thenReturn(Optional.empty());
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.cancelFinanceVpRequest(userDetails(), "missing")
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_NOT_FOUND);
     }
 
     private void mockVerifierTestSubmit(
@@ -413,7 +531,7 @@ class VerifierVpServiceTest {
                         List.of("ROLE_FINANCE_STAFF")
                 )
         );
-        when(financeCorporateCustomerRepository.findLatestByLinkedByUserId(1L)).thenReturn(Optional.empty());
+        lenient().when(financeCorporateCustomerRepository.findLatestByLinkedByUserId(1L)).thenReturn(Optional.empty());
     }
 
     private Corporate createCorporate(Long corporateId, Long userId) {
@@ -456,6 +574,52 @@ class VerifierVpServiceTest {
         Verifier verifier = Verifier.createForAuthenticatedUser("Verifier", contactEmail);
         ReflectionTestUtils.setField(verifier, "verifierId", verifierId);
         return verifier;
+    }
+
+    private VpVerification createFinanceVpVerification(
+            KyvcEnums.VpVerificationStatus status // VP 검증 상태
+    ) {
+        VpVerification vpVerification = VpVerification.createRequest(
+                null,
+                10L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                "ACCOUNT_OPENING",
+                "user@test.com",
+                "[\"corporateName\",\"businessRegistrationNo\"]",
+                LocalDateTime.now().plusMinutes(5),
+                null,
+                "FINANCE_USER_1",
+                KyvcEnums.VpRequestType.FINANCE_VERIFY,
+                KyvcEnums.Yn.N,
+                KyvcEnums.Yn.N,
+                "{\"coreChallenge\":{\"domain\":\"kyvc-finance-vp\",\"aud\":\"kyvc-finance-vp\",\"presentationDefinition\":{}}}"
+        );
+        ReflectionTestUtils.setField(vpVerification, "vpVerificationId", 21L);
+        if (KyvcEnums.VpVerificationStatus.VALID == status) {
+            vpVerification.markPresentedForCorporate(
+                    10L,
+                    100L,
+                    TokenHashUtil.sha256("vp.jwt.value"),
+                    "core-request-id",
+                    LocalDateTime.now().minusSeconds(5)
+            );
+            vpVerification.markValid("VP 검증 성공", LocalDateTime.now());
+        }
+        return vpVerification;
+    }
+
+    private KycApplication createKycApplication(
+            Long kycId, // KYC ID
+            Long corporateId, // 법인 ID
+            KyvcEnums.KycStatus status // KYC 상태
+    ) {
+        KycApplication kycApplication = newInstance(KycApplication.class);
+        ReflectionTestUtils.setField(kycApplication, "kycId", kycId);
+        ReflectionTestUtils.setField(kycApplication, "corporateId", corporateId);
+        ReflectionTestUtils.setField(kycApplication, "kycStatus", status);
+        return kycApplication;
     }
 
     private <T> T newInstance(Class<T> type) {

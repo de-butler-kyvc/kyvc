@@ -161,6 +161,54 @@ class VpVerificationServiceTest {
     }
 
     @Test
+    void resolveQr_validatesFinanceVpRequestQrToken() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce",
+                "challenge",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        vpVerification.applyQrTokenHash(TokenHashUtil.sha256("raw-token"));
+        ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+
+        QrResolveResponse response = service.resolveQr(
+                userDetails(),
+                new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"qrToken\":\"raw-token\"}")
+        );
+
+        assertThat(response.type()).isEqualTo(KyvcEnums.QrType.VP_REQUEST.name());
+        assertThat(response.requestId()).isEqualTo("vp-req-001");
+    }
+
+    @Test
+    void resolveQr_rejectsFinanceVpRequestQrTokenMismatch() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce",
+                "challenge",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        vpVerification.applyQrTokenHash(TokenHashUtil.sha256("raw-token"));
+        ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.resolveQr(
+                        userDetails(),
+                        new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"qrToken\":\"wrong-token\"}")
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.QR_PAYLOAD_INVALID);
+    }
+
+    @Test
     void resolveQr_throwsWhenPayloadIsInvalidJson() {
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -198,6 +246,29 @@ class VpVerificationServiceTest {
         assertThat(response.nonce()).isEqualTo("nonce-001");
         assertThat(response.challenge()).isEqualTo("challenge-001");
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.REQUESTED.name());
+    }
+
+    @Test
+    void getVpRequest_returnsAudAndDomainFromChallengeMetadata() {
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                10L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        ReflectionTestUtils.setField(
+                vpVerification,
+                "permissionResultJson",
+                "{\"coreChallenge\":{\"domain\":\"kyvc-finance-vp\",\"aud\":\"kyvc-finance-vp\",\"presentationDefinition\":{}}}"
+        );
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+
+        VpRequestResponse response = service.getVpRequest(userDetails(), "vp-req-001");
+
+        assertThat(response.aud()).isEqualTo("kyvc-finance-vp");
+        assertThat(response.domain()).isEqualTo("kyvc-finance-vp");
     }
 
     @Test
@@ -330,6 +401,58 @@ class VpVerificationServiceTest {
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
         assertThat(response.result().signatureValid()).isTrue();
         assertThat(response.result().replayDetected()).isFalse();
+    }
+
+    @Test
+    void submitPresentation_updatesFinanceVpRequestWithSubmittedCorporateAndCredential() {
+        String vpJwt = "vp.jwt.value";
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                999L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.Y.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                21L,
+                null
+        );
+
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.getById(100L)).thenReturn(credential);
+        when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
+        when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
+        when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreRequestService.markRunning(coreRequest.getCoreRequestId())).thenReturn(coreRequest);
+        when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), any()))
+                .thenReturn(coreResponse(true, false));
+        when(vpVerificationRepository.save(any(VpVerification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.submitPresentation(
+                userDetails(),
+                vpJwtRequest(vpJwt)
+        );
+
+        verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
+        VpVerification saved = vpVerificationCaptor.getValue();
+        assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID);
+        assertThat(saved.getCorporateId()).isEqualTo(10L);
+        assertThat(saved.getCredentialId()).isEqualTo(100L);
+        assertThat(saved.getPresentedAt()).isNotNull();
+        assertThat(saved.getVerifiedAt()).isNotNull();
     }
 
     @Test

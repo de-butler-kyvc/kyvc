@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.verifier.controller;
 
 import com.kyvc.backend.domain.verifier.application.VerifierVpService;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCancelResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestDetailResponse;
@@ -122,5 +123,30 @@ public class FinanceVerifierController {
             @PathVariable String requestId // VP 요청 ID
     ) {
         return CommonResponseFactory.success(verifierVpService.getFinanceVpRequest(userDetails, requestId));
+    }
+
+    /**
+     * 금융사 VP 검증 요청을 취소
+     *
+     * @param userDetails 인증 사용자 정보
+     * @param requestId VP 요청 ID
+     * @return 금융사 VP 요청 취소 응답
+     */
+    @Operation(
+            summary = "금융사 VP 검증 요청 취소",
+            description = "REQUESTED 상태의 금융사 VP 검증 요청을 취소합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "금융사 VP 요청 취소 응답",
+            content = @Content(schema = @Schema(implementation = FinanceVpRequestCancelResponse.class))
+    )
+    @PostMapping("/vp-requests/{requestId}/cancel")
+    public CommonResponse<FinanceVpRequestCancelResponse> cancelVpRequest(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
+            @PathVariable String requestId // VP 요청 ID
+    ) {
+        return CommonResponseFactory.success(verifierVpService.cancelFinanceVpRequest(userDetails, requestId));
     }
 }

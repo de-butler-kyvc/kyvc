@@ -169,6 +169,7 @@ public final class KyvcEnums {
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
         EXPIRED, // 만료
+        CANCELLED, // 취소
         FAILED // 실패
     }
 
