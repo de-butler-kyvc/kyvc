@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 // VP 검증 Entity
@@ -114,6 +115,10 @@ public class VpVerification {
 
     @Column(name = "callback_sent_at")
     private LocalDateTime callbackSentAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     // VP 요청 생성
     public static VpVerification createRequest(
@@ -234,6 +239,13 @@ public class VpVerification {
         return this.qrTokenHash != null && this.qrTokenHash.equals(qrTokenHash);
     }
 
+    // QR 토큰 해시 저장
+    public void applyQrTokenHash(
+            String qrTokenHash // QR 토큰 해시
+    ) {
+        this.qrTokenHash = qrTokenHash;
+    }
+
     // 브라우저 세션 해시 일치 여부
     public boolean matchesBrowserSessionHash(
             String browserSessionHash // 브라우저 세션 해시
@@ -348,6 +360,18 @@ public class VpVerification {
                 KyvcEnums.VpVerificationStatus.EXPIRED,
                 resultSummary,
                 verifiedAt,
+                KyvcEnums.Yn.N
+        );
+    }
+
+    // 요청 취소 처리
+    public void markCancelled(
+            LocalDateTime cancelledAt // 취소 일시
+    ) {
+        applyVerificationResult(
+                KyvcEnums.VpVerificationStatus.CANCELLED,
+                "VP 요청 취소",
+                cancelledAt,
                 KyvcEnums.Yn.N
         );
     }
