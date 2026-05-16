@@ -240,7 +240,11 @@ export default function MobileLoginPage() {
             <input
               type="checkbox"
               checked={keep}
-              onChange={(e) => setKeep(e.target.checked)}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                setKeep(enabled);
+                setMobileAutoLoginEnabled(enabled);
+              }}
             />
             자동 로그인
           </label>
