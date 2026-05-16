@@ -517,7 +517,31 @@ public class VpVerificationService {
         if (!containsListValue(definition, "documentRules")) {
             definition.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requiredClaims));
         }
+        applyFinanceRequiredDisclosures(vpVerification, definition, requiredClaims);
         return definition;
+    }
+
+    private void applyFinanceRequiredDisclosures(
+            VpVerification vpVerification, // VP 검증 요청
+            Map<String, Object> definition, // Presentation Definition
+            List<String> requestedClaims // 화면 요청 Claim 목록
+    ) {
+        if (!isFinanceVpRequest(vpVerification)) {
+            return;
+        }
+        List<String> requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(requestedClaims);
+        if (requiredDisclosures.isEmpty()) {
+            requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(readStringList(definition.get("requiredClaims")));
+        }
+        if (requiredDisclosures.isEmpty()) {
+            requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(readStringList(definition.get("requiredDisclosures")));
+        }
+        if (requiredDisclosures.isEmpty()) {
+            return;
+        }
+        definition.put("requiredClaims", requiredDisclosures);
+        definition.put("requiredDisclosures", requiredDisclosures);
+        definition.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requiredDisclosures));
     }
 
     private Map<String, Object> extractStoredPresentationDefinition(
@@ -575,6 +599,19 @@ public class VpVerificationService {
             String fieldName // 필드명
     ) {
         return values.get(fieldName) instanceof List<?> listValue && !listValue.isEmpty();
+    }
+
+    private List<String> readStringList(
+            Object value // 문자열 목록 값
+    ) {
+        if (!(value instanceof List<?> listValue)) {
+            return List.of();
+        }
+        return listValue.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(StringUtils::hasText)
+                .toList();
     }
 
     private List<String> parseRequiredClaims(
@@ -670,9 +707,20 @@ public class VpVerificationService {
                 challenge,
                 vpVerification.getPurpose(),
                 resolveVpAud(vpVerification),
-                vpVerification.getRequiredClaimsJson(),
+                resolveCoreRequiredClaimsJson(vpVerification),
                 requestedAt
         );
+    }
+
+    private String resolveCoreRequiredClaimsJson(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (!isFinanceVpRequest(vpVerification)) {
+            return vpVerification.getRequiredClaimsJson();
+        }
+        Map<String, Object> presentationDefinition = resolvePresentationDefinition(vpVerification);
+        List<String> requiredDisclosures = resolveRequiredDisclosures(vpVerification, presentationDefinition);
+        return toJson(requiredDisclosures);
     }
 
     private String resolveVpAud(
