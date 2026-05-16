@@ -80,6 +80,7 @@ function toErrorMessage(error: unknown) {
 
 export function VpRequestVerificationView() {
   const [detail, setDetail] = useState<AdminVpRequestDetail | null>(null);
+  const [qrPayloadForDisplay, setQrPayloadForDisplay] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -96,6 +97,7 @@ export function VpRequestVerificationView() {
     try {
       const nextDetail = await createFinanceVpRequest();
       setDetail(nextDetail);
+      setQrPayloadForDisplay(nextDetail.qrPayload);
       setNow(Date.now());
       setQrModalOpen(false);
     } catch (error) {
@@ -140,11 +142,7 @@ export function VpRequestVerificationView() {
     const pollDetail = async () => {
       try {
         const nextDetail = await getFinanceVpRequestDetail(detail.requestId);
-        setDetail((current) =>
-          current?.requestId === nextDetail.requestId && current.qrPayload
-            ? { ...nextDetail, qrPayload: current.qrPayload }
-            : nextDetail
-        );
+        setDetail(nextDetail);
         setPollingWarning(null);
       } catch (error) {
         setPollingWarning(toErrorMessage(error));
@@ -232,6 +230,7 @@ export function VpRequestVerificationView() {
         <div className="grid gap-4 lg:grid-cols-[230px_1fr]">
           <VpRequestQrCard
             detail={detail}
+            qrPayload={qrPayloadForDisplay}
             remainingSeconds={remainingSeconds}
             status={status}
             onRegenerate={createRequest}
@@ -246,7 +245,7 @@ export function VpRequestVerificationView() {
 
       <VpQrModal
         open={qrModalOpen}
-        qrPayload={detail?.qrPayload ?? ""}
+        qrPayload={qrPayloadForDisplay}
         statusText={qrModalStatusText}
         onClose={() => setQrModalOpen(false)}
       />

@@ -12,6 +12,7 @@ import { VpQrPattern } from "./VpQrPattern";
 
 type VpRequestQrCardProps = {
   detail: AdminVpRequestDetail;
+  qrPayload: string;
   remainingSeconds: number;
   status: AdminVpRequestStatus;
   onRegenerate: () => void;
@@ -31,6 +32,7 @@ function formatRemainingTime(seconds: number) {
 
 export function VpRequestQrCard({
   detail,
+  qrPayload,
   remainingSeconds,
   status,
   onRegenerate,
@@ -78,7 +80,7 @@ export function VpRequestQrCard({
           aria-label="VP 요청 QR 크게 보기"
         >
           <VpQrPattern
-            qrPayload={detail.qrPayload}
+            qrPayload={qrPayload}
             inactive={inactive}
             className="mx-auto w-full max-w-[144px]"
           />

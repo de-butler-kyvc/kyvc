@@ -426,7 +426,7 @@ class VpVerificationServiceTest {
         );
 
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
-        when(credentialRepository.getById(100L)).thenReturn(credential);
+        when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
         when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
         when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
         when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
@@ -446,6 +446,89 @@ class VpVerificationServiceTest {
         assertThat(saved.getCredentialId()).isEqualTo(100L);
         assertThat(saved.getPresentedAt()).isNotNull();
         assertThat(saved.getVerifiedAt()).isNotNull();
+    }
+
+    @Test
+    void submitPresentation_financeRequestDoesNotRejectWalletUnsavedCredentialBeforeCore() {
+        String vpJwt = "vp.jwt.value";
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                999L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        Credential credential = createCredential(
+                100L,
+                10L,
+                KyvcEnums.Yn.N.name(),
+                KyvcEnums.CredentialStatus.VALID,
+                LocalDateTime.now().plusDays(1)
+        );
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                21L,
+                null
+        );
+
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
+        when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
+        when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
+        when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreRequestService.markRunning(coreRequest.getCoreRequestId())).thenReturn(coreRequest);
+        when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), any()))
+                .thenReturn(coreResponse(true, false));
+        when(vpVerificationRepository.save(any(VpVerification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        VpPresentationResponse response = service.submitPresentation(vpJwtRequest(vpJwt));
+
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), any());
+        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
+    }
+
+    @Test
+    void submitPresentation_financeRequestMarksInvalidWhenCredentialMappingMissingAfterCore() {
+        String vpJwt = "vp.jwt.value";
+        VpVerification vpVerification = createRequestedVpVerification(
+                21L,
+                999L,
+                "vp-req-001",
+                "nonce-001",
+                "challenge-001",
+                LocalDateTime.now().plusMinutes(30)
+        );
+        ReflectionTestUtils.setField(vpVerification, "requestTypeCode", KyvcEnums.VpRequestType.FINANCE_VERIFY);
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                21L,
+                null
+        );
+
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(credentialRepository.findById(100L)).thenReturn(Optional.empty());
+        when(vpVerificationRepository.existsReplayCandidate("nonce-001", TokenHashUtil.sha256(vpJwt))).thenReturn(false);
+        when(coreRequestService.createVpVerificationRequest(21L, null)).thenReturn(coreRequest);
+        when(coreRequestService.updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreRequestService.markRunning(coreRequest.getCoreRequestId())).thenReturn(coreRequest);
+        when(coreRequestService.markSuccess(eq(coreRequest.getCoreRequestId()), any())).thenReturn(coreRequest);
+        when(coreAdapter.requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), any()))
+                .thenReturn(coreResponse(true, false));
+        when(vpVerificationRepository.save(any(VpVerification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        VpPresentationResponse response = service.submitPresentation(vpJwtRequest(vpJwt));
+
+        verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), eq("vp+jwt"), eq(vpJwt), any());
+        verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
+        assertThat(vpVerificationCaptor.getValue().getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.INVALID);
+        assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.INVALID.name());
     }
 
     @Test

@@ -139,11 +139,12 @@ public class VpVerificationService {
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
 
-        Credential credential = credentialRepository.getById(request.credentialId());
+        Credential credential = resolveSubmittedCredential(vpVerification, request.credentialId());
         validateCredentialEligible(vpVerification, credential);
         validateNonceAndChallenge(vpVerification, request);
-        Map<String, Object> didDocuments = buildDidDocuments(credential, request.didDocument());
-        Long submittedCorporateId = resolveSubmittedCorporateId(credential);
+        Map<String, Object> didDocuments = buildDidDocumentsForPresentation(vpVerification, credential, request.didDocument());
+        Long submittedCorporateId = resolveSubmittedCorporateId(vpVerification, credential);
+        Long submittedCredentialId = resolveSubmittedCredentialId(credential, request.credentialId());
 
         String vpJwtHash = TokenHashUtil.sha256(resolvedPresentation.hashSource());
         if (vpVerificationRepository.existsReplayCandidate(vpVerification.getRequestNonce(), vpJwtHash)) {
@@ -154,16 +155,17 @@ public class VpVerificationService {
 
         CoreRequest coreRequest = coreRequestService.createVpVerificationRequest(vpVerification.getVpVerificationId(), null);
         LocalDateTime presentedAt = LocalDateTime.now();
-        vpVerification.markPresentedForCorporate(submittedCorporateId, credential.getCredentialId(), vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
-        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, credential, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
+        vpVerification.markPresentedForCorporate(submittedCorporateId, submittedCredentialId, vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
+        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, submittedCredentialId, submittedCorporateId, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestDto));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
 
         try {
+            Map<String, Object> logFields = createBaseLogFields(null, submittedCorporateId, submittedCredentialId, vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId());
             logEventLogger.info(
                     "core.call.started",
                     "Core VP verification call started",
-                    createBaseLogFields(null, submittedCorporateId, credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId())
+                    logFields
             );
             CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerification(
                     coreRequestDto,
@@ -174,9 +176,10 @@ public class VpVerificationService {
             logEventLogger.info(
                     "core.call.completed",
                     "Core VP verification call completed",
-                    createBaseLogFields(null, submittedCorporateId, credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId())
+                    logFields
             );
             applyCoreVerificationResult(vpVerification, coreResponse);
+            applyFinanceCredentialMappingResult(vpVerification, credential, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
             VpVerification saved = vpVerificationRepository.save(vpVerification);
             logPresentationVerified(null, submittedCorporateId, credential, saved);
@@ -213,11 +216,12 @@ public class VpVerificationService {
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
 
-        Credential credential = credentialRepository.getById(request.credentialId());
+        Credential credential = resolveSubmittedCredential(vpVerification, request.credentialId());
         validateCredentialEligible(vpVerification, credential);
         validateNonceAndChallenge(vpVerification, request);
-        Map<String, Object> didDocuments = buildDidDocuments(credential, request.didDocument());
-        Long submittedCorporateId = resolveSubmittedCorporateId(credential);
+        Map<String, Object> didDocuments = buildDidDocumentsForPresentation(vpVerification, credential, request.didDocument());
+        Long submittedCorporateId = resolveSubmittedCorporateId(vpVerification, credential);
+        Long submittedCredentialId = resolveSubmittedCredentialId(credential, request.credentialId());
 
         String vpJwtHash = TokenHashUtil.sha256(resolvedPresentation.hashSource());
         if (vpVerificationRepository.existsReplayCandidate(vpVerification.getRequestNonce(), vpJwtHash)) {
@@ -228,13 +232,13 @@ public class VpVerificationService {
 
         CoreRequest coreRequest = coreRequestService.createVpVerificationRequest(vpVerification.getVpVerificationId(), null);
         LocalDateTime presentedAt = LocalDateTime.now();
-        vpVerification.markPresentedForCorporate(submittedCorporateId, credential.getCredentialId(), vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
-        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, credential, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
+        vpVerification.markPresentedForCorporate(submittedCorporateId, submittedCredentialId, vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
+        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, submittedCredentialId, submittedCorporateId, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestDto));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
 
         try {
-            Map<String, Object> logFields = createBaseLogFields(null, submittedCorporateId, credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId());
+            Map<String, Object> logFields = createBaseLogFields(null, submittedCorporateId, submittedCredentialId, vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId());
             logFields.put("attachmentCount", attachmentSubmission.attachments().size());
             logFields.put("manifestDocumentCount", attachmentSubmission.manifest().size());
             logEventLogger.info("core.call.started", "Core VP verification multipart call started", logFields);
@@ -248,6 +252,7 @@ public class VpVerificationService {
             );
             logEventLogger.info("core.call.completed", "Core VP verification multipart call completed", logFields);
             applyCoreVerificationResult(vpVerification, coreResponse);
+            applyFinanceCredentialMappingResult(vpVerification, credential, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
             VpVerification saved = vpVerificationRepository.save(vpVerification);
             logPresentationVerified(null, submittedCorporateId, credential, saved);
@@ -650,7 +655,8 @@ public class VpVerificationService {
 
     private CoreVpVerificationRequest buildCoreVpVerificationRequest(
             VpVerification vpVerification, // VP 검증 요청
-            Credential credential, // Credential
+            Long credentialId, // Credential ID
+            Long corporateId, // 법인 ID
             String challenge, // challenge
             String coreRequestId, // Core 요청 ID
             LocalDateTime requestedAt // 요청 시각
@@ -658,8 +664,8 @@ public class VpVerificationService {
         return new CoreVpVerificationRequest(
                 coreRequestId,
                 vpVerification.getVpVerificationId(),
-                credential.getCredentialId(),
-                vpVerification.getCorporateId(),
+                credentialId,
+                corporateId,
                 vpVerification.getRequestNonce(),
                 challenge,
                 vpVerification.getPurpose(),
@@ -1024,6 +1030,16 @@ public class VpVerificationService {
         return vpVerification != null && KyvcEnums.VpRequestType.FINANCE_VERIFY == vpVerification.getRequestTypeCode();
     }
 
+    private Credential resolveSubmittedCredential(
+            VpVerification vpVerification, // VP 검증 요청
+            Long credentialId // Credential ID
+    ) {
+        if (isFinanceVpRequest(vpVerification)) {
+            return credentialRepository.findById(credentialId).orElse(null);
+        }
+        return credentialRepository.getById(credentialId);
+    }
+
     private void validateCredentialOwnership(
             Long corporateId, // 법인 ID
             Credential credential // Credential
@@ -1037,11 +1053,52 @@ public class VpVerificationService {
             VpVerification vpVerification, // VP 검증 요청
             Credential credential // Credential
     ) {
-        if (!isFinanceVpRequest(vpVerification) && !credential.isWalletSaved()) {
+        if (isFinanceVpRequest(vpVerification)) {
+            return;
+        }
+        if (credential == null) {
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+        if (!credential.isWalletSaved()) {
             throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
         }
         if (!credential.isValid(LocalDateTime.now())) {
             throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+    }
+
+    private Long resolveSubmittedCorporateId(
+            VpVerification vpVerification, // VP 검증 요청
+            Credential credential // 제출 Credential
+    ) {
+        if (credential == null || credential.getCorporateId() == null) {
+            if (isFinanceVpRequest(vpVerification)) {
+                return null;
+            }
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+        return credential.getCorporateId();
+    }
+
+    private Long resolveSubmittedCredentialId(
+            Credential credential, // 제출 Credential
+            Long requestedCredentialId // 요청 Credential ID
+    ) {
+        return credential == null ? requestedCredentialId : credential.getCredentialId();
+    }
+
+    private void applyFinanceCredentialMappingResult(
+            VpVerification vpVerification, // VP 검증 요청
+            Credential credential, // 제출 Credential
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        if (!isFinanceVpRequest(vpVerification)
+                || coreResponse == null
+                || !Boolean.TRUE.equals(coreResponse.valid())) {
+            return;
+        }
+        if (credential == null || !credential.isValid(LocalDateTime.now()) || credential.getCorporateId() == null) {
+            vpVerification.markInvalid("Credential 매핑을 확인할 수 없습니다.", LocalDateTime.now());
         }
     }
 
@@ -1107,11 +1164,74 @@ public class VpVerificationService {
         if (acceptedVcts == null || acceptedVcts.isEmpty()) {
             return true;
         }
-        return StringUtils.hasText(credential.getCredentialTypeCode())
+        return credential != null
+                && StringUtils.hasText(credential.getCredentialTypeCode())
                 && acceptedVcts.contains(credential.getCredentialTypeCode().trim());
     }
 
+    private boolean matchesAcceptedVct(
+            Long credentialId, // Credential ID
+            Long corporateId, // 踰뺤씤 ID
+            List<String> acceptedVcts // 허용 VCT 목록
+    ) {
+        if (acceptedVcts == null || acceptedVcts.isEmpty()) {
+            return true;
+        }
+        return true;
+    }
+
     // Holder DID Document 목록 생성
+    private Map<String, Object> buildDidDocumentsForPresentation(
+            VpVerification vpVerification, // VP 검증 요청
+            Credential credential, // 제출 Credential
+            Object didDocument // Holder DID Document
+    ) {
+        if (credential != null) {
+            return buildDidDocuments(credential, didDocument);
+        }
+        if (!isFinanceVpRequest(vpVerification)) {
+            return buildDidDocuments(credential, didDocument);
+        }
+        return buildPublicDidDocuments(didDocument);
+    }
+
+    private Map<String, Object> buildPublicDidDocuments(
+            Object didDocument // Holder DID Document
+    ) {
+        if (didDocument == null) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_REQUIRED);
+        }
+        if (!(didDocument instanceof Map<?, ?>)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        validateDidDocumentPayloadSize(didDocument);
+        Map<String, Object> document = resolvePublicDidDocumentMap(asObjectMap(didDocument));
+        Object idValue = document.get("id");
+        if (!(idValue instanceof String didDocumentId) || !StringUtils.hasText(didDocumentId)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        Map<String, Object> didDocuments = new LinkedHashMap<>();
+        didDocuments.put(didDocumentId.trim(), document);
+        return didDocuments;
+    }
+
+    private Map<String, Object> resolvePublicDidDocumentMap(
+            Map<String, Object> payload // DID Document payload
+    ) {
+        if (payload.containsKey("id")) {
+            return payload;
+        }
+        for (Object value : payload.values()) {
+            if (value instanceof Map<?, ?> nestedValue) {
+                Map<String, Object> nestedDocument = asObjectMap(nestedValue);
+                if (nestedDocument.containsKey("id")) {
+                    return nestedDocument;
+                }
+            }
+        }
+        return Map.of();
+    }
+
     private Map<String, Object> buildDidDocuments(
             Credential credential, // 제출 Credential
             Object didDocument // Holder DID Document
@@ -1225,7 +1345,7 @@ public class VpVerificationService {
         logEventLogger.info(
                 isFinanceVpRequest(vpVerification) ? "finance.vp.request.verified" : "mobile.vp.presentation.verified",
                 "Mobile VP presentation verified",
-                createBaseLogFields(userId, corporateId, credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), enumName(vpVerification.getVpVerificationStatus()))
+                createBaseLogFields(userId, corporateId, resolveLogCredentialId(credential, vpVerification), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), enumName(vpVerification.getVpVerificationStatus()))
         );
     }
 
@@ -1236,13 +1356,20 @@ public class VpVerificationService {
             VpVerification vpVerification, // VP 검증 요청
             ApiException exception // 검증 예외
     ) {
-        Map<String, Object> fields = createBaseLogFields(userId, corporateId, credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), exception.getErrorCode().getCode());
+        Map<String, Object> fields = createBaseLogFields(userId, corporateId, resolveLogCredentialId(credential, vpVerification), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), exception.getErrorCode().getCode());
         fields.put("exceptionType", exception.getClass().getSimpleName());
         logEventLogger.warn(
                 isFinanceVpRequest(vpVerification) ? "finance.vp.request.verify.failed" : "mobile.vp.presentation.failed",
                 "Mobile VP presentation verification failed",
                 fields
         );
+    }
+
+    private Long resolveLogCredentialId(
+            Credential credential, // 제출 Credential
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        return credential == null ? vpVerification.getCredentialId() : credential.getCredentialId();
     }
 
     private void validateQrResolveRequest(
