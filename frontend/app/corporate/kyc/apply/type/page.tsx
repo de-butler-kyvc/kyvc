@@ -144,7 +144,7 @@ export default function KycApplyTypePage() {
 }
 
 function TypeIcon({ value }: { value: string }) {
-  if (value === "NONPROFIT") return <Icon.Shield />;
+  if (value === "NON_PROFIT") return <Icon.Shield />;
   if (value === "ASSOCIATION") return <Icon.Users />;
   return <Icon.Building />;
 }
