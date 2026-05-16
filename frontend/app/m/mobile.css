@@ -3117,7 +3117,7 @@ html {
 .mobile-process-view {
   background:
     radial-gradient(circle at 86% 12%, rgba(124, 58, 237, .10), transparent 32%),
-    #fff;
+    var(--m-wash);
 }
 
 .mobile-process-view .m-topbar {
@@ -3134,7 +3134,7 @@ html {
 }
 
 .mobile-process-view .bottom-action {
-  background: transparent;
+  background: var(--m-wash);
   border-top: 0;
 }
 
