@@ -429,7 +429,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
     u022_warning: "삭제 후 복구가 불가합니다. 진행 중인 KYC가 없는 서류만 삭제 요청 가능합니다.",
     u022_btn_delete: "선택 항목 삭제 요청",
     u023_title: "VC 발급 이력 조회", u023_desc: "발급된 Verifiable Credential 목록입니다.",
-    u023_col_type: "Credential Type", u023_col_issuer: "Issuer",
+    u023_col_type: "Credential Type", u023_col_issuer: "발급기관",
     u023_col_issued: "발급일", u023_col_expires: "만료일", u023_col_status: "상태",
     u024_title: "VP 제출 이력 조회", u024_desc: "기관에 제출한 Verifiable Presentation 이력입니다.",
     u024_col_org: "제출 기관", u024_col_vc: "제출 VC",

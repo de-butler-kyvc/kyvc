@@ -66,7 +66,12 @@ function AiReviewView() {
 
   if (!valid) {
     return (
-      <PageShell title="AI 심사 결과" description="유효한 신청 ID가 필요합니다." module="UWEB-015">
+      <PageShell
+        title="AI 심사 결과"
+        description="유효한 신청 ID가 필요합니다."
+        module="UWEB-015"
+        contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
+      >
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             올바른 신청 ID를 포함한 URL로 접근해 주세요.
@@ -87,6 +92,7 @@ function AiReviewView() {
       title="AI 심사 결과"
       description="자동 심사 결과 요약과 후속 조치를 확인합니다."
       module="UWEB-015 · M-04"
+      contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
     >
       {error ? (
         <Card>

@@ -687,10 +687,72 @@ export type DocumentDeleteResponse = {
   deleted?: boolean;
 };
 
+export type UserDocumentItem = {
+  documentId: number;
+  kycId: number;
+  corporateId?: number;
+  corporateName?: string;
+  documentTypeCode?: string;
+  documentTypeName?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  uploadStatusCode?: string;
+  uploadedAt?: string;
+  kycStatusCode?: string;
+  deleteRequestId?: number | null;
+  deleteRequestStatusCode?: string | null;
+};
+
+export type UserDocumentListResponse = {
+  items: UserDocumentItem[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
+export type KycApplicationHistoryItem = {
+  kycId: number;
+  corporateId?: number;
+  corporateName?: string;
+  businessRegistrationNo?: string;
+  corporateTypeCode?: string;
+  kycStatusCode?: string;
+  aiReviewStatusCode?: string | null;
+  aiReviewResultCode?: string | null;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  credentialId?: number | null;
+  credentialStatusCode?: string | null;
+  credentialIssuedAt?: string | null;
+};
+
+export type KycApplicationHistoryResponse = {
+  items: KycApplicationHistoryItem[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
 export const kyc = {
   list: () =>
     api<KycApplicationResponse | KycApplicationResponse[]>(
       "/api/corporate/kyc/applications",
+    ),
+  history: (query?: {
+    status?: string;
+    keyword?: string;
+    page?: number;
+    size?: number;
+  }) =>
+    api<KycApplicationHistoryResponse>(
+      "/api/corporate/kyc/applications/history",
+      { query },
     ),
   /** 현재 진행 중인 KYC 신청 단건. 없으면 ApiError 반환. */
   current: () =>
@@ -800,6 +862,18 @@ export const kyc = {
     ),
 };
 
+export const userDocuments = {
+  list: (query?: {
+    documentTypeCode?: string;
+    status?: string;
+    page?: number;
+    size?: number;
+  }) =>
+    api<UserDocumentListResponse>("/api/user/documents", {
+      query,
+    }),
+};
+
 // ── Credentials ──────────────────────────────────────────────────────
 export type CredentialSummary = {
   credentialId: number;
@@ -861,6 +935,52 @@ export const credentialOffers = {
   status: (offerId: number) =>
     api<CredentialOfferStatusResponse>(
       `/api/user/credential-offers/${offerId}/status`,
+    ),
+};
+
+// ── User VP Presentations ────────────────────────────────────────────
+export type UserVpPresentationSummary = {
+  presentationId: number;
+  requestId?: string;
+  verifierName?: string;
+  purpose?: string;
+  verificationStatus?: string;
+  presentedAt?: string;
+};
+
+export type UserVpPresentationListResponse = {
+  items: UserVpPresentationSummary[];
+  page: {
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+  };
+};
+
+export const userVpPresentations = {
+  list: (query?: {
+    page?: number;
+    size?: number;
+    status?: string;
+    verifierName?: string;
+  }) =>
+    api<UserVpPresentationListResponse>("/api/user/vp-presentations", {
+      query,
+    }),
+};
+
+// ── Common DID Institution ───────────────────────────────────────────
+export type DidInstitutionResponse = {
+  did: string;
+  institutionName: string;
+  status: string;
+};
+
+export const didInstitutions = {
+  get: (did: string) =>
+    api<DidInstitutionResponse>(
+      `/api/common/dids/${encodeURIComponent(did)}/institution`,
     ),
 };
 

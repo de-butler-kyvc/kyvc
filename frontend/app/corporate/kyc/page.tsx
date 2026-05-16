@@ -65,6 +65,7 @@ export default function CorporateKycListPage() {
       title="KYC 신청 내역"
       description="현재 진행 중인 KYC 신청과 상태를 확인합니다."
       module="UWEB-020 · M-03"
+      contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
     >
       <Card>
         {loading ? (

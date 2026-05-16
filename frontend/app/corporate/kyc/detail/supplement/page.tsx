@@ -55,7 +55,12 @@ function SupplementView() {
 
   if (!valid) {
     return (
-      <PageShell title="보완 요청 상세" description="유효한 ID가 필요합니다." module="UWEB-016">
+      <PageShell
+        title="보완 요청 상세"
+        description="유효한 ID가 필요합니다."
+        module="UWEB-016"
+        contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
+      >
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             올바른 신청 ID(id)와 보완 요청 ID(supplementId)가 필요합니다.
@@ -76,6 +81,7 @@ function SupplementView() {
       title="보완 요청 상세"
       description="요청된 보완 항목과 마감일을 확인하고 재제출을 진행합니다."
       module="UWEB-016 · M-04"
+      contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
     >
       {error ? (
         <Card>

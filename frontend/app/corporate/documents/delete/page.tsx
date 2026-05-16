@@ -67,7 +67,7 @@ export default function CorporateDocumentDeletePage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1040px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">원본서류 삭제 요청</h1>

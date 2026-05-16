@@ -171,14 +171,17 @@ export default function CorporateProfilePage() {
 
   if (loading) {
     return (
-      <div style={{ padding: 24, color: "var(--text-muted)", fontSize: 13 }}>
+      <div
+        className="mx-auto flex w-full max-w-[920px] flex-col"
+        style={{ color: "var(--text-muted)", fontSize: 13 }}
+      >
         불러오는 중...
       </div>
     );
   }
 
   return (
-    <>
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">법인 기본정보 등록</h1>
@@ -339,6 +342,6 @@ export default function CorporateProfilePage() {
       </form>
 
       <ToastStack toasts={toasts} />
-    </>
+    </div>
   );
 }

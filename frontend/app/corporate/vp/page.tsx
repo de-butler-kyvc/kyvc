@@ -3,21 +3,28 @@
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { credentials as credentialsApi, type CredentialSummary } from "@/lib/api";
+import {
+  type UserVpPresentationSummary,
+  userVpPresentations
+} from "@/lib/api";
 
 export default function CorporateVpHistoryPage() {
-  const [credentials, setCredentials] = useState<CredentialSummary[]>([]);
+  const [items, setItems] = useState<UserVpPresentationSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    credentialsApi
-      .list()
+    userVpPresentations
+      .list({ page: 0, size: 50 })
       .then((res) => {
-        if (!cancelled) setCredentials(res.credentials ?? []);
+        if (!cancelled) setItems(res.items ?? []);
       })
-      .catch(() => {
-        if (!cancelled) setCredentials([]);
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setItems([]);
+          setError(err instanceof Error ? err.message : "조회에 실패했습니다.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -28,7 +35,7 @@ export default function CorporateVpHistoryPage() {
   }, []);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1040px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">VP 제출 이력 조회</h1>
@@ -36,42 +43,93 @@ export default function CorporateVpHistoryPage() {
         </div>
       </div>
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>검증기관</th>
-            <th>제출 VC</th>
-            <th>제출일시</th>
-            <th>KYC 신청번호</th>
-            <th>결과</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
+      <div className="table-scroll">
+        <table className="table history-table">
+          <thead>
             <tr>
-              <td colSpan={5} className="empty-state">불러오는 중...</td>
+              <th>검증기관</th>
+              <th>제출 목적</th>
+              <th>요청 ID</th>
+              <th>검증일시</th>
+              <th>결과</th>
             </tr>
-          ) : credentials.length === 0 ? (
-            <tr>
-              <td colSpan={5} className="empty-state">VP 제출 이력이 없습니다.</td>
-            </tr>
-          ) : (
-            credentials.map((credential) => (
-              <tr key={credential.credentialId}>
-                <td className="font-semibold">-</td>
-                <td>{credential.credentialTypeCode ?? "KYC_CREDENTIAL"}</td>
-                <td className="mono text-[12.5px]">-</td>
-                <td className="mono text-[12.5px] text-muted-foreground">
-                  {credential.kycId ? `KYC-${credential.kycId}` : "-"}
-                </td>
-                <td>
-                  <Badge variant="secondary">제출 이력 없음</Badge>
-                </td>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="empty-state">불러오는 중...</td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : error ? (
+              <tr>
+                <td colSpan={5} className="empty-state text-destructive">{error}</td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="empty-state">VP 제출 이력이 없습니다.</td>
+              </tr>
+            ) : (
+              items.map((item) => (
+                <tr key={item.presentationId}>
+                  <td className="font-semibold">{item.verifierName ?? "-"}</td>
+                  <td>{purposeLabel(item.purpose)}</td>
+                  <td className="mono text-[12.5px] text-muted-foreground" title={item.requestId}>
+                    {item.requestId ? truncateMiddle(item.requestId) : "-"}
+                  </td>
+                  <td className="mono text-[12.5px]">
+                    {formatDate(item.presentedAt)}
+                  </td>
+                  <td>
+                    <Badge variant={statusVariant(item.verificationStatus)}>
+                      {statusLabel(item.verificationStatus)}
+                    </Badge>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
+}
+
+function truncateMiddle(value: string) {
+  return value.length > 11 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
+}
+
+function formatDate(value?: string) {
+  return value ? value.slice(0, 16).replace("T", " ") : "-";
+}
+
+function purposeLabel(value?: string) {
+  return (
+    {
+      ACCOUNT_OPENING: "계좌 개설",
+      RE_AUTH: "재인증",
+      KYC_VERIFICATION: "KYC 검증"
+    }[value ?? ""] ?? value ?? "-"
+  );
+}
+
+function statusLabel(value?: string) {
+  return (
+    {
+      REQUESTED: "요청",
+      PENDING: "대기",
+      PRESENTED: "제출",
+      VALID: "검증 완료",
+      VERIFIED: "검증 완료",
+      INVALID: "검증 실패",
+      EXPIRED: "만료",
+      REPLAY_SUSPECTED: "재제출 의심"
+    }[value ?? ""] ?? value ?? "-"
+  );
+}
+
+function statusVariant(value?: string) {
+  if (value === "VALID" || value === "VERIFIED") return "success";
+  if (value === "INVALID" || value === "EXPIRED" || value === "REPLAY_SUSPECTED") {
+    return "destructive";
+  }
+  return "secondary";
 }

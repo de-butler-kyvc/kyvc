@@ -78,7 +78,7 @@ export default function KycApplyConfirmPage() {
   const missing = summary?.missingItems ?? [];
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">KYC 신청 내용 확인</h1>
