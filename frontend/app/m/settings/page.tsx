@@ -8,6 +8,7 @@ import { MToggle, MTopBar } from "@/components/m/parts";
 import { ApiError, auth, corporate, type CorporateProfile } from "@/lib/api";
 import { clearKyvcLocalStorage } from "@/lib/kyc-flow";
 import { bridge, isBridgeAvailable, type AuthStatus } from "@/lib/m/android-bridge";
+import { setMobileAutoLoginEnabled } from "@/lib/m/auto-login";
 import { mSession } from "@/lib/m/session";
 import { clearWalletUiState } from "@/lib/m/wallet-owner";
 
@@ -102,6 +103,7 @@ export default function MobileSettingsPage() {
         }
       }
       await auth.logout().catch(() => null);
+      setMobileAutoLoginEnabled(false);
       clearWalletUiState();
       mSession.clearAll();
       clearKyvcLocalStorage();
@@ -120,6 +122,7 @@ export default function MobileSettingsPage() {
 
   const onWebOnlyLogout = async () => {
     await auth.logout().catch(() => null);
+    setMobileAutoLoginEnabled(false);
     clearWalletUiState();
     mSession.clearAll();
     clearKyvcLocalStorage();

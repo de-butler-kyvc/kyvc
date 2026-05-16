@@ -1,8 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { MCertCard } from "@/components/m/parts";
+import {
+  readMobileAutoLoginEnabled,
+  setMobileAutoLoginEnabled,
+  tryMobileAutoLogin,
+} from "@/lib/m/auto-login";
 
 const FIGMA_KYVC_LOGO =
   "https://www.figma.com/api/mcp/asset/c6fbedff-e5eb-4d29-9815-ca33494f9a9e";
@@ -36,6 +42,27 @@ const INTRO_CERTS = [
 
 export default function MobileOnboardingPage() {
   const router = useRouter();
+  const [checkingAutoLogin, setCheckingAutoLogin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!readMobileAutoLoginEnabled()) return;
+    setCheckingAutoLogin(true);
+    tryMobileAutoLogin()
+      .then((res) => {
+        if (!cancelled && res?.autoLogin) router.replace("/m/home");
+      })
+      .catch(() => {
+        if (!cancelled) setMobileAutoLoginEnabled(false);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingAutoLogin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   return (
     <section className="view wallet-dark intro">
       <div className="hero-orbit" />
@@ -58,8 +85,9 @@ export default function MobileOnboardingPage() {
           type="button"
           className="primary mt-24"
           onClick={() => router.push("/m/login")}
+          disabled={checkingAutoLogin}
         >
-          시작하기
+          {checkingAutoLogin ? "자동 로그인 중..." : "시작하기"}
         </button>
         <button
           type="button"
