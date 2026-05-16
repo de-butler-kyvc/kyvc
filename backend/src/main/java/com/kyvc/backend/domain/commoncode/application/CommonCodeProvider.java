@@ -28,6 +28,14 @@ public class CommonCodeProvider {
         return commonCodeService.existsEnabledCode(codeGroup, code);
     }
 
+    // 특정 그룹의 코드 존재 여부 확인
+    public boolean existsCode(
+            String codeGroup, // 공통코드 그룹 코드
+            String code // 공통코드 값
+    ) {
+        return commonCodeService.existsCode(codeGroup, code);
+    }
+
     // 특정 그룹의 활성 코드 유효성 검증
     public void validateEnabledCode(
             String codeGroup, // 공통코드 그룹 코드
