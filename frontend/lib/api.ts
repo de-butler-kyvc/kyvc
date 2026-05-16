@@ -601,6 +601,52 @@ export type KycReviewSummaryResponse = {
   reviewedAt?: string;
 };
 
+export type KycAiReviewDocumentResult = {
+  documentId?: number | null;
+  documentTypeCode?: string | null;
+  documentTypeName?: string | null;
+  resultCode?: string | null;
+  confidenceScore?: number | null;
+  message?: string | null;
+};
+
+export type KycAiReviewMismatchResult = {
+  fieldName?: string | null;
+  sourceDocumentTypeCode?: string | null;
+  targetDocumentTypeCode?: string | null;
+  severityCode?: string | null;
+  message?: string | null;
+};
+
+export type KycAiReviewBeneficialOwnerResult = {
+  ownerName?: string | null;
+  ownershipRatio?: number | null;
+  resultCode?: string | null;
+  message?: string | null;
+};
+
+export type KycAiReviewDelegationResult = {
+  resultCode?: string | null;
+  message?: string | null;
+};
+
+export type KycAiReviewDetailResponse = {
+  kycId: number;
+  applicationStatusCode?: string | null;
+  aiReviewStatusCode?: string | null;
+  overallResultCode?: string | null;
+  confidenceScore?: number | null;
+  reviewedAt?: string | null;
+  manualReviewRequired: boolean;
+  supplementRequired: boolean;
+  summary?: string | null;
+  documentResults: KycAiReviewDocumentResult[];
+  mismatchResults: KycAiReviewMismatchResult[];
+  beneficialOwnerResults: KycAiReviewBeneficialOwnerResult[];
+  delegationResult?: KycAiReviewDelegationResult | null;
+  reviewReasons: string[];
+};
+
 export type SupplementDocument = {
   supplementDocumentId: number;
   documentId?: number;
@@ -819,6 +865,10 @@ export const kyc = {
   aiReviewSummary: (kycId: number) =>
     api<KycReviewSummaryResponse>(
       `/api/corporate/kyc/applications/${kycId}/ai-review-summary`,
+    ),
+  aiReviewResult: (kycId: number) =>
+    api<KycAiReviewDetailResponse>(
+      `/api/user/kyc/applications/${kycId}/ai-review-result`,
     ),
   supplements: (kycId: number) =>
     api<{ supplements: Supplement[] }>(

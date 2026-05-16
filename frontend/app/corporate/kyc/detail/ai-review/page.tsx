@@ -6,15 +6,17 @@ import { Suspense, useEffect, useState } from "react";
 
 import { Icon } from "@/components/design/icons";
 import { PageShell } from "@/components/page-shell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
+  type KycAiReviewDetailResponse,
+  type KycDocument,
   type KycReviewSummaryResponse,
   type Supplement,
   kyc as kycApi
 } from "@/lib/api";
+import { DOCUMENT_LABELS } from "@/lib/kyc-flow";
 
 export default function CorporateKycAiReviewPage() {
   return (
@@ -23,13 +25,6 @@ export default function CorporateKycAiReviewPage() {
     </Suspense>
   );
 }
-
-const FALLBACK_PASS_ITEMS = [
-  { code: "DOCUMENT_VERIFY", label: "서류 진위 확인" },
-  { code: "OCR_PARSE", label: "OCR 추출" },
-  { code: "ID_VALIDATION", label: "신원 정보 일치" },
-  { code: "SANCTION_CHECK", label: "제재 명단 조회" }
-];
 
 function formatConfidencePercent(value: number) {
   const percent = value >= 0 && value <= 1 ? value * 100 : value;
@@ -42,6 +37,8 @@ function AiReviewView() {
   const valid = Number.isFinite(kycId) && kycId > 0;
 
   const [summary, setSummary] = useState<KycReviewSummaryResponse | null>(null);
+  const [detail, setDetail] = useState<KycAiReviewDetailResponse | null>(null);
+  const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,10 +49,14 @@ function AiReviewView() {
     setError(null);
     Promise.all([
       kycApi.aiReviewSummary(kycId).catch(() => null),
+      kycApi.aiReviewResult(kycId).catch(() => null),
+      kycApi.documents(kycId).catch(() => []),
       kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
     ])
-      .then(([s, sup]) => {
+      .then(([s, aiDetail, docs, sup]) => {
         setSummary(s);
+        setDetail(aiDetail);
+        setDocuments(docs);
         setSupplements(sup?.supplements ?? []);
       })
       .catch((err: unknown) =>
@@ -82,10 +83,34 @@ function AiReviewView() {
   }
 
   const findings = summary?.findings ?? [];
-  const passItems = findings.filter((f) => f.result === "PASS");
-  const reviewItems = findings.filter((f) => f.result !== "PASS");
+  const detailItems = detail ? aiReviewItemsFromDetail(detail, documents) : [];
+  const reviewItems = detailItems.length
+    ? detailItems.filter((item) => !item.pass)
+    : findings
+        .filter((f) => f.result !== "PASS")
+        .map((f) => ({
+          code: f.findingType ?? "FINDING",
+          label: f.message ?? findingTypeLabel(f.findingType),
+          pass: false,
+          kind: "reason" as const
+        }));
   const activeSupplement = supplements.find((s) => s.supplementStatus === "REQUESTED");
-  const showSupplementCta = !!activeSupplement || reviewItems.length > 0;
+  const supplementDocumentItems = uniqueStrings([
+    ...((activeSupplement?.requestedDocumentTypeCodes ?? []).map(documentTypeLabel)),
+    ...(detail?.reviewReasons ?? []).map(reasonDocumentLabel).filter((item): item is string => !!item)
+  ]);
+  const opinionItems = uniqueStrings([
+    ...(detail?.reviewReasons ?? []).filter((reason) => !reasonDocumentLabel(reason)),
+    ...reviewItems
+      .filter((item) => item.kind === "document" || item.kind === "mismatch" || item.kind === "reason")
+      .map((item) => item.label)
+  ]);
+  const additionalCheckItems = uniqueStrings(
+    reviewItems
+      .filter((item) => item.kind === "owner" || item.kind === "delegation")
+      .map((item) => item.label)
+  );
+  const showSupplementCta = !!activeSupplement || reviewItems.length > 0 || !!detail?.supplementRequired;
 
   return (
     <PageShell
@@ -109,75 +134,32 @@ function AiReviewView() {
         </div>
       ) : null}
 
-      {summary?.summaryMessage ? (
-        <div className="alert alert-info" style={{ marginBottom: 16 }}>
-          <span className="alert-icon">
-            <Icon.Info size={16} />
-          </span>
-          <span>{summary.summaryMessage}</span>
-        </div>
-      ) : null}
-
       <div className="dash-grid-2">
         <div className="form-card" style={{ marginTop: 0 }}>
           <div className="form-card-header">
-            <div className="form-card-title">자동 심사 통과 항목</div>
-            {summary?.confidenceScore != null ? (
-              <Badge variant="outline">신뢰도 {formatConfidencePercent(summary.confidenceScore)}</Badge>
-            ) : null}
+            <div className="form-card-title">심사 의견</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(passItems.length > 0
-              ? passItems.map((f) => ({
-                  code: f.findingType ?? "FINDING",
-                  label: f.message ?? findingTypeLabel(f.findingType)
-                }))
-              : loading
-                ? []
-                : FALLBACK_PASS_ITEMS
-            ).map((item, i, arr) => (
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--text-secondary)",
+              lineHeight: 1.6,
+              margin: 0
+            }}
+          >
+            {detail?.summary ?? summary?.summaryMessage ?? "AI 심사가 진행되었습니다. 상세 내역을 확인해주세요."}
+          </p>
+          {opinionItems.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+              {opinionItems.map((item, i) => (
               <div
-                key={item.code + i}
+                key={`${item}-${i}`}
                 style={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 10,
                   padding: "10px 0",
-                  borderBottom:
-                    i < arr.length - 1 || reviewItems.length > 0
-                      ? "1px solid var(--divider)"
-                      : "none"
-                }}
-              >
-                <div
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: "50%",
-                    background: "var(--success-soft)",
-                    color: "var(--success)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0
-                  }}
-                >
-                  <Icon.Check size={13} />
-                </div>
-                <span style={{ fontSize: 13.5 }}>{item.label}</span>
-                <Badge variant="success" className="ml-auto">
-                  통과
-                </Badge>
-              </div>
-            ))}
-            {reviewItems.map((f, i) => (
-              <div
-                key={`r-${i}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 0"
+                  borderTop: i === 0 ? "1px solid var(--divider)" : undefined
                 }}
               >
                 <div
@@ -195,15 +177,26 @@ function AiReviewView() {
                 >
                   <Icon.Alert size={13} />
                 </div>
-                <span style={{ fontSize: 13.5 }}>
-                  {f.message ?? findingTypeLabel(f.findingType)}
-                </span>
-                <Badge variant="warning" className="ml-auto">
-                  보완
-                </Badge>
+                <span style={{ fontSize: 13.5, lineHeight: 1.55 }}>{item}</span>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : !loading ? (
+            <div className="text-sm text-muted-foreground" style={{ padding: "12px 0" }}>
+              추가로 확인할 심사 의견이 없습니다.
+            </div>
+          ) : null}
+          {supplementDocumentItems.length ? (
+            <AiReviewItemGroup title="보완 필요 서류" items={supplementDocumentItems} />
+          ) : null}
+          {additionalCheckItems.length ? (
+            <AiReviewItemGroup title="추가 확인 필요" items={additionalCheckItems} />
+          ) : null}
+          {(detail?.confidenceScore ?? summary?.confidenceScore) != null ? (
+            <div className="text-sm text-muted-foreground" style={{ marginTop: 12 }}>
+              신뢰도 {formatConfidencePercent(detail?.confidenceScore ?? summary?.confidenceScore ?? 0)}
+            </div>
+          ) : null}
         </div>
 
         <div className="form-card" style={{ marginTop: 0 }}>
@@ -265,6 +258,35 @@ function AiReviewView() {
                 </div>
               )}
             </div>
+          ) : detail?.reviewReasons?.length || reviewItems.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {(detail?.reviewReasons?.length ? detail.reviewReasons : reviewItems.map((item) => item.label)).map(
+                (reason, index) => (
+                  <div
+                    key={`${reason}-${index}`}
+                    style={{
+                      background: "var(--warning-soft)",
+                      border: "1px solid #FBE2BD",
+                      borderRadius: "var(--radius-md)",
+                      padding: "12px 14px"
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                      확인 필요
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        color: "var(--text-secondary)",
+                        lineHeight: 1.6
+                      }}
+                    >
+                      {reason}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
           ) : (
             <div className="text-sm text-muted-foreground" style={{ padding: "12px 0" }}>
               현재 보완 요청 사항이 없습니다.
@@ -305,11 +327,114 @@ function findingTypeLabel(code?: string) {
   return map[code] ?? code;
 }
 
-function documentTypeLabel(code?: string) {
+type AiReviewDisplayItem = {
+  code: string;
+  label: string;
+  pass: boolean;
+  kind: "document" | "mismatch" | "owner" | "delegation" | "reason";
+};
+
+function aiReviewItemsFromDetail(detail: KycAiReviewDetailResponse, documents: KycDocument[]): AiReviewDisplayItem[] {
+  const items: AiReviewDisplayItem[] = [];
+  detail.documentResults.forEach((result, index) => {
+    const name = documentResultLabel(result, documents, index);
+    const pass = isPassResult(result.resultCode) || isPassMessage(result.message);
+    if (pass || !result.message) return;
+    items.push({
+      code: `document-${result.documentId ?? result.documentTypeCode ?? index}`,
+      label: result.message ? `${name} - ${result.message}` : name,
+      pass,
+      kind: "document"
+    });
+  });
+  detail.mismatchResults.forEach((result, index) => {
+    const pass = isPassResult(result.severityCode) || isPassMessage(result.message);
+    items.push({
+      code: `mismatch-${result.fieldName ?? index}`,
+      label: result.message ? `${mismatchLabel(result, pass)} - ${result.message}` : mismatchFallback(result),
+      pass,
+      kind: "mismatch"
+    });
+  });
+  detail.beneficialOwnerResults.forEach((result, index) => {
+    const name = result.ownerName ? `실소유자 확인(${result.ownerName})` : "실소유자 확인";
+    items.push({
+      code: `owner-${result.ownerName ?? index}`,
+      label: result.message ? `${name} - ${result.message}` : name,
+      pass: isPassResult(result.resultCode),
+      kind: "owner"
+    });
+  });
+  if (detail.delegationResult) {
+    items.push({
+      code: "delegation",
+      label: detail.delegationResult.message
+        ? `위임권한 확인 - ${detail.delegationResult.message}`
+        : "위임권한 확인",
+      pass: isPassResult(detail.delegationResult.resultCode),
+      kind: "delegation"
+    });
+  }
+  if (!items.some((item) => !item.pass)) {
+    detail.reviewReasons.forEach((reason, index) => {
+      items.push({ code: `reason-${index}`, label: reason, pass: false, kind: "reason" });
+    });
+  }
+  return items;
+}
+
+function isPassResult(result?: string | null) {
+  const normalized = (result ?? "").toUpperCase();
+  return normalized === "PASS" || normalized === "PASSED" || normalized === "OK" || normalized === "VALID" || normalized === "MATCH";
+}
+
+function isPassMessage(message?: string | null) {
+  const normalized = (message ?? "").toLowerCase();
+  return (
+    normalized.includes(" passed") ||
+    normalized.endsWith("passed.") ||
+    normalized.includes("consistent") ||
+    normalized.includes("match")
+  );
+}
+
+function documentResultLabel(
+  result: KycAiReviewDetailResponse["documentResults"][number],
+  documents: KycDocument[],
+  index: number
+) {
+  if (result.documentTypeName) return result.documentTypeName;
+  const matched = documents.find((document) => document.documentId === result.documentId);
+  if (matched?.documentTypeCode) return documentTypeLabel(matched.documentTypeCode);
+  if (result.documentTypeCode) return documentTypeLabel(result.documentTypeCode);
+  if (result.documentId) return `제출서류 ${result.documentId}`;
+  return `제출서류 ${index + 1}`;
+}
+
+function mismatchLabel(
+  result: KycAiReviewDetailResponse["mismatchResults"][number],
+  pass: boolean
+) {
+  const prefix = pass ? "문서 간 교차검증" : "문서 간 확인";
+  return result.fieldName ? `${prefix}(${result.fieldName})` : prefix;
+}
+
+function mismatchFallback(result: KycAiReviewDetailResponse["mismatchResults"][number]) {
+  const source = documentTypeLabel(result.sourceDocumentTypeCode);
+  const target = documentTypeLabel(result.targetDocumentTypeCode);
+  const pass = isPassResult(result.severityCode) || isPassMessage(result.message);
+  const label = mismatchLabel(result, pass);
+  if (source && target) return `${label} - ${source}와 ${target}의 정보 확인이 필요합니다.`;
+  return label;
+}
+
+function documentTypeLabel(code?: string | null) {
   if (!code) return "-";
+  if (DOCUMENT_LABELS[code]) return DOCUMENT_LABELS[code];
   const map: Record<string, string> = {
     BUSINESS_REGISTRATION: "사업자등록증",
     CORPORATE_REGISTRATION: "등기사항전부증명서",
+    CORPORATE_SEAL_CERTIFICATE: "법인인감증명서",
     SHAREHOLDER_LIST: "주주명부",
     ARTICLES_OF_INCORPORATION: "정관",
     POWER_OF_ATTORNEY: "위임장",
@@ -318,4 +443,49 @@ function documentTypeLabel(code?: string) {
     OTHER: "기타"
   };
   return map[code] ?? code;
+}
+
+function reasonDocumentLabel(reason: string) {
+  const normalized = reason.trim();
+  const candidates = [
+    "SHAREHOLDER_LIST",
+    "CORPORATE_SEAL_CERTIFICATE",
+    "CORPORATE_REGISTRATION",
+    "BUSINESS_REGISTRATION",
+    "주주명부",
+    "법인인감증명서",
+    "등기사항전부증명서",
+    "사업자등록증"
+  ];
+  if (!candidates.includes(normalized)) return null;
+  return documentTypeLabel(normalized);
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function AiReviewItemGroup({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {items.map((item) => (
+          <span
+            key={item}
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "6px 10px",
+              fontSize: 12.5,
+              color: "var(--text-secondary)",
+              background: "var(--surface-2)"
+            }}
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
