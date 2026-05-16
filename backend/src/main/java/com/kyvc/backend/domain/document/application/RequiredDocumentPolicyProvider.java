@@ -4,6 +4,7 @@ import com.kyvc.backend.domain.document.domain.DocumentRequirementGroup;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementItem;
 import com.kyvc.backend.domain.document.domain.DocumentRequirementPolicy;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -18,7 +19,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RequiredDocumentPolicyProvider {
 
-    private static final String LEGACY_CORPORATION_CODE = "CORPORATION"; // 기존 주식회사 코드
     private static final String OWNERSHIP_DOC_GROUP = "OWNERSHIP_DOC"; // 소유구조 문서 그룹
     private static final String RULE_DOC_GROUP = "RULE_DOC"; // 규약 문서 그룹
     private static final int MIN_ONE = 1; // 최소 1개 기준
@@ -34,11 +34,10 @@ public class RequiredDocumentPolicyProvider {
             return List.of();
         }
         Map<String, RequiredDocumentPolicy> policies = new LinkedHashMap<>(); // 문서 유형별 안내 정책
-        policy.requiredItems().forEach(item -> addPolicy(policies, item, true));
-        policy.requiredGroups().stream()
-                .flatMap(group -> group.items().stream())
-                .forEach(item -> addPolicy(policies, item, false));
-        policy.agentRequiredItems().forEach(item -> addPolicy(policies, item, false));
+        policy.requiredItems().forEach(item -> addPolicy(policies, item, true, null));
+        policy.requiredGroups().forEach(group -> group.items()
+                .forEach(item -> addPolicy(policies, item, false, group)));
+        policy.agentRequiredItems().forEach(item -> addPolicy(policies, item, false, null));
         return List.copyOf(policies.values());
     }
 
@@ -48,7 +47,7 @@ public class RequiredDocumentPolicyProvider {
     ) {
         KyvcEnums.CorporateType corporateType = resolveCorporateType(corporateTypeCode); // 정규화 회사 유형
         return switch (corporateType) {
-            case JOINT_STOCK_COMPANY -> jointStockCompanyPolicy();
+            case CORPORATION -> corporationPolicy();
             case LIMITED_COMPANY -> limitedCompanyPolicy(KyvcEnums.CorporateType.LIMITED_COMPANY);
             case LIMITED_PARTNERSHIP -> limitedCompanyPolicy(KyvcEnums.CorporateType.LIMITED_PARTNERSHIP);
             case GENERAL_PARTNERSHIP -> limitedCompanyPolicy(KyvcEnums.CorporateType.GENERAL_PARTNERSHIP);
@@ -95,11 +94,12 @@ public class RequiredDocumentPolicyProvider {
     private void addPolicy(
             Map<String, RequiredDocumentPolicy> policies, // 문서 유형별 안내 정책
             DocumentRequirementItem item, // 정책 문서 항목
-            boolean required // 단일 필수 여부
+            boolean required, // 단일 필수 여부
+            DocumentRequirementGroup group // 선택 필수 그룹
     ) {
         policies.putIfAbsent(
                 item.documentTypeCode(),
-                createPolicy(item.documentTypeCode(), item.documentTypeName(), item.description(), required)
+                createPolicy(item.documentTypeCode(), item.documentTypeName(), item.description(), required, group)
         );
     }
 
@@ -108,7 +108,8 @@ public class RequiredDocumentPolicyProvider {
             String documentTypeCode, // 문서 유형 코드
             String documentTypeName, // 문서 유형 표시명
             String description, // 제출 안내 문구
-            boolean required // 필수 여부
+            boolean required, // 필수 여부
+            DocumentRequirementGroup group // 선택 필수 그룹
     ) {
         return new RequiredDocumentPolicy(
                 documentTypeCode,
@@ -116,13 +117,17 @@ public class RequiredDocumentPolicyProvider {
                 required,
                 description,
                 documentStorageProperties.getAllowedExtensions(),
-                documentStorageProperties.getMaxFileSizeMb()
+                documentStorageProperties.getMaxFileSizeMb(),
+                group == null ? null : group.groupCode(),
+                group == null ? null : group.groupName(),
+                group == null ? null : group.minRequiredCount(),
+                group != null
         );
     }
 
-    private DocumentRequirementPolicy jointStockCompanyPolicy() {
+    private DocumentRequirementPolicy corporationPolicy() {
         return new DocumentRequirementPolicy(
-                KyvcEnums.CorporateType.JOINT_STOCK_COMPANY.name(),
+                KyvcEnums.CorporateType.CORPORATION.name(),
                 true,
                 List.of(
                         item(KyvcEnums.DocumentType.BUSINESS_REGISTRATION),
@@ -183,7 +188,7 @@ public class RequiredDocumentPolicyProvider {
                 ),
                 List.of(group(
                         RULE_DOC_GROUP,
-                        "규약 확인 문서",
+                        "규약 문서",
                         KyvcEnums.DocumentType.OPERATING_RULES,
                         KyvcEnums.DocumentType.REGULATIONS,
                         KyvcEnums.DocumentType.ARTICLES_OF_ASSOCIATION
@@ -263,10 +268,7 @@ public class RequiredDocumentPolicyProvider {
         if (!StringUtils.hasText(corporateTypeCode)) {
             return KyvcEnums.CorporateType.SOLE_PROPRIETOR;
         }
-        String normalized = corporateTypeCode.trim().toUpperCase(java.util.Locale.ROOT); // 정규화 회사 유형 코드
-        if (LEGACY_CORPORATION_CODE.equals(normalized)) {
-            return KyvcEnums.CorporateType.JOINT_STOCK_COMPANY;
-        }
+        String normalized = CorporateTypeCodeNormalizer.normalize(corporateTypeCode); // 정규화 회사 유형 코드
         try {
             return KyvcEnums.CorporateType.valueOf(normalized);
         } catch (IllegalArgumentException exception) {
@@ -281,11 +283,37 @@ public class RequiredDocumentPolicyProvider {
             boolean required, // 필수 여부
             String description, // 제출 안내 문구
             List<String> allowedExtensions, // 허용 확장자 목록
-            int maxFileSizeMb // 최대 파일 크기 MB
+            int maxFileSizeMb, // 최대 파일 크기 MB
+            String groupCode, // 선택 필수 그룹 코드
+            String groupName, // 선택 필수 그룹 표시명
+            Integer minRequiredCount, // 그룹 최소 제출 개수
+            boolean groupCandidate // 선택 필수 그룹 후보 여부
     ) {
 
         public RequiredDocumentPolicy {
             allowedExtensions = allowedExtensions == null ? List.of() : List.copyOf(allowedExtensions);
+        }
+
+        public RequiredDocumentPolicy(
+                String documentTypeCode, // 문서 유형 코드
+                String documentTypeName, // 문서 유형 표시명
+                boolean required, // 필수 여부
+                String description, // 제출 안내 문구
+                List<String> allowedExtensions, // 허용 확장자 목록
+                int maxFileSizeMb // 최대 파일 크기 MB
+        ) {
+            this(
+                    documentTypeCode,
+                    documentTypeName,
+                    required,
+                    description,
+                    allowedExtensions,
+                    maxFileSizeMb,
+                    null,
+                    null,
+                    null,
+                    false
+            );
         }
     }
 }

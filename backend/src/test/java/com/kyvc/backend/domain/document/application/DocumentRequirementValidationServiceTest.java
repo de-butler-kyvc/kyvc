@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -14,11 +15,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class DocumentRequirementValidationServiceTest {
 
+    private RequiredDocumentPolicyProvider provider;
     private DocumentRequirementValidationService service;
 
     @BeforeEach
     void setUp() {
-        RequiredDocumentPolicyProvider provider = new RequiredDocumentPolicyProvider(
+        provider = new RequiredDocumentPolicyProvider(
                 new DocumentStorageProperties("./build/test-documents", 10, "pdf,jpg,jpeg,png", "application/pdf")
         );
         service = new DocumentRequirementValidationService(provider);
@@ -63,7 +65,7 @@ class DocumentRequirementValidationServiceTest {
 
         assertThat(corporateTypes)
                 .contains(
-                        "JOINT_STOCK_COMPANY",
+                        "CORPORATION",
                         "LIMITED_COMPANY",
                         "LIMITED_PARTNERSHIP",
                         "GENERAL_PARTNERSHIP",
@@ -71,11 +73,13 @@ class DocumentRequirementValidationServiceTest {
                         "ASSOCIATION",
                         "FOREIGN_COMPANY",
                         "SOLE_PROPRIETOR"
-                );
+                )
+                .doesNotContain("JOINT_STOCK_COMPANY");
     }
 
     @Test
-    void validateJointStockCompany_acceptsShareholderRegistryOrStockChangeStatement() {
+    void validateJointStockCompanyAlias_normalizesToCorporationPolicy() {
+        assertThat(provider.getPolicy("JOINT_STOCK_COMPANY").corporateTypeCode()).isEqualTo("CORPORATION");
         assertValid(
                 "JOINT_STOCK_COMPANY",
                 false,
@@ -83,8 +87,19 @@ class DocumentRequirementValidationServiceTest {
                 "CORPORATE_REGISTRY",
                 "SHAREHOLDER_REGISTRY"
         );
+    }
+
+    @Test
+    void validateCorporation_acceptsShareholderRegistryOrStockChangeStatement() {
         assertValid(
-                "JOINT_STOCK_COMPANY",
+                "CORPORATION",
+                false,
+                "BUSINESS_REGISTRATION",
+                "CORPORATE_REGISTRY",
+                "SHAREHOLDER_REGISTRY"
+        );
+        assertValid(
+                "CORPORATION",
                 false,
                 "BUSINESS_REGISTRATION",
                 "CORPORATE_REGISTRY",
@@ -92,7 +107,7 @@ class DocumentRequirementValidationServiceTest {
         );
 
         DocumentRequirementValidationResult result = validate(
-                "JOINT_STOCK_COMPANY",
+                "CORPORATION",
                 false,
                 "BUSINESS_REGISTRATION",
                 "CORPORATE_REGISTRY"
@@ -102,6 +117,37 @@ class DocumentRequirementValidationServiceTest {
         assertThat(result.unsatisfiedGroups())
                 .extracting("groupCode")
                 .containsExactly("OWNERSHIP_DOC");
+    }
+
+    @Test
+    void getRequiredDocuments_containsAlternativeGroupMetadata() {
+        List<RequiredDocumentPolicyProvider.RequiredDocumentPolicy> policies = provider.getRequiredDocuments("CORPORATION");
+
+        assertThat(policies)
+                .filteredOn(RequiredDocumentPolicyProvider.RequiredDocumentPolicy::groupCandidate)
+                .extracting(
+                        RequiredDocumentPolicyProvider.RequiredDocumentPolicy::documentTypeCode,
+                        RequiredDocumentPolicyProvider.RequiredDocumentPolicy::groupCode,
+                        RequiredDocumentPolicyProvider.RequiredDocumentPolicy::groupName,
+                        RequiredDocumentPolicyProvider.RequiredDocumentPolicy::minRequiredCount,
+                        RequiredDocumentPolicyProvider.RequiredDocumentPolicy::required
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                "SHAREHOLDER_REGISTRY",
+                                "OWNERSHIP_DOC",
+                                "소유구조 확인 문서",
+                                1,
+                                false
+                        ),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "STOCK_CHANGE_STATEMENT",
+                                "OWNERSHIP_DOC",
+                                "소유구조 확인 문서",
+                                1,
+                                false
+                        )
+                );
     }
 
     @Test
@@ -125,8 +171,12 @@ class DocumentRequirementValidationServiceTest {
 
     @Test
     void validateLimitedPartnershipAndGeneralPartnership_useSeparatedCorporateTypes() {
+        assertValid("LIMITED_PARTNERSHIP", false, "BUSINESS_REGISTRATION", "CORPORATE_REGISTRY", "INVESTOR_REGISTRY");
         assertValid("LIMITED_PARTNERSHIP", false, "BUSINESS_REGISTRATION", "CORPORATE_REGISTRY", "MEMBER_REGISTRY");
+        assertValid("LIMITED_PARTNERSHIP", false, "BUSINESS_REGISTRATION", "CORPORATE_REGISTRY", "ARTICLES_OF_ASSOCIATION");
+        assertValid("GENERAL_PARTNERSHIP", false, "BUSINESS_REGISTRATION", "CORPORATE_REGISTRY", "INVESTOR_REGISTRY");
         assertValid("GENERAL_PARTNERSHIP", false, "BUSINESS_REGISTRATION", "CORPORATE_REGISTRY", "MEMBER_REGISTRY");
+        assertValid("GENERAL_PARTNERSHIP", false, "BUSINESS_REGISTRATION", "CORPORATE_REGISTRY", "ARTICLES_OF_ASSOCIATION");
     }
 
     @Test
@@ -161,6 +211,13 @@ class DocumentRequirementValidationServiceTest {
                 "ORGANIZATION_IDENTITY_CERTIFICATE",
                 "REPRESENTATIVE_PROOF_DOCUMENT",
                 "REGULATIONS"
+        );
+        assertValid(
+                "ASSOCIATION",
+                false,
+                "ORGANIZATION_IDENTITY_CERTIFICATE",
+                "REPRESENTATIVE_PROOF_DOCUMENT",
+                "ARTICLES_OF_ASSOCIATION"
         );
 
         DocumentRequirementValidationResult missingRule = validate(
@@ -214,14 +271,14 @@ class DocumentRequirementValidationServiceTest {
     @Test
     void validateAgentApplication_requiresDelegationDocuments() {
         DocumentRequirementValidationResult agentResult = validate(
-                "JOINT_STOCK_COMPANY",
+                "CORPORATION",
                 true,
                 "BUSINESS_REGISTRATION",
                 "CORPORATE_REGISTRY",
                 "SHAREHOLDER_REGISTRY"
         );
         DocumentRequirementValidationResult representativeResult = validate(
-                "JOINT_STOCK_COMPANY",
+                "CORPORATION",
                 false,
                 "BUSINESS_REGISTRATION",
                 "CORPORATE_REGISTRY",
@@ -238,7 +295,7 @@ class DocumentRequirementValidationServiceTest {
     @Test
     void validateBeneficialOwnerProofDocument_isNotDefaultRequiredDocument() {
         assertValid(
-                "JOINT_STOCK_COMPANY",
+                "CORPORATION",
                 false,
                 "BUSINESS_REGISTRATION",
                 "CORPORATE_REGISTRY",
@@ -255,6 +312,23 @@ class DocumentRequirementValidationServiceTest {
                 "CORPORATE_REGISTRATION",
                 "SHAREHOLDER_LIST"
         );
+    }
+
+    @Test
+    void validateMissingResult_separatesRequiredDocumentAndAlternativeGroup() {
+        DocumentRequirementValidationResult result = validate(
+                "CORPORATION",
+                false,
+                "BUSINESS_REGISTRATION"
+        );
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.missingRequiredItems())
+                .extracting("documentTypeCode")
+                .containsExactly("CORPORATE_REGISTRY");
+        assertThat(result.unsatisfiedGroups())
+                .extracting("groupCode")
+                .containsExactly("OWNERSHIP_DOC");
     }
 
     @Test

@@ -64,4 +64,21 @@ class KycApplicationServiceTest {
                     assertThat(application.isDraft()).isTrue();
                 });
     }
+
+    @Test
+    void startKycNormalizesJointStockCompanyAliasToCorporation() {
+        Long userId = 1L;
+        Corporate corporate = org.mockito.Mockito.mock(Corporate.class);
+        when(corporate.getCorporateId()).thenReturn(10L);
+        when(corporateRepository.findByUserId(userId)).thenReturn(Optional.of(corporate));
+        when(kycApplicationRepository.save(any(KycApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        kycApplicationService.startKyc(userId, new KycStartRequest("JOINT_STOCK_COMPANY"));
+
+        ArgumentCaptor<KycApplication> captor = ArgumentCaptor.forClass(KycApplication.class);
+        verify(kycApplicationRepository).save(captor.capture());
+        verify(commonCodeProvider).validateEnabledCode(eq("CORPORATE_TYPE"), eq("CORPORATION"));
+        assertThat(captor.getValue().getCorporateTypeCode()).isEqualTo("CORPORATION");
+    }
 }
