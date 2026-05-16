@@ -7,6 +7,7 @@ import {
   isWalletOwnerMismatch,
   type SetCurrentWebUserResult,
 } from "@/lib/m/android-bridge";
+import { setMobileAutoLoginEnabled } from "@/lib/m/auto-login-storage";
 import { mSession } from "@/lib/m/session";
 
 export class WalletOwnerMismatchError extends Error {
@@ -49,6 +50,7 @@ export function clearWalletUiState() {
 }
 
 export async function logoutForWalletOwnerMismatch() {
+  setMobileAutoLoginEnabled(false);
   clearWalletUiState();
   await Promise.all([
     auth.logout().catch(() => null),

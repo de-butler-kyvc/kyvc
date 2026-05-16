@@ -87,6 +87,8 @@ function skipRefreshOn401(pathname: string): boolean {
     pathname.startsWith("/api/auth/login") ||
     pathname.startsWith("/api/auth/signup") ||
     pathname.startsWith("/api/auth/password-reset") ||
+    pathname.startsWith("/api/mobile/auth/auto-login") ||
+    pathname.startsWith("/api/mobile/auth/login") ||
     pathname.startsWith("/api/auth/dev/")
   );
 }
@@ -192,6 +194,17 @@ export type LoginResponse = {
   roles: string[];
 };
 
+export type MobileAutoLoginResponse = {
+  autoLogin: boolean;
+  userId?: number;
+  corporateId?: number | null;
+  email?: string;
+  corporateName?: string | null;
+  roleCode?: string;
+  accessTokenExpiresAt?: string;
+  refreshTokenExpiresAt?: string;
+};
+
 export type SignupResponse = {
   userId: number;
   email: string;
@@ -293,6 +306,11 @@ export const auth = {
     api<LoginResponse>("/api/auth/login", {
       method: "POST",
       body: { email, password },
+    }),
+  mobileAutoLogin: () =>
+    api<MobileAutoLoginResponse>("/api/mobile/auth/auto-login", {
+      method: "POST",
+      body: {},
     }),
   logout: () =>
     api<{ loggedOut: boolean }>("/api/auth/logout", {

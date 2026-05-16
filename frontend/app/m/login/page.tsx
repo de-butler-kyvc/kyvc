@@ -11,6 +11,11 @@ import {
   isBridgeAvailable,
   type AuthStatus,
 } from "@/lib/m/android-bridge";
+import {
+  readMobileAutoLoginEnabled,
+  setMobileAutoLoginEnabled,
+  tryMobileAutoLogin,
+} from "@/lib/m/auto-login";
 import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 import {
   bindCurrentWebUserWithPrompt,
@@ -32,7 +37,7 @@ export default function MobileLoginPage() {
   const [bizNo, setBizNo] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [keep, setKeep] = useState(false);
+  const [keep, setKeep] = useState(() => readMobileAutoLoginEnabled());
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
@@ -56,6 +61,25 @@ export default function MobileLoginPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!readMobileAutoLoginEnabled()) return;
+    setBusy(true);
+    tryMobileAutoLogin()
+      .then((res) => {
+        if (!cancelled && res?.autoLogin) router.replace("/m/home");
+      })
+      .catch(() => {
+        if (!cancelled) setMobileAutoLoginEnabled(false);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const methods = authStatus?.availableMethods ?? ["pin", "biometric"];
   const canUsePin = methods.includes("pin");
@@ -88,6 +112,7 @@ export default function MobileLoginPage() {
         });
         await ensureMobileWallet().catch(() => null);
       }
+      setMobileAutoLoginEnabled(keep);
       router.replace("/m/home");
     } catch (err) {
       if (err instanceof WalletOwnerMismatchError) {
