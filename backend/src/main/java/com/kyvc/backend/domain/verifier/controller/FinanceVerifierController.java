@@ -8,9 +8,7 @@ import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestDetailResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestListResponse;
 import com.kyvc.backend.global.response.CommonResponse;
 import com.kyvc.backend.global.response.CommonResponseFactory;
-import com.kyvc.backend.global.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,7 +16,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,7 +40,6 @@ public class FinanceVerifierController {
     /**
      * 금융사 VP 검증 요청을 생성
      *
-     * @param userDetails 인증 사용자 정보
      * @param request 금융사 VP 요청 생성 요청
      * @return 금융사 VP 요청 생성 응답
      */
@@ -58,17 +54,14 @@ public class FinanceVerifierController {
     )
     @PostMapping("/vp-requests")
     public CommonResponse<FinanceVpRequestCreateResponse> createVpRequest(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @Valid @RequestBody FinanceVpRequestCreateRequest request // 금융사 VP 요청 생성 요청
     ) {
-        return CommonResponseFactory.success(verifierVpService.createFinanceVpRequest(userDetails, request));
+        return CommonResponseFactory.success(verifierVpService.createFinanceVpRequest(request));
     }
 
     /**
      * 금융사 VP 검증 요청 목록을 조회
      *
-     * @param userDetails 인증 사용자 정보
      * @param status VP 검증 상태 필터
      * @param from 조회 시작 일시
      * @param to 조회 종료 일시
@@ -87,8 +80,6 @@ public class FinanceVerifierController {
     )
     @GetMapping("/vp-requests")
     public CommonResponse<FinanceVpRequestListResponse> getVpRequests(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @RequestParam(required = false) String status, // VP 검증 상태 필터
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from, // 조회 시작 일시
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to, // 조회 종료 일시
@@ -96,14 +87,13 @@ public class FinanceVerifierController {
             @RequestParam(required = false) Integer size // 페이지 크기
     ) {
         return CommonResponseFactory.success(
-                verifierVpService.getFinanceVpRequests(userDetails, status, from, to, page, size)
+                verifierVpService.getFinanceVpRequests(status, from, to, page, size)
         );
     }
 
     /**
      * 금융사 VP 검증 요청 상세와 결과를 조회
      *
-     * @param userDetails 인증 사용자 정보
      * @param requestId VP 요청 ID
      * @return 금융사 VP 요청 상세 응답
      */
@@ -118,17 +108,14 @@ public class FinanceVerifierController {
     )
     @GetMapping("/vp-requests/{requestId}")
     public CommonResponse<FinanceVpRequestDetailResponse> getVpRequest(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @PathVariable String requestId // VP 요청 ID
     ) {
-        return CommonResponseFactory.success(verifierVpService.getFinanceVpRequest(userDetails, requestId));
+        return CommonResponseFactory.success(verifierVpService.getFinanceVpRequest(requestId));
     }
 
     /**
      * 금융사 VP 검증 요청을 취소
      *
-     * @param userDetails 인증 사용자 정보
      * @param requestId VP 요청 ID
      * @return 금융사 VP 요청 취소 응답
      */
@@ -143,10 +130,8 @@ public class FinanceVerifierController {
     )
     @PostMapping("/vp-requests/{requestId}/cancel")
     public CommonResponse<FinanceVpRequestCancelResponse> cancelVpRequest(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @PathVariable String requestId // VP 요청 ID
     ) {
-        return CommonResponseFactory.success(verifierVpService.cancelFinanceVpRequest(userDetails, requestId));
+        return CommonResponseFactory.success(verifierVpService.cancelFinanceVpRequest(requestId));
     }
 }
