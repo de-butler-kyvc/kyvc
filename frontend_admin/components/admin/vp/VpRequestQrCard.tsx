@@ -49,7 +49,11 @@ export function VpRequestQrCard({
   const inactive =
     cancelDisabled || (status !== "REQUESTED" && status !== "PRESENTED");
   const remainingLabel =
-    status === "CANCELLED" ? "취소됨" : formatRemainingTime(remainingSeconds);
+    status === "CANCELLED"
+      ? "취소됨"
+      : status === "EXPIRED"
+        ? "만료됨"
+        : formatRemainingTime(remainingSeconds);
 
   return (
     <section className="w-full max-w-[230px] rounded-lg border border-slate-200 bg-white">

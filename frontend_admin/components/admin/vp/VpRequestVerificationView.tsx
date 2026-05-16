@@ -64,10 +64,13 @@ function getBackendStatus(detail: AdminVpRequestDetail): AdminVpRequestStatus {
 function toErrorMessage(error: unknown) {
   if (error instanceof AdminVpApiError) {
     if (error.status === 401 || error.status === 403) {
-      return "backend 금융사 API 호출 권한이 없습니다.";
+      return "backend VP 요청 API 인증 설정을 확인해야 합니다.";
     }
     if (error.status === 409) {
       return "이미 제출 또는 검증 완료된 요청은 취소할 수 없습니다.";
+    }
+    if (error.status === 410) {
+      return "만료된 VP 요청입니다. QR을 재생성해 주세요.";
     }
     return error.message;
   }
@@ -152,7 +155,7 @@ export function VpRequestVerificationView() {
   }, [detail]);
 
   const handleCancel = async () => {
-    if (!detail || !ACTIVE_STATUSES.includes(detail.status)) return;
+    if (!detail || !ACTIVE_STATUSES.includes(getBackendStatus(detail))) return;
 
     setCancelling(true);
     setErrorMessage(null);
