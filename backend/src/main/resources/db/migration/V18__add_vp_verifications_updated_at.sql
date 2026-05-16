@@ -1,4 +1,0 @@
--- V18: VP 검증 요청 수정일시 추가
-
-ALTER TABLE vp_verifications
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
