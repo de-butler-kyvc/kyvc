@@ -140,7 +140,7 @@ public class VpVerificationService {
         validateVpRequestSubmittable(vpVerification);
 
         Credential credential = credentialRepository.getById(request.credentialId());
-        validateCredentialEligible(credential);
+        validateCredentialEligible(vpVerification, credential);
         validateNonceAndChallenge(vpVerification, request);
         Map<String, Object> didDocuments = buildDidDocuments(credential, request.didDocument());
         Long submittedCorporateId = resolveSubmittedCorporateId(credential);
@@ -214,7 +214,7 @@ public class VpVerificationService {
         validateVpRequestSubmittable(vpVerification);
 
         Credential credential = credentialRepository.getById(request.credentialId());
-        validateCredentialEligible(credential);
+        validateCredentialEligible(vpVerification, credential);
         validateNonceAndChallenge(vpVerification, request);
         Map<String, Object> didDocuments = buildDidDocuments(credential, request.didDocument());
         Long submittedCorporateId = resolveSubmittedCorporateId(credential);
@@ -1034,9 +1034,13 @@ public class VpVerificationService {
     }
 
     private void validateCredentialEligible(
+            VpVerification vpVerification, // VP 검증 요청
             Credential credential // Credential
     ) {
-        if (!credential.isWalletSaved() || !credential.isValid(LocalDateTime.now())) {
+        if (!isFinanceVpRequest(vpVerification) && !credential.isWalletSaved()) {
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+        if (!credential.isValid(LocalDateTime.now())) {
             throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
         }
     }
