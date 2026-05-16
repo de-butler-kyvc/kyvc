@@ -140,7 +140,11 @@ export function VpRequestVerificationView() {
     const pollDetail = async () => {
       try {
         const nextDetail = await getFinanceVpRequestDetail(detail.requestId);
-        setDetail(nextDetail);
+        setDetail((current) =>
+          current?.requestId === nextDetail.requestId && current.qrPayload
+            ? { ...nextDetail, qrPayload: current.qrPayload }
+            : nextDetail
+        );
         setPollingWarning(null);
       } catch (error) {
         setPollingWarning(toErrorMessage(error));
