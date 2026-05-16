@@ -19,11 +19,19 @@ public final class CoreDocumentEvidencePolicy {
     private static final Map<String, String> CORE_DOCUMENT_TYPES = Map.ofEntries(
             Map.entry("BUSINESS_REGISTRATION", "KR_BUSINESS_REGISTRATION_CERTIFICATE"),
             Map.entry("CORPORATE_REGISTRATION", "KR_CORPORATE_REGISTER_FULL_CERTIFICATE"),
+            Map.entry("CORPORATE_REGISTRY", "KR_CORPORATE_REGISTER_FULL_CERTIFICATE"),
             Map.entry("SHAREHOLDER_LIST", "KR_SHAREHOLDER_REGISTER"),
+            Map.entry("SHAREHOLDER_REGISTRY", "KR_SHAREHOLDER_REGISTER"),
+            Map.entry("STOCK_CHANGE_STATEMENT", "KR_SHAREHOLDER_REGISTER"),
+            Map.entry("INVESTOR_REGISTRY", "KR_SHAREHOLDER_REGISTER"),
+            Map.entry("MEMBER_REGISTRY", "KR_SHAREHOLDER_REGISTER"),
             Map.entry("ARTICLES_OF_INCORPORATION", "KR_ARTICLES_OF_ASSOCIATION"),
+            Map.entry("ARTICLES_OF_ASSOCIATION", "KR_ARTICLES_OF_ASSOCIATION"),
             Map.entry("POWER_OF_ATTORNEY", "KR_POWER_OF_ATTORNEY"),
             Map.entry("CORPORATE_SEAL_CERTIFICATE", "KR_SEAL_CERTIFICATE"),
+            Map.entry("SEAL_CERTIFICATE", "KR_SEAL_CERTIFICATE"),
             Map.entry("REPRESENTATIVE_ID", "KR_ENTITY_REALNAME_CERTIFICATE"),
+            Map.entry("REPRESENTATIVE_PROOF_DOCUMENT", "KR_ENTITY_REALNAME_CERTIFICATE"),
             Map.entry("AGENT_ID", "KR_ENTITY_REALNAME_CERTIFICATE")
     );
 
@@ -58,11 +66,15 @@ public final class CoreDocumentEvidencePolicy {
         }
         return switch (documentTypeCode.trim().toUpperCase(java.util.Locale.ROOT)) {
             case "BUSINESS_REGISTRATION" -> List.of("legalEntity.name", "legalEntity.registrationNumber");
-            case "CORPORATE_REGISTRATION" -> List.of("legalEntity.registrationNumber", "representative.name");
-            case "SHAREHOLDER_LIST" -> List.of("beneficialOwners[]");
-            case "ARTICLES_OF_INCORPORATION" -> List.of("legalEntity.type", "establishmentPurpose");
-            case "POWER_OF_ATTORNEY", "CORPORATE_SEAL_CERTIFICATE" -> List.of("delegate", "delegation");
-            case "REPRESENTATIVE_ID" -> List.of("representative");
+            case "CORPORATE_REGISTRATION", "CORPORATE_REGISTRY" ->
+                    List.of("legalEntity.registrationNumber", "representative.name");
+            case "SHAREHOLDER_LIST", "SHAREHOLDER_REGISTRY", "STOCK_CHANGE_STATEMENT", "INVESTOR_REGISTRY",
+                    "MEMBER_REGISTRY" -> List.of("beneficialOwners[]");
+            case "ARTICLES_OF_INCORPORATION", "ARTICLES_OF_ASSOCIATION" ->
+                    List.of("legalEntity.type", "establishmentPurpose");
+            case "POWER_OF_ATTORNEY", "CORPORATE_SEAL_CERTIFICATE", "SEAL_CERTIFICATE" ->
+                    List.of("delegate", "delegation");
+            case "REPRESENTATIVE_ID", "REPRESENTATIVE_PROOF_DOCUMENT" -> List.of("representative");
             case "AGENT_ID" -> List.of("delegate");
             default -> List.of();
         };

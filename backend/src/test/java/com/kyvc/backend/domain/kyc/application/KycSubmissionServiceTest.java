@@ -10,7 +10,9 @@ import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
+import com.kyvc.backend.domain.document.application.DocumentRequirementValidationService;
 import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementValidationResult;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
@@ -28,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,6 +61,8 @@ class KycSubmissionServiceTest {
     @Mock
     private RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
     @Mock
+    private DocumentRequirementValidationService documentRequirementValidationService;
+    @Mock
     private DocumentStorage documentStorage;
     @Mock
     private CoreRequestService coreRequestService;
@@ -77,6 +82,7 @@ class KycSubmissionServiceTest {
                 corporateAgentRepository,
                 kycDocumentRepository,
                 requiredDocumentPolicyProvider,
+                documentRequirementValidationService,
                 documentStorage,
                 coreRequestService,
                 coreAdapter,
@@ -155,6 +161,8 @@ class KycSubmissionServiceTest {
         when(corporateAgentRepository.findByCorporateId(CORPORATE_ID)).thenReturn(List.of());
         when(kycDocumentRepository.findByKycId(KYC_ID)).thenReturn(List.of());
         when(requiredDocumentPolicyProvider.getRequiredDocuments(CORPORATE_TYPE_CODE)).thenReturn(List.of());
+        when(documentRequirementValidationService.validate(CORPORATE_TYPE_CODE, Set.of(), false))
+                .thenReturn(new DocumentRequirementValidationResult(true, List.of(), List.of()));
         when(coreRequestService.createAiReviewRequest(KYC_ID, null)).thenReturn(coreRequest);
         when(kycApplicationRepository.save(any(KycApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

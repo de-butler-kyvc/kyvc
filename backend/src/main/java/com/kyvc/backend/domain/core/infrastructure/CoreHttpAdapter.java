@@ -116,7 +116,10 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String DEFAULT_HOLDER_KEY_ID = "holder-key-1";
     private static final String CORE_DOCUMENT_TYPE_UNKNOWN = "UNKNOWN";
     private static final String BACKEND_CORPORATE_TYPE_CORPORATION = "CORPORATION";
+    private static final String BACKEND_CORPORATE_TYPE_JOINT_STOCK_COMPANY = "JOINT_STOCK_COMPANY";
     private static final String BACKEND_CORPORATE_TYPE_LIMITED_COMPANY = "LIMITED_COMPANY";
+    private static final String BACKEND_CORPORATE_TYPE_LIMITED_PARTNERSHIP = "LIMITED_PARTNERSHIP";
+    private static final String BACKEND_CORPORATE_TYPE_GENERAL_PARTNERSHIP = "GENERAL_PARTNERSHIP";
     private static final String BACKEND_CORPORATE_TYPE_NON_PROFIT = "NON_PROFIT";
     private static final String BACKEND_CORPORATE_TYPE_ASSOCIATION = "ASSOCIATION";
     private static final String BACKEND_CORPORATE_TYPE_FOREIGN_COMPANY = "FOREIGN_COMPANY";
@@ -156,6 +159,7 @@ public class CoreHttpAdapter implements CoreAdapter {
             "BENEFICIAL_OWNER_PROOF_DOCUMENT",
             "POWER_OF_ATTORNEY",
             "SEAL_CERTIFICATE",
+            "REPRESENTATIVE_PROOF_DOCUMENT",
             "UNKNOWN"
     );
 
@@ -879,7 +883,10 @@ public class CoreHttpAdapter implements CoreAdapter {
         String normalized = corporateTypeCode.trim().toUpperCase(Locale.ROOT);
         return switch (normalized) {
             case BACKEND_CORPORATE_TYPE_CORPORATION -> CORE_LEGAL_ENTITY_STOCK_COMPANY;
-            case BACKEND_CORPORATE_TYPE_LIMITED_COMPANY -> CORE_LEGAL_ENTITY_LIMITED_COMPANY;
+            case BACKEND_CORPORATE_TYPE_JOINT_STOCK_COMPANY -> CORE_LEGAL_ENTITY_STOCK_COMPANY;
+            case BACKEND_CORPORATE_TYPE_LIMITED_COMPANY,
+                    BACKEND_CORPORATE_TYPE_LIMITED_PARTNERSHIP,
+                    BACKEND_CORPORATE_TYPE_GENERAL_PARTNERSHIP -> CORE_LEGAL_ENTITY_LIMITED_COMPANY;
             case BACKEND_CORPORATE_TYPE_NON_PROFIT -> CORE_LEGAL_ENTITY_INCORPORATED_ASSOCIATION;
             case BACKEND_CORPORATE_TYPE_ASSOCIATION -> CORE_LEGAL_ENTITY_COOPERATIVE;
             case BACKEND_CORPORATE_TYPE_FOREIGN_COMPANY -> CORE_LEGAL_ENTITY_FOREIGN_COMPANY;
