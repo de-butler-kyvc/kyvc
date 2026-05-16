@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
+import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.exception.CoreAiReviewException;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
@@ -18,6 +19,8 @@ import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.dto.KycSubmitResponse;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
+import com.kyvc.backend.domain.kyc.repository.KycReviewHistoryRepository;
+import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.logging.LogEventLogger;
 import com.kyvc.backend.global.util.KyvcEnums;
@@ -28,12 +31,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -70,6 +78,8 @@ class KycSubmissionServiceTest {
     private CoreAdapter coreAdapter;
     @Mock
     private LogEventLogger logEventLogger;
+    @Mock
+    private KycReviewHistoryRepository kycReviewHistoryRepository;
 
     private KycSubmissionService service;
 
@@ -87,8 +97,59 @@ class KycSubmissionServiceTest {
                 coreRequestService,
                 coreAdapter,
                 new ObjectMapper().findAndRegisterModules(),
-                logEventLogger
+                logEventLogger,
+                kycReviewHistoryRepository
         );
+    }
+
+    @Test
+    void submit_changesDraftToAiReviewingBeforeReviewResultAndSavesHistory() {
+        CoreRequest coreRequest = prepareSubmittableKyc();
+        when(coreAdapter.requestAiReview(any(CoreAiReviewRequest.class))).thenReturn(new CoreAiReviewResponse(
+                coreRequest.getCoreRequestId(),
+                KyvcEnums.AiReviewStatus.SUCCESS.name(),
+                "MANUAL_REVIEW_REQUIRED",
+                "assessment-001",
+                new BigDecimal("0.82"),
+                "AI 심사 결과 수기검토 필요",
+                LocalDateTime.now(),
+                Map.of()
+        ));
+
+        KycSubmitResponse response = service.submit(USER_ID, KYC_ID);
+
+        assertThat(response.status()).isEqualTo(KyvcEnums.KycStatus.MANUAL_REVIEW.name());
+        verify(kycReviewHistoryRepository).saveStatusChange(
+                eq(KYC_ID),
+                eq(KyvcEnums.ReviewActionType.SUBMIT),
+                eq(KyvcEnums.KycStatus.DRAFT),
+                eq(KyvcEnums.KycStatus.AI_REVIEWING),
+                eq("KYC 제출 완료"),
+                any(LocalDateTime.class)
+        );
+        verify(kycReviewHistoryRepository).saveStatusChange(
+                eq(KYC_ID),
+                eq(KyvcEnums.ReviewActionType.AI_COMPLETE),
+                eq(KyvcEnums.KycStatus.AI_REVIEWING),
+                eq(KyvcEnums.KycStatus.MANUAL_REVIEW),
+                eq("AI 심사 완료"),
+                any(LocalDateTime.class)
+        );
+    }
+
+    @Test
+    void submit_rejectsAlreadySubmittedKyc() {
+        KycApplication kycApplication = KycApplication.createDraft(CORPORATE_ID, USER_ID, CORPORATE_TYPE_CODE);
+        ReflectionTestUtils.setField(kycApplication, "kycId", KYC_ID);
+        kycApplication.submit(LocalDateTime.now());
+        when(kycApplicationRepository.findById(KYC_ID)).thenReturn(Optional.of(kycApplication));
+
+        assertThatThrownBy(() -> service.submit(USER_ID, KYC_ID))
+                .isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.KYC_ALREADY_SUBMITTED);
+
+        verify(coreAdapter, never()).requestAiReview(any(CoreAiReviewRequest.class));
     }
 
     @Test
