@@ -22,6 +22,7 @@ import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCancelResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestDetailResponse;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpVerificationCheckResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationResponse;
 import com.kyvc.backend.domain.verifier.repository.VerifierRepository;
@@ -414,6 +415,65 @@ class VerifierVpServiceTest {
     }
 
     @Test
+    void getFinanceVpRequest_mapsInvalidCoreResultToChecks() throws Exception {
+        Corporate corporate = createCorporate(10L, 1L);
+        Credential credential = createCredential(100L, 10L);
+        KycApplication kycApplication = createKycApplication(300L, 10L, KyvcEnums.KycStatus.APPROVED);
+        VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.REQUESTED);
+        vpVerification.markPresentedForCorporate(
+                10L,
+                100L,
+                TokenHashUtil.sha256("vp.jwt.value"),
+                "core-request-id",
+                LocalDateTime.now().minusSeconds(5)
+        );
+        vpVerification.markInvalid("VP 검증 결과가 유효하지 않습니다.", LocalDateTime.now());
+        CoreRequest coreRequest = CoreRequest.create(
+                KyvcEnums.CoreRequestType.VP_VERIFY,
+                KyvcEnums.CoreTargetType.VP_VERIFICATION,
+                21L,
+                null
+        );
+        coreRequest.markFailed(
+                "VP 검증 결과가 유효하지 않습니다.",
+                new ObjectMapper().findAndRegisterModules().writeValueAsString(new CoreVpVerificationResponse(
+                        "core-request-id",
+                        KyvcEnums.VpVerificationStatus.INVALID.name(),
+                        "Core VP 검증 실패",
+                        LocalDateTime.now(),
+                        true,
+                        false,
+                        false,
+                        "VP 검증 결과가 유효하지 않습니다.",
+                        List.of(),
+                        Map.of(
+                                "signatureValid", false,
+                                "issuerTrusted", false,
+                                "credentialStatus", KyvcEnums.VpVerificationStatus.INVALID.name(),
+                                "replayDetected", false
+                        )
+                ))
+        );
+
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
+        when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
+        when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
+        when(kycApplicationRepository.findById(300L)).thenReturn(Optional.of(kycApplication));
+        when(coreRequestService.getCoreRequest("core-request-id")).thenReturn(coreRequest);
+
+        FinanceVpRequestDetailResponse response = service.getFinanceVpRequest("vp-req-001");
+
+        assertThat(checkCode(response, "VP_FORMAT")).isEqualTo("CHECK_REQUIRED");
+        assertThat(checkCode(response, "VC_SIGNATURE")).isEqualTo("FAILED");
+        assertThat(checkCode(response, "VC_STATUS")).isEqualTo("FAILED");
+        assertThat(checkCode(response, "ISSUER_TRUST")).isEqualTo("FAILED");
+        assertThat(checkCode(response, "NONCE")).isEqualTo("PASSED");
+        assertThat(response.checks())
+                .extracting(FinanceVpVerificationCheckResponse::message)
+                .noneMatch(message -> String.valueOf(message).contains("Credential 매핑"));
+    }
+
+    @Test
     void cancelFinanceVpRequest_cancelsRequestedRequest() {
         VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.REQUESTED);
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
@@ -612,6 +672,17 @@ class VerifierVpServiceTest {
         ReflectionTestUtils.setField(kycApplication, "corporateId", corporateId);
         ReflectionTestUtils.setField(kycApplication, "kycStatus", status);
         return kycApplication;
+    }
+
+    private String checkCode(
+            FinanceVpRequestDetailResponse response, // 금융사 VP 요청 상세 응답
+            String checkType // 검증 항목 유형
+    ) {
+        return response.checks().stream()
+                .filter(check -> checkType.equals(check.checkType()))
+                .map(FinanceVpVerificationCheckResponse::resultCode)
+                .findFirst()
+                .orElse(null);
     }
 
     private <T> T newInstance(Class<T> type) {

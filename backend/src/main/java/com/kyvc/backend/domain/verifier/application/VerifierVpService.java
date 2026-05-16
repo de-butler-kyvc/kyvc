@@ -408,6 +408,11 @@ public class VerifierVpService {
         if (vpVerification == null || !hasFinanceResult(vpVerification)) {
             return List.of();
         }
+        CoreVpVerificationResponse coreResponse = findCoreVpVerificationResponse(vpVerification);
+        VpVerificationResultResponse result = toNullableVerificationResultResponse(vpVerification, coreResponse);
+        if (result != null) {
+            return buildVerificationChecksFromResult(vpVerification, result);
+        }
         return List.of(
                 buildVerificationCheck(vpVerification, "VP_FORMAT", "VP 형식 검증", "VP 형식이 유효합니다."),
                 buildVerificationCheck(vpVerification, "VC_SIGNATURE", "VC 서명 검증", "VC 서명이 유효합니다."),
@@ -434,6 +439,37 @@ public class VerifierVpService {
                 resultCode,
                 resolveCheckMessage(resultCode, checkName, failureReason)
         );
+    }
+
+    private List<FinanceVpVerificationCheckResponse> buildVerificationChecksFromResult(
+            VpVerification vpVerification, // VP 검증 요청
+            VpVerificationResultResponse result // VP 검증 결과
+    ) {
+        if (KyvcEnums.VpVerificationStatus.VALID == vpVerification.getVpVerificationStatus()) {
+            return List.of(
+                    check("VP_FORMAT", "VP 형식 검증", "PASSED", "VP 형식이 유효합니다."),
+                    check("VC_SIGNATURE", "VC 서명 검증", "PASSED", "VC 서명이 유효합니다."),
+                    check("VC_STATUS", "VC 상태 조회", "PASSED", "VC 상태가 유효합니다."),
+                    check("ISSUER_TRUST", "Issuer 신뢰 확인", "PASSED", "Issuer가 신뢰 정책에 포함되어 있습니다."),
+                    check("NONCE", "Nonce 검증", "PASSED", "Nonce가 일치합니다.")
+            );
+        }
+        return List.of(
+                check("VP_FORMAT", "VP 형식 검증", "CHECK_REQUIRED", "Core 응답에 VP 형식 검증 세부 결과가 없습니다."),
+                check("VC_SIGNATURE", "VC 서명 검증", result.signatureValid() ? "PASSED" : "FAILED", result.signatureValid() ? "VC 서명이 유효합니다." : "VC 서명이 유효하지 않습니다."),
+                check("VC_STATUS", "VC 상태 조회", isCredentialStatusValid(result.credentialStatus()) ? "PASSED" : "FAILED", isCredentialStatusValid(result.credentialStatus()) ? "VC 상태가 유효합니다." : "VC 상태가 유효하지 않습니다."),
+                check("ISSUER_TRUST", "Issuer 신뢰 확인", result.issuerTrusted() ? "PASSED" : "FAILED", result.issuerTrusted() ? "Issuer가 신뢰 정책에 포함되어 있습니다." : "Issuer 신뢰를 확인할 수 없습니다."),
+                check("NONCE", "Nonce 검증", result.replayDetected() ? "FAILED" : "PASSED", result.replayDetected() ? "VP 재사용 또는 nonce 불일치가 의심됩니다." : "Nonce가 일치합니다.")
+        );
+    }
+
+    private FinanceVpVerificationCheckResponse check(
+            String checkType, // 검증 항목 유형
+            String checkName, // 검증 항목명
+            String resultCode, // 검증 결과 코드
+            String message // 검증 결과 메시지
+    ) {
+        return new FinanceVpVerificationCheckResponse(checkType, checkName, resultCode, message);
     }
 
     private String resolveCheckResultCode(
@@ -627,6 +663,74 @@ public class VerifierVpService {
                 credentialStatus,
                 replayDetected
         );
+    }
+
+    private VpVerificationResultResponse toNullableVerificationResultResponse(
+            VpVerification vpVerification, // VP 검증 요청
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        if (vpVerification == null || !vpVerification.isCompleted()) {
+            return null;
+        }
+        if (coreResponse == null) {
+            return toNullableVerificationResultResponse(vpVerification);
+        }
+        return new VpVerificationResultResponse(
+                resolveCoreBoolean(coreResponse, "signatureValid", Boolean.TRUE.equals(coreResponse.valid())),
+                resolveCoreBoolean(coreResponse, "issuerTrusted", Boolean.TRUE.equals(coreResponse.valid()) && !Boolean.TRUE.equals(coreResponse.replaySuspected())),
+                resolveCoreCredentialStatus(coreResponse),
+                resolveCoreBoolean(coreResponse, "replayDetected", Boolean.TRUE.equals(coreResponse.replaySuspected()))
+        );
+    }
+
+    private CoreVpVerificationResponse findCoreVpVerificationResponse(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (vpVerification == null || !StringUtils.hasText(vpVerification.getCoreRequestId())) {
+            return null;
+        }
+        try {
+            CoreRequest coreRequest = coreRequestService.getCoreRequest(vpVerification.getCoreRequestId());
+            if (coreRequest == null || !StringUtils.hasText(coreRequest.getResponsePayloadJson())) {
+                return null;
+            }
+            return objectMapper.readValue(coreRequest.getResponsePayloadJson(), CoreVpVerificationResponse.class);
+        } catch (ApiException | JsonProcessingException exception) {
+            return null;
+        }
+    }
+
+    private boolean resolveCoreBoolean(
+            CoreVpVerificationResponse coreResponse, // Core 검증 응답
+            String fieldName, // 결과 필드명
+            boolean fallback // 대체 값
+    ) {
+        Object value = coreResponse.details() == null ? null : coreResponse.details().get(fieldName);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String stringValue && StringUtils.hasText(stringValue)) {
+            return Boolean.parseBoolean(stringValue.trim());
+        }
+        return fallback;
+    }
+
+    private String resolveCoreCredentialStatus(
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        Object value = coreResponse.details() == null ? null : coreResponse.details().get("credentialStatus");
+        if (value instanceof String stringValue && StringUtils.hasText(stringValue)) {
+            return stringValue.trim();
+        }
+        return Boolean.TRUE.equals(coreResponse.valid())
+                ? KyvcEnums.CredentialStatus.VALID.name()
+                : KyvcEnums.VpVerificationStatus.INVALID.name();
+    }
+
+    private boolean isCredentialStatusValid(
+            String credentialStatus // Credential 상태
+    ) {
+        return KyvcEnums.CredentialStatus.VALID.name().equals(credentialStatus);
     }
 
     private String resolveFailureReason(
