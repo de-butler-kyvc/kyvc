@@ -1,4 +1,6 @@
-const rawBackendApiBase = process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ?? "";
+const DEFAULT_BACKEND_API_BASE = "https://dev-api-kyvc.khuoo.synology.me";
+const rawBackendApiBase =
+  process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL?.trim() || DEFAULT_BACKEND_API_BASE;
 
 const BACKEND_API_BASE = rawBackendApiBase.replace(/\/+$/, "");
 const FINANCE_VP_BASE = `${BACKEND_API_BASE}/api/finance/verifier/vp-requests`;
