@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -115,7 +116,7 @@ class VpVerificationServiceTest {
                 logEventLogger
         );
 
-        when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(createCorporate(10L, 1L)));
+        lenient().when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(createCorporate(10L, 1L)));
     }
 
     @Test
@@ -127,7 +128,6 @@ class VpVerificationServiceTest {
         ));
 
         QrResolveResponse response = service.resolveQr(
-                userDetails(),
                 new QrResolveRequest("{\"type\":\"CREDENTIAL_OFFER\",\"offerId\":1,\"qrToken\":\"token\"}")
         );
 
@@ -147,11 +147,11 @@ class VpVerificationServiceTest {
                 "challenge",
                 LocalDateTime.now().plusMinutes(30)
         );
+        vpVerification.applyQrTokenHash(TokenHashUtil.sha256("raw-token"));
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
         QrResolveResponse response = service.resolveQr(
-                userDetails(),
-                new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"nonce\":\"nonce\",\"challenge\":\"challenge\"}")
+                new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"qrToken\":\"raw-token\",\"nonce\":\"nonce\",\"challenge\":\"challenge\"}")
         );
 
         assertThat(response.type()).isEqualTo(KyvcEnums.QrType.VP_REQUEST.name());
@@ -175,7 +175,6 @@ class VpVerificationServiceTest {
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
         QrResolveResponse response = service.resolveQr(
-                userDetails(),
                 new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"qrToken\":\"raw-token\"}")
         );
 
@@ -200,7 +199,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.resolveQr(
-                        userDetails(),
                         new QrResolveRequest("{\"type\":\"VP_REQUEST\",\"requestId\":\"vp-req-001\",\"qrToken\":\"wrong-token\"}")
                 )
         );
@@ -212,7 +210,7 @@ class VpVerificationServiceTest {
     void resolveQr_throwsWhenPayloadIsInvalidJson() {
         ApiException exception = assertThrows(
                 ApiException.class,
-                () -> service.resolveQr(userDetails(), new QrResolveRequest("{invalid-json"))
+                () -> service.resolveQr(new QrResolveRequest("{invalid-json"))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.QR_PAYLOAD_INVALID);
@@ -222,7 +220,7 @@ class VpVerificationServiceTest {
     void resolveQr_throwsWhenQrTypeIsUnsupported() {
         ApiException exception = assertThrows(
                 ApiException.class,
-                () -> service.resolveQr(userDetails(), new QrResolveRequest("{\"type\":\"UNKNOWN\",\"requestId\":\"vp-req-001\"}"))
+                () -> service.resolveQr(new QrResolveRequest("{\"type\":\"UNKNOWN\",\"requestId\":\"vp-req-001\"}"))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.QR_TYPE_NOT_SUPPORTED);
@@ -240,7 +238,7 @@ class VpVerificationServiceTest {
         );
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
-        VpRequestResponse response = service.getVpRequest(userDetails(), "vp-req-001");
+        VpRequestResponse response = service.getVpRequest("vp-req-001");
 
         assertThat(response.requestId()).isEqualTo("vp-req-001");
         assertThat(response.nonce()).isEqualTo("nonce-001");
@@ -265,7 +263,7 @@ class VpVerificationServiceTest {
         );
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
-        VpRequestResponse response = service.getVpRequest(userDetails(), "vp-req-001");
+        VpRequestResponse response = service.getVpRequest("vp-req-001");
 
         assertThat(response.aud()).isEqualTo("kyvc-finance-vp");
         assertThat(response.domain()).isEqualTo("kyvc-finance-vp");
@@ -278,14 +276,14 @@ class VpVerificationServiceTest {
 
         ApiException exception = assertThrows(
                 ApiException.class,
-                () -> service.getVpRequest(userDetails(), "missing")
+                () -> service.getVpRequest("missing")
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_NOT_FOUND);
     }
 
     @Test
-    void getVpRequest_returnsExpiredFlagWhenRequestExpired() {
+    void getVpRequest_throwsWhenRequestExpired() {
         VpVerification vpVerification = createRequestedVpVerification(
                 21L,
                 10L,
@@ -296,11 +294,12 @@ class VpVerificationServiceTest {
         );
         when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
-        VpRequestResponse response = service.getVpRequest(userDetails(), "vp-req-001");
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.getVpRequest("vp-req-001")
+        );
 
-        assertThat(response.requestId()).isEqualTo("vp-req-001");
-        assertThat(response.expired()).isTrue();
-        assertThat(response.submitted()).isFalse();
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_EXPIRED);
     }
 
     @Test
@@ -373,10 +372,7 @@ class VpVerificationServiceTest {
         when(vpVerificationRepository.save(any(VpVerification.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        VpPresentationResponse response = service.submitPresentation(
-                userDetails(),
-                vpJwtRequest(vpJwt)
-        );
+        VpPresentationResponse response = service.submitPresentation(vpJwtRequest(vpJwt));
 
         verify(coreRequestService).createVpVerificationRequest(21L, null);
         verify(coreRequestService).updateRequestPayloadJson(eq(coreRequest.getCoreRequestId()), requestPayloadCaptor.capture());
@@ -441,10 +437,7 @@ class VpVerificationServiceTest {
         when(vpVerificationRepository.save(any(VpVerification.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.submitPresentation(
-                userDetails(),
-                vpJwtRequest(vpJwt)
-        );
+        service.submitPresentation(vpJwtRequest(vpJwt));
 
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
         VpVerification saved = vpVerificationCaptor.getValue();
@@ -460,10 +453,7 @@ class VpVerificationServiceTest {
         String vpJwt = "vp.jwt.value";
         mockSuccessfulSubmit(vpJwt, coreResponse(true, false));
 
-        service.submitPresentation(
-                userDetails(),
-                vpJwtRequest(vpJwt)
-        );
+        service.submitPresentation(vpJwtRequest(vpJwt));
 
         verify(coreAdapter).requestVpVerification(any(CoreVpVerificationRequest.class), formatCaptor.capture(), presentationCaptor.capture(), didDocumentsCaptor.capture());
         assertThat(formatCaptor.getValue()).isEqualTo("vp+jwt");
@@ -477,7 +467,6 @@ class VpVerificationServiceTest {
         mockSuccessfulSubmit(presentation, coreResponse(true, false));
 
         service.submitPresentation(
-                userDetails(),
                 new VpPresentationRequest(
                         "vp-req-001",
                         100L,
@@ -507,7 +496,6 @@ class VpVerificationServiceTest {
         mockSuccessfulSubmit(null, coreResponse(true, false));
 
         service.submitPresentation(
-                userDetails(),
                 new VpPresentationRequest(
                         "vp-req-001",
                         100L,
@@ -533,7 +521,6 @@ class VpVerificationServiceTest {
         mockSuccessfulSubmit(sdJwtKb, coreResponse(true, false));
 
         service.submitPresentation(
-                userDetails(),
                 new VpPresentationRequest(
                         "vp-req-001",
                         100L,
@@ -584,7 +571,6 @@ class VpVerificationServiceTest {
         ArgumentCaptor<List<CoreAttachmentPart>> attachmentsCaptor = ArgumentCaptor.forClass(List.class);
 
         service.submitPresentationWithAttachments(
-                userDetails(),
                 new VpPresentationRequest(
                         "vp-req-001",
                         100L,
@@ -621,10 +607,7 @@ class VpVerificationServiceTest {
         String vpJwt = "vp.jwt.invalid";
         mockSuccessfulSubmit(vpJwt, coreResponse(false, false));
 
-        VpPresentationResponse response = service.submitPresentation(
-                userDetails(),
-                vpJwtRequest(vpJwt)
-        );
+        VpPresentationResponse response = service.submitPresentation(vpJwtRequest(vpJwt));
 
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
         VpVerification saved = vpVerificationCaptor.getValue();
@@ -638,10 +621,7 @@ class VpVerificationServiceTest {
         String vpJwt = "vp.jwt.replay";
         mockSuccessfulSubmit(vpJwt, coreResponse(false, true));
 
-        VpPresentationResponse response = service.submitPresentation(
-                userDetails(),
-                vpJwtRequest(vpJwt)
-        );
+        VpPresentationResponse response = service.submitPresentation(vpJwtRequest(vpJwt));
 
         verify(vpVerificationRepository).save(vpVerificationCaptor.capture());
         VpVerification saved = vpVerificationCaptor.getValue();
@@ -672,7 +652,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.submitPresentation(
-                        userDetails(),
                         new VpPresentationRequest("vp-req-001", 100L, "nonce-999", "challenge-001", "vp.jwt.value")
                 )
         );
@@ -704,7 +683,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.submitPresentation(
-                        userDetails(),
                         new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-999", "vp.jwt.value")
                 )
         );
@@ -736,7 +714,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.submitPresentation(
-                        userDetails(),
                         new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", "vp.jwt.value")
                 )
         );
@@ -770,10 +747,7 @@ class VpVerificationServiceTest {
 
         ApiException exception = assertThrows(
                 ApiException.class,
-                () -> service.submitPresentation(
-                        userDetails(),
-                        vpJwtRequest(vpJwt)
-                )
+                () -> service.submitPresentation(vpJwtRequest(vpJwt))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_PRESENTATION_REPLAY_SUSPECTED);
@@ -785,7 +759,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.submitPresentation(
-                        userDetails(),
                         new VpPresentationRequest(
                                 "vp-req-001",
                                 100L,
@@ -808,7 +781,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.submitPresentation(
-                        userDetails(),
                         new VpPresentationRequest(
                                 "vp-req-001",
                                 100L,
@@ -879,7 +851,6 @@ class VpVerificationServiceTest {
         ApiException exception = assertThrows(
                 ApiException.class,
                 () -> service.submitPresentation(
-                        userDetails(),
                         new VpPresentationRequest("vp-req-001", 100L, "nonce-001", "challenge-001", "vp.jwt.value")
                 )
         );

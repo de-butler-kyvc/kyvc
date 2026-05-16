@@ -129,9 +129,6 @@ class VerifierVpServiceTest {
 
     @Test
     void createFinanceVpRequest_createsRequestWithoutCoreCall() throws Exception {
-        Corporate corporate = createCorporate(10L, 1L);
-        mockFinanceContext();
-        when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(coreAdapter.issuePresentationChallenge(any())).thenReturn(new CorePresentationChallengeResponse(
                 "challenge-core",
@@ -143,7 +140,6 @@ class VerifierVpServiceTest {
         ));
 
         FinanceVpRequestCreateResponse response = service.createFinanceVpRequest(
-                userDetails(),
                 new FinanceVpRequestCreateRequest(
                         "ACCOUNT_OPENING",
                         List.of(
@@ -179,7 +175,8 @@ class VerifierVpServiceTest {
         assertThat(qrPayload.has("visitorName")).isFalse();
         assertThat(saved.getVpVerificationStatus()).isEqualTo(KyvcEnums.VpVerificationStatus.REQUESTED);
         assertThat(saved.getRequestTypeCode()).isEqualTo(KyvcEnums.VpRequestType.FINANCE_VERIFY);
-        assertThat(saved.getFinanceInstitutionCode()).isEqualTo("FINANCE_USER_1");
+        assertThat(saved.getFinanceInstitutionCode()).isEqualTo("FINANCE_PUBLIC");
+        assertThat(saved.getCorporateId()).isNull();
     }
 
     @Test
@@ -325,9 +322,6 @@ class VerifierVpServiceTest {
 
     @Test
     void createVpRequest_usesCoreChallenge_whenCoreAvailable() {
-        Corporate corporate = createCorporate(10L, 1L);
-        mockFinanceContext();
-        when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(coreAdapter.issuePresentationChallenge(any())).thenReturn(new CorePresentationChallengeResponse(
                 "challenge-core",
@@ -339,7 +333,6 @@ class VerifierVpServiceTest {
         ));
 
         FinanceVpRequestCreateResponse response = service.createFinanceVpRequest(
-                userDetails(),
                 new FinanceVpRequestCreateRequest("ACCOUNT_OPENING", List.of("corporateName"), 600L)
         );
 
@@ -354,14 +347,10 @@ class VerifierVpServiceTest {
 
     @Test
     void createVpRequest_fallsBackToLocalChallenge_whenCoreChallengeFails() {
-        Corporate corporate = createCorporate(10L, 1L);
-        mockFinanceContext();
-        when(corporateRepository.findByUserId(1L)).thenReturn(Optional.of(corporate));
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(coreAdapter.issuePresentationChallenge(any())).thenThrow(new ApiException(ErrorCode.CORE_API_CALL_FAILED));
 
         FinanceVpRequestCreateResponse response = service.createFinanceVpRequest(
-                userDetails(),
                 new FinanceVpRequestCreateRequest("ACCOUNT_OPENING", List.of("corporateName"), 600L)
         );
 
@@ -387,14 +376,12 @@ class VerifierVpServiceTest {
                 LocalDateTime.now().minusSeconds(5)
         );
         vpVerification.markValid("VP 검증 성공", LocalDateTime.now());
-        mockFinanceContext();
-        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "vp-req-001"))
-                .thenReturn(Optional.of(vpVerification));
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
         when(corporateRepository.findById(10L)).thenReturn(Optional.of(corporate));
         when(credentialRepository.findById(100L)).thenReturn(Optional.of(credential));
         when(kycApplicationRepository.findById(300L)).thenReturn(Optional.of(kycApplication));
 
-        FinanceVpRequestDetailResponse response = service.getFinanceVpRequest(userDetails(), "vp-req-001");
+        FinanceVpRequestDetailResponse response = service.getFinanceVpRequest("vp-req-001");
 
         assertThat(response.requestId()).isEqualTo("vp-req-001");
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.VALID.name());
@@ -419,12 +406,10 @@ class VerifierVpServiceTest {
     @Test
     void cancelFinanceVpRequest_cancelsRequestedRequest() {
         VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.REQUESTED);
-        mockFinanceContext();
-        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "vp-req-001"))
-                .thenReturn(Optional.of(vpVerification));
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
         when(vpVerificationRepository.save(any(VpVerification.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        FinanceVpRequestCancelResponse response = service.cancelFinanceVpRequest(userDetails(), "vp-req-001");
+        FinanceVpRequestCancelResponse response = service.cancelFinanceVpRequest("vp-req-001");
 
         assertThat(response.requestId()).isEqualTo("vp-req-001");
         assertThat(response.status()).isEqualTo(KyvcEnums.VpVerificationStatus.CANCELLED.name());
@@ -434,13 +419,11 @@ class VerifierVpServiceTest {
     @Test
     void cancelFinanceVpRequest_throwsConflictWhenAlreadyCompleted() {
         VpVerification vpVerification = createFinanceVpVerification(KyvcEnums.VpVerificationStatus.VALID);
-        mockFinanceContext();
-        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "vp-req-001"))
-                .thenReturn(Optional.of(vpVerification));
+        when(vpVerificationRepository.getByRequestId("vp-req-001")).thenReturn(vpVerification);
 
         ApiException exception = assertThrows(
                 ApiException.class,
-                () -> service.cancelFinanceVpRequest(userDetails(), "vp-req-001")
+                () -> service.cancelFinanceVpRequest("vp-req-001")
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_INVALID_STATUS);
@@ -448,13 +431,12 @@ class VerifierVpServiceTest {
 
     @Test
     void cancelFinanceVpRequest_throwsNotFoundWhenMissing() {
-        mockFinanceContext();
-        when(vpVerificationQueryRepository.findFinanceRequest("FINANCE_USER_1", "missing"))
-                .thenReturn(Optional.empty());
+        when(vpVerificationRepository.getByRequestId("missing"))
+                .thenThrow(new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND));
 
         ApiException exception = assertThrows(
                 ApiException.class,
-                () -> service.cancelFinanceVpRequest(userDetails(), "missing")
+                () -> service.cancelFinanceVpRequest("missing")
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VP_REQUEST_NOT_FOUND);

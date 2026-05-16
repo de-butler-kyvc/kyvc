@@ -51,7 +51,6 @@ public class MobileVpController {
     /**
      * QR Payload를 해석한다.
      *
-     * @param userDetails 인증 사용자 정보
      * @param request QR 해석 요청
      * @return QR 해석 응답
      */
@@ -63,17 +62,14 @@ public class MobileVpController {
     )
     @PostMapping("/qr/resolve")
     public CommonResponse<QrResolveResponse> resolveQr(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @RequestBody QrResolveRequest request // QR 해석 요청
     ) {
-        return CommonResponseFactory.success(vpVerificationService.resolveQr(userDetails, request));
+        return CommonResponseFactory.success(vpVerificationService.resolveQr(request));
     }
 
     /**
      * VP 요청을 조회한다.
      *
-     * @param userDetails 인증 사용자 정보
      * @param requestId VP 요청 ID
      * @return VP 요청 응답
      */
@@ -88,11 +84,9 @@ public class MobileVpController {
     )
     @GetMapping("/vp/requests/{requestId}")
     public CommonResponse<VpRequestResponse> getVpRequest(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @PathVariable String requestId // VP 요청 ID
     ) {
-        return CommonResponseFactory.success(vpVerificationService.getVpRequest(userDetails, requestId));
+        return CommonResponseFactory.success(vpVerificationService.getVpRequest(requestId));
     }
 
     /**
@@ -120,14 +114,13 @@ public class MobileVpController {
     /**
      * VP를 제출한다.
      *
-     * @param userDetails 인증 사용자 정보
      * @param request VP 제출 요청
      * @return VP 제출 응답
      */
     @Operation(
             summary = "모바일 일반 VP 제출",
             description = """
-                    JWT/Cookie로 인증된 로그인 사용자가 일반 VP 요청에 대해 VP를 제출합니다.
+                    일반 VP 요청에 대해 VP를 제출합니다.
                     backend가 Core에 VP 검증을 동기 요청하고 검증 결과를 저장합니다.
                     이 API는 로그인 토큰을 발급하지 않습니다.
                     이 API는 VP 로그인 API가 아니며 POST /api/mobile/auth/vp-login을 대체하지 않습니다.
@@ -140,17 +133,14 @@ public class MobileVpController {
     )
     @PostMapping("/vp/presentations")
     public CommonResponse<VpPresentationResponse> submitPresentation(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @RequestBody VpPresentationRequest request // VP 제출 요청
     ) {
-        return CommonResponseFactory.success(vpVerificationService.submitPresentation(userDetails, request));
+        return CommonResponseFactory.success(vpVerificationService.submitPresentation(request));
     }
 
     /**
      * 원본 첨부 포함 VP를 제출한다.
      *
-     * @param userDetails 인증 사용자 정보
      * @param request VP 제출 요청
      * @param attachmentManifestJson 원본 첨부 manifest JSON
      * @param multipartRequest multipart 요청
@@ -167,14 +157,11 @@ public class MobileVpController {
     )
     @PostMapping(value = "/vp/presentations/with-attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public CommonResponse<VpPresentationResponse> submitPresentationWithAttachments(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
             @RequestPart("presentation") VpPresentationRequest request, // VP 제출 요청
             @RequestPart(value = "attachmentManifest", required = false) String attachmentManifestJson, // 원본 첨부 manifest JSON
             MultipartHttpServletRequest multipartRequest // multipart 요청
     ) {
         return CommonResponseFactory.success(vpVerificationService.submitPresentationWithAttachments(
-                userDetails,
                 request,
                 attachmentManifestJson,
                 extractAttachmentParts(multipartRequest)
