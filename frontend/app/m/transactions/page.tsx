@@ -25,51 +25,10 @@ type ActivityItem = {
 
 const TABS: Array<{ key: ActivityTab; label: string }> = [
   { key: "all", label: "전체" },
-  { key: "vc", label: "VC 발급" },
-  { key: "vp", label: "VP 제출" },
+  { key: "vc", label: "증명서 발급" },
+  { key: "vp", label: "증명서 제출" },
   { key: "warn", label: "보안/경고" },
   { key: "tx", label: "거래 내역" },
-];
-
-const ACTIVITY_ITEMS: ActivityItem[] = [
-  {
-    id: "vp-1",
-    cat: "vp",
-    icon: "check",
-    title: "법인등록증명서 검증 성공",
-    desc: "신한은행 기업금융에서 귀하의 증명서를 성공적으로 검증했습니다.",
-    time: "오후 2:32",
-    group: "오늘",
-    unread: true,
-  },
-  {
-    id: "warn-2",
-    cat: "warn",
-    icon: "shield",
-    title: "새로운 로그인 감지",
-    desc: "새로운 기기(MacBook Pro)에서 지갑에 로그인했습니다.",
-    time: "오전 10:15",
-    group: "오늘",
-    unread: true,
-  },
-  {
-    id: "warn-3",
-    cat: "warn",
-    icon: "bell",
-    title: "사업자등록증 만료 안내",
-    desc: "등록된 사업자등록증 VC가 30일 후 만료됩니다.",
-    time: "수요일",
-    group: "이번 주",
-  },
-  {
-    id: "vc-4",
-    cat: "vc",
-    icon: "cert",
-    title: "기업금융 인증서 발급",
-    desc: "신한은행 기관으로부터 새로운 증명서를 발급받았습니다.",
-    time: "월요일",
-    group: "이번 주",
-  },
 ];
 
 function ActivityIcon({ name }: { name: ActivityItem["icon"] }) {
@@ -142,12 +101,7 @@ export default function MobileTransactionsPage() {
       });
   }, []);
 
-  const visible =
-    tab === "all"
-      ? [...nativeTx, ...ACTIVITY_ITEMS]
-      : tab === "tx"
-        ? nativeTx
-        : ACTIVITY_ITEMS.filter((item) => item.cat === tab);
+  const visible = tab === "all" || tab === "tx" ? nativeTx : [];
   const groupNames = Array.from(new Set(visible.map((item) => item.group)));
   const groups = groupNames
     .map((group) => ({
