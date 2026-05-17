@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
@@ -71,6 +71,15 @@ export default function MobileDidRegisterPage() {
   const [feeDrops, setFeeDrops] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
+
+  const showToast = useCallback((message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  }, []);
 
   useEffect(() => {
     if (!isBridgeAvailable()) return;
@@ -79,13 +88,17 @@ export default function MobileDidRegisterPage() {
         setWalletInfo(state.wallet);
         setWalletAssets(await loadWalletAssets());
         const fee = await bridge.estimateHolderDidSetFee().catch(() => null);
-        setFeeDrops(readFeeDropsFromResult(fee) ?? DID_TX_FEE_DROPS);
+        const estimatedFeeDrops = readFeeDropsFromResult(fee);
+        if (estimatedFeeDrops == null) {
+          showToast("네트워크 수수료를 가져오지 못해 기본값으로 표시합니다.");
+        }
+        setFeeDrops(estimatedFeeDrops ?? DID_TX_FEE_DROPS);
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "지갑 상태 확인에 실패했습니다.");
         setFeeDrops(DID_TX_FEE_DROPS);
       });
-  }, []);
+  }, [showToast]);
 
   const onRegister = async () => {
     setError(null);
@@ -203,6 +216,11 @@ export default function MobileDidRegisterPage() {
           취소
         </button>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }
