@@ -501,7 +501,12 @@ export type WalletTransactionsResult = BridgeResult & {
   transactions?: WalletTransactionSummary[];
 };
 
-export type WalletActivityType = "VC_ISSUED" | "VP_SUBMITTED" | string;
+export type WalletActivityType =
+  | "VC_ISSUED"
+  | "VP_SUBMITTED"
+  | "SECURITY_ALERT"
+  | "WALLET_WARNING"
+  | string;
 
 export type WalletActivitySummary = {
   id: string;
@@ -520,6 +525,14 @@ export type WalletActivitySummary = {
 export type WalletActivityHistoryResult = BridgeResult & {
   count?: number;
   activities?: WalletActivitySummary[];
+};
+
+export type WalletActivityRecordPayload = {
+  type: WalletActivityType;
+  title: string;
+  description?: string;
+  createdAtUtc?: string;
+  unread?: boolean;
 };
 
 export type NativeCredentialStatus =
@@ -771,6 +784,8 @@ export const bridge = {
     }),
   markWalletActivitiesRead: (activityIds: string[] = []) =>
     callBridge("markWalletActivitiesRead", { activityIds }),
+  recordWalletActivity: (payload: WalletActivityRecordPayload) =>
+    callBridge("recordWalletActivity", payload),
   submitXrpPayment: (params: {
     destinationAddress: string;
     destinationTag?: string;

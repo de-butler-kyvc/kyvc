@@ -33,6 +33,13 @@ const TABS: Array<{ key: ActivityTab; label: string }> = [
   { key: "tx", label: "거래 내역" },
 ];
 
+const WALLET_ACTIVITY_TYPES = [
+  "VC_ISSUED",
+  "VP_SUBMITTED",
+  "SECURITY_ALERT",
+  "WALLET_WARNING",
+] as const;
+
 function ActivityIcon({ name }: { name: ActivityItem["icon"] }) {
   if (name === "check") return <MIcon.check />;
   if (name === "shield") return <MIcon.shield />;
@@ -93,18 +100,26 @@ function walletActivityToItem(
   index: number,
 ): ActivityItem {
   const issued = activity.type === "VC_ISSUED";
+  const submitted = activity.type === "VP_SUBMITTED";
+  const securityAlert = activity.type === "SECURITY_ALERT";
   const credentialType = activity.credentialType ?? "증명서";
   const fallbackTitle = issued
     ? `${credentialType} 발급`
-    : `${credentialType} 제출`;
+    : submitted
+      ? `${credentialType} 제출`
+      : securityAlert
+        ? "보안 알림"
+        : "지갑 경고";
   const fallbackDesc = issued
     ? `${activity.issuerName ?? "발급기관"}으로부터 증명서를 발급받았습니다.`
-    : `${activity.verifierName ?? "요청 기관"}에 증명서를 제출했습니다.`;
+    : submitted
+      ? `${activity.verifierName ?? "요청 기관"}에 증명서를 제출했습니다.`
+      : "확인이 필요한 활동이 있습니다.";
 
   return {
     id: activity.id || `${activity.type}-${index}`,
-    cat: issued ? "vc" : "vp",
-    icon: issued ? "cert" : "check",
+    cat: issued ? "vc" : submitted ? "vp" : "warn",
+    icon: issued ? "cert" : submitted ? "check" : securityAlert ? "shield" : "bell",
     title: activity.title ?? fallbackTitle,
     desc: activity.description ?? fallbackDesc,
     time: formatTxTime(activity.createdAtUtc),
@@ -125,7 +140,7 @@ export default function MobileTransactionsPage() {
     let cancelled = false;
     Promise.allSettled([
       bridge.getWalletTransactions(20),
-      bridge.getWalletActivityHistory(50, ["VC_ISSUED", "VP_SUBMITTED"]),
+      bridge.getWalletActivityHistory(50, [...WALLET_ACTIVITY_TYPES]),
     ]).then(([txResult, activityResult]) => {
       if (cancelled) return;
       const errors: string[] = [];
