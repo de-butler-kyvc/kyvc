@@ -113,6 +113,25 @@ export function readXrpBalance(assets?: WalletAssetsResult | null) {
   );
 }
 
+async function findExistingWallet() {
+  try {
+    const list = await bridge.listWallets();
+    if (!list.ok) return null;
+    const active = list.wallets?.find((wallet) => wallet.isActive && wallet.account);
+    const fallback = list.wallets?.find((wallet) => wallet.account);
+    const wallet = active ?? fallback;
+    return wallet?.account
+      ? normalizeWalletInfo({
+          ok: true,
+          account: wallet.account,
+          did: wallet.did,
+        })
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureMobileSessionOwner(): Promise<MobileWalletState> {
   if (!isBridgeAvailable()) {
     return { wallet: null, assets: null, created: false };
@@ -131,11 +150,20 @@ export async function ensureMobileSessionOwner(): Promise<MobileWalletState> {
   }
 
   if (!wallet) {
+    wallet = await findExistingWallet();
+  }
+
+  if (!wallet) {
     const createdWallet = await bridge.createWallet(false);
     const account = createdWallet.holderAccount ?? createdWallet.account;
     if (createdWallet.ok && account) {
       wallet = normalizeWalletInfo(createdWallet);
-      created = true;
+      created =
+        createdWallet.created === false ||
+        createdWallet.reusedExistingAccount === true ||
+        createdWallet.walletAlreadyExists === true
+          ? false
+          : true;
     } else {
       throw new Error(createdWallet.error ?? "지갑 생성에 실패했습니다.");
     }
