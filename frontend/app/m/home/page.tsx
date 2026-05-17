@@ -42,6 +42,9 @@ const PALETTES = [
   "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
 ];
 
+const HOME_REFRESH_INTERVAL_MS = 30_000;
+const HOME_REFRESH_MIN_INTERVAL_MS = 10_000;
+
 const TEST_CREDENTIAL: CertItem = {
   issuer: "did:xrpl:1:rIssuerTestWallet",
   title: "법인 KYC 증명서",
@@ -91,6 +94,9 @@ export default function MobileHomePage() {
   const [toastClosing, setToastClosing] = useState(false);
   const [walletRefreshing, setWalletRefreshing] = useState(false);
   const walletBootstrappedRef = useRef(false);
+  const homeRefreshReadyRef = useRef(false);
+  const homeRefreshInFlightRef = useRef(false);
+  const lastHomeRefreshAtRef = useRef(0);
 
   const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
     const holderAccount = info.holderAccount ?? info.account;
@@ -150,6 +156,49 @@ export default function MobileHomePage() {
     }
   }, []);
 
+  const refreshCredentialSummaries = useCallback(async () => {
+    if (!isBridgeAvailable()) return null;
+    try {
+      const list = await bridge.getCredentialSummaries();
+      setCerts((list.credentials ?? []).map(nativeSummaryToCert));
+      setApiError(null);
+      return list;
+    } catch (e) {
+      setApiError(
+        e instanceof Error
+          ? `지갑 증명서 조회 실패: ${e.message}`
+          : "지갑 증명서 조회 중 오류가 발생했습니다.",
+      );
+      return null;
+    }
+  }, []);
+
+  const refreshHomeData = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!isBridgeAvailable()) return;
+      const now = Date.now();
+      if (
+        !options?.force &&
+        now - lastHomeRefreshAtRef.current < HOME_REFRESH_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      if (homeRefreshInFlightRef.current) return;
+
+      homeRefreshInFlightRef.current = true;
+      lastHomeRefreshAtRef.current = now;
+      try {
+        await Promise.allSettled([
+          refreshWalletAssets(),
+          refreshCredentialSummaries(),
+        ]);
+      } finally {
+        homeRefreshInFlightRef.current = false;
+      }
+    },
+    [refreshCredentialSummaries, refreshWalletAssets],
+  );
+
   // 증명서 목록은 네이티브 지갑 브릿지를 단일 소스로 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
@@ -194,6 +243,8 @@ export default function MobileHomePage() {
         if (cancelled) return;
         await refreshHolderDidState(state.wallet);
         if (cancelled) return;
+        homeRefreshReadyRef.current = true;
+        void refreshHomeData({ force: true });
         if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
         if (cancelled) return;
@@ -203,7 +254,29 @@ export default function MobileHomePage() {
     return () => {
       cancelled = true;
     };
-  }, [refreshHolderDidState]);
+  }, [refreshHolderDidState, refreshHomeData]);
+
+  useEffect(() => {
+    if (!isBridgeAvailable()) return;
+
+    const refreshWhenReady = () => {
+      if (!homeRefreshReadyRef.current) return;
+      if (document.visibilityState !== "visible") return;
+      void refreshHomeData();
+    };
+
+    const onVisible = () => refreshWhenReady();
+    const onFocus = () => refreshWhenReady();
+    const timer = window.setInterval(refreshWhenReady, HOME_REFRESH_INTERVAL_MS);
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(timer);
+    };
+  }, [refreshHomeData]);
 
   // 다른 화면에서 활성 지갑이 바뀌어도 반영
   useBridgeAction("LIST_WALLETS", (r) => {
@@ -267,11 +340,11 @@ export default function MobileHomePage() {
   useEffect(() => {
     const off = onBridgeAction("ISSUER_CREDENTIAL_RECEIVED", (r) => {
       if (r.ok) {
-        bridge.getCredentialSummaries().catch(() => {});
+        void refreshCredentialSummaries();
       }
     });
     return off;
-  }, []);
+  }, [refreshCredentialSummaries]);
 
   const showToast = (message: string) => {
     setToastClosing(false);
