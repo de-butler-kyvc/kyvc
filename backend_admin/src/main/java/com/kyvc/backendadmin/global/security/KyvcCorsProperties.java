@@ -49,7 +49,11 @@ public class KyvcCorsProperties {
             "X-Request-Id"
     )); // JWT와 요청 추적에 필요한 Header 목록입니다.
 
-    private List<String> exposedHeaders = new ArrayList<>(List.of("X-Request-Id")); // 프론트에서 읽을 수 있는 응답 Header입니다.
+    private List<String> exposedHeaders = new ArrayList<>(List.of(
+            "X-Request-Id",
+            "Content-Disposition",
+            "Content-Length"
+    )); // 프론트에서 읽을 수 있는 응답 Header입니다.
 
     private long maxAge = 3600L; // Preflight 결과 캐시 시간입니다.
 }

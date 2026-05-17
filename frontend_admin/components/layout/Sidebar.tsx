@@ -49,7 +49,7 @@ export default function Sidebar() {
           height={24}
           className="object-contain"
         />
-        <span className="block text-xs text-slate-400 mt-1">백엔드 어드민</span>
+        <span className="block text-xs text-slate-400 mt-1">증명서 관리자</span>
       </div>
 
       {/* 메뉴 */}

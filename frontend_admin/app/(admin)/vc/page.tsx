@@ -12,7 +12,7 @@ const statusBadge: Record<string, string> = {
   보류: "bg-orange-100 text-orange-600",
 };
 
-const ITEMS_PER_PAGE = 3;
+const ITEMS_PER_PAGE = 15;
 
 export default function VcPage() {
   const [vcList, setVcList] = useState<VcListItem[]>([]);
@@ -78,7 +78,7 @@ export default function VcPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400">백엔드 어드민</p>
+          <p className="text-xs text-slate-400">증명서 관리자</p>
           <h1 className="text-xl font-bold text-slate-800">VC 발급 상태 조회</h1>
         </div>
       </div>

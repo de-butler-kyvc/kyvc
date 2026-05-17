@@ -60,7 +60,7 @@ export default function NotFound() {
       </div>
 
       <div className="flex justify-between w-full max-w-md mt-6 text-xs text-slate-400">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
     </div>

@@ -12,7 +12,8 @@ import {
   getKycDetail,
   getKycCorporate,
   getKycDocuments,
-  getKycDocumentPreview,
+  getKycDocumentPreviewBlob,
+  downloadKycDocumentBlob,
   formatConfidence,
   formatCorporateType,
   issueKycCredential,
@@ -103,6 +104,15 @@ function fmtDate(iso?: string) {
   return iso.slice(0, 10).replaceAll("-", ".");
 }
 
+function isPdfFile(doc: KycSubmittedDocument, contentType?: string | null) {
+  return contentType?.includes("application/pdf") || doc.fileName.toLowerCase().endsWith(".pdf");
+}
+
+function isImageFile(doc: KycSubmittedDocument, contentType?: string | null) {
+  const lowerName = doc.fileName.toLowerCase();
+  return Boolean(contentType?.startsWith("image/")) || [".png", ".jpg", ".jpeg"].some((ext) => lowerName.endsWith(ext));
+}
+
 const tabs = ["법인정보", "제출서류", "AI 결과", "심사 이력", "VC 발급"];
 
 export default function KycDetailPage({ id }: { id: string }) {
@@ -126,7 +136,10 @@ export default function KycDetailPage({ id }: { id: string }) {
   // ── 문서 미리보기 ────────────────────────────────────────────
   const [previewDoc, setPreviewDoc] = useState<KycSubmittedDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewContentType, setPreviewContentType] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
   // ── VC 발급 ──────────────────────────────────────────────────
   const [credentials, setCredentials] = useState<KycCredential[]>([]);
@@ -140,6 +153,12 @@ export default function KycDetailPage({ id }: { id: string }) {
 
   // ── UI 상태 ──────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("법인정보");
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   // ── 초기 로드: 신청 상세 ─────────────────────────────────────
   useEffect(() => {
@@ -183,12 +202,15 @@ export default function KycDetailPage({ id }: { id: string }) {
   const handlePreview = async (doc: KycSubmittedDocument) => {
     setPreviewDoc(doc);
     setPreviewUrl(null);
+    setPreviewContentType(null);
+    setPreviewError(null);
     setPreviewLoading(true);
     try {
-      const data = await getKycDocumentPreview(id, doc.documentId);
-      setPreviewUrl(data.previewUrl ?? null);
-    } catch {
-      // API 미지원 시 플레이스홀더 표시
+      const data = await getKycDocumentPreviewBlob(id, doc.documentId);
+      setPreviewUrl(URL.createObjectURL(data.blob));
+      setPreviewContentType(data.contentType ?? doc.mimeType ?? doc.contentType ?? null);
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : "파일을 불러오지 못했습니다. 다운로드 또는 새 탭 열기를 시도해주세요.");
     } finally {
       setPreviewLoading(false);
     }
@@ -197,6 +219,33 @@ export default function KycDetailPage({ id }: { id: string }) {
   const closePreview = () => {
     setPreviewDoc(null);
     setPreviewUrl(null);
+    setPreviewContentType(null);
+    setPreviewError(null);
+  };
+
+  const handleOpenPreview = () => {
+    if (!previewUrl) return;
+    window.open(previewUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleDownloadPreview = async () => {
+    if (!previewDoc) return;
+    setDownloadLoading(true);
+    try {
+      const data = await downloadKycDocumentBlob(id, previewDoc.documentId);
+      const downloadUrl = URL.createObjectURL(data.blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = data.fileName ?? previewDoc.fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : "파일을 다운로드하지 못했습니다.");
+    } finally {
+      setDownloadLoading(false);
+    }
   };
 
   // ── VC 발급 핸들러 ───────────────────────────────────────────
@@ -245,7 +294,7 @@ export default function KycDetailPage({ id }: { id: string }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href="/kyc" className="hover:underline">KYC 신청</Link>
+            증명서 관리자 · <Link href="/kyc" className="hover:underline">KYC 신청</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">KYC 신청 상세</h1>
         </div>
@@ -591,7 +640,7 @@ export default function KycDetailPage({ id }: { id: string }) {
       </div>
 
       <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
 
@@ -626,18 +675,37 @@ export default function KycDetailPage({ id }: { id: string }) {
                 <div className="bg-slate-100 rounded-lg h-80 flex items-center justify-center text-slate-400 border border-slate-200">
                   <p className="text-sm">미리보기 불러오는 중...</p>
                 </div>
-              ) : previewUrl ? (
+              ) : previewError ? (
+                <div className="bg-slate-100 rounded-lg h-80 flex flex-col items-center justify-center text-slate-400 border border-slate-200 px-6 text-center">
+                  <FileText size={48} className="text-slate-300 mb-3" />
+                  <p className="text-sm font-medium text-slate-600">파일을 불러오지 못했습니다.</p>
+                  <p className="text-xs mt-2 text-slate-400">{previewError}</p>
+                </div>
+              ) : previewUrl && isPdfFile(previewDoc, previewContentType) ? (
                 <iframe
                   src={previewUrl}
                   className="w-full h-80 rounded-lg border border-slate-200"
                   title={previewDoc.documentName}
                 />
+              ) : previewUrl && isImageFile(previewDoc, previewContentType) ? (
+                <div className="bg-slate-100 rounded-lg h-80 flex items-center justify-center border border-slate-200 overflow-hidden">
+                  <img
+                    src={previewUrl}
+                    alt={previewDoc.documentName}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : previewUrl ? (
+                <div className="bg-slate-100 rounded-lg h-80 flex flex-col items-center justify-center text-slate-400 border border-slate-200 px-6 text-center">
+                  <FileText size={48} className="text-slate-300 mb-3" />
+                  <p className="text-sm font-medium text-slate-600">{previewDoc.fileName}</p>
+                  <p className="text-xs mt-2 text-slate-400">미리보기를 지원하지 않는 파일입니다. 다운로드해서 확인해주세요.</p>
+                </div>
               ) : (
                 <div className="bg-slate-100 rounded-lg h-80 flex flex-col items-center justify-center text-slate-400 border border-slate-200">
                   <FileText size={48} className="text-slate-300 mb-3" />
                   <p className="text-sm font-medium text-slate-600">{previewDoc.fileName}</p>
-                  <p className="text-xs mt-1 text-slate-400">PDF 미리보기</p>
-                  <p className="text-xs text-slate-300 mt-4">실제 환경에서는 PDF 뷰어가 표시됩니다</p>
+                  <p className="text-xs mt-1 text-slate-400">파일을 불러오지 못했습니다.</p>
                 </div>
               )}
             </div>
@@ -649,26 +717,24 @@ export default function KycDetailPage({ id }: { id: string }) {
                 닫기
               </button>
               {previewUrl && (
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={handleOpenPreview}
                   className="border border-slate-200 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50 flex items-center gap-1.5"
                 >
                   <ExternalLink size={14} />
                   새 탭으로 열기
-                </a>
+                </button>
               )}
-              {previewUrl && (
-                <a
-                  href={previewUrl}
-                  download={previewDoc.fileName}
-                  className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 flex items-center gap-1.5"
-                >
-                  <Download size={14} />
-                  다운로드
-                </a>
-              )}
+              <button
+                type="button"
+                onClick={handleDownloadPreview}
+                disabled={downloadLoading}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5"
+              >
+                <Download size={14} />
+                {downloadLoading ? "다운로드 중..." : "다운로드"}
+              </button>
             </div>
           </div>
         </div>

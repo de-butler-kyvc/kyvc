@@ -1,8 +1,8 @@
 package com.kyvc.backendadmin.domain.document.controller;
 
 import com.kyvc.backendadmin.domain.document.application.AdminKycDocumentService;
+import com.kyvc.backendadmin.domain.document.dto.AdminKycDocumentFileResponse;
 import com.kyvc.backendadmin.domain.document.dto.AdminKycDocumentListResponse;
-import com.kyvc.backendadmin.domain.document.dto.AdminKycDocumentPreviewResponse;
 import com.kyvc.backendadmin.global.response.CommonResponse;
 import com.kyvc.backendadmin.global.response.CommonResponseFactory;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,10 +10,18 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  * KYC 제출 문서 목록 및 미리보기 API를 담당합니다.
@@ -56,12 +64,51 @@ public class AdminKycDocumentController {
     @ApiResponse(responseCode = "404", description = "KYC 신청 또는 문서가 없는 경우")
     @ApiResponse(responseCode = "403", description = "문서가 해당 KYC에 속하지 않거나 파일 접근 권한이 없는 경우")
     @GetMapping("/{documentId}/preview")
-    public CommonResponse<AdminKycDocumentPreviewResponse> createPreview(
+    public ResponseEntity<Resource> preview(
             @Parameter(description = "KYC 신청 ID", required = true)
             @PathVariable Long kycId,
             @Parameter(description = "문서 ID", required = true)
             @PathVariable Long documentId
     ) {
-        return CommonResponseFactory.success(adminKycDocumentService.createPreview(kycId, documentId));
+        return fileResponse(adminKycDocumentService.loadFile(kycId, documentId), false);
+    }
+
+    @Operation(summary = "KYC 제출 문서 다운로드", description = "KYC와 문서 존재 여부, 문서 소속을 검증한 뒤 원본 파일을 다운로드합니다.")
+    @ApiResponse(responseCode = "404", description = "KYC 신청 또는 문서가 없는 경우")
+    @ApiResponse(responseCode = "403", description = "문서가 해당 KYC에 속하지 않거나 파일 접근 권한이 없는 경우")
+    @GetMapping("/{documentId}/download")
+    public ResponseEntity<Resource> download(
+            @Parameter(description = "KYC 신청 ID", required = true)
+            @PathVariable Long kycId,
+            @Parameter(description = "문서 ID", required = true)
+            @PathVariable Long documentId
+    ) {
+        return fileResponse(adminKycDocumentService.loadFile(kycId, documentId), true);
+    }
+
+    private ResponseEntity<Resource> fileResponse(
+            AdminKycDocumentFileResponse file, // 파일 응답 데이터
+            boolean attachment // 다운로드 여부
+    ) {
+        ContentDisposition contentDisposition = (attachment ? ContentDisposition.attachment() : ContentDisposition.inline())
+                .filename(file.fileName(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(mediaType(file.mimeType()))
+                .contentLength(file.fileSize())
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                .body(file.resource());
+    }
+
+    private MediaType mediaType(String mimeType // MIME 타입
+    ) {
+        if (!StringUtils.hasText(mimeType)) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        try {
+            return MediaType.parseMediaType(mimeType);
+        } catch (IllegalArgumentException exception) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 }

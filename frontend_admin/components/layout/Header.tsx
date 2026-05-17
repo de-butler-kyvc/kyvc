@@ -22,7 +22,7 @@ export default function Header() {
   return (
     <header className="h-14 bg-slate-900 text-white flex items-center justify-between px-6 border-b border-slate-700 flex-shrink-0">
       <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white transition-colors">
-        백엔드 어드민
+        증명서 관리자
       </Link>
       <div className="flex items-center gap-3">
         <span className="text-sm text-slate-300">관리자</span>

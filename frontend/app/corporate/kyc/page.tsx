@@ -11,20 +11,17 @@ import {
   type KycApplicationResponse,
 } from "@/lib/api";
 
-const TABS = [
-  { id: "all", label: "전체" },
-  { id: "review", label: "심사중" },
-  { id: "done", label: "완료" },
-  { id: "supplement", label: "보완" },
-  { id: "auth", label: "VC 발급" },
-] as const;
-
-const REVIEW = new Set(["SUBMITTED", "IN_REVIEW", "AI_REVIEWING"]);
-const SUPPLEMENT = new Set(["NEED_SUPPLEMENT", "SUPPLEMENT_REQUESTED"]);
-const DONE = new Set(["APPROVED", "COMPLETED", "VC_ISSUED"]);
+const ACTIVE_STATUSES = new Set([
+  "DRAFT",
+  "SUBMITTED",
+  "AI_REVIEWING",
+  "NEED_SUPPLEMENT",
+  "MANUAL_REVIEW",
+]);
+const REVIEW = new Set(["SUBMITTED", "AI_REVIEWING", "MANUAL_REVIEW"]);
+const SUPPLEMENT = new Set(["NEED_SUPPLEMENT"]);
 
 export default function CorporateKycListPage() {
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
   const [items, setItems] = useState<KycApplicationResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,14 +60,9 @@ export default function CorporateKycListPage() {
     () =>
       items.filter((item) => {
         const status = item.kycStatus ?? "";
-        if (tab === "all") return true;
-        if (tab === "review") return REVIEW.has(status);
-        if (tab === "done") return DONE.has(status);
-        if (tab === "supplement") return SUPPLEMENT.has(status);
-        if (tab === "auth") return status === "VC_ISSUED";
-        return true;
+        return ACTIVE_STATUSES.has(status);
       }),
-    [items, tab],
+    [items],
   );
 
   return (
@@ -80,19 +72,6 @@ export default function CorporateKycListPage() {
           <h1 className="page-head-title">KYC 진행상태 조회</h1>
           <p className="page-head-desc">현재 진행 중인 KYC 신청과 상태를 확인합니다.</p>
         </div>
-      </div>
-
-      <div className="mb-4 flex w-fit gap-1 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-2)] p-1">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`rounded-[var(--radius-sm)] px-3.5 py-1.5 text-[13px] ${tab === item.id ? "bg-[var(--surface)] font-semibold text-foreground shadow-sm" : "text-muted-foreground"}`}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
       </div>
 
       <table className="table">
@@ -111,7 +90,7 @@ export default function CorporateKycListPage() {
           ) : error ? (
             <EmptyRow text={error} danger />
           ) : filtered.length === 0 ? (
-            <EmptyRow text="표시할 KYC 신청이 없습니다." />
+            <EmptyRow text="현재 진행 중인 KYC 신청이 없습니다." />
           ) : (
             filtered.map((item) => (
               <tr key={item.kycId}>
@@ -163,7 +142,7 @@ function label(status?: string | null) {
       IN_REVIEW: "심사중",
       AI_REVIEWING: "AI 심사중",
       NEED_SUPPLEMENT: "보완필요",
-      SUPPLEMENT_REQUESTED: "보완필요",
+      MANUAL_REVIEW: "수동 심사중",
       APPROVED: "승인",
       COMPLETED: "완료",
       VC_ISSUED: "VC 발급완료",
@@ -174,7 +153,6 @@ function label(status?: string | null) {
 
 function variant(status?: string | null) {
   if (SUPPLEMENT.has(status ?? "") || status === "REJECTED") return "destructive";
-  if (DONE.has(status ?? "")) return "success";
   if (REVIEW.has(status ?? "")) return "secondary";
   return "outline";
 }
