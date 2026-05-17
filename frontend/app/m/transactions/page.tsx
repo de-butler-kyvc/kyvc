@@ -7,6 +7,7 @@ import { MBottomNav, MTopBar } from "@/components/m/parts";
 import {
   bridge,
   isBridgeAvailable,
+  type WalletActivitySummary,
   type WalletTransactionSummary,
 } from "@/lib/m/android-bridge";
 
@@ -20,6 +21,7 @@ type ActivityItem = {
   desc: string;
   time: string;
   group: string;
+  sortAt: number;
   unread?: boolean;
 };
 
@@ -62,6 +64,12 @@ function formatTxGroup(dateUtc?: string) {
   });
 }
 
+function sortTime(value?: string) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 function txToActivity(tx: WalletTransactionSummary, index: number): ActivityItem {
   const incoming = tx.direction === "incoming";
   const amount = tx.amountXrp ? `${tx.amountXrp} XRP` : "XRP";
@@ -76,32 +84,110 @@ function txToActivity(tx: WalletTransactionSummary, index: number): ActivityItem
     desc: `${tx.transactionType ?? "Transaction"}${result}${fee}`,
     time: formatTxTime(tx.dateUtc),
     group: formatTxGroup(tx.dateUtc),
+    sortAt: sortTime(tx.dateUtc),
+  };
+}
+
+function walletActivityToItem(
+  activity: WalletActivitySummary,
+  index: number,
+): ActivityItem {
+  const issued = activity.type === "VC_ISSUED";
+  const credentialType = activity.credentialType ?? "증명서";
+  const fallbackTitle = issued
+    ? `${credentialType} 발급`
+    : `${credentialType} 제출`;
+  const fallbackDesc = issued
+    ? `${activity.issuerName ?? "발급기관"}으로부터 증명서를 발급받았습니다.`
+    : `${activity.verifierName ?? "요청 기관"}에 증명서를 제출했습니다.`;
+
+  return {
+    id: activity.id || `${activity.type}-${index}`,
+    cat: issued ? "vc" : "vp",
+    icon: issued ? "cert" : "check",
+    title: activity.title ?? fallbackTitle,
+    desc: activity.description ?? fallbackDesc,
+    time: formatTxTime(activity.createdAtUtc),
+    group: formatTxGroup(activity.createdAtUtc),
+    sortAt: sortTime(activity.createdAtUtc),
+    unread: activity.unread,
   };
 }
 
 export default function MobileTransactionsPage() {
   const [tab, setTab] = useState<ActivityTab>("all");
   const [nativeTx, setNativeTx] = useState<ActivityItem[]>([]);
+  const [walletActivities, setWalletActivities] = useState<ActivityItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isBridgeAvailable()) return;
-    bridge
-      .getWalletTransactions(20)
-      .then((r) => {
-        if (!r.ok) {
-          setError(r.error ?? "거래 내역을 가져올 수 없습니다.");
-          return;
+    let cancelled = false;
+    Promise.allSettled([
+      bridge.getWalletTransactions(20),
+      bridge.getWalletActivityHistory(50, ["VC_ISSUED", "VP_SUBMITTED"]),
+    ]).then(([txResult, activityResult]) => {
+      if (cancelled) return;
+      const errors: string[] = [];
+
+      if (txResult.status === "fulfilled" && txResult.value.ok) {
+        setNativeTx((txResult.value.transactions ?? []).map(txToActivity));
+      } else {
+        const reason =
+          txResult.status === "fulfilled"
+            ? txResult.value.error
+            : txResult.reason instanceof Error
+              ? txResult.reason.message
+              : null;
+        errors.push(reason ?? "거래 내역을 가져올 수 없습니다.");
+      }
+
+      if (activityResult.status === "fulfilled" && activityResult.value.ok) {
+        const activities = activityResult.value.activities ?? [];
+        setWalletActivities(activities.map(walletActivityToItem));
+        const unreadIds = activities
+          .filter((activity) => activity.unread)
+          .map((activity) => activity.id)
+          .filter(Boolean);
+        if (unreadIds.length > 0) {
+          bridge
+            .markWalletActivitiesRead(unreadIds)
+            .then((result) => {
+              if (cancelled || !result.ok) return;
+              setWalletActivities((prev) =>
+                prev.map((item) =>
+                  unreadIds.includes(item.id) ? { ...item, unread: false } : item,
+                ),
+              );
+            })
+            .catch(() => null);
         }
-        setNativeTx((r.transactions ?? []).map(txToActivity));
-        setError(null);
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : "거래 내역 조회에 실패했습니다.");
-      });
+      } else {
+        const reason =
+          activityResult.status === "fulfilled"
+            ? activityResult.value.error
+            : activityResult.reason instanceof Error
+              ? activityResult.reason.message
+              : null;
+        errors.push(reason ?? "증명서 활동 내역을 가져올 수 없습니다.");
+      }
+
+      setError(errors.length ? errors.join(" ") : null);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const visible = tab === "all" || tab === "tx" ? nativeTx : [];
+  const allItems = [...walletActivities, ...nativeTx].sort(
+    (a, b) => b.sortAt - a.sortAt,
+  );
+  const visible =
+    tab === "all"
+      ? allItems
+      : tab === "tx"
+        ? nativeTx
+        : walletActivities.filter((item) => item.cat === tab);
   const groupNames = Array.from(new Set(visible.map((item) => item.group)));
   const groups = groupNames
     .map((group) => ({
