@@ -501,6 +501,27 @@ export type WalletTransactionsResult = BridgeResult & {
   transactions?: WalletTransactionSummary[];
 };
 
+export type WalletActivityType = "VC_ISSUED" | "VP_SUBMITTED" | string;
+
+export type WalletActivitySummary = {
+  id: string;
+  type: WalletActivityType;
+  title?: string;
+  description?: string;
+  credentialId?: string;
+  credentialType?: string;
+  issuerDid?: string;
+  issuerName?: string;
+  verifierName?: string;
+  createdAtUtc?: string;
+  unread?: boolean;
+};
+
+export type WalletActivityHistoryResult = BridgeResult & {
+  count?: number;
+  activities?: WalletActivitySummary[];
+};
+
 export type NativeCredentialStatus =
   | "active"
   | "issued"
@@ -740,6 +761,16 @@ export const bridge = {
   copyWalletAddress: () => callBridge("copyWalletAddress", {}),
   getWalletTransactions: (limit = 10) =>
     callBridge<WalletTransactionsResult>("getWalletTransactions", { limit }),
+  getWalletActivityHistory: (
+    limit = 50,
+    types: WalletActivityType[] = ["VC_ISSUED", "VP_SUBMITTED"],
+  ) =>
+    callBridge<WalletActivityHistoryResult>("getWalletActivityHistory", {
+      limit,
+      types,
+    }),
+  markWalletActivitiesRead: (activityIds: string[] = []) =>
+    callBridge("markWalletActivitiesRead", { activityIds }),
   submitXrpPayment: (params: {
     destinationAddress: string;
     destinationTag?: string;
