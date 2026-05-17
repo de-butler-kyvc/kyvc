@@ -42,8 +42,8 @@ const PALETTES = [
   "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
 ];
 
-const HOME_REFRESH_INTERVAL_MS = 30_000;
-const HOME_REFRESH_MIN_INTERVAL_MS = 10_000;
+const HOME_REFRESH_INTERVAL_MS = 12_000;
+const HOME_REFRESH_MIN_INTERVAL_MS = 2_000;
 
 const TEST_CREDENTIAL: CertItem = {
   issuer: "did:xrpl:1:rIssuerTestWallet",
@@ -94,8 +94,10 @@ export default function MobileHomePage() {
   const [toastClosing, setToastClosing] = useState(false);
   const [walletRefreshing, setWalletRefreshing] = useState(false);
   const walletBootstrappedRef = useRef(false);
+  const newWalletToastShownRef = useRef(false);
   const homeRefreshReadyRef = useRef(false);
   const homeRefreshInFlightRef = useRef(false);
+  const pendingHomeRefreshRef = useRef(false);
   const lastHomeRefreshAtRef = useRef(0);
 
   const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
@@ -183,7 +185,10 @@ export default function MobileHomePage() {
       ) {
         return;
       }
-      if (homeRefreshInFlightRef.current) return;
+      if (homeRefreshInFlightRef.current) {
+        if (options?.force) pendingHomeRefreshRef.current = true;
+        return;
+      }
 
       homeRefreshInFlightRef.current = true;
       lastHomeRefreshAtRef.current = now;
@@ -194,6 +199,11 @@ export default function MobileHomePage() {
         ]);
       } finally {
         homeRefreshInFlightRef.current = false;
+        if (pendingHomeRefreshRef.current) {
+          pendingHomeRefreshRef.current = false;
+          lastHomeRefreshAtRef.current = 0;
+          void refreshHomeData({ force: true });
+        }
       }
     },
     [refreshCredentialSummaries, refreshWalletAssets],
@@ -245,7 +255,10 @@ export default function MobileHomePage() {
         if (cancelled) return;
         homeRefreshReadyRef.current = true;
         void refreshHomeData({ force: true });
-        if (state.created) showToast("새 지갑이 생성되었습니다.");
+        if (state.created && !newWalletToastShownRef.current) {
+          newWalletToastShownRef.current = true;
+          showToast("새 지갑이 생성되었습니다.");
+        }
       } catch (e) {
         if (cancelled) return;
         setApiError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
@@ -262,7 +275,7 @@ export default function MobileHomePage() {
     const refreshWhenReady = () => {
       if (!homeRefreshReadyRef.current) return;
       if (document.visibilityState !== "visible") return;
-      void refreshHomeData();
+      void refreshHomeData({ force: true });
     };
 
     const onVisible = () => refreshWhenReady();
@@ -305,6 +318,7 @@ export default function MobileHomePage() {
     if (!r.ok) return;
     const list = (r.credentials as NativeCredentialSummary[] | undefined) ?? [];
     setCerts(list.map(nativeSummaryToCert));
+    setApiError(null);
   });
 
   useBridgeAction("CREATE_WALLET", (r) => {
@@ -340,13 +354,14 @@ export default function MobileHomePage() {
   useEffect(() => {
     const off = onBridgeAction("ISSUER_CREDENTIAL_RECEIVED", (r) => {
       if (r.ok) {
-        void refreshCredentialSummaries();
+        void refreshHomeData({ force: true });
       }
     });
     return off;
-  }, [refreshCredentialSummaries]);
+  }, [refreshHomeData]);
 
   const showToast = (message: string) => {
+    if (/^Wallet ready:/i.test(message)) return;
     setToastClosing(false);
     setToast(message);
     window.setTimeout(() => setToastClosing(true), 1400);

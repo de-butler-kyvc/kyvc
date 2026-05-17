@@ -52,21 +52,22 @@ export default function KycApplyConfirmPage() {
     setBusy(true);
     setError(null);
     try {
-      const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+      const latestKycId = summary?.kycId ?? await refreshCurrentKycStorage(kycApi.current);
       if (!latestKycId) {
         router.push("/corporate/kyc/apply");
         return;
       }
       const res = await kycApi.submit(latestKycId);
+      const submittedKycId = res.kycId ?? latestKycId;
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("kyvc.lastSubmittedKycId", String(latestKycId));
+        window.localStorage.setItem("kyvc.lastSubmittedKycId", String(submittedKycId));
         window.localStorage.setItem(
           "kyvc.lastSubmittedAt",
           res.submittedAt ?? new Date().toISOString()
         );
       }
       clearCurrentKycId();
-      router.push(`/corporate/kyc/detail?id=${latestKycId}`);
+      router.replace(`/corporate/kyc/detail?id=${submittedKycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
     } finally {
