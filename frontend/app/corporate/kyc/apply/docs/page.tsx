@@ -42,7 +42,11 @@ export default function KycApplyDocsPage() {
             uploaded: false,
             description: slot.hint,
             allowedExtensions: ["pdf", "jpg", "jpeg", "png"],
-            maxFileSizeMb: 20
+            maxFileSizeMb: 20,
+            groupCode: slot.groupCode,
+            groupName: slot.groupName,
+            minRequiredCount: slot.minRequiredCount,
+            groupCandidate: slot.groupCandidate
           }))
         );
         setError(err instanceof ApiError ? err.message : "서류 기준 조회에 실패했습니다.");

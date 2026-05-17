@@ -28,7 +28,11 @@ const FALLBACK_SLOTS: RequiredDocument[] = KYC_DOCUMENT_SLOTS.map((slot) => ({
   uploaded: false,
   description: slot.hint,
   allowedExtensions: ["pdf", "jpg", "jpeg", "png"],
-  maxFileSizeMb: 20
+  maxFileSizeMb: 20,
+  groupCode: slot.groupCode,
+  groupName: slot.groupName,
+  minRequiredCount: slot.minRequiredCount,
+  groupCandidate: slot.groupCandidate
 }));
 
 export default function KycApplyUploadPage() {
@@ -126,9 +130,7 @@ export default function KycApplyUploadPage() {
     }
   };
 
-  const requiredFilled = slots
-    .filter((slot) => slot.required)
-    .every((slot) => !!findDocument(documents, slot.documentTypeCode));
+  const requiredFilled = isRequiredFilled(slots, documents);
 
   return (
     <div className="mx-auto flex w-full max-w-[920px] flex-col">
@@ -196,6 +198,7 @@ function UploadSlot({
   const sizeHint = slot.maxFileSizeMb
     ? `최대 ${slot.maxFileSizeMb}MB`
     : "최대 20MB";
+  const highlightedDescription = shouldHighlightGroupDescription(slot);
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0 || busy) return;
@@ -266,7 +269,9 @@ function UploadSlot({
             {busy ? "업로드 중..." : "클릭하거나 드래그"}
           </div>
           <div className="upload-tile-meta">
-            {slot.description ?? `PDF, JPG, PNG · ${sizeHint}`}
+            <span className={highlightedDescription ? "!text-red-600" : undefined}>
+              {slot.description ?? `PDF, JPG, PNG · ${sizeHint}`}
+            </span>
           </div>
         </>
       )}
@@ -283,6 +288,40 @@ function UploadSlot({
       />
     </div>
   );
+}
+
+function isGroupCandidateSlot(slot: RequiredDocument) {
+  return Boolean(slot.groupCode) && (slot.groupCandidate === true || slot.minRequiredCount != null);
+}
+
+function shouldHighlightGroupDescription(slot: RequiredDocument) {
+  return slot.groupCandidate === true || Boolean(slot.groupCode && slot.minRequiredCount != null);
+}
+
+function isRequiredFilled(slots: RequiredDocument[], documents: KycDocument[]) {
+  const singleRequiredFilled = slots
+    .filter((slot) => slot.required && !isGroupCandidateSlot(slot))
+    .every((slot) => !!findDocument(documents, slot.documentTypeCode));
+
+  if (!singleRequiredFilled) return false;
+
+  const groups = slots
+    .filter(isGroupCandidateSlot)
+    .reduce<Record<string, RequiredDocument[]>>((acc, slot) => {
+      const groupCode = slot.groupCode;
+      if (!groupCode) return acc;
+      acc[groupCode] = [...(acc[groupCode] ?? []), slot];
+      return acc;
+    }, {});
+
+  return Object.values(groups).every((groupSlots) => {
+    const minRequiredCount = groupSlots.find((slot) => slot.minRequiredCount != null)
+      ?.minRequiredCount ?? 1;
+    const uploadedCount = groupSlots.filter((slot) =>
+      findDocument(documents, slot.documentTypeCode)
+    ).length;
+    return uploadedCount >= minRequiredCount;
+  });
 }
 
 function findDocument(documents: KycDocument[], documentTypeCode: string) {
