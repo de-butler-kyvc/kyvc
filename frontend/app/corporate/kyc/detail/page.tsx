@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { Icon } from "@/components/design/icons";
@@ -16,7 +16,12 @@ import {
   type Supplement,
   kyc as kycApi
 } from "@/lib/api";
-import { DOCUMENT_LABELS, formatFileSize } from "@/lib/kyc-flow";
+import {
+  DOCUMENT_LABELS,
+  formatFileSize,
+  setCurrentKycId,
+  setStoredCorporateType
+} from "@/lib/kyc-flow";
 
 const PRE_SUBMIT_STATUSES = new Set(["DRAFT"]);
 const POLLING_STATUSES = new Set(["SUBMITTED", "AI_REVIEWING"]);
@@ -154,12 +159,6 @@ function isRecentSubmittedKyc(kycId: number) {
   return Date.now() - submittedTime <= RECENT_SUBMIT_WINDOW_MS;
 }
 
-function rememberSubmittedKyc(kycId: number, submittedAt?: string | null) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LAST_SUBMITTED_KYC_ID_KEY, String(kycId));
-  window.localStorage.setItem(LAST_SUBMITTED_AT_KEY, submittedAt ?? new Date().toISOString());
-}
-
 function shouldPollStatus(
   kycStatus: string,
   draftFallbackAttempts: number,
@@ -195,6 +194,7 @@ export default function CorporateKycDetailPage() {
 }
 
 function KycDetail() {
+  const router = useRouter();
   const params = useSearchParams();
   const kycId = Number(params.get("id"));
   const valid = Number.isFinite(kycId) && kycId > 0;
@@ -206,7 +206,6 @@ function KycDetail() {
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusPollMessage, setStatusPollMessage] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!valid) return;
@@ -338,22 +337,13 @@ function KycDetail() {
     };
   }, [kycId, valid, status?.kycStatus]);
 
-  const onSubmitApplication = async () => {
+  const onResumeDraft = () => {
     if (!valid) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await kycApi.submit(kycId);
-      rememberSubmittedKyc(kycId, res.submittedAt);
-      setStatus((prev) => ({
-        ...(prev ?? { kycId }),
-        kycStatus: res.kycStatus ?? prev?.kycStatus
-      }));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
-    } finally {
-      setSubmitting(false);
+    setCurrentKycId(kycId);
+    if (status?.corporateTypeCode) {
+      setStoredCorporateType(status.corporateTypeCode);
     }
+    router.push("/corporate/kyc/apply/upload");
   };
 
   if (!valid) {
@@ -533,10 +523,9 @@ function KycDetail() {
                   <Button
                     type="button"
                     className="btn-block"
-                    onClick={onSubmitApplication}
-                    disabled={submitting}
+                    onClick={onResumeDraft}
                   >
-                    {submitting ? "제출 중..." : "신청 제출"}
+                    이어서 작성
                   </Button>
                 </div>
               ) : null}
