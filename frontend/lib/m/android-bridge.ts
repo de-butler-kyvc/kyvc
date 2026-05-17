@@ -416,6 +416,13 @@ export type HolderDidSetResult = BridgeResult & {
   didAccountBindingValid?: boolean;
 };
 
+export type HolderDidSetFeeEstimateResult = BridgeResult & {
+  feeDrops?: string | number;
+  feeXrp?: string | number;
+  networkFeeDrops?: string | number;
+  networkFeeXrp?: string | number;
+};
+
 export type DeviceInfoResult = BridgeResult & {
   deviceId?: string;
   deviceName?: string;
@@ -710,6 +717,12 @@ export const bridge = {
     callBridge("submitHolderDidSet", {
       ...(didDocumentUri ? { didDocumentUri } : {}),
     }),
+  estimateHolderDidSetFee: () =>
+    callBridge<HolderDidSetFeeEstimateResult>(
+      "estimateHolderDidSetFee",
+      {},
+      { timeoutMs: 5_000 },
+    ),
   checkHolderDidSet: () =>
     callBridge<HolderDidSetResult>("checkHolderDidSet", {}),
 
