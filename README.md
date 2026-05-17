@@ -1,364 +1,138 @@
+![alt text](KYvC_Logo.png)
+
 # KYvC
 
-KYvC는 법인 KYC 심사, Verifiable Credential 발급, Verifiable Presentation 검증, XRPL DID/자격증명 상태 관리를 제공하는 모노레포 프로젝트입니다. 사용자 서비스, 운영자 서비스, Core 자격증명 서비스, 인프라 설정을 한 저장소에서 관리합니다.
 
-## 서비스 구성
+KYvC는 법인 KYC 심사, Verifiable Credential 발급, Verifiable Presentation 검증, DID/자격증명 상태 관리를 하나의 흐름으로 연결하는 프로젝트입니다.
 
-| 디렉터리 | 역할 | 주요 기술 |
+## 1. 프로젝트 개요
+
+### 프로젝트 소개
+
+KYvC는 법인 사용자의 KYC 신청부터 제출서류 검토, AI/수동 심사, VC 발급, VP 검증까지 연결하는 서비스이다. 사용자 서비스, 관리자 서비스, Core 기술 서비스, 배포 인프라를 하나의 저장소에서 관리한다.
+
+### 프로젝트 목적
+
+- 법인 정보와 제출서류 기반 KYC 심사 흐름 디지털화
+- 심사 완료 법인에 대한 검증 가능한 자격증명 발급
+- 금융사와 외부 Verifier를 위한 VP 요청/제출/검증 구조 제공
+- DID, VC/VP, SD-JWT, XRPL, AI 평가 기능을 업무 API와 분리
+- 사용자 업무, 관리자 업무, Core 운영, 인프라 책임 경계 명확화
+
+### 서비스 도메인
+
+| 도메인 | 환경 | 대상 서비스 |
 | --- | --- | --- |
-| `frontend` | 법인 고객, 금융기관, 웹/모바일 지갑 사용자 화면 | Next.js 16, React 19, TypeScript |
-| `frontend_admin` | KYvC 운영 관리자 백오피스 | Next.js 16, React 19, TypeScript |
-| `frontend_core_admin` | Core 운영 관리자 화면 | Next.js 16, React 19, TypeScript |
-| `frontend_core_admin_api` | Core Admin API 운영 콘솔 | Next.js 16, React 19, TypeScript |
-| `backend` | 사용자 서비스 API, KYC 신청/문서/인증/VC 연동 | Spring Boot 3.5, Java 21, PostgreSQL |
-| `backend_admin` | 운영 관리자 API, KYC/사용자/VC/VP 관리 | Spring Boot 3.5, Java 21, PostgreSQL |
-| `core` | DID, VC/VP, SD-JWT, XRPL, AI 문서 평가 Core API | FastAPI, Python 3.12, MySQL |
-| `core_admin` | Core 운영용 Admin API 어댑터 | FastAPI, Python 3.12 |
-| `infra` | Dockerfile, docker compose, Nginx 기반 배포 구성 | Docker, Compose, Nginx |
+| `dev-kyvc.khuoo.synology.me` | dev | Synology DSM Reverse Proxy / Frontend 통합 Nginx / 사용자 프론트 |
+| `dev-admin-kyvc.khuoo.synology.me` | dev admin | Synology DSM Reverse Proxy / Frontend 통합 Nginx / 백엔드 어드민 프론트 |
+| `dev-core-admin-kyvc.khuoo.synology.me` | dev core admin | Synology DSM Reverse Proxy / Frontend 통합 Nginx / 코어 어드민 프론트 |
+| `dev-api-kyvc.khuoo.synology.me` | dev | Synology DSM Reverse Proxy / Backend API |
+| `dev-core-kyvc.khuoo.synology.me` | dev | Synology DSM Reverse Proxy / Core API |
+| `dev-admin-api-kyvc.khuoo.synology.me` | dev admin | Synology DSM Reverse Proxy / Backend Admin API |
+| `dev-admin-core-kyvc.khuoo.synology.me` | dev admin | Synology DSM Reverse Proxy / Core Admin API |
 
-## 주요 기능
+### 핵심 기능 요약
 
-- 법인 고객 회원가입, 로그인, KYC 신청, 서류 제출, 진행 상태 조회
-- KYC 심사 결과 기반 VC 발급 및 폐기
-- 금융기관 VP 요청, 제출, 검증 흐름
-- 모바일 WebView 지갑 기반 VC 목록, QR, VP 제출, XRP 송수신
-- XRPL DID 등록 및 Credential 상태 원장 연동
-- SD-JWT 기반 자격증명 발급/검증
-- OCR/LLM 기반 KYC 문서 AI 평가
-- 운영자용 KYC, 사용자, VC/VP, Issuer/Verifier, 정책, 감사로그 관리
-- Core 운영자용 provider 선택, Core 상태 조회, 변경 이력 관리
+- 사용자 KYC: 법인 정보 등록, KYC 신청, 제출서류 업로드, 보완 제출, 진행 상태 조회
+- 관리자 심사: KYC 신청 목록/상세, 제출서류 검토, AI 심사 결과 조회, 승인/반려, 보완요청
+- Credential: VC 발급 요청, 발급 상태 조회, 재발급/폐기 요청, Credential 이력 관리
+- VP Verification: VP 요청, QR/링크 기반 제출, 검증 결과 조회, 외부 Verifier 연동
+- Core 기술 기능: DID, VC/VP, SD-JWT, XRPL 상태 관리, OCR/LLM 기반 AI 평가
 
-## 저장소 구조
+## 2. 전체 서비스 구성
+
+| 구분 | 구성 서비스 | 주요 책임 | 대표 디렉터리 |
+| --- | --- | --- | --- |
+| 사용자 서비스 | 사용자 프론트, 사용자 업무 API | 법인 사용자 KYC 신청, 문서 제출, VC/VP 사용자 흐름 | `frontend`, `backend` |
+| 관리자 서비스 | 백엔드 어드민 프론트, 백엔드 어드민 API | KYC 심사, 문서 검토, 사용자/법인 조회, 업무 운영 | `frontend_admin`, `backend_admin` |
+| Core 서비스 | Core API, Core Admin API, Core Admin 화면 | DID/VC/VP/AI 평가 처리, Core 운영 API와 화면 | `core`, `core_admin`, `frontend_core_admin` |
+| 인프라 | Docker, Compose, Frontend 통합 Nginx, Synology DSM Reverse Proxy 기준 | 컨테이너 실행, reverse proxy, 네트워크, 로그/볼륨 기준 | `infra` |
+| CI/CD | GitHub Actions, GHCR, self-hosted runner | 브랜치 기준 이미지 빌드와 배포 | `.github/workflows` |
+
+## 3. Monorepo 디렉터리 구조
 
 ```text
 kyvc/
-├── backend/                  # 사용자 서비스 Spring Boot API
-├── backend_admin/            # 관리자 Spring Boot API
-├── core/                     # VC/VP, DID, XRPL, AI 평가 Core API
-├── core_admin/               # Core 운영 Admin API
-├── frontend/                 # 사용자/법인/금융기관/모바일 지갑 프론트엔드
-├── frontend_admin/           # 운영 관리자 프론트엔드
-├── frontend_core_admin/      # Core 관리자 프론트엔드
-├── frontend_core_admin_api/  # Core Admin API 콘솔
-└── infra/                    # Docker, compose, Nginx 배포 구성
+├── frontend/                 사용자 웹 화면
+├── frontend_admin/           백엔드 어드민 웹 화면
+├── frontend_core_admin/      Core 운영 관리자 화면
+├── frontend_core_admin_api/  Core Admin API 운영 콘솔
+├── backend/                  사용자 업무 API
+├── backend_admin/            백엔드 어드민 업무 API
+├── core/                     DID, VC/VP, SD-JWT, XRPL, AI 평가 Core API
+├── core_admin/               Core 운영용 Admin API 어댑터
+├── infra/                    Docker, Compose, Nginx, Reverse Proxy 기준
+└── .github/                  GitHub Actions workflow와 actionlint 설정
 ```
 
-## 요구 사항
+## 4. 서비스별 책임 분리
 
-- Java 21
-- Python 3.12
-- Node.js 20 이상
-- Docker, Docker Compose
-- PostgreSQL 16
-- MySQL 8.4
-
-Next.js 16 기반 프론트엔드는 Node.js 20 이상에서 실행해야 합니다.
-
-## 빠른 시작
-
-### 1. 데이터베이스 실행
-
-개발용 PostgreSQL과 MySQL compose 파일은 `infra/compose` 아래에 있습니다.
-
-```bash
-docker compose -f infra/compose/postgres/docker-compose.yml up -d kyvc-postgres-back-dev
-docker compose -f infra/compose/mysql/docker-compose.yml up -d kyvc-mysql-core-dev
-```
-
-compose는 외부 Docker network를 사용합니다. 네트워크가 없다면 먼저 생성합니다.
-
-```bash
-docker network create kyvc-dev-net
-docker network create kyvc-prod-net
-```
-
-개발 DB 기본 포트:
-
-| 서비스 | 로컬 포트 | 컨테이너 포트 |
+| 서비스 | 책임 | 금지 또는 주의 |
 | --- | --- | --- |
-| PostgreSQL dev | `5433` | `5432` |
-| MySQL dev | `3307` | `3306` |
+| `frontend` | 사용자 KYC, Credential, VP 제출 화면 제공 | 관리자 업무 API 직접 호출 금지 |
+| `frontend_admin` | KYC 심사, 문서 검토, 법인/사용자 조회 화면 제공 | Core API 직접 호출 금지 |
+| `frontend_core_admin` | Core 운영 화면 제공 | 사용자 업무 화면과 혼합 금지 |
+| `backend` | 사용자 인증, KYC 신청, 문서 저장, Core 요청 생성, 업무 DB 동기화 | `/api/admin/**` 관리자 API 구현 금지 |
+| `backend_admin` | 관리자 인증, KYC 심사 조회/처리, 업무 DB 기준 운영 API 제공 | CoreAdapter 직접 호출과 Core raw payload 노출 금지 |
+| `core` | DID, VC/VP, SD-JWT, XRPL, AI 평가 처리 | 사용자 업무 DB 직접 처리 금지 |
+| `core_admin` | Core 운영 API 어댑터, provider/상태/운영 기능 제공 | 백엔드 어드민 업무 API 대체 금지 |
+| `infra` | 컨테이너, 네트워크, reverse proxy, 배포 구성 관리 | 서비스 비즈니스 로직 작성 금지 |
 
-### 2. 환경 변수 준비
-
-각 서비스의 예시 파일을 복사해 로컬 환경에 맞게 수정합니다.
-
-```bash
-cp backend/.env.example backend/.env
-cp backend_admin/.env.example backend_admin/.env
-cp core/.env.example core/.env
-cp core_admin/.env.example core_admin/.env
-```
-
-민감 정보, DB 비밀번호, JWT secret, 메일 계정, OpenAI/Azure/Naver OCR 키, XRPL issuer seed 등은 실제 환경 값으로 설정해야 합니다.
-
-### 3. Core 실행
-
-```bash
-cd core
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8090 --reload
-```
-
-문서:
+## 5. 전체 통신 구조
 
 ```text
-http://localhost:8090/docs
+frontend              -> backend
+frontend_admin        -> backend_admin
+frontend_core_admin   -> core_admin
+backend               -> core
+backend_admin         -> core 직접 호출 금지
 ```
 
-### 4. Core Admin API 실행
+사용자 업무 API는 `backend`, 관리자 업무 API는 `backend_admin`, Core 운영 API는 `core_admin` 기준으로 분리한다. `backend_admin`은 Core를 직접 호출하지 않고, backend 업무 DB에 동기화된 Core 결과를 조회한다.
 
-```bash
-cd core_admin
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8091 --reload
-```
+데이터 책임도 같은 기준을 따른다. 사용자/법인/KYC/문서/심사는 `backend` 업무 DB 기준이고, DID/VC/VP/SD-JWT/XRPL/AI 평가는 `core` 책임이다. 정적 프론트 배포와 reverse proxy 기준은 `infra`에서 관리한다.
 
-### 5. Backend 실행
+## 6. 기술 스택 요약
 
-```bash
-cd backend
-./gradlew bootRun
-```
+| 영역 | 주요 기술 | 사용 위치 |
+| --- | --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript | `frontend`, `frontend_admin`, `frontend_core_admin`, `frontend_core_admin_api` |
+| Backend | Java 21, Spring Boot 3.5, Spring Security, Spring Data JPA | `backend`, `backend_admin` |
+| Core | Python 3.12, FastAPI, SQLAlchemy, AI/OCR provider 연동 | `core`, `core_admin` |
+| Database | PostgreSQL, MySQL, Flyway | 업무 DB, Core DB, migration |
+| Infra | Docker, Docker Compose, Nginx, Synology DSM Reverse Proxy | `infra` |
+| CI/CD | GitHub Actions, GHCR, self-hosted runner | `.github/workflows` |
 
-기본 포트:
+## 7. README 문서 구조
 
-```text
-http://localhost:8080
-```
-
-### 6. Backend Admin 실행
-
-```bash
-cd backend_admin
-./gradlew bootRun
-```
-
-기본 포트:
-
-```text
-http://localhost:8080
-```
-
-`backend`와 동시에 실행할 경우 `SERVER_PORT` 또는 Spring 설정으로 포트를 분리하세요.
-
-### 7. 프론트엔드 실행
-
-각 프론트엔드 앱은 독립 Next.js 프로젝트입니다.
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-관리자 프론트엔드:
-
-```bash
-cd frontend_admin
-npm install
-npm run dev
-```
-
-Core 관리자 프론트엔드:
-
-```bash
-cd frontend_core_admin
-npm install
-npm run dev
-```
-
-Core Admin API 콘솔:
-
-```bash
-cd frontend_core_admin_api
-npm install
-npm run dev
-```
-
-여러 Next.js 앱을 동시에 실행할 때는 포트를 분리합니다.
-
-```bash
-npm run dev -- -p 3001
-```
-
-## 주요 로컬 포트
-
-| 서비스 | 기본 포트 |
+| 문서 | 설명 |
 | --- | --- |
-| `frontend` | `3000` |
-| `frontend_admin` | `3000` |
-| `frontend_core_admin` | `3000` |
-| `frontend_core_admin_api` | `3000` |
-| `backend` | `8080` |
-| `backend_admin` | `8080` |
-| `core` | `8090` |
-| `core_admin` | `8091` |
-| PostgreSQL dev | `5433` |
-| MySQL dev | `3307` |
+| [통합 README](./README.md) | 프로젝트 전체 구조, 책임 분리, 통신/배포/Git 기준 |
+| [Frontend README](./frontend/README.md) | 사용자 프론트 구조, API 호출, 실행 기준 |
+| [Frontend Admin README](./frontend_admin/README.md) | 백엔드 어드민 프론트 구조와 개발 규칙 |
+| [Frontend Core Admin API README](./frontend_core_admin_api/README.md) | Core Admin API 운영 콘솔 설명 |
+| [Backend README](./backend/README.md) | 사용자 업무 API 구조, DB, 인증, 개발 규칙 |
+| [Backend Admin README](./backend_admin/README.md) | 관리자 API 구조, 권한, 심사 업무, 개발 규칙 |
+| [Core README](./core/README.md) | Core API와 DID/VC/VP/AI 평가 구조 |
+| [Core Admin README](./core_admin/README.md) | Core 운영 API 어댑터 구조 |
+| [Infra README](./infra/README.md) | Docker Compose, Nginx, Reverse Proxy, 배포/로그 기준 |
 
-## API와 서비스 연동
+## 8. 배포 구조
 
-일반적인 호출 흐름은 다음과 같습니다.
+배포는 브랜치 기준으로 분리한다. `feature/*`는 기능 개발과 PR 생성을 위한 브랜치이며 자동 배포 대상이 아니다. `develop`은 dev 배포 기준이고, `main`은 prod 배포 기준이다.
 
-```text
-frontend / frontend_admin
-        ↓
-backend / backend_admin
-        ↓
-core / core_admin
-        ↓
-PostgreSQL, MySQL, XRPL, OCR/LLM provider
-```
+dev 배포는 `develop` 병합 이후 dev 이미지 태그와 `infra/compose/dev/docker-compose.yml` 기준으로 진행한다. prod 배포는 `main` 병합 이후 prod 이미지 태그와 `infra/compose/prod/docker-compose.yml` 기준으로 진행한다.
 
-`backend`는 사용자 인증, KYC 신청, 문서 저장, Core 호출을 담당합니다. `core`는 DID, VC/VP, SD-JWT, XRPL 상태, AI 평가를 담당합니다. `backend_admin`은 운영자 API를 제공하며, `core_admin`은 Core 내부 운영 API를 안전하게 호출하는 어댑터 역할을 합니다.
+Frontend는 통합 Nginx 이미지로 빌드되며 `frontend`, `frontend_admin`, `frontend_core_admin` 정적 산출물을 포함한다. Backend, Backend Admin, Core, Core Admin은 각각 독립 이미지로 빌드하고 GHCR에 push한 뒤 compose 기준으로 배포한다.
 
-## 배포 구성
+## 9. Git 운영 전략
 
-배포 compose 파일은 `infra/compose` 아래에 있습니다.
+브랜치는 `feature/*`, `develop`, `main` 기준으로 운영한다. 작업은 `feature/*`에서 진행하고, dev 검증은 `feature/*` -> `develop` PR 병합 후 진행한다. 운영 반영은 `develop` -> `main` PR로 분리한다.
 
-| 파일 | 설명 |
-| --- | --- |
-| `infra/compose/dev/docker-compose.yml` | dev 애플리케이션 서비스 |
-| `infra/compose/prod/docker-compose.yml` | prod 애플리케이션 서비스 |
-| `infra/compose/postgres/docker-compose.yml` | PostgreSQL dev/prod |
-| `infra/compose/mysql/docker-compose.yml` | MySQL dev/prod |
+커밋 메시지는 `type(scope): 작업 내용` 형식을 사용한다.
 
-dev 배포 포트:
+- type: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
+- scope: `back`, `back-admin`, `front`, `front-admin`, `core`, `core-admin`, `infra`, `-`
+- 예시: `docs(-): 통합 README 구조 정리`
 
-| 서비스 | 포트 |
-| --- | --- |
-| frontend | `3001:80` |
-| backend | `8082:8080` |
-| core | `8092:8090` |
-| backend_admin | `8083:8080` |
-| core_admin | `8093:8091` |
-
-prod 배포 포트:
-
-| 서비스 | 포트 |
-| --- | --- |
-| frontend | `3000:80` |
-| backend | `8080:8080` |
-| core | `8090:8090` |
-| backend_admin | `8081:8080` |
-| core_admin | `8091:8091` |
-
-## 검증 명령
-
-Spring Boot:
-
-```bash
-cd backend
-./gradlew test
-```
-
-```bash
-cd backend_admin
-./gradlew test
-```
-
-Core:
-
-```bash
-cd core
-pytest
-```
-
-Core Admin:
-
-```bash
-cd core_admin
-pytest
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run build
-```
-
-```bash
-cd frontend_admin
-npm run build
-```
-
-```bash
-cd frontend_core_admin
-npm run build
-```
-
-```bash
-cd frontend_core_admin_api
-npm run build
-```
-
-TypeScript 타입 체크만 확인하려면 각 프론트엔드 디렉터리에서 다음 명령을 사용할 수 있습니다.
-
-```bash
-node ./node_modules/typescript/bin/tsc --noEmit
-```
-
-## Git 운영 전략
-
-브랜치는 `main`, `develop`, `feature/*`만 사용합니다.
-
-- `main`: production 자동 배포 기준
-- `develop`: dev 자동 배포 기준
-- `feature/*`: 기능 개발용, 배포하지 않음
-
-작업 흐름:
-
-```text
-feature/* -> develop -> main
-```
-
-`main`, `develop` 브랜치에는 직접 커밋하거나 푸시하지 않고 PR 병합만 허용합니다.
-
-커밋 메시지 형식:
-
-```text
-type(scope): 작업 내용
-```
-
-사용 가능한 `type`:
-
-- `feat`
-- `fix`
-- `refactor`
-- `test`
-- `docs`
-- `chore`
-
-사용 가능한 `scope`:
-
-- `back`
-- `back-admin`
-- `front`
-- `front-admin`
-- `core`
-- `core-admin`
-- `infra`
-- `-`
-
-예시:
-
-```text
-feat(back): 검증 요청 API 추가
-fix(front): 모바일 VP 제출 오류 처리 수정
-docs(-): 프로젝트 README 작성
-chore(infra): dev compose 포트 정리
-```
-
-## 참고 문서
-
-- `core/README.md`: Core API 상세 설명
-- `core_admin/README.md`: Core Admin API 설명
-- `frontend_admin/README.md`: 운영 관리자 프론트엔드 설명
-- `frontend_core_admin_api/README.md`: Core Admin API 콘솔 설명
-- `frontend/AI_HANDOFF.md`: 모바일 지갑 및 프론트엔드 연동 참고
+`main`, `develop`에는 직접 push하지 않고 PR 병합만 허용한다. 요청 없는 branch 생성, commit, push, merge, PR 생성은 하지 않는다.
