@@ -42,7 +42,7 @@ const PALETTES = [
   "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
 ];
 
-const HOME_REFRESH_INTERVAL_MS = 12_000;
+const HOME_REFRESH_INTERVAL_MS = 3_000;
 const HOME_REFRESH_MIN_INTERVAL_MS = 2_000;
 
 const TEST_CREDENTIAL: CertItem = {
