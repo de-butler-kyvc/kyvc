@@ -3,7 +3,9 @@ package com.kyvc.backend.domain.kyc.application;
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
 import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
+import com.kyvc.backend.domain.corporate.domain.CorporateRepresentative;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
+import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.dto.DocumentStoreOptionRequest;
 import com.kyvc.backend.domain.kyc.dto.KycApplicationResponse;
@@ -31,6 +33,7 @@ public class KycApplicationService {
 
     private final KycApplicationRepository kycApplicationRepository;
     private final CorporateRepository corporateRepository;
+    private final CorporateRepresentativeRepository corporateRepresentativeRepository;
     private final CommonCodeProvider commonCodeProvider;
 
     // KYC 신청 시작
@@ -45,6 +48,7 @@ public class KycApplicationService {
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, corporateTypeCode);
 
         Corporate corporate = findMyCorporate(userId);
+        validateRepresentativeRequired(corporate);
 
         KycApplication kycApplication = KycApplication.createDraft(
                 corporate.getCorporateId(),
@@ -159,6 +163,23 @@ public class KycApplicationService {
     ) {
         return corporateRepository.findByUserId(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_CORPORATE_REQUIRED));
+    }
+
+    // KYC 신청 대표자 정보 검증
+    private void validateRepresentativeRequired(
+            Corporate corporate // 법인 엔티티
+    ) {
+        if (StringUtils.hasText(corporate.getRepresentativeName())) {
+            return;
+        }
+
+        boolean representativeExists = corporateRepresentativeRepository.findByCorporateId(corporate.getCorporateId())
+                .map(CorporateRepresentative::getRepresentativeName)
+                .filter(StringUtils::hasText)
+                .isPresent(); // 대표자 상세 정보 존재 여부
+        if (!representativeExists) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "대표자 정보를 먼저 등록하세요.");
+        }
     }
 
     // KYC 신청 시작 요청 검증
