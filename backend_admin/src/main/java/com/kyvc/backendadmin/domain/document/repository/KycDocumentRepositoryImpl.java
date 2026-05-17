@@ -26,6 +26,20 @@ public class KycDocumentRepositoryImpl implements KycDocumentRepository {
     }
 
     @Override
+    public Optional<KycDocument> findByKycIdAndDocumentId(Long kycId, Long documentId) {
+        return entityManager().createQuery("""
+                        select document
+                        from KycDocument document
+                        where document.kycId = :kycId
+                          and document.documentId = :documentId
+                        """, KycDocument.class)
+                .setParameter("kycId", kycId)
+                .setParameter("documentId", documentId)
+                .getResultStream()
+                .findFirst();
+    }
+
+    @Override
     public int updateUploadStatus(Long documentId, KyvcEnums.DocumentUploadStatus status) {
         return entityManager().createNativeQuery("""
                         update kyc_documents

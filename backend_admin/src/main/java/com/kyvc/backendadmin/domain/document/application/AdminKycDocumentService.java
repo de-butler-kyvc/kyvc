@@ -72,7 +72,7 @@ public class AdminKycDocumentService {
     @Transactional(readOnly = true)
     public AdminKycDocumentPreviewResponse createPreview(Long kycId, Long documentId) {
         validateKycExists(kycId);
-        KycDocument document = kycDocumentRepository.findById(documentId)
+        KycDocument document = kycDocumentRepository.findByKycIdAndDocumentId(kycId, documentId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
 
         // 문서 소속 검증: 요청 KYC의 문서가 아니면 파일 접근 권한이 없는 것으로 처리한다.
@@ -105,11 +105,8 @@ public class AdminKycDocumentService {
             Long documentId // 문서 ID
     ) {
         validateKycExists(kycId);
-        KycDocument document = kycDocumentRepository.findById(documentId)
+        KycDocument document = kycDocumentRepository.findByKycIdAndDocumentId(kycId, documentId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
-        if (!kycId.equals(document.getKycId())) {
-            throw new ApiException(ErrorCode.DOCUMENT_ACCESS_DENIED);
-        }
 
         AdminDocumentStorage.StoredContent content = adminDocumentStorage.load(document.getFilePath());
         return new AdminKycDocumentFileResponse(
