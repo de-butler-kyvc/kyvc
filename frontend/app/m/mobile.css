@@ -3906,6 +3906,14 @@ body[data-mobile-keyboard-open="true"] .bottom-nav {
   pointer-events: none;
 }
 
+body[data-mobile-keyboard-open="true"] .bottom-action,
+body[data-mobile-keyboard-open="true"] .signup-bottom-action,
+body[data-mobile-keyboard-open="true"] .verify-bottom-action {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .nav-btn {
   border: 0;
   background: transparent;
