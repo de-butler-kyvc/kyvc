@@ -3,9 +3,11 @@ package com.kyvc.backend.domain.kyc.repository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.global.util.KyvcEnums;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -75,5 +77,35 @@ public interface KycApplicationJpaRepository extends JpaRepository<KycApplicatio
     boolean existsInProgressByApplicantUserId(
             @Param("applicantUserId") Long applicantUserId, // 신청 사용자 ID
             @Param("statuses") Collection<KyvcEnums.KycStatus> statuses // 진행 중 상태 목록
+    );
+
+    /**
+     * 현재 상태 기준 KYC 상태 조건부 변경
+     *
+     * @param kycId KYC 신청 ID
+     * @param applicantUserId 신청 사용자 ID
+     * @param currentStatus 현재 KYC 상태
+     * @param nextStatus 변경 KYC 상태
+     * @param submittedAt 제출 일시
+     * @param updatedAt 수정 일시
+     * @return 변경 건수
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update KycApplication kycApplication
+            set kycApplication.kycStatus = :nextStatus,
+                kycApplication.submittedAt = :submittedAt,
+                kycApplication.updatedAt = :updatedAt
+            where kycApplication.kycId = :kycId
+              and kycApplication.applicantUserId = :applicantUserId
+              and kycApplication.kycStatus = :currentStatus
+            """)
+    int updateStatusIfCurrentStatus(
+            @Param("kycId") Long kycId, // KYC 신청 ID
+            @Param("applicantUserId") Long applicantUserId, // 신청 사용자 ID
+            @Param("currentStatus") KyvcEnums.KycStatus currentStatus, // 현재 KYC 상태
+            @Param("nextStatus") KyvcEnums.KycStatus nextStatus, // 변경 KYC 상태
+            @Param("submittedAt") LocalDateTime submittedAt, // 제출 일시
+            @Param("updatedAt") LocalDateTime updatedAt // 수정 일시
     );
 }

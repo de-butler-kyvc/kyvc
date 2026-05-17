@@ -85,6 +85,7 @@ public class KycSubmissionService {
     private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
     private final KycReviewHistoryRepository kycReviewHistoryRepository;
+    private final KycSubmissionStatusService kycSubmissionStatusService;
 
     // KYC 제출 전 요약 조회
     @Transactional(readOnly = true)
@@ -112,7 +113,6 @@ public class KycSubmissionService {
         validateSubmittable(summary);
 
         LocalDateTime submittedAt = LocalDateTime.now(); // 제출 일시
-        KyvcEnums.KycStatus beforeSubmitStatus = kycApplication.getKycStatus(); // 제출 전 KYC 상태
         String coreRequestId = null; // Core 요청 ID
 
         logEventLogger.info(
@@ -121,18 +121,13 @@ public class KycSubmissionService {
                 createSubmitLogFields(kycApplication, null)
         );
 
-        try {
-            kycApplication.startAiReview(submittedAt);
-            kycApplicationRepository.save(kycApplication);
-            saveStatusHistory(
-                    kycApplication.getKycId(),
-                    resolveSubmitActionType(beforeSubmitStatus),
-                    beforeSubmitStatus,
-                    kycApplication.getKycStatus(),
-                    "KYC 제출 완료",
-                    submittedAt
-            );
+        kycApplication = kycSubmissionStatusService.reserveSubmission(
+                userId,
+                kycApplication.getKycId(),
+                submittedAt
+        );
 
+        try {
             CoreRequest coreRequest = coreRequestService.createAiReviewRequest(
                     kycApplication.getKycId(),
                     null
@@ -416,7 +411,7 @@ public class KycSubmissionService {
     private void validateSubmitAllowed(
             KycApplication kycApplication // KYC 신청 정보
     ) {
-        if (kycApplication.isSubmitAllowed()) {
+        if (kycApplication.isDraft()) {
             return;
         }
         throw new ApiException(ErrorCode.KYC_ALREADY_SUBMITTED);
