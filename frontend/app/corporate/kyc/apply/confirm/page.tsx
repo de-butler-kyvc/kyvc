@@ -49,6 +49,7 @@ export default function KycApplyConfirmPage() {
   }, [router]);
 
   const onSubmit = async () => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -57,20 +58,25 @@ export default function KycApplyConfirmPage() {
         router.push("/corporate/kyc/apply");
         return;
       }
-      const res = await kycApi.submit(latestKycId);
-      const submittedKycId = res.kycId ?? latestKycId;
+      const submittedKycId = latestKycId;
       if (typeof window !== "undefined") {
         window.localStorage.setItem("kyvc.lastSubmittedKycId", String(submittedKycId));
         window.localStorage.setItem(
           "kyvc.lastSubmittedAt",
-          res.submittedAt ?? new Date().toISOString()
+          new Date().toISOString()
         );
       }
+      void kycApi.submit(submittedKycId).catch((err: unknown) => {
+        const safeError =
+          err instanceof ApiError
+            ? { status: err.status, code: err.code, message: err.message }
+            : { message: err instanceof Error ? err.message : "KYC submit failed" };
+        console.error("Failed to submit KYC application", safeError);
+      });
       clearCurrentKycId();
       router.replace(`/corporate/kyc/detail?id=${submittedKycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
-    } finally {
       setBusy(false);
     }
   };
