@@ -7,6 +7,7 @@ import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { auth } from "@/lib/api";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
+import { ensureMobileSessionOwner } from "@/lib/m/wallet-bridge";
 import { tryMobileAutoLogin } from "@/lib/m/auto-login";
 import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
 import {
@@ -63,7 +64,7 @@ export default function MobileBiometricPage() {
             return;
           }
         }
-        await ensureMobileWallet().catch(() => null);
+        await ensureMobileSessionOwner().catch(() => null);
         router.replace("/m/home");
         return;
       }

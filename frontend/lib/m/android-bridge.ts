@@ -148,6 +148,7 @@ function shouldResolvePending(pending: Pending, result: BridgeResult) {
 export function isWalletOwnerMismatch(result: BridgeResult) {
   return (
     result.errorCode === "WALLET_OWNER_MISMATCH" ||
+    result.walletAccess === "owner_mismatch" ||
     result.walletAccess === "wallet_owner_mismatch" ||
     result.walletAccess === "previous_wallet_deleted" ||
     result.shouldLogout === true
@@ -376,6 +377,7 @@ export type WalletAccess =
   | "no_wallet"
   | "previous_wallet_deleted"
   | "binding_required"
+  | "owner_mismatch"
   | "wallet_owner_mismatch"
   | string;
 
@@ -384,6 +386,7 @@ export type SetCurrentWebUserResult = BridgeResult & {
   errorCode?: string;
   errorTitle?: string;
   errorHint?: string;
+  deleteRequired?: boolean;
   shouldLogout?: boolean;
 };
 

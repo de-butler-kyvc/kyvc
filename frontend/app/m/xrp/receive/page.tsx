@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
-import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+import { ensureMobileSessionOwner } from "@/lib/m/wallet-bridge";
 
 export default function MobileXrpReceivePage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function MobileXrpReceivePage() {
     }
     (async () => {
       try {
-        await ensureMobileWallet();
+        await ensureMobileSessionOwner();
         const r = await bridge.getWalletDepositInfo();
         const addr =
           (r.receiveAddress as string | undefined) ??
