@@ -16,7 +16,7 @@ import {
   setMobileAutoLoginEnabled,
   tryMobileAutoLogin,
 } from "@/lib/m/auto-login";
-import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+import { ensureMobileSessionOwner } from "@/lib/m/wallet-bridge";
 import {
   bindCurrentWebUserWithPrompt,
   logoutForWalletOwnerMismatch,
@@ -110,7 +110,7 @@ export default function MobileLoginPage() {
           userId: loginUser.userId,
           email: loginUser.email,
         });
-        await ensureMobileWallet().catch(() => null);
+        await ensureMobileSessionOwner().catch(() => null);
       }
       setMobileAutoLoginEnabled(keep);
       router.replace("/m/home");
@@ -148,7 +148,7 @@ export default function MobileLoginPage() {
           setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
           return;
         }
-        await ensureMobileWallet().catch(() => null);
+        await ensureMobileSessionOwner().catch(() => null);
         router.replace("/m/home");
       } else if (r.emailVerificationRequired) {
         setError("인증 5회 실패로 이메일 인증이 필요합니다.");

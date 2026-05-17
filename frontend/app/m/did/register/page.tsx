@@ -12,9 +12,10 @@ import {
   type WalletInfo,
 } from "@/lib/m/android-bridge";
 import {
-  ensureMobileWallet,
+  ensureMobileSessionOwner,
   formatXrpDrops,
   formatXrp,
+  loadWalletAssets,
   readXrpBalance,
   xrpBalanceDropsFromAssets,
 } from "@/lib/m/wallet-bridge";
@@ -32,10 +33,10 @@ export default function MobileDidRegisterPage() {
 
   useEffect(() => {
     if (!isBridgeAvailable()) return;
-    ensureMobileWallet()
-      .then((state) => {
+    ensureMobileSessionOwner()
+      .then(async (state) => {
         setWalletInfo(state.wallet);
-        setWalletAssets(state.assets);
+        setWalletAssets(await loadWalletAssets());
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "지갑 상태 확인에 실패했습니다.");

@@ -11,6 +11,8 @@ export type MobileWalletState = {
   created: boolean;
 };
 
+export const XRPL_ACCOUNT_NOT_ACTIVATED_CODE = "XRPL_ACCOUNT_NOT_ACTIVATED";
+
 function normalizeWalletInfo(wallet: WalletInfo): WalletInfo {
   const holderAccount = wallet.holderAccount ?? wallet.account;
   const holderDid = wallet.holderDid ?? wallet.did;
@@ -19,6 +21,31 @@ function normalizeWalletInfo(wallet: WalletInfo): WalletInfo {
     ...(holderAccount ? { account: holderAccount, holderAccount } : {}),
     ...(holderDid ? { did: holderDid, holderDid } : {}),
   };
+}
+
+export function readWalletAccount(
+  wallet?: WalletInfo | null,
+  assets?: WalletAssetsResult | null,
+) {
+  return assets?.account ?? wallet?.holderAccount ?? wallet?.account ?? null;
+}
+
+export function isXrplAccountActivationRequired(
+  assets?: WalletAssetsResult | null,
+) {
+  if (!assets?.ok) return false;
+  return (
+    assets.errorCode === XRPL_ACCOUNT_NOT_ACTIVATED_CODE ||
+    (assets.accountActivated === false && assets.depositRequired === true)
+  );
+}
+
+export function isXrplAccountActivated(assets?: WalletAssetsResult | null) {
+  return Boolean(
+    assets?.ok &&
+      assets.accountActivated === true &&
+      assets.depositRequired !== true,
+  );
 }
 
 export function formatXrp(value?: string | number | null) {
@@ -86,14 +113,14 @@ export function readXrpBalance(assets?: WalletAssetsResult | null) {
   );
 }
 
-export async function ensureMobileWallet(): Promise<MobileWalletState> {
+export async function ensureMobileSessionOwner(): Promise<MobileWalletState> {
   if (!isBridgeAvailable()) {
     return { wallet: null, assets: null, created: false };
   }
 
   let wallet: WalletInfo | null = null;
   let created = false;
-  const authStatus = await bridge.getAuthStatus().catch(() => null);
+  await bridge.getAuthStatus().catch(() => null);
 
   try {
     const info = await bridge.getWalletInfo();
@@ -101,10 +128,6 @@ export async function ensureMobileWallet(): Promise<MobileWalletState> {
     if (info.ok && account) wallet = normalizeWalletInfo(info);
   } catch {
     wallet = null;
-  }
-
-  if (!wallet && authStatus?.walletReady === true) {
-    return { wallet: null, assets: null, created: false };
   }
 
   if (!wallet) {
@@ -118,12 +141,14 @@ export async function ensureMobileWallet(): Promise<MobileWalletState> {
     }
   }
 
-  let assets: WalletAssetsResult | null = null;
-  try {
-    assets = await bridge.getWalletAssets();
-  } catch {
-    assets = null;
-  }
+  return { wallet, assets: null, created };
+}
 
-  return { wallet, assets, created };
+export async function loadWalletAssets() {
+  if (!isBridgeAvailable()) return null;
+  return bridge.getWalletAssets();
+}
+
+export async function ensureMobileWallet(): Promise<MobileWalletState> {
+  return ensureMobileSessionOwner();
 }

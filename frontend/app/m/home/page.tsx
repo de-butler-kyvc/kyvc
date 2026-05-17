@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import {
@@ -27,9 +27,13 @@ import { nativeSummaryToCert } from "@/lib/m/credential-summaries";
 import { readHiddenCerts } from "@/lib/m/data";
 import { mSession } from "@/lib/m/session";
 import {
-  ensureMobileWallet,
+  ensureMobileSessionOwner,
   formatXrp,
+  isXrplAccountActivated,
+  isXrplAccountActivationRequired,
+  loadWalletAssets,
   readXrpBalance,
+  readWalletAccount,
 } from "@/lib/m/wallet-bridge";
 
 const PALETTES = [
@@ -65,8 +69,7 @@ function isWalletActivated(
   wallet?: WalletInfo | null,
   assets?: WalletAssetsResult | null,
 ) {
-  const account = wallet?.holderAccount ?? wallet?.account;
-  return Boolean(account) && Boolean(assets?.accountActivated) && !assets?.depositRequired;
+  return Boolean(readWalletAccount(wallet, assets)) && isXrplAccountActivated(assets);
 }
 
 export default function MobileHomePage() {
@@ -86,7 +89,8 @@ export default function MobileHomePage() {
   const [testState, setTestState] = useState<HomeTestState>("bridge");
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
-  const [inactiveStateConfirmed, setInactiveStateConfirmed] = useState(false);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
+  const walletBootstrappedRef = useRef(false);
 
   const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
     const holderAccount = info.holderAccount ?? info.account;
@@ -128,48 +132,28 @@ export default function MobileHomePage() {
   );
 
   const refreshWalletAssets = useCallback(async () => {
-    if (!isBridgeAvailable()) return;
+    if (!isBridgeAvailable()) return null;
     try {
-      const assets = await bridge.getWalletAssets();
+      const assets = await loadWalletAssets();
+      if (!assets) return null;
+      setWalletAssets(assets);
       if (assets.ok) {
-        setWalletAssets(assets);
         mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
+        setApiError(null);
+      } else {
+        setApiError(assets.error ?? "지갑 자산 조회에 실패했습니다.");
       }
+      return assets;
     } catch {
-      // 홈 잔액 새로고침 실패는 다음 진입/포커스 때 다시 시도한다.
+      setApiError("지갑 자산 조회에 실패했습니다.");
+      return null;
     }
   }, []);
 
   // 증명서 목록은 네이티브 지갑 브릿지를 단일 소스로 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!isBridgeAvailable()) {
-          if (!cancelled) {
-            setCerts([]);
-            setApiError("증명서는 KYvC 앱 지갑에서 확인할 수 있습니다.");
-          }
-          return;
-        }
-        const list = await bridge.getCredentialSummaries();
-        if (cancelled) return;
-        setCerts((list.credentials ?? []).map(nativeSummaryToCert));
-        setApiError(null);
-      } catch (e) {
-        if (cancelled) return;
-        setApiError(
-          e instanceof Error
-            ? `지갑 증명서 조회 실패: ${e.message}`
-            : "지갑 증명서 조회 중 오류가 발생했습니다.",
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+  }, []);
 
   // 설정 화면 진입 전에 법인 기본정보를 미리 캐시한다.
   useEffect(() => {
@@ -196,58 +180,30 @@ export default function MobileHomePage() {
     };
   }, [router]);
 
-  // 브리지: 로그인 후 활성 지갑 보장 + 자산 조회.
+  // 브리지: 로그인 후 활성 지갑 보장.
   useEffect(() => {
     if (!isBridgeAvailable()) {
       return;
     }
+    if (walletBootstrappedRef.current) return;
+    walletBootstrappedRef.current = true;
+    let cancelled = false;
     (async () => {
       try {
-        const state = await ensureMobileWallet();
+        const state = await ensureMobileSessionOwner();
+        if (cancelled) return;
         await refreshHolderDidState(state.wallet);
-        if (state.assets?.ok) {
-          setWalletAssets(state.assets);
-          mSession.writeWalletAssets({ assets: state.assets, cachedAt: Date.now() });
-        }
-        void refreshWalletAssets();
+        if (cancelled) return;
         if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
+        if (cancelled) return;
         setApiError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
       }
     })();
-    bridge.listWallets().catch(() => {});
-    bridge.getCredentialSummaries().catch(() => {});
-  }, [refreshHolderDidState, refreshWalletAssets]);
-
-  useEffect(() => {
-    if (!isBridgeAvailable()) return;
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refreshWalletAssets();
-    };
-    const onFocus = () => {
-      void refreshWalletAssets();
-    };
-
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onFocus);
-    void refreshWalletAssets();
-    const warmupTimers = [800, 1800, 3200, 5000].map((delay) =>
-      window.setTimeout(() => {
-        if (document.visibilityState === "visible") void refreshWalletAssets();
-      }, delay),
-    );
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refreshWalletAssets();
-    }, 5000);
-
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onFocus);
-      warmupTimers.forEach((id) => window.clearTimeout(id));
-      window.clearInterval(timer);
+      cancelled = true;
     };
-  }, [refreshWalletAssets]);
+  }, [refreshHolderDidState]);
 
   // 다른 화면에서 활성 지갑이 바뀌어도 반영
   useBridgeAction("LIST_WALLETS", (r) => {
@@ -283,7 +239,6 @@ export default function MobileHomePage() {
     const next = normalizeWalletInfo(r as WalletInfo);
     setWalletInfo(next);
     void refreshHolderDidState(next);
-    void refreshWalletAssets();
   });
 
   useBridgeAction("GET_WALLET_INFO", (r) => {
@@ -299,7 +254,14 @@ export default function MobileHomePage() {
   });
 
   useBridgeAction("GET_WALLET_ASSETS", (r) => {
-    if (r.ok) setWalletAssets(r as WalletAssetsResult);
+    const assets = r as WalletAssetsResult;
+    setWalletAssets(assets);
+    if (assets.ok) {
+      mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
+      setApiError(null);
+    } else {
+      setApiError(assets.error ?? "지갑 자산 조회에 실패했습니다.");
+    }
   });
 
   useEffect(() => {
@@ -311,32 +273,6 @@ export default function MobileHomePage() {
     return off;
   }, []);
 
-  useEffect(() => {
-    if (testState !== "bridge") {
-      setInactiveStateConfirmed(true);
-      return;
-    }
-    setInactiveStateConfirmed(false);
-    if (!walletInfo || !walletAssets) return;
-    if (isWalletActivated(walletInfo, walletAssets)) return;
-
-    let cancelled = false;
-    bridge
-      .getWalletAssets()
-      .then((assets) => {
-        if (cancelled || !assets.ok) return;
-        setWalletAssets(assets);
-        mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
-        if (!isWalletActivated(walletInfo, assets)) {
-          setInactiveStateConfirmed(true);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [testState, walletInfo, walletAssets]);
-
   const showToast = (message: string) => {
     setToastClosing(false);
     setToast(message);
@@ -345,6 +281,15 @@ export default function MobileHomePage() {
   };
 
   const copyText = async (value: string) => {
+    if (isBridgeAvailable()) {
+      try {
+        const r = await bridge.copyTextToClipboard(value);
+        if (r.ok) return;
+      } catch {
+        // 브라우저 클립보드로 한 번 더 시도한다.
+      }
+    }
+
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(value);
       return;
@@ -359,6 +304,50 @@ export default function MobileHomePage() {
     el.select();
     document.execCommand("copy");
     document.body.removeChild(el);
+  };
+
+  const copyActivationAddress = async (address?: string | null) => {
+    if (!address) {
+      showToast("복사할 지갑 주소를 찾을 수 없습니다.");
+      return;
+    }
+    try {
+      await copyText(address);
+      showToast("지갑 주소가 복사되었습니다.");
+    } catch {
+      showToast("지갑 주소를 복사할 수 없습니다.");
+    }
+  };
+
+  const recheckWalletActivation = async () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 활성화 상태를 확인할 수 있습니다.");
+      return;
+    }
+    setWalletRefreshing(true);
+    try {
+      const assets = await refreshWalletAssets();
+      if (!assets) {
+        showToast("활성화 상태를 확인할 수 없습니다.");
+        return;
+      }
+      if (!assets.ok) {
+        showToast(assets.error ?? "지갑 자산 조회에 실패했습니다.");
+        return;
+      }
+      if (isXrplAccountActivated(assets)) {
+        void refreshHolderDidState(walletInfo);
+        setWalletSheetOpen(false);
+        setInactiveQrOpen(false);
+        showToast("XRPL 계정 활성화가 확인되었습니다.");
+        return;
+      }
+      if (isXrplAccountActivationRequired(assets) || assets.accountActivated !== true) {
+        showToast("아직 XRPL 계정 활성화가 필요합니다.");
+      }
+    } finally {
+      setWalletRefreshing(false);
+    }
   };
 
   const startIssueQrScan = async () => {
@@ -441,7 +430,15 @@ export default function MobileHomePage() {
           : walletInfo;
   const testWalletAssets =
     testState === "inactive"
-      ? ({ ok: true, accountActivated: false, depositRequired: true } as WalletAssetsResult)
+      ? ({
+          ok: true,
+          account: "rKYvC1234567890TestWallet",
+          accountActivated: false,
+          depositRequired: true,
+          errorCode: "XRPL_ACCOUNT_NOT_ACTIVATED",
+          errorTitle: "XRPL 계정 활성화 필요",
+          errorHint: "이 주소로 XRP를 입금한 뒤 자산 조회를 다시 실행하세요.",
+        } as WalletAssetsResult)
       : testState === "walletOnly"
         ? ({ ok: true, accountActivated: true, depositRequired: false, xrpBalanceXrp: "12.345678" } as WalletAssetsResult)
         : testState === "did" || testState === "credential"
@@ -453,43 +450,100 @@ export default function MobileHomePage() {
       : testState === "credential"
         ? [TEST_CREDENTIAL]
         : certs.filter((c) => !hidden.includes(c.title));
-  const accountShort = testWalletInfo?.account
-    ? `${testWalletInfo.account.slice(0, 6)}...${testWalletInfo.account.slice(-4)}`
+  const walletAccount = readWalletAccount(testWalletInfo, testWalletAssets);
+  const accountShort = walletAccount
+    ? `${walletAccount.slice(0, 6)}...${walletAccount.slice(-4)}`
     : null;
   const walletExists = Boolean(accountShort);
+  const activationAddress = walletAccount;
   const didRegistrationLabel = testWalletInfo?.didRegistrationLabel;
   const registeredDid = testWalletInfo?.holderDid ?? testWalletInfo?.did;
-  const ledgerActivated = Boolean(testWalletAssets?.accountActivated);
-  const depositRequired = Boolean(testWalletAssets?.depositRequired);
-  const walletXrplActivated = walletExists && ledgerActivated && !depositRequired;
+  const walletActivationRequired =
+    walletExists && isXrplAccountActivationRequired(testWalletAssets);
+  const walletXrplActivated = walletExists && isWalletActivated(testWalletInfo, testWalletAssets);
   const walletStateCanRender =
     testState !== "bridge" ||
-    !walletExists ||
-    walletXrplActivated ||
-    inactiveStateConfirmed;
+    Boolean(testWalletInfo);
   const didRegistrationRequired =
     testWalletInfo?.didRegistrationRequired ??
-    (walletXrplActivated
-      ? didRegistrationLabel === "DID 등록하기" ||
-        (testWalletInfo?.didSetRegistered !== true && !registeredDid)
-      : false);
+    (didRegistrationLabel === "DID 등록하기" ||
+      (testWalletInfo?.didSetRegistered !== true && !registeredDid));
   const didRegistered =
-    walletXrplActivated &&
     (testWalletInfo?.didSetRegistered === true ||
       didRegistrationLabel === "DID 등록됨" ||
       (Boolean(registeredDid) && didRegistrationRequired === false));
   const hasCredential = visible.length > 0;
   const walletLabel =
-    !walletExists || !walletXrplActivated
-      ? "지갑 활성화 필요"
-      : didRegistered && registeredDid
-        ? shortDid(registeredDid)
-        : "DID 등록하기";
+    !walletExists
+      ? "지갑 생성 필요"
+      : walletActivationRequired
+        ? "XRPL 계정 활성화 필요"
+        : didRegistered && registeredDid
+          ? shortDid(registeredDid)
+          : "DID 등록하기";
   const balanceValue = walletExists && testWalletAssets ? readXrpBalance(testWalletAssets) : null;
   const balanceXrp = balanceValue == null ? null : formatXrp(balanceValue);
   const homeStateReady =
     testState !== "bridge" ||
-    Boolean(testWalletInfo && testWalletAssets && walletStateCanRender);
+    Boolean(testWalletInfo && walletStateCanRender);
+  const openWalletActivationSheet = () => {
+    setInactiveQrOpen(false);
+    setWalletSheetOpen(true);
+  };
+  const ensureWalletFeatureActivated = async () => {
+    if (!homeStateReady) return false;
+    if (!walletExists) {
+      openWalletActivationSheet();
+      return false;
+    }
+
+    const assets =
+      testState === "bridge" ? await refreshWalletAssets() : testWalletAssets;
+    if (!assets) {
+      showToast("지갑 활성화 상태를 확인할 수 없습니다.");
+      return false;
+    }
+    if (!assets.ok) {
+      showToast(assets.error ?? "지갑 자산 조회에 실패했습니다.");
+      return false;
+    }
+    if (isXrplAccountActivationRequired(assets) || !isXrplAccountActivated(assets)) {
+      openWalletActivationSheet();
+      return false;
+    }
+    return true;
+  };
+  const handleIssueQrAction = async () => {
+    const ready = await ensureWalletFeatureActivated();
+    if (!ready) return;
+    if (!didRegistered) {
+      setInactiveQrOpen(false);
+      setDidSheetOpen(true);
+      return;
+    }
+    setInactiveQrOpen(false);
+    await startIssueQrScan();
+  };
+  const handleSubmitQrAction = async () => {
+    const ready = await ensureWalletFeatureActivated();
+    if (!ready) return;
+    if (!didRegistered) {
+      setInactiveQrOpen(false);
+      setDidSheetOpen(true);
+      return;
+    }
+    if (!hasCredential) {
+      showToast("제출할 증명서가 없습니다.");
+      return;
+    }
+    setInactiveQrOpen(false);
+    await startPresentationQrScan();
+  };
+  const handleSendXrp = async () => {
+    const ready = await ensureWalletFeatureActivated();
+    if (!ready) return;
+    router.push("/m/xrp/send");
+  };
 
   return (
     <section className="view wash home-view">
@@ -537,7 +591,7 @@ export default function MobileHomePage() {
                       setWalletSheetOpen(true);
                       return;
                     }
-                    if (!walletXrplActivated) {
+                    if (walletActivationRequired) {
                       setWalletSheetOpen(true);
                       return;
                     }
@@ -594,18 +648,9 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={homeStateReady && !walletXrplActivated ? "inactive" : ""}
+              className={homeStateReady && walletActivationRequired ? "inactive" : ""}
               onClick={() => {
-                if (!homeStateReady) return;
-                if (!walletExists) {
-                  setWalletSheetOpen(true);
-                  return;
-                }
-                if (!walletXrplActivated) {
-                  router.push("/m/xrp/receive");
-                  return;
-                }
-                router.push("/m/xrp/send");
+                void handleSendXrp();
               }}
             >
               <MIcon.arrowUpRight />
@@ -621,6 +666,15 @@ export default function MobileHomePage() {
             </button>
           </section>
 
+          {homeStateReady && walletActivationRequired ? (
+            <XrplActivationNotice
+              address={activationAddress}
+              busy={walletRefreshing}
+              onCopy={copyActivationAddress}
+              onRefresh={recheckWalletActivation}
+            />
+          ) : null}
+
           <section className="stack-section">
             <div className="m-section-title section-title stack-title">
               <h2>내 증명서</h2>
@@ -631,24 +685,7 @@ export default function MobileHomePage() {
                   type="button"
                   className="empty-credential-card"
                   onClick={() => {
-                    if (!homeStateReady) return;
-                    if (!walletExists) {
-                      setWalletSheetOpen(true);
-                      return;
-                    }
-                    if (!walletXrplActivated) {
-                      router.push("/m/xrp/receive");
-                      return;
-                    }
-                    if (!didRegistered) {
-                      setDidSheetOpen(true);
-                      return;
-                    }
-                    if (didRegistered && !hasCredential) {
-                      startIssueQrScan();
-                      return;
-                    }
-                    startIssueQrScan();
+                    void handleIssueQrAction();
                   }}
                 >
                   발급하기
@@ -683,11 +720,9 @@ export default function MobileHomePage() {
             return;
           }
           setQrNoticeKind(
-            didRegistered
-              ? "needCredential"
-              : walletXrplActivated
-                ? "did"
-                : "account",
+            !walletExists || walletActivationRequired
+              ? "account"
+              : "needCredential",
           );
           setInactiveQrOpen(true);
         }}
@@ -695,13 +730,16 @@ export default function MobileHomePage() {
       {inactiveQrOpen ? (
         <InactiveQrMenu
           kind={qrNoticeKind}
+          activationAddress={walletActivationRequired ? activationAddress : null}
+          activationBusy={walletRefreshing}
+          onCopyActivationAddress={copyActivationAddress}
+          onRefreshActivation={recheckWalletActivation}
+          onActivationRequired={openWalletActivationSheet}
           onIssue={() => {
-            setInactiveQrOpen(false);
-            startIssueQrScan();
+            void handleIssueQrAction();
           }}
           onSubmit={() => {
-            setInactiveQrOpen(false);
-            startPresentationQrScan();
+            void handleSubmitQrAction();
           }}
           onClose={() => setInactiveQrOpen(false)}
         />
@@ -719,14 +757,16 @@ export default function MobileHomePage() {
           onRegister={() => router.push("/m/did/register")}
         />
       ) : null}
-      {walletSheetOpen ? (
+      {walletSheetOpen && walletActivationRequired ? (
         <WalletActivationSheet
+          address={activationAddress}
+          refreshing={walletRefreshing}
+          onCopyAddress={copyActivationAddress}
           onClose={() => setWalletSheetOpen(false)}
-          onReceive={() => {
-            setWalletSheetOpen(false);
-            router.push("/m/xrp/receive");
-          }}
+          onRefresh={recheckWalletActivation}
         />
+      ) : walletSheetOpen ? (
+        <WalletSetupSheet onClose={() => setWalletSheetOpen(false)} />
       ) : null}
       {toast ? (
         <div className={`m-toast${toastClosing ? " closing" : ""}`}>
@@ -739,18 +779,31 @@ export default function MobileHomePage() {
 
 function InactiveQrMenu({
   kind,
+  activationAddress,
+  activationBusy,
+  onCopyActivationAddress,
+  onRefreshActivation,
+  onActivationRequired,
   onIssue,
   onSubmit,
   onClose,
 }: {
   kind: "account" | "did" | "needCredential" | "credential";
+  activationAddress?: string | null;
+  activationBusy?: boolean;
+  onCopyActivationAddress?: (address?: string | null) => void;
+  onRefreshActivation?: () => void;
+  onActivationRequired?: () => void;
   onIssue: () => void;
   onSubmit: () => void;
   onClose: () => void;
 }) {
+  const activationRequired = kind === "account" && Boolean(activationAddress);
   const issueReady = kind === "needCredential" || kind === "credential";
   const submitReady = kind === "credential";
   const menuReady = issueReady;
+  const blockedAction =
+    activationRequired && onActivationRequired ? onActivationRequired : undefined;
 
   return (
     <div className="inactive-qr-layer" role="dialog" aria-modal="true">
@@ -760,7 +813,15 @@ function InactiveQrMenu({
         aria-label="QR 메뉴 닫기"
         onClick={onClose}
       />
-      {menuReady ? null : (
+      {menuReady ? null : activationRequired ? (
+        <XrplActivationNotice
+          className="inactive-qr-notice xrpl-activation-card xrpl-activation-qr-card"
+          address={activationAddress}
+          busy={activationBusy}
+          onCopy={(address) => onCopyActivationAddress?.(address)}
+          onRefresh={() => onRefreshActivation?.()}
+        />
+      ) : (
         <section className="inactive-qr-notice" aria-live="polite">
           <span className="inactive-qr-notice-icon">
             <MIcon.help />
@@ -780,7 +841,7 @@ function InactiveQrMenu({
           type="button"
           className={issueReady ? "active" : ""}
           aria-disabled={issueReady ? undefined : "true"}
-          onClick={issueReady ? onIssue : undefined}
+          onClick={issueReady ? onIssue : blockedAction}
         >
           <span className="inactive-qr-icon issue">
             {issueReady ? <MIcon.cert /> : <MIcon.lockSlash />}
@@ -794,7 +855,7 @@ function InactiveQrMenu({
           type="button"
           className={submitReady ? "active submit" : ""}
           aria-disabled={submitReady ? undefined : "true"}
-          onClick={submitReady ? onSubmit : undefined}
+          onClick={submitReady ? onSubmit : blockedAction}
         >
           <span className="inactive-qr-icon submit">
             {submitReady ? <MIcon.qr /> : <MIcon.lockSlash />}
@@ -806,6 +867,52 @@ function InactiveQrMenu({
         </button>
       </section>
     </div>
+  );
+}
+
+function XrplActivationNotice({
+  address,
+  busy,
+  className,
+  onCopy,
+  onRefresh,
+}: {
+  address?: string | null;
+  busy?: boolean;
+  className?: string;
+  onCopy: (address?: string | null) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <section className={className ?? "xrpl-activation-card"} aria-live="polite">
+      <div className="xrpl-activation-copy">
+        <span>Testnet</span>
+        <h2>XRPL 계정 활성화 필요</h2>
+        <p>지갑 주소로 Testnet XRP를 입금한 뒤 다시 확인해 주세요.</p>
+      </div>
+      <div className="xrpl-activation-address">
+        <span>지갑 주소</span>
+        <strong>{address ?? "주소 확인 중"}</strong>
+      </div>
+      <div className="xrpl-activation-actions">
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => onCopy(address)}
+          disabled={!address}
+        >
+          주소 복사
+        </button>
+        <button
+          type="button"
+          className="primary"
+          onClick={onRefresh}
+          disabled={busy}
+        >
+          {busy ? "확인 중..." : "활성화 상태 다시 확인"}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -878,25 +985,54 @@ function DidRequiredSheet({
   );
 }
 
-function WalletActivationSheet({
-  onClose,
-  onReceive,
-}: {
-  onClose: () => void;
-  onReceive: () => void;
-}) {
+function WalletSetupSheet({ onClose }: { onClose: () => void }) {
   return (
     <WalletGuideSheet
-      title="지갑 활성화 필요"
-      description="지갑을 활성화하려면 1 XRP를 예치해야 합니다."
-      linkLabel="입금 주소 보기"
+      title="지갑 준비 필요"
+      description="모바일 지갑을 먼저 생성하거나 복구해 주세요."
+      linkLabel=""
       primaryLabel="확인"
       onClose={onClose}
       onPrimary={onClose}
-      onLink={onReceive}
+      ariaLabel="지갑 준비 안내 닫기"
+      handleLabel="지갑 준비 안내 시트 이동"
+    />
+  );
+}
+
+function WalletActivationSheet({
+  address,
+  refreshing,
+  onCopyAddress,
+  onClose,
+  onRefresh,
+}: {
+  address?: string | null;
+  refreshing: boolean;
+  onCopyAddress: (address?: string | null) => void;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <WalletGuideSheet
+      title="XRPL 계정 활성화 필요"
+      description="지갑 주소로 Testnet XRP를 입금한 뒤 다시 확인해 주세요."
+      linkLabel="주소 복사"
+      primaryLabel={refreshing ? "확인 중..." : "활성화 상태 다시 확인"}
+      onClose={onClose}
+      onPrimary={onRefresh}
+      onLink={() => onCopyAddress(address)}
+      linkDisabled={!address}
+      primaryDisabled={refreshing}
       ariaLabel="지갑 활성화 안내 닫기"
       handleLabel="지갑 활성화 안내 시트 이동"
-    />
+      sheetClassName="xrpl-activation-sheet"
+    >
+      <div className="wallet-sheet-address">
+        <span>지갑 주소</span>
+        <strong>{address ?? "주소 확인 중"}</strong>
+      </div>
+    </WalletGuideSheet>
   );
 }
 
@@ -905,21 +1041,29 @@ function WalletGuideSheet({
   description,
   linkLabel,
   primaryLabel,
+  children,
   onClose,
   onPrimary,
   onLink,
+  linkDisabled,
+  primaryDisabled,
   ariaLabel,
   handleLabel,
+  sheetClassName,
 }: {
   title: string;
   description: string;
   linkLabel: string;
   primaryLabel: string;
+  children?: ReactNode;
   onClose: () => void;
-  onPrimary: () => void;
+  onPrimary: () => void | Promise<void>;
   onLink?: () => void;
+  linkDisabled?: boolean;
+  primaryDisabled?: boolean;
   ariaLabel: string;
   handleLabel: string;
+  sheetClassName?: string;
 }) {
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -958,7 +1102,7 @@ function WalletGuideSheet({
         onClick={closeWithAnimation}
       />
       <div
-        className={`wallet-activation-sheet${dragging ? " dragging" : ""}${closing ? " closing" : ""}`}
+        className={`wallet-activation-sheet${sheetClassName ? ` ${sheetClassName}` : ""}${dragging ? " dragging" : ""}${closing ? " closing" : ""}`}
         style={{ transform: `translateY(${dragY}px)` }}
       >
         <div
@@ -977,17 +1121,22 @@ function WalletGuideSheet({
         <div className="wallet-sheet-body">
           <h2>{title}</h2>
           <p>{description}</p>
-          <button
-            type="button"
-            className="wallet-sheet-link"
-            onClick={onLink}
-          >
-            {linkLabel}
-          </button>
+          {children}
+          {onLink ? (
+            <button
+              type="button"
+              className="wallet-sheet-link"
+              onClick={onLink}
+              disabled={linkDisabled}
+            >
+              {linkLabel}
+            </button>
+          ) : null}
         </div>
         <button
           type="button"
           className="wallet-sheet-primary"
+          disabled={primaryDisabled}
           onClick={() => {
             if (onPrimary === onClose) closeWithAnimation();
             else onPrimary();

@@ -1596,6 +1596,101 @@ html {
   text-underline-offset: 3px;
 }
 
+.xrpl-activation-card {
+  margin: 16px 19px 4px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 18px;
+  background: #eff6ff;
+  color: var(--m-ink);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, .12);
+}
+
+.xrpl-activation-copy span {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.xrpl-activation-copy h2 {
+  margin: 9px 0 0;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 900;
+}
+
+.xrpl-activation-copy p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.xrpl-activation-address {
+  margin-top: 13px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.xrpl-activation-address span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 800;
+}
+
+.xrpl-activation-address strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 900;
+  word-break: break-all;
+}
+
+.xrpl-activation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.25fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.xrpl-activation-actions button {
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 15px;
+  font-weight: 900;
+}
+
+.xrpl-activation-actions .secondary {
+  border: 1px solid #bfdbfe;
+  background: #fff;
+  color: #1d4ed8;
+}
+
+.xrpl-activation-actions .primary {
+  border: 1px solid var(--m-ink);
+  background: var(--m-ink);
+  color: #fff;
+}
+
+.xrpl-activation-actions button:disabled {
+  opacity: .55;
+}
+
 .inactive-qr-layer {
   position: fixed;
   inset: 0;
@@ -1661,6 +1756,22 @@ html {
   color: #6b7280;
   font-size: 12px;
   line-height: 16.8px;
+}
+
+.inactive-qr-notice.xrpl-activation-qr-card {
+  display: block;
+  bottom: 274px;
+  padding: 16px;
+}
+
+.xrpl-activation-qr-card .xrpl-activation-copy h2 {
+  font-size: 15px;
+  line-height: 19px;
+}
+
+.xrpl-activation-qr-card .xrpl-activation-actions button {
+  font-size: 11.5px;
+  line-height: 14px;
 }
 
 .inactive-qr-menu {
@@ -1844,6 +1955,10 @@ html {
   transition: transform .18s ease-in;
 }
 
+.wallet-activation-sheet.xrpl-activation-sheet {
+  height: 356px;
+}
+
 .wallet-sheet-handle {
   position: absolute;
   top: 0;
@@ -1878,6 +1993,11 @@ html {
   right: 21px;
 }
 
+.xrpl-activation-sheet .wallet-sheet-body {
+  position: static;
+  padding: 38px 21px 0;
+}
+
 .wallet-sheet-body h2 {
   margin: 0;
   color: var(--m-ink);
@@ -1894,6 +2014,36 @@ html {
   line-height: 16.8px;
 }
 
+.xrpl-activation-sheet .wallet-sheet-body p {
+  margin-top: 12px;
+}
+
+.wallet-sheet-address {
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #eff6ff;
+}
+
+.wallet-sheet-address span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 800;
+}
+
+.wallet-sheet-address strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 900;
+  word-break: break-all;
+}
+
 .wallet-sheet-link {
   display: inline-block;
   margin-top: 8px;
@@ -1906,6 +2056,27 @@ html {
   line-height: 16.8px;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.xrpl-activation-sheet .wallet-sheet-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+  margin-top: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.wallet-sheet-link:disabled {
+  opacity: .55;
 }
 
 .wallet-sheet-primary {
@@ -1921,6 +2092,15 @@ html {
   font-family: inherit;
   font-size: 14.6px;
   font-weight: 800;
+}
+
+.xrpl-activation-sheet .wallet-sheet-primary {
+  top: auto;
+  bottom: 20px;
+}
+
+.wallet-sheet-primary:disabled {
+  opacity: .55;
 }
 
 .credential-card.stacked {

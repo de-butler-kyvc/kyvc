@@ -7,7 +7,7 @@ import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
 import { auth } from "@/lib/api";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
-import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+import { ensureMobileSessionOwner } from "@/lib/m/wallet-bridge";
 import {
   bindCurrentWebUserWithPrompt,
   logoutForWalletOwnerMismatch,
@@ -57,7 +57,7 @@ export default function MobileBiometricPage() {
           setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
           return;
         }
-        await ensureMobileWallet().catch(() => null);
+        await ensureMobileSessionOwner().catch(() => null);
         router.replace("/m/home");
         return;
       }

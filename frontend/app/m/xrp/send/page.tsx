@@ -8,8 +8,9 @@ import { MTopBar } from "@/components/m/parts";
 import { bridge, isBridgeAvailable } from "@/lib/m/android-bridge";
 import { mSession } from "@/lib/m/session";
 import {
-  ensureMobileWallet,
+  ensureMobileSessionOwner,
   formatXrp,
+  loadWalletAssets,
   readXrpBalance,
 } from "@/lib/m/wallet-bridge";
 
@@ -52,8 +53,9 @@ export default function MobileXrpSendPage() {
       setAvailableXrp("앱에서 확인");
       return;
     }
-    ensureMobileWallet()
-      .then(({ assets }) => {
+    ensureMobileSessionOwner()
+      .then(async () => {
+        const assets = await loadWalletAssets();
         const balance = readXrpBalance(assets);
         setAvailableXrp(balance == null ? "확인 실패" : formatXrp(balance));
       })
