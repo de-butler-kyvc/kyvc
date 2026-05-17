@@ -48,10 +48,7 @@ public class KycSubmissionController {
             description = "법인 정보, 업로드 문서, 필수서류 충족 여부, 제출 가능 여부, 누락 항목 목록 반환",
             content = @Content(schema = @Schema(implementation = KycApplicationSummaryResponse.class))
     )
-    @GetMapping({
-            "/api/corporate/kyc/applications/{kycId}/summary",
-            "/api/user/kyc/applications/{kycId}/summary"
-    })
+    @GetMapping("/api/corporate/kyc/applications/{kycId}/summary")
     public ResponseEntity<CommonResponse<KycApplicationSummaryResponse>> getSummary(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
@@ -79,10 +76,7 @@ public class KycSubmissionController {
             description = "제출된 KYC 신청 ID, KYC 상태, 제출일시, 제출 결과 메시지 반환",
             content = @Content(schema = @Schema(implementation = KycSubmitResponse.class))
     )
-    @PostMapping({
-            "/api/corporate/kyc/applications/{kycId}/submit",
-            "/api/user/kyc/applications/{kycId}/submit"
-    })
+    @PostMapping("/api/corporate/kyc/applications/{kycId}/submit")
     public ResponseEntity<CommonResponse<KycSubmitResponse>> submit(
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails,
