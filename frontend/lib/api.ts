@@ -194,6 +194,27 @@ export type LoginResponse = {
   roles: string[];
 };
 
+export type MobileLoginRequest = {
+  email: string;
+  password: string;
+  autoLogin: boolean;
+  deviceId: string;
+  deviceName?: string;
+  os: string;
+  appVersion?: string;
+  publicKey?: string;
+};
+
+export type MobileLoginResponse = {
+  userId: number;
+  userType?: string;
+  email: string;
+  name?: string | null;
+  deviceId?: string;
+  deviceRegistered?: boolean;
+  accessTokenExpiresAt?: string;
+};
+
 export type MobileAutoLoginResponse = {
   autoLogin: boolean;
   userId?: number;
@@ -307,10 +328,14 @@ export const auth = {
       method: "POST",
       body: { email, password },
     }),
+  mobileLogin: (body: MobileLoginRequest) =>
+    api<MobileLoginResponse>("/api/mobile/auth/login", {
+      method: "POST",
+      body,
+    }),
   mobileAutoLogin: () =>
     api<MobileAutoLoginResponse>("/api/mobile/auth/auto-login", {
       method: "POST",
-      body: {},
     }),
   logout: () =>
     api<{ loggedOut: boolean }>("/api/auth/logout", {

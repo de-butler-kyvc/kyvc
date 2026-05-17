@@ -4,11 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { MCertCard } from "@/components/m/parts";
-import {
-  readMobileAutoLoginEnabled,
-  setMobileAutoLoginEnabled,
-  tryMobileAutoLogin,
-} from "@/lib/m/auto-login";
+import { tryMobileAutoLogin } from "@/lib/m/auto-login";
 
 const FIGMA_KYVC_LOGO =
   "https://www.figma.com/api/mcp/asset/c6fbedff-e5eb-4d29-9815-ca33494f9a9e";
@@ -42,19 +38,15 @@ const INTRO_CERTS = [
 
 export default function MobileOnboardingPage() {
   const router = useRouter();
-  const [checkingAutoLogin, setCheckingAutoLogin] = useState(false);
+  const [checkingAutoLogin, setCheckingAutoLogin] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    if (!readMobileAutoLoginEnabled()) return;
-    setCheckingAutoLogin(true);
-    tryMobileAutoLogin()
+    tryMobileAutoLogin({ requireEnabled: false })
       .then((res) => {
         if (!cancelled && res?.autoLogin) router.replace("/m/home");
       })
-      .catch(() => {
-        if (!cancelled) setMobileAutoLoginEnabled(false);
-      })
+      .catch(() => null)
       .finally(() => {
         if (!cancelled) setCheckingAutoLogin(false);
       });
