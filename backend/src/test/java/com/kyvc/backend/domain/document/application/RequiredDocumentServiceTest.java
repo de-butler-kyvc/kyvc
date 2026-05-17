@@ -122,6 +122,34 @@ class RequiredDocumentServiceTest {
                 .containsExactly("BUSINESS_REGISTRATION");
     }
 
+    @Test
+    void buildRequiredDocumentResponses_normalizesLegacyRepresentativeRequirementCode() {
+        when(commonCodeProvider.getEnabledCodes(DOCUMENT_TYPE_GROUP)).thenReturn(List.of(
+                code("REPRESENTATIVE_PROOF_DOCUMENT", "대표자 확인서류")
+        ));
+        when(documentRequirementRepository.findEnabledByCorporateTypeCode("ASSOCIATION"))
+                .thenReturn(List.of(
+                        requirement("ASSOCIATION", "REPRESENTATIVE_ID", true, 1, "대표자 확인서류 제출", null, null, null)
+                ));
+
+        List<RequiredDocumentResponse> responses = service.buildRequiredDocumentResponses(
+                "ASSOCIATION",
+                Set.of("REPRESENTATIVE_ID")
+        );
+
+        assertThat(responses)
+                .extracting(
+                        RequiredDocumentResponse::documentTypeCode,
+                        RequiredDocumentResponse::documentTypeName,
+                        RequiredDocumentResponse::uploaded
+                )
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "REPRESENTATIVE_PROOF_DOCUMENT",
+                        "대표자 확인서류",
+                        true
+                ));
+    }
+
     private List<DocumentRequirement> corporationRequirements() {
         return List.of(
                 requirement("CORPORATION", "BUSINESS_REGISTRATION", true, 1, "사업자등록증을 제출해 주세요.", null, null, null),

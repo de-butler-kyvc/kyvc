@@ -296,7 +296,7 @@ public class KycDocumentService {
     private String normalizeRequired(
             String value // 원본 문자열
     ) {
-        return value.trim();
+        return DocumentTypeCodeNormalizer.normalize(value);
     }
 
     // 미리보기 만료 일시 검증
