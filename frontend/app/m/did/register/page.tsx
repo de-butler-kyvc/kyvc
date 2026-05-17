@@ -34,19 +34,12 @@ function positiveBigInt(value?: string | number | bigint | null) {
 
 function readAvailableDrops(assets?: WalletAssetsResult | null) {
   if (!assets?.ok || assets.depositRequired) return null;
-  const record = assets as WalletAssetsResult & {
-    availableDrops?: string | number;
-    availableXrpDrops?: string | number;
-    spendableDrops?: string | number;
-    availableXrp?: string | number;
-    spendableXrp?: string | number;
-  };
   return (
-    positiveBigInt(record.availableXrpDrops) ??
-    positiveBigInt(record.availableDrops) ??
-    positiveBigInt(record.spendableDrops) ??
-    parseXrpToDrops(record.availableXrp) ??
-    parseXrpToDrops(record.spendableXrp)
+    positiveBigInt(assets.availableXrpDrops) ??
+    positiveBigInt(assets.availableDrops) ??
+    positiveBigInt(assets.spendableDrops) ??
+    parseXrpToDrops(assets.availableXrp) ??
+    parseXrpToDrops(assets.spendableXrp)
   );
 }
 
@@ -119,15 +112,19 @@ export default function MobileDidRegisterPage() {
   const availableDrops = readAvailableDrops(walletAssets);
   const ownerCount = walletAssets?.ownerCount ?? 0;
   const networkFeeDrops = feeDrops ?? DID_TX_FEE_DROPS;
+  const baseReserveDrops =
+    positiveBigInt(walletAssets?.baseReserveDrops) ?? XRPL_BASE_RESERVE_DROPS;
+  const ownerReserveDrops =
+    positiveBigInt(walletAssets?.ownerReserveDrops) ?? XRPL_OWNER_RESERVE_DROPS;
   const currentReserve =
-    XRPL_BASE_RESERVE_DROPS + XRPL_OWNER_RESERVE_DROPS * BigInt(ownerCount);
+    baseReserveDrops + ownerReserveDrops * BigInt(ownerCount);
   const currentSpendable =
     availableDrops ??
     (balanceDrops == null ? null : balanceDrops - currentReserve);
   const spendableAfterDid =
     currentSpendable == null
       ? null
-      : currentSpendable - XRPL_OWNER_RESERVE_DROPS - networkFeeDrops;
+      : currentSpendable - ownerReserveDrops - networkFeeDrops;
   const currentBalance =
     balanceDrops == null ? formatXrp(readXrpBalance(walletAssets)) : formatXrpDrops(balanceDrops);
   const depositRequired = Boolean(walletAssets?.depositRequired);
@@ -158,7 +155,7 @@ export default function MobileDidRegisterPage() {
           </div>
           <div>
             <dt>계정 준비금 증가 (잠금, 소각 아님)</dt>
-            <dd>{formatXrpDrops(XRPL_OWNER_RESERVE_DROPS)}</dd>
+            <dd>{formatXrpDrops(ownerReserveDrops)}</dd>
           </div>
           <div>
             <dt>등록 후 사용 가능 잔액</dt>
