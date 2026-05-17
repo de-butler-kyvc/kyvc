@@ -13,6 +13,7 @@ type ProfileForm = {
   businessNo: string;
   corporateNo: string;
   establishedDate: string;
+  businessType: string;
   zonecode: string;
   baseAddress: string;
   detailAddress: string;
@@ -26,6 +27,7 @@ const DEFAULTS: ProfileForm = {
   businessNo: "",
   corporateNo: "",
   establishedDate: "",
+  businessType: "",
   zonecode: "",
   baseAddress: "",
   detailAddress: "",
@@ -81,6 +83,9 @@ export default function CorporateProfilePage() {
   const [loading, setLoading] = useState(true);
   const [corporateId, setCorporateId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
 
   const {
     register,
@@ -102,13 +107,14 @@ export default function CorporateProfilePage() {
           corporateName: res?.corporateName ?? "",
           businessNo: res?.businessRegistrationNo ?? "",
           corporateNo: res?.corporateRegistrationNo ?? "",
+          establishedDate: res?.establishedDate ?? extras.establishedDate ?? "",
+          businessType: res?.businessType ?? "",
           zonecode: addr.zonecode,
           baseAddress: addr.baseAddress,
           detailAddress: addr.detailAddress,
-          phone: res?.representativePhone ?? "",
+          phone: res?.corporatePhone ?? res?.representativePhone ?? "",
           contactEmail: res?.representativeEmail ?? "",
-          website: extras.website ?? "",
-          establishedDate: extras.establishedDate ?? ""
+          website: res?.website ?? extras.website ?? ""
         });
         setCorporateId(res?.corporateId ?? null);
         setLoading(false);
@@ -133,13 +139,14 @@ export default function CorporateProfilePage() {
     setError(null);
     const composedAddress = composeAddress(data.zonecode, data.baseAddress, data.detailAddress);
     const payload = {
-      corporateName: data.corporateName,
-      representativeName: 'Test',
-      businessRegistrationNo: data.businessNo,
-      corporateRegistrationNo: data.corporateNo,
+      corporateName: data.corporateName.trim(),
+      businessRegistrationNo: data.businessNo.trim(),
+      corporateRegistrationNo: data.corporateNo.trim(),
+      establishedDate: data.establishedDate,
+      corporatePhone: data.phone.trim(),
       address: composedAddress,
-      businessType: "",
-      
+      website: data.website.trim(),
+      businessType: data.businessType.trim()
     };
     const id = corporateId
       ? (await corpApi.updateBasicInfo(corporateId, payload), corporateId)
@@ -231,8 +238,27 @@ export default function CorporateProfilePage() {
                 })}
               />
             </Field>
-            <Field label="설립일" required>
-              <input className="input" type="date" {...register("establishedDate")} />
+            <Field label="설립일" required error={errors.establishedDate?.message}>
+              <input
+                className={`input${errors.establishedDate ? " error" : ""}`}
+                type="date"
+                max={today}
+                {...register("establishedDate", {
+                  required: "설립일은 필수입니다",
+                  validate: (value) => value <= today || "미래일자는 입력할 수 없습니다"
+                })}
+              />
+            </Field>
+            <Field label="업종" required error={errors.businessType?.message}>
+              <input
+                className={`input${errors.businessType ? " error" : ""}`}
+                placeholder="예) 소프트웨어 개발 및 공급업"
+                {...register("businessType", {
+                  required: "업종은 필수입니다",
+                  maxLength: { value: 100, message: "업종은 100자 이내로 입력해 주세요" },
+                  validate: (value) => value.trim().length > 0 || "업종은 필수입니다"
+                })}
+              />
             </Field>
           </div>
         </div>

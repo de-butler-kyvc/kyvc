@@ -442,13 +442,14 @@ export type KycApplicationResponse = {
 /** POST /api/user/corporates, PUT .../basic-info 요청 본문 */
 export type CorporateBasicInfoBody = {
   corporateName: string;
-  representativeName: string;
   businessRegistrationNo: string;
-  corporateRegistrationNo: string;
-  address: string;
-  businessType?: string;
-  representativePhone?: string;
-  representativeEmail?: string;
+  corporateRegistrationNo?: string | null;
+  corporateTypeCode?: string | null;
+  establishedDate: string;
+  corporatePhone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  businessType: string;
 };
 export type Representative = {
   name: string;
@@ -496,13 +497,13 @@ export type AgentListItem = {
 export const corporate = {
   dashboard: () => api<UserDashboardResponse>("/api/user/dashboard"),
   create: (body: CorporateBasicInfoBody) =>
-    api<{ corporateId: number }>("/api/user/corporates", {
+    api<CorporateProfile>("/api/user/corporates", {
       method: "POST",
       body,
     }),
   me: () => api<CorporateProfile>("/api/user/corporates/me"),
   updateBasicInfo: (corporateId: number, body: CorporateBasicInfoBody) =>
-    api<{ updated: boolean }>(
+    api<CorporateProfile>(
       `/api/user/corporates/${corporateId}/basic-info`,
       { method: "PUT", body },
     ),

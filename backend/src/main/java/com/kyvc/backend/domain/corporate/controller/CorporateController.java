@@ -48,7 +48,7 @@ public class CorporateController {
      */
     @Operation(
             summary = "법인 기본정보 최초 등록",
-            description = "로그인 사용자의 법인 기본정보를 최초 등록합니다. 입력값은 법인명, 사업자등록번호, 법인등록번호, 법인 유형 코드, 설립일, 법인 대표전화, 주소, 웹사이트입니다."
+            description = "로그인 사용자의 법인 기본정보를 최초 등록합니다. 입력값은 법인명, 사업자등록번호, 법인등록번호, 법인 유형 코드, 설립일, 법인 대표전화, 주소, 웹사이트, 업종입니다."
     )
     @ApiResponse(
             responseCode = "201",
@@ -107,7 +107,7 @@ public class CorporateController {
      */
     @Operation(
             summary = "법인 기본정보 수정",
-            description = "로그인 사용자가 소유한 법인의 기본정보를 수정합니다. 입력값은 법인 ID, 법인명, 사업자등록번호, 법인등록번호, 법인 유형 코드, 설립일, 법인 대표전화, 주소, 웹사이트입니다."
+            description = "로그인 사용자가 소유한 법인의 기본정보를 수정합니다. 입력값은 법인 ID, 법인명, 사업자등록번호, 법인등록번호, 법인 유형 코드, 설립일, 법인 대표전화, 주소, 웹사이트, 업종입니다."
     )
     @ApiResponse(
             responseCode = "200",

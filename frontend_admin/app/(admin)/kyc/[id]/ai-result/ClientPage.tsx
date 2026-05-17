@@ -439,6 +439,7 @@ const CLAIM_LABELS: Record<string, string> = {
   nationality: "국적",
   englishName: "영문명",
   ownershipPercent: "지분율",
+  ownershipPercentage: "지분율",
   basis: "판단 기준",
   contact: "연락처",
   address: "주소",
@@ -580,9 +581,9 @@ function ClaimSectionList({ sections }: { sections: ClaimSection[] }) {
             <p className="text-xs font-semibold text-slate-600 mb-2">{section.title}</p>
             <div className="space-y-1.5">
               {section.rows.map((row) => (
-                <div key={`${section.title}-${row.label}`} className="flex gap-3 text-xs">
-                  <span className="w-24 shrink-0 text-slate-400">{row.label}</span>
-                  <span className="min-w-0 text-slate-700 break-words">{row.value}</span>
+                <div key={`${section.title}-${row.label}`} className="flex items-start gap-5 text-xs sm:gap-8">
+                  <span className="w-32 shrink-0 break-words text-slate-400 sm:w-44">{row.label}</span>
+                  <span className="min-w-0 flex-1 break-words text-slate-700">{row.value}</span>
                 </div>
               ))}
             </div>
