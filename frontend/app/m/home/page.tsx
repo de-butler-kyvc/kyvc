@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import {
@@ -427,11 +427,11 @@ export default function MobileHomePage() {
         void refreshHolderDidState(walletInfo);
         setWalletSheetOpen(false);
         setInactiveQrOpen(false);
-        showToast("XRPL 계정 활성화가 확인되었습니다.");
+        showToast("지갑 활성화가 확인되었습니다.");
         return;
       }
       if (isXrplAccountActivationRequired(assets) || assets.accountActivated !== true) {
-        showToast("아직 XRPL 계정 활성화가 필요합니다.");
+        showToast("아직 지갑 활성화가 필요합니다.");
       }
     } finally {
       setWalletRefreshing(false);
@@ -524,7 +524,7 @@ export default function MobileHomePage() {
           accountActivated: false,
           depositRequired: true,
           errorCode: "XRPL_ACCOUNT_NOT_ACTIVATED",
-          errorTitle: "XRPL 계정 활성화 필요",
+          errorTitle: "지갑 활성화 필요",
           errorHint: "이 주소로 XRP를 입금한 뒤 자산 조회를 다시 실행하세요.",
         } as WalletAssetsResult)
       : testState === "walletOnly"
@@ -565,7 +565,7 @@ export default function MobileHomePage() {
     !walletExists
       ? "지갑 생성 필요"
       : walletActivationRequired
-        ? "XRPL 계정 활성화 필요"
+        ? "지갑 활성화 필요"
         : didRegistered && registeredDid
           ? shortDid(registeredDid)
           : "DID 등록하기";
@@ -664,8 +664,12 @@ export default function MobileHomePage() {
             <div className={`home-wallet-state${homeStateReady ? " ready" : ""}`}>
               {homeStateReady ? (
                 <>
-                  {balanceXrp ? <h1>{balanceXrp}</h1> : null}
-                <button
+                  {balanceXrp ? (
+                    <h1 key={balanceXrp} className="wallet-balance-fade">
+                      {balanceXrp}
+                    </h1>
+                  ) : null}
+                  <button
                   type="button"
                   className={`wallet-did-copy${
                     didRegistered
@@ -754,15 +758,6 @@ export default function MobileHomePage() {
             </button>
           </section>
 
-          {homeStateReady && walletActivationRequired ? (
-            <XrplActivationNotice
-              address={activationAddress}
-              busy={walletRefreshing}
-              onCopy={copyActivationAddress}
-              onRefresh={recheckWalletActivation}
-            />
-          ) : null}
-
           <section className="stack-section">
             <div className="m-section-title section-title stack-title">
               <h2>내 증명서</h2>
@@ -818,10 +813,6 @@ export default function MobileHomePage() {
       {inactiveQrOpen ? (
         <InactiveQrMenu
           kind={qrNoticeKind}
-          activationAddress={walletActivationRequired ? activationAddress : null}
-          activationBusy={walletRefreshing}
-          onCopyActivationAddress={copyActivationAddress}
-          onRefreshActivation={recheckWalletActivation}
           onActivationRequired={openWalletActivationSheet}
           onIssue={() => {
             void handleIssueQrAction();
@@ -847,11 +838,11 @@ export default function MobileHomePage() {
       ) : null}
       {walletSheetOpen && walletActivationRequired ? (
         <WalletActivationSheet
-          address={activationAddress}
-          refreshing={walletRefreshing}
-          onCopyAddress={copyActivationAddress}
           onClose={() => setWalletSheetOpen(false)}
-          onRefresh={recheckWalletActivation}
+          onReceive={() => {
+            setWalletSheetOpen(false);
+            router.push("/m/xrp/receive");
+          }}
         />
       ) : walletSheetOpen ? (
         <WalletSetupSheet onClose={() => setWalletSheetOpen(false)} />
@@ -867,31 +858,21 @@ export default function MobileHomePage() {
 
 function InactiveQrMenu({
   kind,
-  activationAddress,
-  activationBusy,
-  onCopyActivationAddress,
-  onRefreshActivation,
   onActivationRequired,
   onIssue,
   onSubmit,
   onClose,
 }: {
   kind: "account" | "did" | "needCredential" | "credential";
-  activationAddress?: string | null;
-  activationBusy?: boolean;
-  onCopyActivationAddress?: (address?: string | null) => void;
-  onRefreshActivation?: () => void;
   onActivationRequired?: () => void;
   onIssue: () => void;
   onSubmit: () => void;
   onClose: () => void;
 }) {
-  const activationRequired = kind === "account" && Boolean(activationAddress);
   const issueReady = kind === "needCredential" || kind === "credential";
   const submitReady = kind === "credential";
   const menuReady = issueReady;
-  const blockedAction =
-    activationRequired && onActivationRequired ? onActivationRequired : undefined;
+  const blockedAction = kind === "account" ? onActivationRequired : undefined;
 
   return (
     <div className="inactive-qr-layer" role="dialog" aria-modal="true">
@@ -901,15 +882,7 @@ function InactiveQrMenu({
         aria-label="QR 메뉴 닫기"
         onClick={onClose}
       />
-      {menuReady ? null : activationRequired ? (
-        <XrplActivationNotice
-          className="inactive-qr-notice xrpl-activation-card xrpl-activation-qr-card"
-          address={activationAddress}
-          busy={activationBusy}
-          onCopy={(address) => onCopyActivationAddress?.(address)}
-          onRefresh={() => onRefreshActivation?.()}
-        />
-      ) : (
+      {menuReady ? null : (
         <section className="inactive-qr-notice" aria-live="polite">
           <span className="inactive-qr-notice-icon">
             <MIcon.help />
@@ -955,52 +928,6 @@ function InactiveQrMenu({
         </button>
       </section>
     </div>
-  );
-}
-
-function XrplActivationNotice({
-  address,
-  busy,
-  className,
-  onCopy,
-  onRefresh,
-}: {
-  address?: string | null;
-  busy?: boolean;
-  className?: string;
-  onCopy: (address?: string | null) => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <section className={className ?? "xrpl-activation-card"} aria-live="polite">
-      <div className="xrpl-activation-copy">
-        <span>Testnet</span>
-        <h2>XRPL 계정 활성화 필요</h2>
-        <p>지갑 주소로 Testnet XRP를 입금한 뒤 다시 확인해 주세요.</p>
-      </div>
-      <div className="xrpl-activation-address">
-        <span>지갑 주소</span>
-        <strong>{address ?? "주소 확인 중"}</strong>
-      </div>
-      <div className="xrpl-activation-actions">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => onCopy(address)}
-          disabled={!address}
-        >
-          주소 복사
-        </button>
-        <button
-          type="button"
-          className="primary"
-          onClick={onRefresh}
-          disabled={busy}
-        >
-          {busy ? "확인 중..." : "활성화 상태 다시 확인"}
-        </button>
-      </div>
-    </section>
   );
 }
 
@@ -1089,38 +1016,24 @@ function WalletSetupSheet({ onClose }: { onClose: () => void }) {
 }
 
 function WalletActivationSheet({
-  address,
-  refreshing,
-  onCopyAddress,
   onClose,
-  onRefresh,
+  onReceive,
 }: {
-  address?: string | null;
-  refreshing: boolean;
-  onCopyAddress: (address?: string | null) => void;
   onClose: () => void;
-  onRefresh: () => void;
+  onReceive: () => void;
 }) {
   return (
     <WalletGuideSheet
-      title="XRPL 계정 활성화 필요"
-      description="지갑 주소로 Testnet XRP를 입금한 뒤 다시 확인해 주세요."
-      linkLabel="주소 복사"
-      primaryLabel={refreshing ? "확인 중..." : "활성화 상태 다시 확인"}
+      title="지갑 활성화 필요"
+      description="지갑을 활성화하려면 1 XRP를 예치해야 합니다."
+      linkLabel="입금 주소 보기"
+      primaryLabel="확인"
       onClose={onClose}
-      onPrimary={onRefresh}
-      onLink={() => onCopyAddress(address)}
-      linkDisabled={!address}
-      primaryDisabled={refreshing}
+      onPrimary={onClose}
+      onLink={onReceive}
       ariaLabel="지갑 활성화 안내 닫기"
       handleLabel="지갑 활성화 안내 시트 이동"
-      sheetClassName="xrpl-activation-sheet"
-    >
-      <div className="wallet-sheet-address">
-        <span>지갑 주소</span>
-        <strong>{address ?? "주소 확인 중"}</strong>
-      </div>
-    </WalletGuideSheet>
+    />
   );
 }
 
@@ -1129,29 +1042,21 @@ function WalletGuideSheet({
   description,
   linkLabel,
   primaryLabel,
-  children,
   onClose,
   onPrimary,
   onLink,
-  linkDisabled,
-  primaryDisabled,
   ariaLabel,
   handleLabel,
-  sheetClassName,
 }: {
   title: string;
   description: string;
   linkLabel: string;
   primaryLabel: string;
-  children?: ReactNode;
   onClose: () => void;
-  onPrimary: () => void | Promise<void>;
+  onPrimary: () => void;
   onLink?: () => void;
-  linkDisabled?: boolean;
-  primaryDisabled?: boolean;
   ariaLabel: string;
   handleLabel: string;
-  sheetClassName?: string;
 }) {
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -1190,7 +1095,7 @@ function WalletGuideSheet({
         onClick={closeWithAnimation}
       />
       <div
-        className={`wallet-activation-sheet${sheetClassName ? ` ${sheetClassName}` : ""}${dragging ? " dragging" : ""}${closing ? " closing" : ""}`}
+        className={`wallet-activation-sheet${dragging ? " dragging" : ""}${closing ? " closing" : ""}`}
         style={{ transform: `translateY(${dragY}px)` }}
       >
         <div
@@ -1209,13 +1114,11 @@ function WalletGuideSheet({
         <div className="wallet-sheet-body">
           <h2>{title}</h2>
           <p>{description}</p>
-          {children}
           {onLink ? (
             <button
               type="button"
               className="wallet-sheet-link"
               onClick={onLink}
-              disabled={linkDisabled}
             >
               {linkLabel}
             </button>
@@ -1224,7 +1127,6 @@ function WalletGuideSheet({
         <button
           type="button"
           className="wallet-sheet-primary"
-          disabled={primaryDisabled}
           onClick={() => {
             if (onPrimary === onClose) closeWithAnimation();
             else onPrimary();
