@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
+
 // 법인 기본정보 서비스
 @Service
 @Transactional
@@ -59,7 +61,7 @@ public class CorporateService {
                 null,
                 normalizeOptional(request.address()),
                 normalizeOptional(request.website()),
-                null,
+                normalizeRequired(request.businessType()),
                 KyvcEnums.CorporateStatus.ACTIVE
         );
         return toResponse(corporateRepository.save(corporate));
@@ -106,7 +108,7 @@ public class CorporateService {
                 corporate.getRepresentativeEmail(),
                 normalizeOptional(request.address()),
                 normalizeOptional(request.website()),
-                corporate.getBusinessType()
+                normalizeRequired(request.businessType())
         );
         return toResponse(corporateRepository.save(corporate));
     }
@@ -117,7 +119,9 @@ public class CorporateService {
     ) {
         if (request == null
                 || !StringUtils.hasText(request.corporateName())
-                || !StringUtils.hasText(request.businessRegistrationNo())) {
+                || !StringUtils.hasText(request.businessRegistrationNo())
+                || !StringUtils.hasText(request.businessType())
+                || !validEstablishedDate(request.establishedDate())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
     }
@@ -128,9 +132,18 @@ public class CorporateService {
     ) {
         if (request == null
                 || !StringUtils.hasText(request.corporateName())
-                || !StringUtils.hasText(request.businessRegistrationNo())) {
+                || !StringUtils.hasText(request.businessRegistrationNo())
+                || !StringUtils.hasText(request.businessType())
+                || !validEstablishedDate(request.establishedDate())) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    // 설립일 유효성 여부
+    private boolean validEstablishedDate(
+            LocalDate establishedDate // 설립일
+    ) {
+        return establishedDate != null && !establishedDate.isAfter(LocalDate.now());
     }
 
     // 소유 법인 조회
