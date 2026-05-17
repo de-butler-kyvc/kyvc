@@ -547,6 +547,10 @@ export type RequiredDocument = {
   description?: string;
   allowedExtensions?: string[];
   maxFileSizeMb?: number;
+  groupCode?: string | null;
+  groupName?: string | null;
+  minRequiredCount?: number | null;
+  groupCandidate?: boolean;
 };
 
 export type KycMissingItem = {

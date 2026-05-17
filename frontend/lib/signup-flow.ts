@@ -16,7 +16,14 @@ type EntityTypeMeta = {
   label: string;
   description: string;
   /** kyc-flow.CORPORATE_TYPE_OPTIONS 코드와 매핑 */
-  corporateTypeCode: "CORPORATION" | "LIMITED" | "NONPROFIT" | "ASSOCIATION" | "FOREIGN";
+  corporateTypeCode:
+    | "CORPORATION"
+    | "LIMITED_COMPANY"
+    | "LIMITED_PARTNERSHIP"
+    | "GENERAL_PARTNERSHIP"
+    | "NON_PROFIT"
+    | "ASSOCIATION"
+    | "FOREIGN_COMPANY";
   iconKey: "Building" | "Users" | "UserCheck" | "Shield" | "Grid" | "Hash" | "File";
 };
 
@@ -32,35 +39,35 @@ export const SIGNUP_ENTITY_TYPES: EntityTypeMeta[] = [
     id: "yuhan",
     label: "유한회사",
     description: "KYC 신청, VC 발급, VP 제출",
-    corporateTypeCode: "LIMITED",
+    corporateTypeCode: "LIMITED_COMPANY",
     iconKey: "Building"
   },
   {
     id: "hapja",
     label: "합자회사",
     description: "KYC 신청, VC 발급, VP 제출",
-    corporateTypeCode: "CORPORATION",
+    corporateTypeCode: "LIMITED_PARTNERSHIP",
     iconKey: "Users"
   },
   {
     id: "hapmyong",
     label: "합명회사",
     description: "KYC 신청, VC 발급, VP 제출",
-    corporateTypeCode: "CORPORATION",
+    corporateTypeCode: "GENERAL_PARTNERSHIP",
     iconKey: "Users"
   },
   {
     id: "sadan",
     label: "사단법인",
     description: "KYC 신청, VC 발급, VP 제출",
-    corporateTypeCode: "NONPROFIT",
+    corporateTypeCode: "NON_PROFIT",
     iconKey: "UserCheck"
   },
   {
     id: "jaedan",
     label: "재단법인",
     description: "KYC 신청, VC 발급, VP 제출",
-    corporateTypeCode: "NONPROFIT",
+    corporateTypeCode: "NON_PROFIT",
     iconKey: "Shield"
   },
   {
@@ -81,7 +88,7 @@ export const SIGNUP_ENTITY_TYPES: EntityTypeMeta[] = [
     id: "foreign",
     label: "외국기업",
     description: "KYC 신청, VC 발급, VP 제출",
-    corporateTypeCode: "FOREIGN",
+    corporateTypeCode: "FOREIGN_COMPANY",
     iconKey: "File"
   }
 ];
