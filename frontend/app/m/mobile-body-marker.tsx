@@ -17,6 +17,10 @@ export default function MobileBodyMarker() {
     let startY = 0;
     let scrollTarget: HTMLElement | null = null;
     let viewportRaf = 0;
+    let maxVisualHeight =
+      window.visualViewport?.height ??
+      document.documentElement.clientHeight ??
+      window.innerHeight;
 
     const syncVisualViewport = () => {
       if (viewportRaf) return;
@@ -26,11 +30,14 @@ export default function MobileBodyMarker() {
         const height = vv?.height ?? window.innerHeight;
         const offsetTop = vv?.offsetTop ?? 0;
         const bottomInset = Math.max(0, window.innerHeight - height - offsetTop);
+        maxVisualHeight = Math.max(maxVisualHeight, height);
+        const keyboardOpen = maxVisualHeight - height > 120;
         const fallbackHeight = Math.max(
           height,
           document.documentElement.clientHeight,
           window.innerHeight,
         );
+        document.body.toggleAttribute("data-mobile-keyboard-open", keyboardOpen);
         document.documentElement.style.setProperty(
           "--m-visual-bottom",
           `${bottomInset}px`,
@@ -100,6 +107,7 @@ export default function MobileBodyMarker() {
       document.documentElement.style.removeProperty("--m-visual-height");
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
+      document.body.removeAttribute("data-mobile-keyboard-open");
       document.body.removeAttribute("data-mobile");
     };
   }, []);

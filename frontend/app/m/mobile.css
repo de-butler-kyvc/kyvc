@@ -3895,8 +3895,15 @@ html {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 0 20px max(0px, env(safe-area-inset-bottom));
-  transform: translateY(var(--m-visual-bottom, 0px));
-  transition: transform .18s ease;
+  transition:
+    opacity .12s ease,
+    visibility .12s ease;
+}
+
+body[data-mobile-keyboard-open="true"] .bottom-nav {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .nav-btn {
