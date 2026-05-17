@@ -13,6 +13,7 @@ import {
 import {
   ApiError,
   corporate,
+  didInstitutions,
 } from "@/lib/api";
 import {
   bridge,
@@ -23,7 +24,10 @@ import {
   type WalletAssetsResult,
   type WalletInfo,
 } from "@/lib/m/android-bridge";
-import { nativeSummaryToCert } from "@/lib/m/credential-summaries";
+import {
+  nativeCredentialIssuer,
+  nativeSummaryToCert,
+} from "@/lib/m/credential-summaries";
 import { readHiddenCerts } from "@/lib/m/data";
 import { mSession } from "@/lib/m/session";
 import {
@@ -46,7 +50,7 @@ const HOME_REFRESH_INTERVAL_MS = 3_000;
 const HOME_REFRESH_MIN_INTERVAL_MS = 2_000;
 
 const TEST_CREDENTIAL: CertItem = {
-  issuer: "did:xrpl:1:rIssuerTestWallet",
+  issuer: "KYvC 인증기관",
   title: "법인 KYC 증명서",
   status: "유효",
   id: "KYVC-CERT-240315",
@@ -75,6 +79,14 @@ function isWalletActivated(
   return Boolean(readWalletAccount(wallet, assets)) && isXrplAccountActivated(assets);
 }
 
+function credentialIssuerName(
+  summary: NativeCredentialSummary,
+  issuerNames: Record<string, string>,
+) {
+  if (summary.issuerDid) return issuerNames[summary.issuerDid] ?? "미등록 기관";
+  return nativeCredentialIssuer(summary);
+}
+
 export default function MobileHomePage() {
   const router = useRouter();
   const [certs, setCerts] = useState<CertItem[]>([]);
@@ -99,6 +111,7 @@ export default function MobileHomePage() {
   const homeRefreshInFlightRef = useRef(false);
   const pendingHomeRefreshRef = useRef(false);
   const lastHomeRefreshAtRef = useRef(0);
+  const issuerNameCacheRef = useRef<Record<string, string>>({});
 
   const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
     const holderAccount = info.holderAccount ?? info.account;
@@ -158,11 +171,60 @@ export default function MobileHomePage() {
     }
   }, []);
 
+  const resolveCredentialIssuerNames = useCallback(
+    async (summaries: NativeCredentialSummary[]) => {
+      const issuerDids = Array.from(
+        new Set(
+          summaries
+            .map((summary) => summary.issuerDid)
+            .filter((did): did is string => Boolean(did)),
+        ),
+      );
+      const missingDids = issuerDids.filter(
+        (did) =>
+          !Object.prototype.hasOwnProperty.call(issuerNameCacheRef.current, did),
+      );
+
+      if (missingDids.length > 0) {
+        const pairs = await Promise.all(
+          missingDids.map(async (did) => {
+            try {
+              const institution = await didInstitutions.get(did);
+              return [did, institution.institutionName || "미등록 기관"] as const;
+            } catch {
+              return [did, "미등록 기관"] as const;
+            }
+          }),
+        );
+        issuerNameCacheRef.current = {
+          ...issuerNameCacheRef.current,
+          ...Object.fromEntries(pairs),
+        };
+      }
+
+      return issuerNameCacheRef.current;
+    },
+    [],
+  );
+
+  const applyCredentialSummaries = useCallback(
+    async (summaries: NativeCredentialSummary[]) => {
+      const issuerNames = await resolveCredentialIssuerNames(summaries);
+      setCerts(
+        summaries.map((summary, index) => ({
+          ...nativeSummaryToCert(summary, index),
+          issuer: credentialIssuerName(summary, issuerNames),
+        })),
+      );
+    },
+    [resolveCredentialIssuerNames],
+  );
+
   const refreshCredentialSummaries = useCallback(async () => {
     if (!isBridgeAvailable()) return null;
     try {
       const list = await bridge.getCredentialSummaries();
-      setCerts((list.credentials ?? []).map(nativeSummaryToCert));
+      await applyCredentialSummaries(list.credentials ?? []);
       setApiError(null);
       return list;
     } catch (e) {
@@ -173,7 +235,7 @@ export default function MobileHomePage() {
       );
       return null;
     }
-  }, []);
+  }, [applyCredentialSummaries]);
 
   const refreshHomeData = useCallback(
     async (options?: { force?: boolean }) => {
@@ -317,8 +379,7 @@ export default function MobileHomePage() {
   useBridgeAction("GET_CREDENTIAL_SUMMARIES", (r) => {
     if (!r.ok) return;
     const list = (r.credentials as NativeCredentialSummary[] | undefined) ?? [];
-    setCerts(list.map(nativeSummaryToCert));
-    setApiError(null);
+    void applyCredentialSummaries(list).then(() => setApiError(null));
   });
 
   useBridgeAction("CREATE_WALLET", (r) => {
