@@ -22,6 +22,15 @@ public interface KycDocumentRepository {
     Optional<KycDocument> findById(Long documentId);
 
     /**
+     * kyc_documents 테이블에서 KYC ID와 문서 ID 기준으로 문서를 조회합니다.
+     *
+     * @param kycId 조회할 KYC 신청 ID
+     * @param documentId 조회할 문서 ID
+     * @return KYC 제출 문서 Optional
+     */
+    Optional<KycDocument> findByKycIdAndDocumentId(Long kycId, Long documentId);
+
+    /**
      * KYC 문서 업로드 상태를 변경합니다.
      *
      * @param documentId 문서 ID

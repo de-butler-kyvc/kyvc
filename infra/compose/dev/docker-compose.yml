@@ -69,6 +69,7 @@ services:
       - "8083:8080"
     volumes:
       - /opt/kyvc/logs/dev/back-admin:/app/logs
+      - /mnt/kyvc-dev/kyc-documents:/app/storage/kyc-documents:ro
       - /opt/kyvc/logs/dev:/app/service-logs:ro
     networks:
       - kyvc-admin-internal

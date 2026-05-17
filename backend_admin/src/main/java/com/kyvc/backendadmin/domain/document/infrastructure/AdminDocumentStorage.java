@@ -20,6 +20,9 @@ import java.util.List;
 public class AdminDocumentStorage {
 
     private static final String KYC_DOCUMENTS_ROOT_NAME = "kyc-documents";
+    private static final String BACKEND_ADMIN_MODULE_NAME = "backend_admin";
+    private static final String BACKEND_MODULE_NAME = "backend";
+    private static final String STORAGE_ROOT_NAME = "storage";
 
     private final AdminDocumentStorageProperties properties;
 
@@ -131,7 +134,40 @@ public class AdminDocumentStorage {
         if (!KYC_DOCUMENTS_ROOT_NAME.equals(rootPath.getFileName().toString())) {
             roots.add(rootPath.resolve(KYC_DOCUMENTS_ROOT_NAME).normalize());
         }
+        addLocalBackendStorageRoot(roots, rootPath);
         return List.copyOf(roots);
+    }
+
+    private void addLocalBackendStorageRoot(
+            LinkedHashSet<Path> roots, // 허용 저장소 루트 목록
+            Path rootPath // 관리자 문서 저장소 루트
+    ) {
+        Path storageRoot = KYC_DOCUMENTS_ROOT_NAME.equals(rootPath.getFileName().toString())
+                ? rootPath.getParent()
+                : rootPath;
+        if (storageRoot == null
+                || storageRoot.getFileName() == null
+                || !STORAGE_ROOT_NAME.equals(storageRoot.getFileName().toString())) {
+            return;
+        }
+
+        Path adminModulePath = storageRoot.getParent();
+        if (adminModulePath == null
+                || adminModulePath.getFileName() == null
+                || !BACKEND_ADMIN_MODULE_NAME.equals(adminModulePath.getFileName().toString())) {
+            return;
+        }
+
+        Path workspacePath = adminModulePath.getParent();
+        if (workspacePath == null) {
+            return;
+        }
+
+        roots.add(workspacePath
+                .resolve(BACKEND_MODULE_NAME)
+                .resolve(STORAGE_ROOT_NAME)
+                .resolve(KYC_DOCUMENTS_ROOT_NAME)
+                .normalize());
     }
 
     public record StoredContent(
