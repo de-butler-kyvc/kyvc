@@ -24,7 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CorporateRepresentativeService {
 
-    private static final String REPRESENTATIVE_ID_DOCUMENT_TYPE = "REPRESENTATIVE_ID"; // 대표자 신분증 문서 유형 코드
+    private static final String REPRESENTATIVE_ID_DOCUMENT_TYPE = "REPRESENTATIVE_PROOF_DOCUMENT"; // 대표자 신분증 문서 유형 코드
 
     private final CorporateRepository corporateRepository;
     private final CorporateRepresentativeRepository corporateRepresentativeRepository;

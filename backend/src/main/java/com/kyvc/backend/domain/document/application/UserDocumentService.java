@@ -184,7 +184,7 @@ public class UserDocumentService {
         if (!StringUtils.hasText(documentTypeCode)) {
             return null;
         }
-        String normalizedCode = documentTypeCode.trim().toUpperCase(Locale.ROOT); // 정규화 문서 유형 코드
+        String normalizedCode = DocumentTypeCodeNormalizer.normalize(documentTypeCode); // 정규화 문서 유형 코드
         commonCodeProvider.validateEnabledCode(DOCUMENT_TYPE_GROUP, normalizedCode);
         return normalizedCode;
     }

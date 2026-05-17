@@ -121,16 +121,17 @@ public class RequiredDocumentPolicyProvider {
             DocumentRequirement requirement, // 제출 문서 요구사항
             Map<String, CommonCodeItem> enabledDocumentTypeMap // 활성 문서 유형 공통코드 맵
     ) {
-        CommonCodeItem documentType = enabledDocumentTypeMap.get(requirement.getDocumentTypeCode());
+        String normalizedDocumentTypeCode = DocumentTypeCodeNormalizer.normalize(requirement.getDocumentTypeCode()); // 정규화 문서 유형 코드
+        CommonCodeItem documentType = enabledDocumentTypeMap.get(normalizedDocumentTypeCode);
         if (documentType != null) {
-            return new ResolvedDocumentRequirement(requirement, documentType);
+            return new ResolvedDocumentRequirement(requirement, normalizedDocumentTypeCode, documentType);
         }
-        if (commonCodeProvider.existsCode(DOCUMENT_TYPE_GROUP, requirement.getDocumentTypeCode())) {
+        if (commonCodeProvider.existsCode(DOCUMENT_TYPE_GROUP, normalizedDocumentTypeCode)) {
             return null;
         }
         throw new ApiException(
                 ErrorCode.COMMON_CODE_NOT_FOUND,
-                DOCUMENT_TYPE_GROUP + ":" + requirement.getDocumentTypeCode() + " 공통 코드를 찾을 수 없습니다."
+                DOCUMENT_TYPE_GROUP + ":" + normalizedDocumentTypeCode + " 공통 코드를 찾을 수 없습니다."
         );
     }
 
@@ -152,7 +153,7 @@ public class RequiredDocumentPolicyProvider {
                 ? toGroup(requirement, List.of(toItem(resolvedRequirement)))
                 : null; // 선택 필수 그룹
         return createPolicy(
-                requirement.getDocumentTypeCode(),
+                resolvedRequirement.documentTypeCode(),
                 resolvedRequirement.documentType().codeName(),
                 resolveGuideMessage(resolvedRequirement),
                 isSingleRequired(requirement),
@@ -196,7 +197,7 @@ public class RequiredDocumentPolicyProvider {
             ResolvedDocumentRequirement resolvedRequirement // 공통코드가 반영된 제출 문서 요구사항
     ) {
         return new DocumentRequirementItem(
-                resolvedRequirement.requirement().getDocumentTypeCode(),
+                resolvedRequirement.documentTypeCode(),
                 resolvedRequirement.documentType().codeName(),
                 resolveGuideMessage(resolvedRequirement)
         );
@@ -274,7 +275,7 @@ public class RequiredDocumentPolicyProvider {
     ) {
         return !requirement.isRequired()
                 && !hasGroup(requirement)
-                && AGENT_REQUIRED_DOCUMENT_TYPES.contains(requirement.getDocumentTypeCode());
+                && AGENT_REQUIRED_DOCUMENT_TYPES.contains(DocumentTypeCodeNormalizer.normalize(requirement.getDocumentTypeCode()));
     }
 
     private boolean hasGroup(
@@ -303,6 +304,7 @@ public class RequiredDocumentPolicyProvider {
 
     private record ResolvedDocumentRequirement(
             DocumentRequirement requirement, // 제출 문서 요구사항
+            String documentTypeCode, // 정규화 문서 유형 코드
             CommonCodeItem documentType // 문서 유형 공통코드
     ) {
     }

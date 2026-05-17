@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.corporate.application;
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
 import com.kyvc.backend.domain.corporate.domain.CorporateDocument;
 import com.kyvc.backend.domain.corporate.repository.CorporateDocumentRepository;
+import com.kyvc.backend.domain.document.application.DocumentTypeCodeNormalizer;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
 import com.kyvc.backend.global.exception.ApiException;
@@ -41,7 +42,7 @@ public class CorporateDocumentService {
         validateDocumentTypeCode(documentTypeCode);
         validateFile(file);
 
-        String normalizedDocumentTypeCode = documentTypeCode.trim(); // 정규화된 문서 유형 코드
+        String normalizedDocumentTypeCode = DocumentTypeCodeNormalizer.normalize(documentTypeCode); // 정규화된 문서 유형 코드
         commonCodeProvider.validateEnabledCode(DOCUMENT_TYPE_GROUP, normalizedDocumentTypeCode);
 
         DocumentStorage.StoredFile storedFile = documentStorage.storeCorporateDocument(
