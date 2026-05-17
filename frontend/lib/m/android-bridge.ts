@@ -452,6 +452,13 @@ export type WalletAssetsResult = BridgeResult & {
   depositRequired?: boolean;
   xrpBalanceDrops?: string;
   xrpBalanceXrp?: string;
+  availableXrpDrops?: string | number;
+  availableDrops?: string | number;
+  availableXrp?: string | number;
+  spendableDrops?: string | number;
+  spendableXrp?: string | number;
+  baseReserveDrops?: string | number;
+  ownerReserveDrops?: string | number;
   ownerCount?: number;
   sequence?: number;
   trustLineCount?: number;
