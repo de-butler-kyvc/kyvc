@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.finance.application;
 import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
+import com.kyvc.backend.domain.document.application.DocumentTypeCodeNormalizer;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
@@ -58,7 +59,7 @@ public class FinanceKycDocumentService {
             throw new ApiException(ErrorCode.FINANCE_KYC_DOCUMENT_UPLOAD_NOT_ALLOWED);
         }
 
-        String documentTypeCode = normalizeRequired(request.documentTypeCode()); // 문서 유형 코드
+        String documentTypeCode = DocumentTypeCodeNormalizer.normalize(request.documentTypeCode()); // 문서 유형 코드
         MultipartFile file = request.file(); // 업로드 파일
         commonCodeProvider.validateEnabledCode(DOCUMENT_TYPE_GROUP, documentTypeCode);
         validateFile(file);

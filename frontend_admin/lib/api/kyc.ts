@@ -7,33 +7,37 @@ const KYC_BASE = `${API_BASE}/api/admin/backend/kyc/applications`;
 // ── 상태/채널 코드 매핑 ──────────────────────────────────────
 
 const STATUS_KO_TO_API: Record<string, string> = {
-  수동심사필요: "MANUAL_REVIEW",
-  보완필요: "NEED_SUPPLEMENT",
-  심사중: "AI_REVIEWING",
-  정상: "APPROVED",
-  불충족: "REJECTED",
+  작성중: "DRAFT",
+  제출완료: "SUBMITTED",
+  "AI 심사중": "AI_REVIEWING",
+  수동심사: "MANUAL_REVIEW",
+  보완요청: "NEED_SUPPLEMENT",
+  승인완료: "APPROVED",
+  반려: "REJECTED",
+  "VC 발급완료": "VC_ISSUED",
 };
 
-const STATUS_API_TO_KO: Record<string, KycStatus> = {
-  NEEDS_MANUAL_REVIEW: "수동심사필요",
-  NEED_MANUAL_REVIEW: "수동심사필요",
-  MANUAL_REVIEW: "수동심사필요",
-  NEEDS_SUPPLEMENT: "보완필요",
-  NEED_SUPPLEMENT: "보완필요",
-  SUPPLEMENT_REQUESTED: "보완필요",
-  REVIEWING: "심사중",
-  AI_REVIEWING: "심사중",
-  SUBMITTED: "심사중",
-  DRAFT: "심사중",
-  NORMAL: "정상",
-  APPROVED: "정상",
-  UNSATISFACTORY: "불충족",
-  REJECTED: "불충족",
-  수동심사필요: "수동심사필요",
-  보완필요: "보완필요",
-  심사중: "심사중",
-  정상: "정상",
-  불충족: "불충족",
+const STATUS_API_TO_KO: Record<string, string> = {
+  DRAFT: "작성중",
+  SUBMITTED: "제출완료",
+  REVIEWING: "AI 심사중",
+  AI_REVIEWING: "AI 심사중",
+  MANUAL_REVIEW: "수동심사",
+  NEEDS_SUPPLEMENT: "보완요청",
+  NEED_SUPPLEMENT: "보완요청",
+  SUPPLEMENT_REQUESTED: "보완요청",
+  NORMAL: "승인완료",
+  APPROVED: "승인완료",
+  VC_ISSUED: "VC 발급완료",
+  UNSATISFACTORY: "반려",
+  REJECTED: "반려",
+  작성중: "작성중",
+  제출완료: "제출완료",
+  "AI 심사중": "AI 심사중",
+  수동심사: "수동심사",
+  보완요청: "보완요청",
+  승인완료: "승인완료",
+  반려: "반려",
 };
 
 const AI_JUDGMENT_KO: Record<string, string> = {
@@ -49,6 +53,7 @@ const AI_JUDGMENT_KO: Record<string, string> = {
   FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
   NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_APPROVAL_REQUIRED: "수동심사필요",
 };
 
 const CHANNEL_KO_TO_API: Record<string, string> = {
@@ -63,6 +68,29 @@ const CHANNEL_API_TO_KO: Record<string, KycChannel> = {
   금융사: "금융사",
 };
 
+const CORPORATE_TYPE_LABELS: Record<string, string> = {
+  CORPORATION: "주식회사",
+  SOLE_PROPRIETOR: "개인사업자",
+  LIMITED_COMPANY: "유한회사",
+  NON_PROFIT: "비영리법인",
+  ASSOCIATION: "조합·단체",
+  FOREIGN_COMPANY: "외국기업",
+};
+
+export function formatCorporateType(codeOrName?: string | null, name?: string | null) {
+  if (name) return name;
+  if (!codeOrName) return "-";
+  return CORPORATE_TYPE_LABELS[codeOrName] ?? codeOrName;
+}
+
+export function formatConfidence(value?: number | string | null) {
+  if (value === null || value === undefined) return "-";
+  const numeric = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(numeric)) return "-";
+  const percent = numeric <= 1 ? numeric * 100 : numeric;
+  return `${Math.round(percent)}%`;
+}
+
 // ── KYC 신청 관련 API 타입 ────────────────────────────────────
 
 interface BackendKycItem {
@@ -73,8 +101,13 @@ interface BackendKycItem {
   corporationName?: string;
   businessRegistrationNumber?: string;
   businessRegistrationNo?: string;
+  corporateType?: string;
   corporateTypeCode?: string;
+  corporateTypeName?: string;
   corporationType?: string;
+  corporateRegistrationNo?: string;
+  corporateRegistrationNumber?: string;
+  establishedDate?: string;
   applicationDate?: string;
   submittedAt?: string;
   channel?: string;
@@ -103,6 +136,10 @@ export interface BackendKycDetail {
   corporationName?: string;
   businessRegistrationNumber?: string;
   businessRegistrationNo?: string;
+  corporateTypeCode?: string;
+  corporateTypeName?: string;
+  corporateRegistrationNo?: string;
+  establishedDate?: string;
   applicationDate?: string;
   submittedAt?: string;
   channel?: string;
@@ -112,7 +149,7 @@ export interface BackendKycDetail {
   aiReviewResult?: string;
   aiReviewStatus?: string;
   aiReviewResultCode?: string;
-  aiConfidenceScore?: number;
+  aiConfidenceScore?: number | string;
   aiReviewSummary?: string;
   reviewerName?: string;
   documents?: KycDocument[];
@@ -128,10 +165,17 @@ export interface BackendKycCorporate {
   corporationName?: string;
   businessRegistrationNumber?: string;
   businessRegistrationNo?: string;
+  corporateRegistrationNo?: string;
   corporateRegistrationNumber?: string;
   corporateType?: string;
+  corporateTypeCode?: string;
+  corporateTypeName?: string;
   corporationType?: string;
   representativeName?: string;
+  agentName?: string;
+  agentAuthorityScope?: string;
+  agentPhone?: string;
+  agentEmail?: string;
   establishedDate?: string;
   address?: string;
   businessType?: string;
@@ -225,12 +269,13 @@ export async function getKycList(filters?: {
   const rows = unwrapListData(json.data);
   return rows.map((row) => {
     const statusCode = row.kycStatus ?? row.status ?? "";
-    const aiCode = row.aiJudgment ?? row.aiReviewResult ?? row.aiReviewResultCode ?? row.aiReviewStatus ?? row.aiReviewStatusCode ?? "";
+    const aiCode = row.aiReviewResult ?? row.aiReviewResultCode ?? "";
+    const corporateType = row.corporationType ?? row.corporateType ?? row.corporateTypeCode;
     return {
       id: String(row.kycId ?? row.applicationId ?? row.id ?? ""),
       corp: row.corporateName ?? row.corporationName ?? "-",
       biz: row.businessRegistrationNumber ?? row.businessRegistrationNo ?? "-",
-      type: row.corporationType ?? row.corporateTypeCode ?? "-",
+      type: formatCorporateType(corporateType, row.corporateTypeName),
       date: fmtDt(row.applicationDate ?? row.submittedAt),
       channel: (CHANNEL_API_TO_KO[row.channel ?? ""] ?? row.channel ?? "-") as KycChannel,
       status: (STATUS_API_TO_KO[statusCode] ?? statusCode) as KycStatus,
@@ -306,6 +351,8 @@ export interface KycSubmittedDocument {
   documentTypeName?: string;
   documentName: string;
   fileName: string;
+  mimeType?: string;
+  contentType?: string;
   fileSize?: string | number;
   uploadedAt?: string;
   submittedAt?: string;
@@ -315,6 +362,12 @@ export interface KycSubmittedDocument {
 
 export interface DocumentPreviewData {
   previewUrl?: string;
+  contentType?: string;
+}
+
+export interface DocumentBlobData {
+  blob: Blob;
+  fileName?: string;
   contentType?: string;
 }
 
@@ -336,18 +389,50 @@ export async function getKycDocuments(kycId: string): Promise<KycSubmittedDocume
 }
 
 /** GET /api/admin/backend/kyc/applications/{kycId}/documents/{documentId}/preview */
-export async function getKycDocumentPreview(
+export async function getKycDocumentPreviewBlob(
   kycId: string,
   documentId: string
-): Promise<DocumentPreviewData> {
-  const response = await fetch(`${KYC_BASE}/${kycId}/documents/${documentId}/preview`, {
+): Promise<DocumentBlobData> {
+  return fetchDocumentBlob(`${KYC_BASE}/${kycId}/documents/${documentId}/preview`);
+}
+
+/** GET /api/admin/backend/kyc/applications/{kycId}/documents/{documentId}/download */
+export async function downloadKycDocumentBlob(
+  kycId: string,
+  documentId: string
+): Promise<DocumentBlobData> {
+  return fetchDocumentBlob(`${KYC_BASE}/${kycId}/documents/${documentId}/download`);
+}
+
+async function fetchDocumentBlob(url: string): Promise<DocumentBlobData> {
+  const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
     credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<DocumentPreviewData>;
-  return json.data;
+  const blob = await response.blob();
+  const contentType = response.headers.get("Content-Type") ?? blob.type;
+  return {
+    blob,
+    fileName: fileNameFromDisposition(response.headers.get("Content-Disposition")),
+    contentType,
+  };
+}
+
+function fileNameFromDisposition(disposition: string | null): string | undefined {
+  if (!disposition) return undefined;
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.replace(/"/g, ""));
+    } catch {
+      return encoded;
+    }
+  }
+
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  return plain ? plain.trim() : undefined;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -473,12 +558,13 @@ export async function rejectKycManualReview(
 export interface AiReviewResult {
   status?: string;
   overallJudgment: string;
-  confidenceScore: number;
+  confidenceScore: number | string;
   modelVersion?: string;
   reviewedAt?: string;
   summaryReason?: string;
   manualReviewReason?: string;
   detailJson?: string;
+  coreAiAssessmentJson?: string;
 }
 
 export interface AiMismatch {
@@ -548,6 +634,7 @@ export async function getAiReview(kycId: string): Promise<AiReviewResult> {
     summaryReason: (d.summary ?? d.summaryReason ?? d.aiReviewSummary) as string | undefined,
     manualReviewReason: d.manualReviewReason as string | undefined,
     detailJson: (d.detailJson ?? d.aiReviewDetailJson) as string | undefined,
+    coreAiAssessmentJson: d.coreAiAssessmentJson as string | undefined,
     modelVersion: d.modelVersion as string | undefined,
     reviewedAt: (d.reviewedAt ?? d.updatedAt) as string | undefined,
   };

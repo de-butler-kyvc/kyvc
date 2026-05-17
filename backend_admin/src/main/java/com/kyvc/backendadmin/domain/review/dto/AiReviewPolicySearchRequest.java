@@ -32,7 +32,7 @@ public record AiReviewPolicySearchRequest(
             String enabledYn
     ) {
         int normalizedPage = page == null || page < 0 ? 0 : page;
-        int normalizedSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int normalizedSize = size == null || size < 1 ? 15 : Math.min(size, 100);
         return new AiReviewPolicySearchRequest(
                 normalizedPage,
                 normalizedSize,

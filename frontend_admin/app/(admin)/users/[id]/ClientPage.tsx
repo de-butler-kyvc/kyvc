@@ -139,7 +139,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   if (loadError || !user) {
     return (
       <div className="space-y-4">
-        <p className="text-xs text-slate-400">백엔드 어드민 · <Link href="/users" className="hover:underline">법인 사용자 관리</Link></p>
+        <p className="text-xs text-slate-400">증명서 관리자 · <Link href="/users" className="hover:underline">법인 사용자 관리</Link></p>
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-4 text-sm text-red-600">
           {loadError ?? "사용자 정보를 불러오지 못했습니다."}
         </div>
@@ -157,7 +157,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href="/users" className="hover:underline">법인 사용자 관리</Link>
+            증명서 관리자 · <Link href="/users" className="hover:underline">법인 사용자 관리</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">법인 사용자 상세</h1>
         </div>
@@ -412,7 +412,7 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
 

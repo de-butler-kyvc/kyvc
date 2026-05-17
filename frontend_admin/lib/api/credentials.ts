@@ -10,15 +10,37 @@ export interface KycCredential {
   issuedAt?: string;
   expiresAt?: string;
   status?: string;
+  credentialStatusCode?: string;
   credentialType?: string;
+  credentialTypeCode?: string;
+  credentialExternalId?: string;
   issuerDid?: string;
   holderDid?: string;
   xrplTxHash?: string;
   transactionHash?: string;
   mobileStored?: boolean | string;
+  walletSavedYn?: string;
 }
 
-export interface KycCredentialDetail extends KycCredential {
+export interface AdminCredentialDetailResponse extends KycCredential {
+  holderXrplAddress?: string;
+  credentialStatusId?: string;
+  walletSavedAt?: string;
+  revokedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  corporateId?: string | number;
+  corporateName?: string;
+  businessRegistrationNo?: string;
+  corporatePhone?: string;
+  kycId?: string | number;
+  kycStatusCode?: string;
+  aiReviewStatusCode?: string;
+  coreRequestStatusCode?: string;
+  coreErrorMessage?: string;
+}
+
+export interface KycCredentialDetail extends AdminCredentialDetailResponse {
   vcJson?: string;
   vcData?: Record<string, unknown>;
 }

@@ -2,12 +2,15 @@ package com.kyvc.backend.domain.core.infrastructure;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyvc.backend.domain.core.application.CorePayloadSanitizer;
+import com.kyvc.backend.domain.core.application.CoreDocumentEvidencePolicy;
 import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewRequest;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewResponse;
 import com.kyvc.backend.domain.core.dto.CoreAiReviewStatusResponse;
+import com.kyvc.backend.domain.core.dto.CoreAttachmentPart;
 import com.kyvc.backend.domain.core.dto.CoreCredentialSchemaResponse;
 import com.kyvc.backend.domain.core.dto.CoreCredentialStatusResponse;
 import com.kyvc.backend.domain.core.dto.CoreCredentialVerificationRequest;
@@ -48,11 +51,15 @@ import com.kyvc.backend.global.logging.LogEventLogger;
 import com.kyvc.backend.global.util.KyvcEnums;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -109,7 +116,10 @@ public class CoreHttpAdapter implements CoreAdapter {
     private static final String DEFAULT_HOLDER_KEY_ID = "holder-key-1";
     private static final String CORE_DOCUMENT_TYPE_UNKNOWN = "UNKNOWN";
     private static final String BACKEND_CORPORATE_TYPE_CORPORATION = "CORPORATION";
+    private static final String BACKEND_CORPORATE_TYPE_JOINT_STOCK_COMPANY = "JOINT_STOCK_COMPANY";
     private static final String BACKEND_CORPORATE_TYPE_LIMITED_COMPANY = "LIMITED_COMPANY";
+    private static final String BACKEND_CORPORATE_TYPE_LIMITED_PARTNERSHIP = "LIMITED_PARTNERSHIP";
+    private static final String BACKEND_CORPORATE_TYPE_GENERAL_PARTNERSHIP = "GENERAL_PARTNERSHIP";
     private static final String BACKEND_CORPORATE_TYPE_NON_PROFIT = "NON_PROFIT";
     private static final String BACKEND_CORPORATE_TYPE_ASSOCIATION = "ASSOCIATION";
     private static final String BACKEND_CORPORATE_TYPE_FOREIGN_COMPANY = "FOREIGN_COMPANY";
@@ -149,6 +159,7 @@ public class CoreHttpAdapter implements CoreAdapter {
             "BENEFICIAL_OWNER_PROOF_DOCUMENT",
             "POWER_OF_ATTORNEY",
             "SEAL_CERTIFICATE",
+            "REPRESENTATIVE_PROOF_DOCUMENT",
             "UNKNOWN"
     );
 
@@ -223,6 +234,7 @@ public class CoreHttpAdapter implements CoreAdapter {
                     .retrieve()
                     .toEntity(String.class);
             logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            String responseBody = responseEntity.getBody(); // Core AI 심사 원본 응답 body
             LlmPrimaryAssessmentApiResponse body = parseAiReviewResponseBody(
                     request,
                     endpoint,
@@ -230,7 +242,18 @@ public class CoreHttpAdapter implements CoreAdapter {
                     startedAt,
                     fields
             );
-            CoreAiReviewResponse mapped = mapAiReviewResponseSafely(request, endpoint, body, startedAt, fields);
+            String coreAiReviewRawJson = sanitizeAiReviewResponsePayload(responseBody);
+            String coreAiAssessmentJson = extractSanitizedAssessmentJson(responseBody);
+            CoreAiReviewResponse mapped = mapAiReviewResponseSafely(
+                    request,
+                    endpoint,
+                    body,
+                    startedAt,
+                    fields,
+                    coreAiAssessmentJson,
+                    coreAiReviewRawJson
+            );
+            logAiReviewAssessmentDetails(mapped, body.assessment(), fields);
             logEventLogger.info("core.response.mapped", "Core AI review response mapped", fields);
             return mapped;
         } catch (CoreAiReviewException exception) {
@@ -468,19 +491,96 @@ public class CoreHttpAdapter implements CoreAdapter {
         }
     }
 
+    @Override
+    public CoreVpVerificationResponse requestVpVerificationWithAttachments(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String format, // Presentation format
+            Object presentation, // Presentation 원문 또는 객체
+            Map<String, Object> didDocuments, // DID document 목록
+            Object attachmentManifest, // attachmentManifest 목록
+            List<CoreAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        if (request == null || !StringUtils.hasText(request.coreRequestId())) {
+            throw new ApiException(ErrorCode.CORE_REQUIRED_DATA_MISSING, "VP 寃利??붿껌 ?꾩닔 ?곗씠?곌? 遺議깊빀?덈떎.");
+        }
+        if (!StringUtils.hasText(format) || presentation == null) {
+            throw new ApiException(ErrorCode.VP_JWT_REQUIRED);
+        }
+        if (!PRESENTATION_FORMAT_SD_JWT.equals(format.trim())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+
+        Object corePresentation = buildCorePresentation(request, format.trim(), presentation, attachmentManifest);
+        MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
+        bodyBuilder.part("presentation", serializeJson(corePresentation), MediaType.APPLICATION_JSON);
+        for (CoreAttachmentPart attachment : safeAttachments(attachments)) {
+            bodyBuilder.part(attachment.partName(), attachmentResource(attachment))
+                    .filename(attachment.fileName())
+                    .contentType(resolveAttachmentMediaType(attachment.contentType()));
+        }
+        MultiValueMap<String, HttpEntity<?>> multipartBody = bodyBuilder.build();
+
+        String endpoint = VERIFY_PRESENTATION_ENDPOINT;
+        Map<String, Object> fields = createHttpLogFields(endpoint, request.coreRequestId(), request.credentialId(), request.vpVerificationId());
+        fields.put("presentationFormat", format.trim());
+        fields.put("attachmentCount", safeAttachments(attachments).size());
+        fields.put("manifestDocumentCount", countManifestDocuments(attachmentManifest));
+        long startedAt = System.currentTimeMillis();
+        logEventLogger.info("core.call.started", "Core VP verify multipart API call started", fields);
+        try {
+            ResponseEntity<VerificationApiResponse> responseEntity = coreRestClient.post()
+                    .uri(endpoint)
+                    .headers(this::applyApiKeyHeader)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(multipartBody)
+                    .retrieve()
+                    .toEntity(VerificationApiResponse.class);
+            VerificationApiResponse body = requireResponseBody(responseEntity.getBody(), endpoint);
+            logHttpCompleted(endpoint, responseEntity.getStatusCode().value(), startedAt, fields);
+            CoreVpVerificationResponse mapped = mapVpVerificationResponse(request, body);
+            logEventLogger.info("core.response.mapped", "Core VP verify multipart response mapped", fields);
+            return mapped;
+        } catch (RestClientException exception) {
+            ApiException mapped = mapCoreException(endpoint, exception, fields);
+            throw mapped;
+        }
+    }
+
     private Object buildCorePresentation(
             CoreVpVerificationRequest request, // VP 검증 요청
             String format, // Presentation format
             Object presentation // Presentation 원문 또는 객체
     ) {
-        if (!PRESENTATION_FORMAT_SD_JWT.equals(format) || !(presentation instanceof String presentationString)) {
+        return buildCorePresentation(request, format, presentation, null);
+    }
+
+    private Object buildCorePresentation(
+            CoreVpVerificationRequest request, // VP 검증 요청
+            String format, // Presentation format
+            Object presentation, // Presentation 원문 또는 객체
+            Object attachmentManifest // attachmentManifest 목록
+    ) {
+        if (!PRESENTATION_FORMAT_SD_JWT.equals(format)) {
             return presentation;
         }
         Map<String, Object> presentationObject = new LinkedHashMap<>();
-        presentationObject.put("format", PRESENTATION_FORMAT_SD_JWT);
-        presentationObject.put("aud", request.aud());
-        presentationObject.put("nonce", request.requestNonce());
-        presentationObject.put("sdJwtKb", presentationString);
+        if (presentation instanceof Map<?, ?> presentationMap) {
+            presentationMap.forEach((key, value) -> {
+                if (key != null) {
+                    presentationObject.put(String.valueOf(key), value);
+                }
+            });
+        } else if (presentation instanceof String presentationString) {
+            presentationObject.put("sdJwtKb", presentationString);
+        } else {
+            return presentation;
+        }
+        presentationObject.putIfAbsent("format", PRESENTATION_FORMAT_SD_JWT);
+        presentationObject.putIfAbsent("aud", request.aud());
+        presentationObject.putIfAbsent("nonce", request.requestNonce());
+        if (attachmentManifest != null) {
+            presentationObject.put("attachmentManifest", attachmentManifest);
+        }
         return presentationObject;
     }
 
@@ -491,7 +591,44 @@ public class CoreHttpAdapter implements CoreAdapter {
         policy.put("id", PRESENTATION_DEFINITION_ID_KYC);
         policy.put("acceptedFormat", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         policy.put("requiredClaims", requiredClaims == null ? List.of() : requiredClaims);
+        policy.put("requiredDisclosures", CoreDocumentEvidencePolicy.requiredDisclosures(requiredClaims));
+        policy.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requiredClaims));
         return policy;
+    }
+
+    private List<CoreAttachmentPart> safeAttachments(
+            List<CoreAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        return attachments == null ? List.of() : attachments;
+    }
+
+    private ByteArrayResource attachmentResource(
+            CoreAttachmentPart attachment // 원본 첨부 파일 파트
+    ) {
+        return new ByteArrayResource(attachment.content()) {
+            @Override
+            public String getFilename() {
+                return attachment.fileName();
+            }
+        };
+    }
+
+    private MediaType resolveAttachmentMediaType(
+            String contentType // MIME 타입
+    ) {
+        if (!StringUtils.hasText(contentType)) {
+            return MediaType.APPLICATION_PDF;
+        }
+        return MediaType.parseMediaType(contentType.trim());
+    }
+
+    private int countManifestDocuments(
+            Object attachmentManifest // attachmentManifest 목록
+    ) {
+        if (attachmentManifest instanceof List<?> manifestList) {
+            return manifestList.size();
+        }
+        return attachmentManifest == null ? 0 : 1;
     }
 
     @Override
@@ -746,7 +883,10 @@ public class CoreHttpAdapter implements CoreAdapter {
         String normalized = corporateTypeCode.trim().toUpperCase(Locale.ROOT);
         return switch (normalized) {
             case BACKEND_CORPORATE_TYPE_CORPORATION -> CORE_LEGAL_ENTITY_STOCK_COMPANY;
-            case BACKEND_CORPORATE_TYPE_LIMITED_COMPANY -> CORE_LEGAL_ENTITY_LIMITED_COMPANY;
+            case BACKEND_CORPORATE_TYPE_JOINT_STOCK_COMPANY -> CORE_LEGAL_ENTITY_STOCK_COMPANY;
+            case BACKEND_CORPORATE_TYPE_LIMITED_COMPANY,
+                    BACKEND_CORPORATE_TYPE_LIMITED_PARTNERSHIP,
+                    BACKEND_CORPORATE_TYPE_GENERAL_PARTNERSHIP -> CORE_LEGAL_ENTITY_LIMITED_COMPANY;
             case BACKEND_CORPORATE_TYPE_NON_PROFIT -> CORE_LEGAL_ENTITY_INCORPORATED_ASSOCIATION;
             case BACKEND_CORPORATE_TYPE_ASSOCIATION -> CORE_LEGAL_ENTITY_COOPERATIVE;
             case BACKEND_CORPORATE_TYPE_FOREIGN_COMPANY -> CORE_LEGAL_ENTITY_FOREIGN_COMPANY;
@@ -787,6 +927,15 @@ public class CoreHttpAdapter implements CoreAdapter {
             CoreAiReviewRequest request, // AI 심사 요청
             LlmPrimaryAssessmentApiResponse body // Core AI 심사 응답
     ) {
+        return mapAiReviewResponse(request, body, null, null);
+    }
+
+    private CoreAiReviewResponse mapAiReviewResponse(
+            CoreAiReviewRequest request, // AI 심사 요청
+            LlmPrimaryAssessmentApiResponse body, // Core AI 심사 응답
+            String coreAiAssessmentJson, // Core AI assessment 상세 JSON
+            String coreAiReviewRawJson // Core AI review 원본 응답 JSON
+    ) {
         LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment = body.assessment();
         if (assessment == null || !StringUtils.hasText(assessment.status())) {
             throw new ApiException(ErrorCode.CORE_API_RESPONSE_INVALID, "Core AI 심사 응답 필수 필드가 부족합니다.");
@@ -800,7 +949,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                 assessment.overallConfidence(),
                 resolveAiReviewMessage(assessment),
                 LocalDateTime.now(),
-                buildAiReviewClaims(assessment)
+                buildAiReviewClaims(assessment),
+                coreAiAssessmentJson,
+                coreAiReviewRawJson
         );
     }
 
@@ -1008,13 +1159,59 @@ public class CoreHttpAdapter implements CoreAdapter {
             String endpoint, // 호출 endpoint
             LlmPrimaryAssessmentApiResponse body, // Core AI 심사 응답
             long startedAt, // 시작 시각
-            Map<String, Object> fields // 로그 필드
+            Map<String, Object> fields, // 로그 필드
+            String coreAiAssessmentJson, // Core AI assessment 상세 JSON
+            String coreAiReviewRawJson // Core AI review 원본 응답 JSON
     ) {
         try {
-            return mapAiReviewResponse(request, body);
+            return mapAiReviewResponse(request, body, coreAiAssessmentJson, coreAiReviewRawJson);
         } catch (ApiException exception) {
             throw buildAiReviewInvalidResponseException(request, endpoint, startedAt, fields, exception);
         }
+    }
+
+    private String sanitizeAiReviewResponsePayload(
+            String responseBody // Core AI 심사 원본 응답 body
+    ) {
+        return corePayloadSanitizer.sanitizeAiReviewResponsePayload(responseBody);
+    }
+
+    private String extractSanitizedAssessmentJson(
+            String responseBody // Core AI 심사 원본 응답 body
+    ) {
+        if (!StringUtils.hasText(responseBody)) {
+            return null;
+        }
+        try {
+            JsonNode assessmentNode = objectMapper.readTree(responseBody).get("assessment");
+            if (assessmentNode == null || assessmentNode.isNull()) {
+                return null;
+            }
+            return corePayloadSanitizer.sanitizeAiReviewResponsePayload(objectMapper.writeValueAsString(assessmentNode));
+        } catch (JsonProcessingException exception) {
+            return null;
+        }
+    }
+
+    private void logAiReviewAssessmentDetails(
+            CoreAiReviewResponse response, // Core AI 심사 매핑 응답
+            LlmPrimaryAssessmentApiResponse.KycAssessmentApiResponse assessment, // Core AI assessment 응답
+            Map<String, Object> baseFields // 로그 기본 필드
+    ) {
+        if (response == null || assessment == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<>(baseFields);
+        fields.put("assessmentId", response.assessmentId());
+        fields.put("assessmentStatus", response.assessmentStatus());
+        fields.put("confidenceScore", response.confidenceScore());
+        fields.put("supplementRequestsCount", assessment.supplementRequests().size());
+        fields.put("manualReviewReasonsCount", assessment.manualReviewReasons().size());
+        logEventLogger.info(
+                "core.ai_review.assessment_details.saved",
+                "Core AI review assessment details captured",
+                fields
+        );
     }
 
     private LlmPrimaryAssessmentApiResponse parseAiReviewResponseBody(
@@ -1697,6 +1894,16 @@ public class CoreHttpAdapter implements CoreAdapter {
     ) {
     }
 
+    private String serializeJson(
+            Object value // JSON 변환 대상
+    ) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.CORE_API_CALL_FAILED, "Core JSON 직렬화 실패", exception);
+        }
+    }
+
     private String serializeCredentialPayload(
             Object credential // Core credential 객체
     ) {
@@ -1771,7 +1978,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                     true,
                     true,
                     false,
-                    resolveSummary(errors, details, "VP 검증 성공")
+                    resolveSummary(errors, details, "VP 검증 성공"),
+                    errors,
+                    details
             );
         }
         if (replaySuspected) {
@@ -1783,7 +1992,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                     true,
                     false,
                     true,
-                    resolveSummary(errors, details, "VP Replay 의심")
+                    resolveSummary(errors, details, "VP Replay 의심"),
+                    errors,
+                    details
             );
         }
         return new CoreVpVerificationResponse(
@@ -1794,7 +2005,9 @@ public class CoreHttpAdapter implements CoreAdapter {
                 true,
                 false,
                 false,
-                resolveSummary(errors, details, "VP 검증 실패")
+                resolveSummary(errors, details, "VP 검증 실패"),
+                errors,
+                details
         );
     }
 

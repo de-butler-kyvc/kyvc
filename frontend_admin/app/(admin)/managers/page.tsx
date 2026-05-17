@@ -38,7 +38,7 @@ export default function ManagersPage() {
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
-  const ITEMS_PER_PAGE = 3;
+  const ITEMS_PER_PAGE = 15;
 
   const handleRegister = async () => {
     if (!form.email || !form.name || !form.password || !form.roleId) {
@@ -118,7 +118,7 @@ export default function ManagersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400">백엔드 어드민</p>
+          <p className="text-xs text-slate-400">증명서 관리자</p>
           <h1 className="text-xl font-bold text-slate-800">관리자 사용자 관리</h1>
         </div>
       </div>
@@ -230,7 +230,7 @@ export default function ManagersPage() {
       </div>
 
       <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
 

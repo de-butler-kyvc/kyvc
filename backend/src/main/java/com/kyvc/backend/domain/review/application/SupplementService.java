@@ -7,6 +7,7 @@ import com.kyvc.backend.domain.document.dto.KycDocumentUploadRequest;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
+import com.kyvc.backend.domain.kyc.repository.KycReviewHistoryRepository;
 import com.kyvc.backend.domain.review.domain.KycSupplement;
 import com.kyvc.backend.domain.review.domain.KycSupplementDocument;
 import com.kyvc.backend.domain.review.dto.SupplementDetailResponse;
@@ -40,6 +41,7 @@ public class SupplementService {
     private final KycDocumentService kycDocumentService;
     private final SupplementRepository supplementRepository;
     private final SupplementDocumentRepository supplementDocumentRepository;
+    private final KycReviewHistoryRepository kycReviewHistoryRepository;
 
     // 보완요청 목록 조회
     @Transactional(readOnly = true)
@@ -133,11 +135,20 @@ public class SupplementService {
         }
 
         LocalDateTime submittedAt = LocalDateTime.now(); // 제출 일시
+        KyvcEnums.KycStatus beforeKycStatus = kycApplication.getKycStatus(); // 보완 제출 전 KYC 상태
         supplement.submit(request == null ? null : request.submittedComment(), submittedAt);
         kycApplication.submitSupplement(submittedAt);
 
         KycSupplement savedSupplement = supplementRepository.save(supplement);
         KycApplication savedKycApplication = kycApplicationRepository.save(kycApplication);
+        kycReviewHistoryRepository.saveStatusChange(
+                savedKycApplication.getKycId(),
+                KyvcEnums.ReviewActionType.SUPPLEMENT_SUBMIT,
+                beforeKycStatus,
+                savedKycApplication.getKycStatus(),
+                "보완 제출 완료",
+                submittedAt
+        );
 
         return new SupplementSubmitResponse(
                 savedKycApplication.getKycId(),

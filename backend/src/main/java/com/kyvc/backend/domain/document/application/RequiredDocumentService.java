@@ -1,6 +1,7 @@
 package com.kyvc.backend.domain.document.application;
 
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.dto.RequiredDocumentResponse;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
@@ -41,10 +42,7 @@ public class RequiredDocumentService {
         String normalizedCorporateTypeCode = validateCorporateTypeCode(corporateTypeCode); // 정규화 법인 유형 코드
         commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, normalizedCorporateTypeCode);
 
-        return buildResponses(
-                requiredDocumentPolicyProvider.getRequiredDocuments(normalizedCorporateTypeCode),
-                Set.of()
-        );
+        return buildRequiredDocumentResponses(normalizedCorporateTypeCode, Set.of());
     }
 
     // 신청 건 기준 필수서류 안내 조회
@@ -56,15 +54,27 @@ public class RequiredDocumentService {
         validateKycId(kycId);
 
         KycApplication kycApplication = findOwnedKyc(userId, kycId); // 사용자 소유 KYC
-        commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, kycApplication.getCorporateTypeCode());
+        String normalizedCorporateTypeCode = validateCorporateTypeCode(kycApplication.getCorporateTypeCode()); // 정규화 법인 유형 코드
+        commonCodeProvider.validateEnabledCode(CORPORATE_TYPE_GROUP, normalizedCorporateTypeCode);
 
         Set<String> uploadedDocumentTypes = kycDocumentRepository.findByKycId(kycId).stream()
                 .map(KycDocument::getDocumentTypeCode)
+                .map(DocumentTypeCodeNormalizer::normalize)
                 .collect(Collectors.toSet());
 
+        return buildRequiredDocumentResponses(normalizedCorporateTypeCode, uploadedDocumentTypes);
+    }
+
+    // 법인 유형과 업로드 문서 기준 필수서류 응답 목록 생성
+    public List<RequiredDocumentResponse> buildRequiredDocumentResponses(
+            String corporateTypeCode, // 법인 유형 코드
+            Set<String> uploadedDocumentTypes // 업로드 문서 유형 목록
+    ) {
+        String normalizedCorporateTypeCode = validateCorporateTypeCode(corporateTypeCode); // 정규화 법인 유형 코드
+        Set<String> normalizedUploadedDocumentTypes = normalizeDocumentTypes(uploadedDocumentTypes); // 정규화 업로드 문서 유형 목록
         return buildResponses(
-                requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode()),
-                uploadedDocumentTypes
+                requiredDocumentPolicyProvider.getRequiredDocuments(normalizedCorporateTypeCode),
+                normalizedUploadedDocumentTypes
         );
     }
 
@@ -96,7 +106,11 @@ public class RequiredDocumentService {
                         uploadedDocumentTypes.contains(policy.documentTypeCode()),
                         policy.description(),
                         policy.allowedExtensions(),
-                        policy.maxFileSizeMb()
+                        policy.maxFileSizeMb(),
+                        policy.groupCode(),
+                        policy.groupName(),
+                        policy.minRequiredCount(),
+                        policy.groupCandidate()
                 ))
                 .toList();
     }
@@ -110,6 +124,18 @@ public class RequiredDocumentService {
         }
     }
 
+    private Set<String> normalizeDocumentTypes(
+            Set<String> documentTypeCodes // 문서 유형 코드 목록
+    ) {
+        if (documentTypeCodes == null || documentTypeCodes.isEmpty()) {
+            return Set.of();
+        }
+        return documentTypeCodes.stream()
+                .map(DocumentTypeCodeNormalizer::normalize)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+    }
+
     // 법인 유형 코드 검증
     private String validateCorporateTypeCode(
             String corporateTypeCode // 법인 유형 코드
@@ -117,7 +143,7 @@ public class RequiredDocumentService {
         if (!StringUtils.hasText(corporateTypeCode)) {
             throw new ApiException(ErrorCode.INVALID_REQUEST);
         }
-        return corporateTypeCode.trim();
+        return CorporateTypeCodeNormalizer.normalize(corporateTypeCode);
     }
 
     // 사용자 ID 검증

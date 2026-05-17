@@ -1,12 +1,8 @@
 package com.kyvc.backend.domain.document.controller;
 
 import com.kyvc.backend.domain.document.application.KycDocumentService;
-import com.kyvc.backend.domain.document.dto.DocumentDeleteResponse;
-import com.kyvc.backend.domain.document.dto.DocumentPreviewResponse;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
-import com.kyvc.backend.global.response.CommonResponse;
-import com.kyvc.backend.global.response.CommonResponseFactory;
 import com.kyvc.backend.global.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -23,7 +19,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,37 +38,6 @@ import java.time.LocalDateTime;
 public class UserKycDocumentAliasController {
 
     private final KycDocumentService kycDocumentService;
-
-    /**
-     * 문서 미리보기 URL 조회
-     *
-     * @param userDetails 인증 사용자 정보
-     * @param kycId KYC 신청 ID
-     * @param documentId 문서 ID
-     * @return 문서 미리보기 응답
-     */
-    @Operation(
-            summary = "문서 미리보기 URL 조회",
-            description = "사용자 KYC 문서 미리보기 URL 조회"
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "문서 미리보기 응답 반환",
-            content = @Content(schema = @Schema(implementation = DocumentPreviewResponse.class))
-    )
-    @GetMapping("/{documentId}/preview")
-    public ResponseEntity<CommonResponse<DocumentPreviewResponse>> getPreview(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
-            @Parameter(description = "KYC 신청 ID", example = "1")
-            @PathVariable Long kycId, // KYC 신청 ID
-            @Parameter(description = "문서 ID", example = "1")
-            @PathVariable Long documentId // 문서 ID
-    ) {
-        return ResponseEntity.ok(CommonResponseFactory.success(
-                kycDocumentService.getDocumentPreview(getAuthenticatedUserId(userDetails), kycId, documentId)
-        ));
-    }
 
     /**
      * 문서 미리보기 파일 조회
@@ -124,37 +88,6 @@ public class UserKycDocumentAliasController {
                                 .toString()
                 )
                 .body(previewContent.resource());
-    }
-
-    /**
-     * 제출 전 문서 삭제
-     *
-     * @param userDetails 인증 사용자 정보
-     * @param kycId KYC 신청 ID
-     * @param documentId 문서 ID
-     * @return 문서 삭제 응답
-     */
-    @Operation(
-            summary = "제출 전 문서 삭제",
-            description = "사용자 KYC DRAFT 문서 삭제 처리"
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "문서 삭제 응답 반환",
-            content = @Content(schema = @Schema(implementation = DocumentDeleteResponse.class))
-    )
-    @DeleteMapping("/{documentId}")
-    public ResponseEntity<CommonResponse<DocumentDeleteResponse>> deleteDocument(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal CustomUserDetails userDetails, // 인증 사용자 정보
-            @Parameter(description = "KYC 신청 ID", example = "1")
-            @PathVariable Long kycId, // KYC 신청 ID
-            @Parameter(description = "문서 ID", example = "1")
-            @PathVariable Long documentId // 문서 ID
-    ) {
-        return ResponseEntity.ok(CommonResponseFactory.success(
-                kycDocumentService.deleteDocument(getAuthenticatedUserId(userDetails), kycId, documentId)
-        ));
     }
 
     // 인증 사용자 ID 조회

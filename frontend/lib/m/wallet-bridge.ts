@@ -11,6 +11,8 @@ export type MobileWalletState = {
   created: boolean;
 };
 
+export const XRPL_ACCOUNT_NOT_ACTIVATED_CODE = "XRPL_ACCOUNT_NOT_ACTIVATED";
+
 function normalizeWalletInfo(wallet: WalletInfo): WalletInfo {
   const holderAccount = wallet.holderAccount ?? wallet.account;
   const holderDid = wallet.holderDid ?? wallet.did;
@@ -19,6 +21,31 @@ function normalizeWalletInfo(wallet: WalletInfo): WalletInfo {
     ...(holderAccount ? { account: holderAccount, holderAccount } : {}),
     ...(holderDid ? { did: holderDid, holderDid } : {}),
   };
+}
+
+export function readWalletAccount(
+  wallet?: WalletInfo | null,
+  assets?: WalletAssetsResult | null,
+) {
+  return assets?.account ?? wallet?.holderAccount ?? wallet?.account ?? null;
+}
+
+export function isXrplAccountActivationRequired(
+  assets?: WalletAssetsResult | null,
+) {
+  if (!assets?.ok) return false;
+  return (
+    assets.errorCode === XRPL_ACCOUNT_NOT_ACTIVATED_CODE ||
+    (assets.accountActivated === false && assets.depositRequired === true)
+  );
+}
+
+export function isXrplAccountActivated(assets?: WalletAssetsResult | null) {
+  return Boolean(
+    assets?.ok &&
+      assets.accountActivated === true &&
+      assets.depositRequired !== true,
+  );
 }
 
 export function formatXrp(value?: string | number | null) {
@@ -86,14 +113,33 @@ export function readXrpBalance(assets?: WalletAssetsResult | null) {
   );
 }
 
-export async function ensureMobileWallet(): Promise<MobileWalletState> {
+async function findExistingWallet() {
+  try {
+    const list = await bridge.listWallets();
+    if (!list.ok) return null;
+    const active = list.wallets?.find((wallet) => wallet.isActive && wallet.account);
+    const fallback = list.wallets?.find((wallet) => wallet.account);
+    const wallet = active ?? fallback;
+    return wallet?.account
+      ? normalizeWalletInfo({
+          ok: true,
+          account: wallet.account,
+          did: wallet.did,
+        })
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureMobileSessionOwner(): Promise<MobileWalletState> {
   if (!isBridgeAvailable()) {
     return { wallet: null, assets: null, created: false };
   }
 
   let wallet: WalletInfo | null = null;
   let created = false;
-  const authStatus = await bridge.getAuthStatus().catch(() => null);
+  await bridge.getAuthStatus().catch(() => null);
 
   try {
     const info = await bridge.getWalletInfo();
@@ -103,8 +149,8 @@ export async function ensureMobileWallet(): Promise<MobileWalletState> {
     wallet = null;
   }
 
-  if (!wallet && authStatus?.walletReady === true) {
-    return { wallet: null, assets: null, created: false };
+  if (!wallet) {
+    wallet = await findExistingWallet();
   }
 
   if (!wallet) {
@@ -112,18 +158,25 @@ export async function ensureMobileWallet(): Promise<MobileWalletState> {
     const account = createdWallet.holderAccount ?? createdWallet.account;
     if (createdWallet.ok && account) {
       wallet = normalizeWalletInfo(createdWallet);
-      created = true;
+      created =
+        createdWallet.created === false ||
+        createdWallet.reusedExistingAccount === true ||
+        createdWallet.walletAlreadyExists === true
+          ? false
+          : true;
     } else {
       throw new Error(createdWallet.error ?? "지갑 생성에 실패했습니다.");
     }
   }
 
-  let assets: WalletAssetsResult | null = null;
-  try {
-    assets = await bridge.getWalletAssets();
-  } catch {
-    assets = null;
-  }
+  return { wallet, assets: null, created };
+}
 
-  return { wallet, assets, created };
+export async function loadWalletAssets() {
+  if (!isBridgeAvailable()) return null;
+  return bridge.getWalletAssets();
+}
+
+export async function ensureMobileWallet(): Promise<MobileWalletState> {
+  return ensureMobileSessionOwner();
 }

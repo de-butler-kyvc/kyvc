@@ -61,6 +61,7 @@ public class AdminAiReviewService {
                 response.aiConfidenceScore(),
                 response.aiReviewSummary(),
                 maskDetailJson(response.aiReviewDetailJson()),
+                maskDetailJson(response.coreAiAssessmentJson()),
                 response.manualReviewReason(),
                 response.aiReviewReasonCode(),
                 response.updatedAt()

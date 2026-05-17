@@ -44,7 +44,7 @@ public record IssuerPolicySummaryResponse(
                                        LocalDate startDate, LocalDate endDate) {
             return new SearchRequest(
                     page == null || page < 0 ? 0 : page,
-                    size == null || size < 1 ? 20 : Math.min(size, 100),
+                    size == null || size < 1 ? 15 : Math.min(size, 100),
                     keyword,
                     policyType,
                     status,

@@ -87,6 +87,8 @@ function skipRefreshOn401(pathname: string): boolean {
     pathname.startsWith("/api/auth/login") ||
     pathname.startsWith("/api/auth/signup") ||
     pathname.startsWith("/api/auth/password-reset") ||
+    pathname.startsWith("/api/mobile/auth/auto-login") ||
+    pathname.startsWith("/api/mobile/auth/login") ||
     pathname.startsWith("/api/auth/dev/")
   );
 }
@@ -192,6 +194,38 @@ export type LoginResponse = {
   roles: string[];
 };
 
+export type MobileLoginRequest = {
+  email: string;
+  password: string;
+  autoLogin: boolean;
+  deviceId: string;
+  deviceName?: string;
+  os: string;
+  appVersion?: string;
+  publicKey?: string;
+};
+
+export type MobileLoginResponse = {
+  userId: number;
+  userType?: string;
+  email: string;
+  name?: string | null;
+  deviceId?: string;
+  deviceRegistered?: boolean;
+  accessTokenExpiresAt?: string;
+};
+
+export type MobileAutoLoginResponse = {
+  autoLogin: boolean;
+  userId?: number;
+  corporateId?: number | null;
+  email?: string;
+  corporateName?: string | null;
+  roleCode?: string;
+  accessTokenExpiresAt?: string;
+  refreshTokenExpiresAt?: string;
+};
+
 export type SignupResponse = {
   userId: number;
   email: string;
@@ -293,6 +327,15 @@ export const auth = {
     api<LoginResponse>("/api/auth/login", {
       method: "POST",
       body: { email, password },
+    }),
+  mobileLogin: (body: MobileLoginRequest) =>
+    api<MobileLoginResponse>("/api/mobile/auth/login", {
+      method: "POST",
+      body,
+    }),
+  mobileAutoLogin: () =>
+    api<MobileAutoLoginResponse>("/api/mobile/auth/auto-login", {
+      method: "POST",
     }),
   logout: () =>
     api<{ loggedOut: boolean }>("/api/auth/logout", {
@@ -399,13 +442,14 @@ export type KycApplicationResponse = {
 /** POST /api/user/corporates, PUT .../basic-info 요청 본문 */
 export type CorporateBasicInfoBody = {
   corporateName: string;
-  representativeName: string;
   businessRegistrationNo: string;
-  corporateRegistrationNo: string;
-  address: string;
-  businessType?: string;
-  representativePhone?: string;
-  representativeEmail?: string;
+  corporateRegistrationNo?: string | null;
+  corporateTypeCode?: string | null;
+  establishedDate: string;
+  corporatePhone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  businessType: string;
 };
 export type Representative = {
   name: string;
@@ -453,13 +497,13 @@ export type AgentListItem = {
 export const corporate = {
   dashboard: () => api<UserDashboardResponse>("/api/user/dashboard"),
   create: (body: CorporateBasicInfoBody) =>
-    api<{ corporateId: number }>("/api/user/corporates", {
+    api<CorporateProfile>("/api/user/corporates", {
       method: "POST",
       body,
     }),
   me: () => api<CorporateProfile>("/api/user/corporates/me"),
   updateBasicInfo: (corporateId: number, body: CorporateBasicInfoBody) =>
-    api<{ updated: boolean }>(
+    api<CorporateProfile>(
       `/api/user/corporates/${corporateId}/basic-info`,
       { method: "PUT", body },
     ),
@@ -529,6 +573,10 @@ export type RequiredDocument = {
   description?: string;
   allowedExtensions?: string[];
   maxFileSizeMb?: number;
+  groupCode?: string | null;
+  groupName?: string | null;
+  minRequiredCount?: number | null;
+  groupCandidate?: boolean;
 };
 
 export type KycMissingItem = {
@@ -599,6 +647,52 @@ export type KycReviewSummaryResponse = {
   findings?: KycReviewFinding[];
   manualReviewRequired?: boolean;
   reviewedAt?: string;
+};
+
+export type KycAiReviewDocumentResult = {
+  documentId?: number | null;
+  documentTypeCode?: string | null;
+  documentTypeName?: string | null;
+  resultCode?: string | null;
+  confidenceScore?: number | null;
+  message?: string | null;
+};
+
+export type KycAiReviewMismatchResult = {
+  fieldName?: string | null;
+  sourceDocumentTypeCode?: string | null;
+  targetDocumentTypeCode?: string | null;
+  severityCode?: string | null;
+  message?: string | null;
+};
+
+export type KycAiReviewBeneficialOwnerResult = {
+  ownerName?: string | null;
+  ownershipRatio?: number | null;
+  resultCode?: string | null;
+  message?: string | null;
+};
+
+export type KycAiReviewDelegationResult = {
+  resultCode?: string | null;
+  message?: string | null;
+};
+
+export type KycAiReviewDetailResponse = {
+  kycId: number;
+  applicationStatusCode?: string | null;
+  aiReviewStatusCode?: string | null;
+  overallResultCode?: string | null;
+  confidenceScore?: number | null;
+  reviewedAt?: string | null;
+  manualReviewRequired: boolean;
+  supplementRequired: boolean;
+  summary?: string | null;
+  documentResults: KycAiReviewDocumentResult[];
+  mismatchResults: KycAiReviewMismatchResult[];
+  beneficialOwnerResults: KycAiReviewBeneficialOwnerResult[];
+  delegationResult?: KycAiReviewDelegationResult | null;
+  reviewReasons: string[];
 };
 
 export type SupplementDocument = {
@@ -687,10 +781,72 @@ export type DocumentDeleteResponse = {
   deleted?: boolean;
 };
 
+export type UserDocumentItem = {
+  documentId: number;
+  kycId: number;
+  corporateId?: number;
+  corporateName?: string;
+  documentTypeCode?: string;
+  documentTypeName?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  uploadStatusCode?: string;
+  uploadedAt?: string;
+  kycStatusCode?: string;
+  deleteRequestId?: number | null;
+  deleteRequestStatusCode?: string | null;
+};
+
+export type UserDocumentListResponse = {
+  items: UserDocumentItem[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
+export type KycApplicationHistoryItem = {
+  kycId: number;
+  corporateId?: number;
+  corporateName?: string;
+  businessRegistrationNo?: string;
+  corporateTypeCode?: string;
+  kycStatusCode?: string;
+  aiReviewStatusCode?: string | null;
+  aiReviewResultCode?: string | null;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  credentialId?: number | null;
+  credentialStatusCode?: string | null;
+  credentialIssuedAt?: string | null;
+};
+
+export type KycApplicationHistoryResponse = {
+  items: KycApplicationHistoryItem[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
 export const kyc = {
   list: () =>
     api<KycApplicationResponse | KycApplicationResponse[]>(
       "/api/corporate/kyc/applications",
+    ),
+  history: (query?: {
+    status?: string;
+    keyword?: string;
+    page?: number;
+    size?: number;
+  }) =>
+    api<KycApplicationHistoryResponse>(
+      "/api/corporate/kyc/applications/history",
+      { query },
     ),
   /** 현재 진행 중인 KYC 신청 단건. 없으면 ApiError 반환. */
   current: () =>
@@ -758,6 +914,10 @@ export const kyc = {
     api<KycReviewSummaryResponse>(
       `/api/corporate/kyc/applications/${kycId}/ai-review-summary`,
     ),
+  aiReviewResult: (kycId: number) =>
+    api<KycAiReviewDetailResponse>(
+      `/api/user/kyc/applications/${kycId}/ai-review-result`,
+    ),
   supplements: (kycId: number) =>
     api<{ supplements: Supplement[] }>(
       `/api/corporate/kyc/applications/${kycId}/supplements`,
@@ -798,6 +958,18 @@ export const kyc = {
       `/api/user/kyc/applications/${kycId}/credentials`,
       { method: "POST" },
     ),
+};
+
+export const userDocuments = {
+  list: (query?: {
+    documentTypeCode?: string;
+    status?: string;
+    page?: number;
+    size?: number;
+  }) =>
+    api<UserDocumentListResponse>("/api/user/documents", {
+      query,
+    }),
 };
 
 // ── Credentials ──────────────────────────────────────────────────────
@@ -861,6 +1033,52 @@ export const credentialOffers = {
   status: (offerId: number) =>
     api<CredentialOfferStatusResponse>(
       `/api/user/credential-offers/${offerId}/status`,
+    ),
+};
+
+// ── User VP Presentations ────────────────────────────────────────────
+export type UserVpPresentationSummary = {
+  presentationId: number;
+  requestId?: string;
+  verifierName?: string;
+  purpose?: string;
+  verificationStatus?: string;
+  presentedAt?: string;
+};
+
+export type UserVpPresentationListResponse = {
+  items: UserVpPresentationSummary[];
+  page: {
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+  };
+};
+
+export const userVpPresentations = {
+  list: (query?: {
+    page?: number;
+    size?: number;
+    status?: string;
+    verifierName?: string;
+  }) =>
+    api<UserVpPresentationListResponse>("/api/user/vp-presentations", {
+      query,
+    }),
+};
+
+// ── Common DID Institution ───────────────────────────────────────────
+export type DidInstitutionResponse = {
+  did: string;
+  institutionName: string;
+  status: string;
+};
+
+export const didInstitutions = {
+  get: (did: string) =>
+    api<DidInstitutionResponse>(
+      `/api/common/dids/${encodeURIComponent(did)}/institution`,
     ),
 };
 
@@ -943,6 +1161,8 @@ export type WalletCredentialPrepareResponse = {
   credentialId: number;
   prepared: boolean;
   credentialPayload: WalletCredentialPayload;
+  documentAttachments?: Record<string, unknown>[];
+  documentAttachmentManifest?: unknown;
 };
 
 export type WalletCredentialConfirmRequest = {

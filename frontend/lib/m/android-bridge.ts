@@ -21,6 +21,8 @@ export type SaveVcPayload = {
   sdJwt?: string;
   vcJwt?: string;
   metadata?: Record<string, unknown>;
+  documentAttachments?: Record<string, unknown>[];
+  documentAttachmentManifest?: unknown;
   selectiveDisclosure?: {
     disclosablePaths?: string[];
     [key: string]: unknown;
@@ -146,6 +148,7 @@ function shouldResolvePending(pending: Pending, result: BridgeResult) {
 export function isWalletOwnerMismatch(result: BridgeResult) {
   return (
     result.errorCode === "WALLET_OWNER_MISMATCH" ||
+    result.walletAccess === "owner_mismatch" ||
     result.walletAccess === "wallet_owner_mismatch" ||
     result.walletAccess === "previous_wallet_deleted" ||
     result.shouldLogout === true
@@ -374,6 +377,7 @@ export type WalletAccess =
   | "no_wallet"
   | "previous_wallet_deleted"
   | "binding_required"
+  | "owner_mismatch"
   | "wallet_owner_mismatch"
   | string;
 
@@ -382,6 +386,7 @@ export type SetCurrentWebUserResult = BridgeResult & {
   errorCode?: string;
   errorTitle?: string;
   errorHint?: string;
+  deleteRequired?: boolean;
   shouldLogout?: boolean;
 };
 
@@ -409,6 +414,13 @@ export type HolderDidSetResult = BridgeResult & {
   didRegistrationRequired?: boolean;
   didRegistrationLabel?: string;
   didAccountBindingValid?: boolean;
+};
+
+export type HolderDidSetFeeEstimateResult = BridgeResult & {
+  feeDrops?: string | number;
+  feeXrp?: string | number;
+  networkFeeDrops?: string | number;
+  networkFeeXrp?: string | number;
 };
 
 export type DeviceInfoResult = BridgeResult & {
@@ -440,6 +452,13 @@ export type WalletAssetsResult = BridgeResult & {
   depositRequired?: boolean;
   xrpBalanceDrops?: string;
   xrpBalanceXrp?: string;
+  availableXrpDrops?: string | number;
+  availableDrops?: string | number;
+  availableXrp?: string | number;
+  spendableDrops?: string | number;
+  spendableXrp?: string | number;
+  baseReserveDrops?: string | number;
+  ownerReserveDrops?: string | number;
   ownerCount?: number;
   sequence?: number;
   trustLineCount?: number;
@@ -480,6 +499,40 @@ export type WalletTransactionsResult = BridgeResult & {
   account?: string;
   count?: number;
   transactions?: WalletTransactionSummary[];
+};
+
+export type WalletActivityType =
+  | "VC_ISSUED"
+  | "VP_SUBMITTED"
+  | "SECURITY_ALERT"
+  | "WALLET_WARNING"
+  | string;
+
+export type WalletActivitySummary = {
+  id: string;
+  type: WalletActivityType;
+  title?: string;
+  description?: string;
+  credentialId?: string;
+  credentialType?: string;
+  issuerDid?: string;
+  issuerName?: string;
+  verifierName?: string;
+  createdAtUtc?: string;
+  unread?: boolean;
+};
+
+export type WalletActivityHistoryResult = BridgeResult & {
+  count?: number;
+  activities?: WalletActivitySummary[];
+};
+
+export type WalletActivityRecordPayload = {
+  type: WalletActivityType;
+  title: string;
+  description?: string;
+  createdAtUtc?: string;
+  unread?: boolean;
 };
 
 export type NativeCredentialStatus =
@@ -705,6 +758,12 @@ export const bridge = {
     callBridge("submitHolderDidSet", {
       ...(didDocumentUri ? { didDocumentUri } : {}),
     }),
+  estimateHolderDidSetFee: () =>
+    callBridge<HolderDidSetFeeEstimateResult>(
+      "estimateHolderDidSetFee",
+      {},
+      { timeoutMs: 5_000 },
+    ),
   checkHolderDidSet: () =>
     callBridge<HolderDidSetResult>("checkHolderDidSet", {}),
 
@@ -715,6 +774,18 @@ export const bridge = {
   copyWalletAddress: () => callBridge("copyWalletAddress", {}),
   getWalletTransactions: (limit = 10) =>
     callBridge<WalletTransactionsResult>("getWalletTransactions", { limit }),
+  getWalletActivityHistory: (
+    limit = 50,
+    types: WalletActivityType[] = ["VC_ISSUED", "VP_SUBMITTED"],
+  ) =>
+    callBridge<WalletActivityHistoryResult>("getWalletActivityHistory", {
+      limit,
+      types,
+    }),
+  markWalletActivitiesRead: (activityIds: string[] = []) =>
+    callBridge("markWalletActivitiesRead", { activityIds }),
+  recordWalletActivity: (payload: WalletActivityRecordPayload) =>
+    callBridge("recordWalletActivity", payload),
   submitXrpPayment: (params: {
     destinationAddress: string;
     destinationTag?: string;

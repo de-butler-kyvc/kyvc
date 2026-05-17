@@ -54,7 +54,7 @@ public record AdminKycApplicationSearchRequest(
             String supplementYn
     ) {
         int resolvedPage = page == null || page < 0 ? 0 : page;
-        int resolvedSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int resolvedSize = size == null || size < 1 ? 15 : Math.min(size, 100);
         return new AdminKycApplicationSearchRequest(
                 resolvedPage,
                 resolvedSize,

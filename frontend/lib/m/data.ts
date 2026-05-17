@@ -92,13 +92,6 @@ export const MOCK_NOTIFS: MNotifItem[] = [
   },
 ];
 
-export const MOCK_TRANSACTIONS = [
-  ["↗", "법인등록증명서 제출", "신한은행 · 2026.05.07 14:32"],
-  ["↓", "법인등록증명서 발급", "법원행정처 · 2026.05.05 11:08"],
-  ["↗", "사업자등록증 제출", "KB국민은행 · 2026.05.02 09:45"],
-  ["↓", "사업자등록증 발급", "국세청 · 2026.04.28 16:20"],
-] as const;
-
 export const MOCK_SEED_WORDS = [
   "apple", "brave", "candy", "delta", "eagle", "flame",
   "grape", "happy", "igloo", "jelly", "koala", "lemon",

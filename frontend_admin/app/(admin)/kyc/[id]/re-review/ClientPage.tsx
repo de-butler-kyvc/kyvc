@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  formatConfidence,
   getAiReview,
   getKycDetail,
   retryAiReview,
@@ -38,6 +39,7 @@ const JUDGMENT_KO: Record<string, string> = {
   FAILED: "불충족",
   NEEDS_MANUAL_REVIEW: "수동심사필요",
   NEED_MANUAL_REVIEW: "수동심사필요",
+  MANUAL_APPROVAL_REQUIRED: "수동심사필요",
 };
 
 const badge: Record<string, string> = {
@@ -54,12 +56,6 @@ const badge: Record<string, string> = {
 function toKo(map: Record<string, string>, value?: string) {
   if (!value) return "-";
   return map[value] ?? value;
-}
-
-function formatPercent(value?: number) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "-";
-  const normalized = value <= 1 ? value * 100 : value;
-  return `${normalized.toFixed(1)}%`;
 }
 
 export default function ReReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -108,9 +104,8 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
       statusKo,
       judgmentKo,
       canRetry: RETRYABLE_STATUSES.has(rawStatus),
-      confidence: formatPercent(aiReview?.confidenceScore),
+      confidence: formatConfidence(aiReview?.confidenceScore),
       reason: aiReview?.summaryReason ?? detail?.aiReviewSummary ?? "-",
-      modelVersion: aiReview?.modelVersion ?? "-",
     };
   }, [aiReview, detail]);
 
@@ -161,10 +156,6 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge[summary.judgmentKo] ?? "bg-slate-100 text-slate-500"}`}>
                     {summary.judgmentKo} ({summary.confidence})
                   </span>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">처리 모델</p>
-                  <p className="text-slate-700 text-xs mt-0.5">{summary.modelVersion}</p>
                 </div>
               </>
             )}
@@ -264,7 +255,7 @@ export default function ReReviewPage({ params }: { params: Promise<{ id: string 
       )}
 
       <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
     </div>

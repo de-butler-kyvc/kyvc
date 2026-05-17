@@ -11,7 +11,12 @@ import {
   isBridgeAvailable,
   type AuthStatus,
 } from "@/lib/m/android-bridge";
-import { ensureMobileWallet } from "@/lib/m/wallet-bridge";
+import {
+  readMobileAutoLoginEnabled,
+  setMobileAutoLoginEnabled,
+  tryMobileAutoLogin,
+} from "@/lib/m/auto-login";
+import { ensureMobileSessionOwner } from "@/lib/m/wallet-bridge";
 import {
   bindCurrentWebUserWithPrompt,
   logoutForWalletOwnerMismatch,
@@ -26,13 +31,74 @@ const FIGMA_PIN_ICON =
 const FIGMA_BIOMETRIC_ICON =
   "https://www.figma.com/api/mcp/asset/915135d4-9f0a-4722-a5d4-44424d45817b";
 
+const WEB_DEVICE_ID_KEY = "kyvc.mobile.webDeviceId";
+
+function optionalText(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function createWebDeviceId() {
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `web-${random}`;
+}
+
+function readOrCreateWebDeviceId() {
+  if (typeof window === "undefined") return createWebDeviceId();
+  try {
+    const stored = window.localStorage.getItem(WEB_DEVICE_ID_KEY);
+    if (stored) return stored;
+    const next = createWebDeviceId();
+    window.localStorage.setItem(WEB_DEVICE_ID_KEY, next);
+    return next;
+  } catch {
+    return createWebDeviceId();
+  }
+}
+
+function detectMobileOs() {
+  if (typeof navigator === "undefined") return "Mobile Web";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("android")) return "Android";
+  if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ipod")) {
+    return "iOS";
+  }
+  return "Mobile Web";
+}
+
+async function resolveMobileLoginDevice() {
+  if (isBridgeAvailable()) {
+    const device = await bridge.getDeviceInfo().catch(() => null);
+    const deviceId = optionalText(device?.deviceId);
+    if (device?.ok && deviceId) {
+      return {
+        deviceId,
+        deviceName: optionalText(device.deviceName),
+        os: optionalText(device.os) ?? "Android",
+        appVersion: optionalText(device.appVersion),
+        publicKey: optionalText(device.publicKey),
+      };
+    }
+  }
+
+  return {
+    deviceId: readOrCreateWebDeviceId(),
+    deviceName: "Mobile Web",
+    os: detectMobileOs(),
+    appVersion: "web",
+  };
+}
+
 export default function MobileLoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("business");
   const [bizNo, setBizNo] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [keep, setKeep] = useState(false);
+  const [keep, setKeep] = useState(() => readMobileAutoLoginEnabled());
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
@@ -57,6 +123,22 @@ export default function MobileLoginPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true);
+    tryMobileAutoLogin({ requireEnabled: false })
+      .then((res) => {
+        if (!cancelled && res?.autoLogin) router.replace("/m/home");
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   const methods = authStatus?.availableMethods ?? ["pin", "biometric"];
   const canUsePin = methods.includes("pin");
   const canUseBiometric = methods.includes("biometric");
@@ -80,14 +162,21 @@ export default function MobileLoginPage() {
         return;
       }
       // 백엔드는 이메일 기준 로그인. 사업자번호 탭일 때도 입력값을 그대로 보낸다.
-      const loginUser = await auth.login(id, password);
+      const device = await resolveMobileLoginDevice();
+      const loginUser = await auth.mobileLogin({
+        email: id,
+        password,
+        autoLogin: keep,
+        ...device,
+      });
       if (isBridgeAvailable()) {
         await bindCurrentWebUserWithPrompt({
           userId: loginUser.userId,
           email: loginUser.email,
         });
-        await ensureMobileWallet().catch(() => null);
+        await ensureMobileSessionOwner().catch(() => null);
       }
+      setMobileAutoLoginEnabled(keep);
       router.replace("/m/home");
     } catch (err) {
       if (err instanceof WalletOwnerMismatchError) {
@@ -120,10 +209,15 @@ export default function MobileLoginPage() {
             email: session.email,
           });
         } else {
-          setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
-          return;
+          const autoLogin = await tryMobileAutoLogin({ requireEnabled: false }).catch(
+            () => null,
+          );
+          if (!autoLogin?.autoLogin) {
+            setError("웹 로그인 세션을 확인할 수 없습니다. 이메일 로그인 후 다시 시도해 주세요.");
+            return;
+          }
         }
-        await ensureMobileWallet().catch(() => null);
+        await ensureMobileSessionOwner().catch(() => null);
         router.replace("/m/home");
       } else if (r.emailVerificationRequired) {
         setError("인증 5회 실패로 이메일 인증이 필요합니다.");
@@ -215,7 +309,10 @@ export default function MobileLoginPage() {
             <input
               type="checkbox"
               checked={keep}
-              onChange={(e) => setKeep(e.target.checked)}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                setKeep(enabled);
+              }}
             />
             자동 로그인
           </label>

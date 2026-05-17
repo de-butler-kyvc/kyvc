@@ -96,7 +96,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
+            증명서 관리자 · <Link href={kycDetailPath(id)} className="hover:underline">KYC 신청 상세</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">보완요청 생성</h1>
         </div>
@@ -192,7 +192,7 @@ export default function SupplementRequestPage({ params }: { params: Promise<{ id
       </div>
 
       <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
     </div>

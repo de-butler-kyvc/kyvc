@@ -64,14 +64,26 @@ public class SecurityConfig {
                                 "/api/auth/vp-login-requests",
                                 "/api/auth/vp-login-requests/*/complete",
                                 "/api/mobile/auth/login",
+                                "/api/mobile/auth/auto-login",
                                 "/api/mobile/auth/vp-login/challenge",
                                 "/api/mobile/auth/vp-login",
                                 "/api/mobile/auth/vp-login-requests/resolve",
                                 "/api/mobile/auth/vp-login-requests/*/submit"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/finance/verifier/vp-requests",
+                                "/api/finance/verifier/vp-requests/*/cancel",
+                                "/api/mobile/qr/resolve",
+                                "/api/mobile/vp/presentations",
+                                "/api/mobile/vp/presentations/with-attachments"
+                        ).permitAll()
+                        .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/common/session",
+                                "/api/finance/verifier/vp-requests",
+                                "/api/finance/verifier/vp-requests/*",
+                                "/api/mobile/vp/requests/*",
                                 "/api/auth/vp-login-requests/*/status",
                                 "/api/common/dids/*/institution",
                                 "/health",

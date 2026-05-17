@@ -45,8 +45,19 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function statusLabel(status?: string | null) {
   if (!status) return "-";
-  return STATUS_LABELS[status] ?? status;
+  return STATUS_DISPLAY[status] ?? STATUS_LABELS[status] ?? status;
 }
+
+const STATUS_DISPLAY: Record<string, string> = {
+  DRAFT: "임시 저장",
+  SUBMITTED: "접수완료",
+  AI_REVIEWING: "AI 심사중",
+  NEED_SUPPLEMENT: "보완 필요",
+  MANUAL_REVIEW: "수동 심사중",
+  APPROVED: "승인",
+  REJECTED: "반려",
+  VC_ISSUED: "VC 발급 완료"
+};
 
 export function statusBadgeVariant(
   status?: string | null

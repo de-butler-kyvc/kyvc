@@ -1,10 +1,13 @@
 package com.kyvc.backend.domain.vp.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kyvc.backend.domain.core.application.CoreDocumentEvidencePolicy;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
+import com.kyvc.backend.domain.core.dto.CoreAttachmentPart;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationRequest;
 import com.kyvc.backend.domain.core.dto.CoreVpVerificationResponse;
 import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
@@ -15,11 +18,13 @@ import com.kyvc.backend.domain.credential.domain.Credential;
 import com.kyvc.backend.domain.credential.domain.CredentialOffer;
 import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.document.infrastructure.DocumentStorageProperties;
 import com.kyvc.backend.domain.vp.domain.VpVerification;
 import com.kyvc.backend.domain.vp.dto.EligibleCredentialListResponse;
 import com.kyvc.backend.domain.vp.dto.EligibleCredentialResponse;
 import com.kyvc.backend.domain.vp.dto.QrResolveRequest;
 import com.kyvc.backend.domain.vp.dto.QrResolveResponse;
+import com.kyvc.backend.domain.vp.dto.VpAttachmentPart;
 import com.kyvc.backend.domain.vp.dto.VpPresentationRequest;
 import com.kyvc.backend.domain.vp.dto.VpPresentationResponse;
 import com.kyvc.backend.domain.vp.dto.VpPresentationResultResponse;
@@ -56,8 +61,13 @@ public class VpVerificationService {
     private static final String VP_PRESENTATION_MESSAGE = "VP 검증이 완료되었습니다.";
     private static final String PRESENTATION_FORMAT_VP_JWT = "vp+jwt";
     private static final String PRESENTATION_FORMAT_SD_JWT = "kyvc-sd-jwt-presentation-v1";
+    private static final String PRESENTATION_CHALLENGE_FORMAT_SD_JWT = "dc+sd-jwt";
     private static final String PRESENTATION_FORMAT_JSONLD_VP = "kyvc-jsonld-vp-v1";
     private static final int MAX_DID_DOCUMENT_BYTES = 64 * 1024;
+    private static final int MAX_ATTACHMENT_COUNT = 10;
+    private static final int MAX_ATTACHMENT_MANIFEST_BYTES = 64 * 1024;
+    private static final String PDF_MEDIA_TYPE = "application/pdf";
+    private static final String ATTACHMENTS_PART_NAME = "attachments";
 
     private final VpVerificationRepository vpVerificationRepository;
     private final CredentialRepository credentialRepository;
@@ -66,26 +76,25 @@ public class VpVerificationService {
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
     private final ObjectMapper objectMapper;
+    private final DocumentStorageProperties documentStorageProperties;
     private final LogEventLogger logEventLogger;
 
     // QR 해석
     @Transactional(readOnly = true)
     public QrResolveResponse resolveQr(
-            CustomUserDetails userDetails, // 인증 사용자 정보
             QrResolveRequest request // QR 해석 요청
     ) {
-        AuthContext authContext = resolveAuthContext(userDetails);
         validateQrResolveRequest(request);
         JsonNode rootNode = parseQrPayload(request.qrPayload());
         KyvcEnums.QrType qrType = resolveQrType(rootNode);
         QrResolveResponse response = switch (qrType) {
             case CREDENTIAL_OFFER -> resolveCredentialOfferQr(rootNode);
-            case VP_REQUEST -> resolveVpRequestQr(rootNode, authContext);
+            case VP_REQUEST -> resolveVpRequestQr(rootNode);
         };
         logEventLogger.info(
                 "qr.resolve.completed",
                 "QR resolve completed",
-                createBaseLogFields(authContext.userId(), authContext.corporateId(), response.offerId(), null, response.requestId(), response.type())
+                createBaseLogFields(null, null, response.offerId(), null, response.requestId(), response.type())
         );
         return response;
     }
@@ -93,11 +102,10 @@ public class VpVerificationService {
     // VP 요청 상세 조회
     @Transactional(readOnly = true)
     public VpRequestResponse getVpRequest(
-            CustomUserDetails userDetails, // 인증 사용자 정보
             String requestId // VP 요청 ID
     ) {
-        AuthContext authContext = resolveAuthContext(userDetails);
-        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), normalizeRequiredText(requestId));
+        VpVerification vpVerification = vpVerificationRepository.getByRequestId(normalizeRequiredText(requestId));
+        validatePublicVpRequestReadable(vpVerification);
         return toVpRequestResponse(vpVerification);
     }
 
@@ -123,21 +131,20 @@ public class VpVerificationService {
 
     // VP 제출
     public VpPresentationResponse submitPresentation(
-            CustomUserDetails userDetails, // 인증 사용자 정보
             VpPresentationRequest request // VP 제출 요청
     ) {
-        AuthContext authContext = resolveAuthContext(userDetails);
         validatePresentationRequest(request);
         ResolvedPresentation resolvedPresentation = resolvePresentation(request);
-        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), request.requestId().trim());
+        VpVerification vpVerification = vpVerificationRepository.getByRequestId(request.requestId().trim());
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
 
-        Credential credential = credentialRepository.getById(request.credentialId());
-        validateCredentialOwnership(authContext.corporateId(), credential);
-        validateCredentialEligible(credential);
+        Credential credential = resolveSubmittedCredential(vpVerification, request.credentialId());
+        validateCredentialEligible(vpVerification, credential);
         validateNonceAndChallenge(vpVerification, request);
-        Map<String, Object> didDocuments = buildDidDocuments(credential, request.didDocument());
+        Map<String, Object> didDocuments = buildDidDocumentsForPresentation(vpVerification, credential, request.didDocument());
+        Long submittedCorporateId = resolveSubmittedCorporateId(vpVerification, credential);
+        Long submittedCredentialId = resolveSubmittedCredentialId(credential, request.credentialId());
 
         String vpJwtHash = TokenHashUtil.sha256(resolvedPresentation.hashSource());
         if (vpVerificationRepository.existsReplayCandidate(vpVerification.getRequestNonce(), vpJwtHash)) {
@@ -148,16 +155,17 @@ public class VpVerificationService {
 
         CoreRequest coreRequest = coreRequestService.createVpVerificationRequest(vpVerification.getVpVerificationId(), null);
         LocalDateTime presentedAt = LocalDateTime.now();
-        vpVerification.markPresentedForCorporate(authContext.corporateId(), credential.getCredentialId(), vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
-        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, credential, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
+        vpVerification.markPresentedForCorporate(submittedCorporateId, submittedCredentialId, vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
+        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, submittedCredentialId, submittedCorporateId, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
         coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestDto));
         coreRequestService.markRunning(coreRequest.getCoreRequestId());
 
         try {
+            Map<String, Object> logFields = createBaseLogFields(null, submittedCorporateId, submittedCredentialId, vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId());
             logEventLogger.info(
                     "core.call.started",
                     "Core VP verification call started",
-                    createBaseLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId())
+                    logFields
             );
             CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerification(
                     coreRequestDto,
@@ -168,11 +176,13 @@ public class VpVerificationService {
             logEventLogger.info(
                     "core.call.completed",
                     "Core VP verification call completed",
-                    createBaseLogFields(authContext.userId(), authContext.corporateId(), credential.getCredentialId(), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId())
+                    logFields
             );
             applyCoreVerificationResult(vpVerification, coreResponse);
+            applyFinanceCredentialMappingResult(vpVerification, credential, coreResponse);
             updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
             VpVerification saved = vpVerificationRepository.save(vpVerification);
+            logPresentationVerified(null, submittedCorporateId, credential, saved);
             return new VpPresentationResponse(
                     saved.getVpVerificationId(),
                     saved.getVpRequestId(),
@@ -187,6 +197,80 @@ public class VpVerificationService {
             markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
             vpVerification.markInvalid(exception.getMessage(), LocalDateTime.now());
             vpVerificationRepository.save(vpVerification);
+            logPresentationFailed(null, submittedCorporateId, credential, vpVerification, exception);
+            throw exception;
+        }
+    }
+
+    // 원본 첨부 포함 VP 제출
+    public VpPresentationResponse submitPresentationWithAttachments(
+            VpPresentationRequest request, // VP 제출 요청
+            String attachmentManifestJson, // 원본 첨부 manifest JSON
+            List<VpAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        validatePresentationRequest(request);
+        ResolvedPresentation resolvedPresentation = resolvePresentation(request);
+        validateAttachmentPresentationFormat(resolvedPresentation.format());
+        AttachmentSubmission attachmentSubmission = resolveAttachmentSubmission(request, attachmentManifestJson, attachments);
+        VpVerification vpVerification = vpVerificationRepository.getByRequestId(request.requestId().trim());
+        validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
+        validateVpRequestSubmittable(vpVerification);
+
+        Credential credential = resolveSubmittedCredential(vpVerification, request.credentialId());
+        validateCredentialEligible(vpVerification, credential);
+        validateNonceAndChallenge(vpVerification, request);
+        Map<String, Object> didDocuments = buildDidDocumentsForPresentation(vpVerification, credential, request.didDocument());
+        Long submittedCorporateId = resolveSubmittedCorporateId(vpVerification, credential);
+        Long submittedCredentialId = resolveSubmittedCredentialId(credential, request.credentialId());
+
+        String vpJwtHash = TokenHashUtil.sha256(resolvedPresentation.hashSource());
+        if (vpVerificationRepository.existsReplayCandidate(vpVerification.getRequestNonce(), vpJwtHash)) {
+            vpVerification.markReplaySuspected("VP 재제출이 의심됩니다.", LocalDateTime.now());
+            vpVerificationRepository.save(vpVerification);
+            throw new ApiException(ErrorCode.VP_PRESENTATION_REPLAY_SUSPECTED);
+        }
+
+        CoreRequest coreRequest = coreRequestService.createVpVerificationRequest(vpVerification.getVpVerificationId(), null);
+        LocalDateTime presentedAt = LocalDateTime.now();
+        vpVerification.markPresentedForCorporate(submittedCorporateId, submittedCredentialId, vpJwtHash, coreRequest.getCoreRequestId(), presentedAt);
+        CoreVpVerificationRequest coreRequestDto = buildCoreVpVerificationRequest(vpVerification, submittedCredentialId, submittedCorporateId, request.challenge(), coreRequest.getCoreRequestId(), presentedAt);
+        coreRequestService.updateRequestPayloadJson(coreRequest.getCoreRequestId(), toJson(coreRequestDto));
+        coreRequestService.markRunning(coreRequest.getCoreRequestId());
+
+        try {
+            Map<String, Object> logFields = createBaseLogFields(null, submittedCorporateId, submittedCredentialId, vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), coreRequest.getCoreRequestId());
+            logFields.put("attachmentCount", attachmentSubmission.attachments().size());
+            logFields.put("manifestDocumentCount", attachmentSubmission.manifest().size());
+            logEventLogger.info("core.call.started", "Core VP verification multipart call started", logFields);
+            CoreVpVerificationResponse coreResponse = coreAdapter.requestVpVerificationWithAttachments(
+                    coreRequestDto,
+                    resolvedPresentation.format(),
+                    resolvedPresentation.presentation(),
+                    didDocuments,
+                    attachmentSubmission.manifest(),
+                    attachmentSubmission.attachments()
+            );
+            logEventLogger.info("core.call.completed", "Core VP verification multipart call completed", logFields);
+            applyCoreVerificationResult(vpVerification, coreResponse);
+            applyFinanceCredentialMappingResult(vpVerification, credential, coreResponse);
+            updateCoreRequestStatus(coreRequest.getCoreRequestId(), coreResponse);
+            VpVerification saved = vpVerificationRepository.save(vpVerification);
+            logPresentationVerified(null, submittedCorporateId, credential, saved);
+            return new VpPresentationResponse(
+                    saved.getVpVerificationId(),
+                    saved.getVpRequestId(),
+                    saved.getCredentialId(),
+                    enumName(saved.getVpVerificationStatus()),
+                    toVerificationResultResponse(saved, coreResponse),
+                    saved.getPresentedAt(),
+                    saved.getVerifiedAt(),
+                    resolveVpPresentationMessage(saved, coreResponse)
+            );
+        } catch (ApiException exception) {
+            markCoreRequestFailure(coreRequest.getCoreRequestId(), exception);
+            vpVerification.markInvalid(exception.getMessage(), LocalDateTime.now());
+            vpVerificationRepository.save(vpVerification);
+            logPresentationFailed(null, submittedCorporateId, credential, vpVerification, exception);
             throw exception;
         }
     }
@@ -216,16 +300,194 @@ public class VpVerificationService {
         );
     }
 
+    private void validateAttachmentPresentationFormat(
+            String format // Presentation format
+    ) {
+        if (!PRESENTATION_FORMAT_SD_JWT.equals(format)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private AttachmentSubmission resolveAttachmentSubmission(
+            VpPresentationRequest request, // VP 제출 요청
+            String attachmentManifestJson, // 원본 첨부 manifest JSON
+            List<VpAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        Object manifestPayload = resolveAttachmentManifestPayload(request, attachmentManifestJson);
+        List<Map<String, Object>> manifest = parseAttachmentManifest(manifestPayload);
+        List<VpAttachmentPart> safeAttachments = attachments == null ? List.of() : attachments;
+        validateAttachmentFiles(safeAttachments);
+        return new AttachmentSubmission(manifest, buildCoreAttachmentParts(manifest, safeAttachments));
+    }
+
+    private Object resolveAttachmentManifestPayload(
+            VpPresentationRequest request, // VP 제출 요청
+            String attachmentManifestJson // 원본 첨부 manifest JSON
+    ) {
+        if (StringUtils.hasText(attachmentManifestJson)) {
+            validateManifestPayloadSize(attachmentManifestJson);
+            return attachmentManifestJson;
+        }
+        if (request.attachmentManifest() != null) {
+            return request.attachmentManifest();
+        }
+        if (request.presentation() instanceof Map<?, ?> presentationMap && presentationMap.containsKey("attachmentManifest")) {
+            return presentationMap.get("attachmentManifest");
+        }
+        throw new ApiException(ErrorCode.INVALID_REQUEST);
+    }
+
+    private void validateManifestPayloadSize(
+            String attachmentManifestJson // 원본 첨부 manifest JSON
+    ) {
+        if (attachmentManifestJson.getBytes(StandardCharsets.UTF_8).length > MAX_ATTACHMENT_MANIFEST_BYTES) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private List<Map<String, Object>> parseAttachmentManifest(
+            Object manifestPayload // 원본 첨부 manifest payload
+    ) {
+        JsonNode manifestNode = toJsonNode(manifestPayload);
+        if (manifestNode.isObject() && manifestNode.has("attachments")) {
+            manifestNode = manifestNode.get("attachments");
+        }
+        if (!manifestNode.isArray() || manifestNode.isEmpty()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        List<Map<String, Object>> manifest = new ArrayList<>();
+        manifestNode.forEach(item -> {
+            if (!item.isObject()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST);
+            }
+            Map<String, Object> manifestItem = objectMapper.convertValue(item, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
+            validateManifestItem(manifestItem);
+            manifestItem.putIfAbsent("submissionMode", CoreDocumentEvidencePolicy.SUBMISSION_MODE_ATTACHED_ORIGINAL);
+            manifest.add(manifestItem);
+        });
+        return manifest;
+    }
+
+    private JsonNode toJsonNode(
+            Object value // JSON 변환 대상
+    ) {
+        try {
+            if (value instanceof String stringValue) {
+                return objectMapper.readTree(stringValue);
+            }
+            return objectMapper.valueToTree(value);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, exception);
+        }
+    }
+
+    private void validateManifestItem(
+            Map<String, Object> manifestItem // attachmentManifest 항목
+    ) {
+        if (!hasTextValue(manifestItem, "documentId")
+                || !hasTextValue(manifestItem, "documentType")
+                || !hasTextValue(manifestItem, "digestSRI")
+                || !hasTextValue(manifestItem, "attachmentRef")) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private boolean hasTextValue(
+            Map<String, Object> values, // 값 목록
+            String fieldName // 필드명
+    ) {
+        Object value = values.get(fieldName);
+        return value instanceof String stringValue && StringUtils.hasText(stringValue);
+    }
+
+    private void validateAttachmentFiles(
+            List<VpAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        if (attachments.size() > MAX_ATTACHMENT_COUNT) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST);
+        }
+        for (VpAttachmentPart attachment : attachments) {
+            if (attachment.fileSize() <= 0L || attachment.content() == null || attachment.content().length == 0) {
+                throw new ApiException(ErrorCode.DOCUMENT_FILE_REQUIRED);
+            }
+            if (attachment.fileSize() > documentStorageProperties.getMaxFileSizeBytes()) {
+                throw new ApiException(ErrorCode.DOCUMENT_SIZE_EXCEEDED);
+            }
+            if (!PDF_MEDIA_TYPE.equalsIgnoreCase(attachment.contentType())) {
+                throw new ApiException(ErrorCode.DOCUMENT_MIME_TYPE_NOT_ALLOWED);
+            }
+        }
+    }
+
+    private List<CoreAttachmentPart> buildCoreAttachmentParts(
+            List<Map<String, Object>> manifest, // attachmentManifest 목록
+            List<VpAttachmentPart> attachments // 원본 첨부 파일 목록
+    ) {
+        return attachments.stream()
+                .map(attachment -> toCoreAttachmentPart(attachment, manifest, attachments.size()))
+                .toList();
+    }
+
+    private CoreAttachmentPart toCoreAttachmentPart(
+            VpAttachmentPart attachment, // VP 첨부 파일 파트
+            List<Map<String, Object>> manifest, // attachmentManifest 목록
+            int attachmentCount // 첨부 파일 수
+    ) {
+        String attachmentRef = resolveAttachmentRef(attachment, manifest, attachmentCount);
+        return new CoreAttachmentPart(
+                attachmentRef,
+                normalizeFileName(attachment.fileName(), attachmentRef),
+                attachment.contentType(),
+                attachment.content()
+        );
+    }
+
+    private String resolveAttachmentRef(
+            VpAttachmentPart attachment, // VP 첨부 파일 파트
+            List<Map<String, Object>> manifest, // attachmentManifest 목록
+            int attachmentCount // 첨부 파일 수
+    ) {
+        List<String> refs = manifest.stream()
+                .map(item -> String.valueOf(item.get("attachmentRef")))
+                .toList();
+        if (refs.contains(attachment.partName())) {
+            return attachment.partName();
+        }
+        if (StringUtils.hasText(attachment.fileName()) && refs.contains(attachment.fileName())) {
+            return attachment.fileName();
+        }
+        if (ATTACHMENTS_PART_NAME.equals(attachment.partName()) && manifest.size() == 1 && attachmentCount == 1) {
+            return refs.get(0);
+        }
+        return StringUtils.hasText(attachment.partName()) ? attachment.partName() : normalizeFileName(attachment.fileName(), refs.get(0));
+    }
+
+    private String normalizeFileName(
+            String fileName, // 원본 파일명
+            String fallback // 대체 파일명
+    ) {
+        return StringUtils.hasText(fileName) ? fileName.trim() : fallback;
+    }
+
     private VpRequestResponse toVpRequestResponse(
             VpVerification vpVerification // VP 검증 요청
     ) {
+        Map<String, Object> presentationDefinition = resolvePresentationDefinition(vpVerification);
+        List<String> requiredDisclosures = resolveRequiredDisclosures(vpVerification, presentationDefinition);
+        List<Map<String, Object>> documentRules = resolveDocumentRules(presentationDefinition);
         return new VpRequestResponse(
                 vpVerification.getVpRequestId(),
                 vpVerification.getRequesterName(),
                 vpVerification.getPurpose(),
                 vpVerification.getRequiredClaimsJson(),
+                requiredDisclosures,
+                documentRules,
+                presentationDefinition,
                 vpVerification.getChallenge(),
                 vpVerification.getRequestNonce(),
+                resolveVpAud(vpVerification),
+                resolveVpDomain(vpVerification),
                 vpVerification.getExpiresAt(),
                 vpVerification.isExpired(LocalDateTime.now()),
                 !vpVerification.isRequested(),
@@ -233,6 +495,137 @@ public class VpVerificationService {
                 toNullableVerificationResultResponse(vpVerification, null),
                 vpVerification.getVerifiedAt()
         );
+    }
+
+    private Map<String, Object> resolvePresentationDefinition(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        List<String> requiredClaims = parseRequiredClaims(vpVerification.getRequiredClaimsJson());
+        Map<String, Object> definition = extractStoredPresentationDefinition(vpVerification.getPermissionResultJson());
+        if (definition.isEmpty()) {
+            definition = new LinkedHashMap<>();
+            definition.put("id", "kyvc-kyc-presentation-v1");
+            definition.put("acceptedFormat", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
+            definition.put("format", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
+        } else {
+            definition = new LinkedHashMap<>(definition);
+        }
+        definition.putIfAbsent("requiredClaims", requiredClaims);
+        if (!containsListValue(definition, "requiredDisclosures")) {
+            definition.put("requiredDisclosures", CoreDocumentEvidencePolicy.requiredDisclosures(requiredClaims));
+        }
+        if (!containsListValue(definition, "documentRules")) {
+            definition.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requiredClaims));
+        }
+        applyFinanceRequiredDisclosures(vpVerification, definition, requiredClaims);
+        return definition;
+    }
+
+    private void applyFinanceRequiredDisclosures(
+            VpVerification vpVerification, // VP 검증 요청
+            Map<String, Object> definition, // Presentation Definition
+            List<String> requestedClaims // 화면 요청 Claim 목록
+    ) {
+        if (!isFinanceVpRequest(vpVerification)) {
+            return;
+        }
+        List<String> requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(requestedClaims);
+        if (requiredDisclosures.isEmpty()) {
+            requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(readStringList(definition.get("requiredClaims")));
+        }
+        if (requiredDisclosures.isEmpty()) {
+            requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(readStringList(definition.get("requiredDisclosures")));
+        }
+        if (requiredDisclosures.isEmpty()) {
+            return;
+        }
+        definition.put("requiredClaims", requiredDisclosures);
+        definition.put("requiredDisclosures", requiredDisclosures);
+        definition.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requiredDisclosures));
+    }
+
+    private Map<String, Object> extractStoredPresentationDefinition(
+            String permissionResultJson // Core challenge metadata JSON
+    ) {
+        if (!StringUtils.hasText(permissionResultJson)) {
+            return Map.of();
+        }
+        try {
+            JsonNode rootNode = objectMapper.readTree(permissionResultJson);
+            JsonNode definitionNode = rootNode.path("coreChallenge").path("presentationDefinition");
+            if (definitionNode.isMissingNode() || definitionNode.isNull()) {
+                definitionNode = rootNode.path("presentationDefinition");
+            }
+            if (!definitionNode.isObject()) {
+                return Map.of();
+            }
+            return objectMapper.convertValue(definitionNode, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
+        } catch (JsonProcessingException exception) {
+            return Map.of();
+        }
+    }
+
+    private List<String> resolveRequiredDisclosures(
+            VpVerification vpVerification, // VP 검증 요청
+            Map<String, Object> presentationDefinition // Presentation Definition
+    ) {
+        Object value = presentationDefinition.get("requiredDisclosures");
+        if (value instanceof List<?> listValue) {
+            return listValue.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .filter(StringUtils::hasText)
+                    .toList();
+        }
+        return CoreDocumentEvidencePolicy.requiredDisclosures(parseRequiredClaims(vpVerification.getRequiredClaimsJson()));
+    }
+
+    private List<Map<String, Object>> resolveDocumentRules(
+            Map<String, Object> presentationDefinition // Presentation Definition
+    ) {
+        Object value = presentationDefinition.get("documentRules");
+        if (!(value instanceof List<?> listValue)) {
+            return List.of();
+        }
+        return listValue.stream()
+                .filter(Map.class::isInstance)
+                .map(this::asObjectMap)
+                .toList();
+    }
+
+    private boolean containsListValue(
+            Map<String, Object> values, // 값 목록
+            String fieldName // 필드명
+    ) {
+        return values.get(fieldName) instanceof List<?> listValue && !listValue.isEmpty();
+    }
+
+    private List<String> readStringList(
+            Object value // 문자열 목록 값
+    ) {
+        if (!(value instanceof List<?> listValue)) {
+            return List.of();
+        }
+        return listValue.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(StringUtils::hasText)
+                .toList();
+    }
+
+    private List<String> parseRequiredClaims(
+            String requiredClaimsJson // 요청 Claim JSON
+    ) {
+        if (!StringUtils.hasText(requiredClaimsJson)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(requiredClaimsJson, new TypeReference<List<String>>() {
+            });
+        } catch (JsonProcessingException exception) {
+            return List.of();
+        }
     }
 
     private EligibleCredentialResponse toEligibleCredentialResponse(
@@ -280,11 +673,11 @@ public class VpVerificationService {
     }
 
     private QrResolveResponse resolveVpRequestQr(
-            JsonNode rootNode, // QR Payload JSON
-            AuthContext authContext // 인증 컨텍스트
+            JsonNode rootNode // QR Payload JSON
     ) {
         String requestId = extractTextField(rootNode, "requestId");
-        VpVerification vpVerification = getAccessibleVpRequest(authContext.corporateId(), requestId);
+        VpVerification vpVerification = vpVerificationRepository.getByRequestId(requestId);
+        validateQrTokenRequired(vpVerification, extractTextField(rootNode, "qrToken"));
         validateVpRequestNotExpired(vpVerification, LocalDateTime.now());
         validateVpRequestSubmittable(vpVerification);
         return new QrResolveResponse(
@@ -299,7 +692,8 @@ public class VpVerificationService {
 
     private CoreVpVerificationRequest buildCoreVpVerificationRequest(
             VpVerification vpVerification, // VP 검증 요청
-            Credential credential, // Credential
+            Long credentialId, // Credential ID
+            Long corporateId, // 법인 ID
             String challenge, // challenge
             String coreRequestId, // Core 요청 ID
             LocalDateTime requestedAt // 요청 시각
@@ -307,15 +701,26 @@ public class VpVerificationService {
         return new CoreVpVerificationRequest(
                 coreRequestId,
                 vpVerification.getVpVerificationId(),
-                credential.getCredentialId(),
-                vpVerification.getCorporateId(),
+                credentialId,
+                corporateId,
                 vpVerification.getRequestNonce(),
                 challenge,
                 vpVerification.getPurpose(),
                 resolveVpAud(vpVerification),
-                vpVerification.getRequiredClaimsJson(),
+                resolveCoreRequiredClaimsJson(vpVerification),
                 requestedAt
         );
+    }
+
+    private String resolveCoreRequiredClaimsJson(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (!isFinanceVpRequest(vpVerification)) {
+            return vpVerification.getRequiredClaimsJson();
+        }
+        Map<String, Object> presentationDefinition = resolvePresentationDefinition(vpVerification);
+        List<String> requiredDisclosures = resolveRequiredDisclosures(vpVerification, presentationDefinition);
+        return toJson(requiredDisclosures);
     }
 
     private String resolveVpAud(
@@ -335,6 +740,25 @@ public class VpVerificationService {
             return CoreMockSeedData.DEV_VP_AUD;
         }
         return CoreMockSeedData.DEV_VP_AUD;
+    }
+
+    private String resolveVpDomain(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (!StringUtils.hasText(vpVerification.getPermissionResultJson())) {
+            return "kyvc-backend";
+        }
+        try {
+            JsonNode rootNode = objectMapper.readTree(vpVerification.getPermissionResultJson());
+            JsonNode coreChallengeNode = rootNode.get("coreChallenge");
+            JsonNode domainNode = coreChallengeNode == null ? rootNode.get("domain") : coreChallengeNode.get("domain");
+            if (domainNode != null && StringUtils.hasText(domainNode.asText())) {
+                return domainNode.asText().trim();
+            }
+        } catch (JsonProcessingException exception) {
+            return "kyvc-backend";
+        }
+        return "kyvc-backend";
     }
 
     private void applyCoreVerificationResult(
@@ -369,13 +793,22 @@ public class VpVerificationService {
             coreRequestService.markSuccess(coreRequestId, toJson(coreResponse));
             return;
         }
-        coreRequestService.markFailed(coreRequestId, resolveVpPresentationMessage(null, coreResponse));
+        coreRequestService.markFailed(coreRequestId, resolveVpPresentationMessage(null, coreResponse), toJson(coreResponse));
     }
 
     private String resolveVpPresentationMessage(
             VpVerification vpVerification, // VP 검증 요청
             CoreVpVerificationResponse coreResponse // Core 검증 응답
     ) {
+        if (coreResponse != null && Boolean.TRUE.equals(coreResponse.replaySuspected())) {
+            return "VP 재사용 의심이 탐지되었습니다.";
+        }
+        if (coreResponse != null && Boolean.TRUE.equals(coreResponse.valid())) {
+            return "VP 검증이 완료되었습니다.";
+        }
+        if (coreResponse != null && Boolean.TRUE.equals(coreResponse.completed())) {
+            return "VP 검증 결과가 유효하지 않습니다.";
+        }
         if (coreResponse != null && StringUtils.hasText(coreResponse.resultSummary())) {
             return coreResponse.resultSummary().trim();
         }
@@ -541,6 +974,17 @@ public class VpVerificationService {
         return fieldNode.asText().trim();
     }
 
+    private String extractOptionalTextField(
+            JsonNode rootNode, // QR Payload JSON
+            String fieldName // 필드명
+    ) {
+        JsonNode fieldNode = rootNode.get(fieldName);
+        if (fieldNode == null || !StringUtils.hasText(fieldNode.asText())) {
+            return null;
+        }
+        return fieldNode.asText().trim();
+    }
+
     private Long extractLongField(
             JsonNode rootNode, // QR Payload JSON
             String fieldName // 필드명
@@ -582,6 +1026,37 @@ public class VpVerificationService {
         }
     }
 
+    private void validateQrTokenIfPresent(
+            VpVerification vpVerification, // VP 검증 요청
+            String qrToken // QR 토큰 원문
+    ) {
+        if (StringUtils.hasText(vpVerification.getQrTokenHash())
+                && !vpVerification.matchesQrTokenHash(TokenHashUtil.sha256(qrToken == null ? "" : qrToken))) {
+            throw new ApiException(ErrorCode.QR_PAYLOAD_INVALID);
+        }
+    }
+
+    private void validateQrTokenRequired(
+            VpVerification vpVerification, // VP 검증 요청
+            String qrToken // QR 토큰 원문
+    ) {
+        if (!StringUtils.hasText(vpVerification.getQrTokenHash())) {
+            throw new ApiException(ErrorCode.QR_PAYLOAD_INVALID);
+        }
+        validateQrTokenIfPresent(vpVerification, qrToken);
+    }
+
+    private void validatePublicVpRequestReadable(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (vpVerification.isExpired(LocalDateTime.now())) {
+            throw new ApiException(ErrorCode.VP_REQUEST_EXPIRED);
+        }
+        if (KyvcEnums.VpVerificationStatus.CANCELLED == vpVerification.getVpVerificationStatus()) {
+            throw new ApiException(ErrorCode.VP_REQUEST_INVALID_STATUS);
+        }
+    }
+
     private void validatePresentationOwnership(
             Long corporateId, // 법인 ID
             VpVerification vpVerification // VP 검증 요청
@@ -612,6 +1087,16 @@ public class VpVerificationService {
         return vpVerification != null && KyvcEnums.VpRequestType.FINANCE_VERIFY == vpVerification.getRequestTypeCode();
     }
 
+    private Credential resolveSubmittedCredential(
+            VpVerification vpVerification, // VP 검증 요청
+            Long credentialId // Credential ID
+    ) {
+        if (isFinanceVpRequest(vpVerification)) {
+            return credentialRepository.findById(credentialId).orElse(null);
+        }
+        return credentialRepository.getById(credentialId);
+    }
+
     private void validateCredentialOwnership(
             Long corporateId, // 법인 ID
             Credential credential // Credential
@@ -622,11 +1107,65 @@ public class VpVerificationService {
     }
 
     private void validateCredentialEligible(
+            VpVerification vpVerification, // VP 검증 요청
             Credential credential // Credential
     ) {
-        if (!credential.isWalletSaved() || !credential.isValid(LocalDateTime.now())) {
+        if (isFinanceVpRequest(vpVerification)) {
+            return;
+        }
+        if (credential == null) {
             throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
         }
+        if (!credential.isWalletSaved()) {
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+        if (!credential.isValid(LocalDateTime.now())) {
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+    }
+
+    private Long resolveSubmittedCorporateId(
+            VpVerification vpVerification, // VP 검증 요청
+            Credential credential // 제출 Credential
+    ) {
+        if (credential == null || credential.getCorporateId() == null) {
+            if (isFinanceVpRequest(vpVerification)) {
+                return null;
+            }
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+        return credential.getCorporateId();
+    }
+
+    private Long resolveSubmittedCredentialId(
+            Credential credential, // 제출 Credential
+            Long requestedCredentialId // 요청 Credential ID
+    ) {
+        return credential == null ? requestedCredentialId : credential.getCredentialId();
+    }
+
+    private void applyFinanceCredentialMappingResult(
+            VpVerification vpVerification, // VP 검증 요청
+            Credential credential, // 제출 Credential
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        if (!isFinanceVpRequest(vpVerification)
+                || coreResponse == null
+                || !Boolean.TRUE.equals(coreResponse.valid())) {
+            return;
+        }
+        if (credential == null || credential.getCorporateId() == null) {
+            vpVerification.markInvalid("Credential 매핑을 확인할 수 없습니다.", LocalDateTime.now());
+        }
+    }
+
+    private Long resolveSubmittedCorporateId(
+            Credential credential // 제출 Credential
+    ) {
+        if (credential == null || credential.getCorporateId() == null) {
+            throw new ApiException(ErrorCode.VP_CREDENTIAL_NOT_ELIGIBLE);
+        }
+        return credential.getCorporateId();
     }
 
     private void validateNonceAndChallenge(
@@ -682,11 +1221,74 @@ public class VpVerificationService {
         if (acceptedVcts == null || acceptedVcts.isEmpty()) {
             return true;
         }
-        return StringUtils.hasText(credential.getCredentialTypeCode())
+        return credential != null
+                && StringUtils.hasText(credential.getCredentialTypeCode())
                 && acceptedVcts.contains(credential.getCredentialTypeCode().trim());
     }
 
+    private boolean matchesAcceptedVct(
+            Long credentialId, // Credential ID
+            Long corporateId, // 踰뺤씤 ID
+            List<String> acceptedVcts // 허용 VCT 목록
+    ) {
+        if (acceptedVcts == null || acceptedVcts.isEmpty()) {
+            return true;
+        }
+        return true;
+    }
+
     // Holder DID Document 목록 생성
+    private Map<String, Object> buildDidDocumentsForPresentation(
+            VpVerification vpVerification, // VP 검증 요청
+            Credential credential, // 제출 Credential
+            Object didDocument // Holder DID Document
+    ) {
+        if (credential != null) {
+            return buildDidDocuments(credential, didDocument);
+        }
+        if (!isFinanceVpRequest(vpVerification)) {
+            return buildDidDocuments(credential, didDocument);
+        }
+        return buildPublicDidDocuments(didDocument);
+    }
+
+    private Map<String, Object> buildPublicDidDocuments(
+            Object didDocument // Holder DID Document
+    ) {
+        if (didDocument == null) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_REQUIRED);
+        }
+        if (!(didDocument instanceof Map<?, ?>)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        validateDidDocumentPayloadSize(didDocument);
+        Map<String, Object> document = resolvePublicDidDocumentMap(asObjectMap(didDocument));
+        Object idValue = document.get("id");
+        if (!(idValue instanceof String didDocumentId) || !StringUtils.hasText(didDocumentId)) {
+            throw new ApiException(ErrorCode.VP_DID_DOCUMENT_INVALID);
+        }
+        Map<String, Object> didDocuments = new LinkedHashMap<>();
+        didDocuments.put(didDocumentId.trim(), document);
+        return didDocuments;
+    }
+
+    private Map<String, Object> resolvePublicDidDocumentMap(
+            Map<String, Object> payload // DID Document payload
+    ) {
+        if (payload.containsKey("id")) {
+            return payload;
+        }
+        for (Object value : payload.values()) {
+            if (value instanceof Map<?, ?> nestedValue) {
+                Map<String, Object> nestedDocument = asObjectMap(nestedValue);
+                if (nestedDocument.containsKey("id")) {
+                    return nestedDocument;
+                }
+            }
+        }
+        return Map.of();
+    }
+
     private Map<String, Object> buildDidDocuments(
             Credential credential, // 제출 Credential
             Object didDocument // Holder DID Document
@@ -791,6 +1393,42 @@ public class VpVerificationService {
         }
     }
 
+    private void logPresentationVerified(
+            Long userId, // 사용자 ID
+            Long corporateId, // 법인 ID
+            Credential credential, // 제출 Credential
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        logEventLogger.info(
+                isFinanceVpRequest(vpVerification) ? "finance.vp.request.verified" : "mobile.vp.presentation.verified",
+                "Mobile VP presentation verified",
+                createBaseLogFields(userId, corporateId, resolveLogCredentialId(credential, vpVerification), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), enumName(vpVerification.getVpVerificationStatus()))
+        );
+    }
+
+    private void logPresentationFailed(
+            Long userId, // 사용자 ID
+            Long corporateId, // 법인 ID
+            Credential credential, // 제출 Credential
+            VpVerification vpVerification, // VP 검증 요청
+            ApiException exception // 검증 예외
+    ) {
+        Map<String, Object> fields = createBaseLogFields(userId, corporateId, resolveLogCredentialId(credential, vpVerification), vpVerification.getVpVerificationId(), vpVerification.getVpRequestId(), exception.getErrorCode().getCode());
+        fields.put("exceptionType", exception.getClass().getSimpleName());
+        logEventLogger.warn(
+                isFinanceVpRequest(vpVerification) ? "finance.vp.request.verify.failed" : "mobile.vp.presentation.failed",
+                "Mobile VP presentation verification failed",
+                fields
+        );
+    }
+
+    private Long resolveLogCredentialId(
+            Credential credential, // 제출 Credential
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        return credential == null ? vpVerification.getCredentialId() : credential.getCredentialId();
+    }
+
     private void validateQrResolveRequest(
             QrResolveRequest request // QR 해석 요청
     ) {
@@ -853,6 +1491,12 @@ public class VpVerificationService {
             String format, // Presentation format
             Object presentation, // Presentation 원문 또는 객체
             String hashSource // 해시 대상 문자열
+    ) {
+    }
+
+    private record AttachmentSubmission(
+            List<Map<String, Object>> manifest, // attachmentManifest 목록
+            List<CoreAttachmentPart> attachments // 원본 첨부 파일 목록
     ) {
     }
 }

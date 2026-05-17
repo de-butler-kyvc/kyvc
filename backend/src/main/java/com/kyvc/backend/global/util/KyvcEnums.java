@@ -29,6 +29,65 @@ public final class KyvcEnums {
         SUSPENDED // 정지
     }
 
+    // 회사 유형
+    public enum CorporateType {
+        CORPORATION("주식회사"), // 주식회사
+        LIMITED_COMPANY("유한회사"), // 유한회사
+        LIMITED_PARTNERSHIP("합자회사"), // 합자회사
+        GENERAL_PARTNERSHIP("합명회사"), // 합명회사
+        NON_PROFIT("비영리법인"), // 비영리법인
+        ASSOCIATION("조합·단체"), // 조합·단체
+        FOREIGN_COMPANY("외국기업"), // 외국기업
+        SOLE_PROPRIETOR("개인사업자"); // 개인사업자
+
+        private final String displayName; // 표시명
+
+        CorporateType(
+                String displayName // 표시명
+        ) {
+            this.displayName = displayName;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
+    }
+
+    // 제출 문서 유형
+    public enum DocumentType {
+        BUSINESS_REGISTRATION("사업자등록증"), // 사업자등록증
+        CORPORATE_REGISTRY("등기사항전부증명서"), // 등기사항전부증명서
+        SHAREHOLDER_REGISTRY("주주명부"), // 주주명부
+        STOCK_CHANGE_STATEMENT("주식변동상황명세서"), // 주식변동상황명세서
+        INVESTOR_REGISTRY("투자자명부"), // 투자자명부
+        MEMBER_REGISTRY("사원명부"), // 사원명부
+        BOARD_REGISTRY("임원명부"), // 임원명부
+        ARTICLES_OF_ASSOCIATION("정관"), // 정관
+        OPERATING_RULES("운영규정"), // 운영규정
+        REGULATIONS("규정"), // 규정
+        MEETING_MINUTES("회의록"), // 회의록
+        OFFICIAL_LETTER("공문"), // 공문
+        PURPOSE_PROOF_DOCUMENT("설립목적 증빙서류"), // 설립목적 증빙서류
+        ORGANIZATION_IDENTITY_CERTIFICATE("고유번호증"), // 고유번호증
+        INVESTMENT_REGISTRATION_CERTIFICATE("외국인투자등록증명서"), // 외국인투자등록증명서
+        BENEFICIAL_OWNER_PROOF_DOCUMENT("실소유자 증빙서류"), // 실소유자 증빙서류
+        POWER_OF_ATTORNEY("위임장"), // 위임장
+        SEAL_CERTIFICATE("인감증명서"), // 인감증명서
+        REPRESENTATIVE_PROOF_DOCUMENT("대표자 확인서류"); // 대표자 확인서류
+
+        private final String displayName; // 표시명
+
+        DocumentType(
+                String displayName // 표시명
+        ) {
+            this.displayName = displayName;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
+    }
+
     // 대리인 권한 상태
     public enum AgentAuthorityStatus {
         ACTIVE, // 활성
@@ -169,6 +228,7 @@ public final class KyvcEnums {
         INVALID, // 무효
         REPLAY_SUSPECTED, // 재사용 의심
         EXPIRED, // 만료
+        CANCELLED, // 취소
         FAILED // 실패
     }
 

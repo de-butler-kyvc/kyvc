@@ -13,6 +13,7 @@ import {
 import {
   ApiError,
   corporate,
+  didInstitutions,
 } from "@/lib/api";
 import {
   bridge,
@@ -23,13 +24,20 @@ import {
   type WalletAssetsResult,
   type WalletInfo,
 } from "@/lib/m/android-bridge";
-import { nativeSummaryToCert } from "@/lib/m/credential-summaries";
+import {
+  nativeCredentialIssuer,
+  nativeSummaryToCert,
+} from "@/lib/m/credential-summaries";
 import { readHiddenCerts } from "@/lib/m/data";
 import { mSession } from "@/lib/m/session";
 import {
-  ensureMobileWallet,
+  ensureMobileSessionOwner,
   formatXrp,
+  isXrplAccountActivated,
+  isXrplAccountActivationRequired,
+  loadWalletAssets,
   readXrpBalance,
+  readWalletAccount,
 } from "@/lib/m/wallet-bridge";
 
 const PALETTES = [
@@ -38,8 +46,11 @@ const PALETTES = [
   "linear-gradient(135deg,#231942 0%,#5e3bce 50%,#00a3ff 100%)",
 ];
 
+const HOME_REFRESH_INTERVAL_MS = 3_000;
+const HOME_REFRESH_MIN_INTERVAL_MS = 2_000;
+
 const TEST_CREDENTIAL: CertItem = {
-  issuer: "did:xrpl:1:rIssuerTestWallet",
+  issuer: "KYvC 인증기관",
   title: "법인 KYC 증명서",
   status: "유효",
   id: "KYVC-CERT-240315",
@@ -65,8 +76,15 @@ function isWalletActivated(
   wallet?: WalletInfo | null,
   assets?: WalletAssetsResult | null,
 ) {
-  const account = wallet?.holderAccount ?? wallet?.account;
-  return Boolean(account) && Boolean(assets?.accountActivated) && !assets?.depositRequired;
+  return Boolean(readWalletAccount(wallet, assets)) && isXrplAccountActivated(assets);
+}
+
+function credentialIssuerName(
+  summary: NativeCredentialSummary,
+  issuerNames: Record<string, string>,
+) {
+  if (summary.issuerDid) return issuerNames[summary.issuerDid] ?? "미등록 기관";
+  return nativeCredentialIssuer(summary);
 }
 
 export default function MobileHomePage() {
@@ -86,7 +104,14 @@ export default function MobileHomePage() {
   const [testState, setTestState] = useState<HomeTestState>("bridge");
   const [toast, setToast] = useState("");
   const [toastClosing, setToastClosing] = useState(false);
-  const [inactiveStateConfirmed, setInactiveStateConfirmed] = useState(false);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
+  const walletBootstrappedRef = useRef(false);
+  const newWalletToastShownRef = useRef(false);
+  const homeRefreshReadyRef = useRef(false);
+  const homeRefreshInFlightRef = useRef(false);
+  const pendingHomeRefreshRef = useRef(false);
+  const lastHomeRefreshAtRef = useRef(0);
+  const issuerNameCacheRef = useRef<Record<string, string>>({});
 
   const normalizeWalletInfo = useCallback((info: WalletInfo): WalletInfo => {
     const holderAccount = info.holderAccount ?? info.account;
@@ -128,48 +153,128 @@ export default function MobileHomePage() {
   );
 
   const refreshWalletAssets = useCallback(async () => {
-    if (!isBridgeAvailable()) return;
+    if (!isBridgeAvailable()) return null;
     try {
-      const assets = await bridge.getWalletAssets();
+      const assets = await loadWalletAssets();
+      if (!assets) return null;
+      setWalletAssets(assets);
       if (assets.ok) {
-        setWalletAssets(assets);
         mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
+        setApiError(null);
+      } else {
+        setApiError(assets.error ?? "지갑 자산 조회에 실패했습니다.");
       }
+      return assets;
     } catch {
-      // 홈 잔액 새로고침 실패는 다음 진입/포커스 때 다시 시도한다.
+      setApiError("지갑 자산 조회에 실패했습니다.");
+      return null;
     }
   }, []);
+
+  const resolveCredentialIssuerNames = useCallback(
+    async (summaries: NativeCredentialSummary[]) => {
+      const issuerDids = Array.from(
+        new Set(
+          summaries
+            .map((summary) => summary.issuerDid)
+            .filter((did): did is string => Boolean(did)),
+        ),
+      );
+      const missingDids = issuerDids.filter(
+        (did) =>
+          !Object.prototype.hasOwnProperty.call(issuerNameCacheRef.current, did),
+      );
+
+      if (missingDids.length > 0) {
+        const pairs = await Promise.all(
+          missingDids.map(async (did) => {
+            try {
+              const institution = await didInstitutions.get(did);
+              return [did, institution.institutionName || "미등록 기관"] as const;
+            } catch {
+              return [did, "미등록 기관"] as const;
+            }
+          }),
+        );
+        issuerNameCacheRef.current = {
+          ...issuerNameCacheRef.current,
+          ...Object.fromEntries(pairs),
+        };
+      }
+
+      return issuerNameCacheRef.current;
+    },
+    [],
+  );
+
+  const applyCredentialSummaries = useCallback(
+    async (summaries: NativeCredentialSummary[]) => {
+      const issuerNames = await resolveCredentialIssuerNames(summaries);
+      setCerts(
+        summaries.map((summary, index) => ({
+          ...nativeSummaryToCert(summary, index),
+          issuer: credentialIssuerName(summary, issuerNames),
+        })),
+      );
+    },
+    [resolveCredentialIssuerNames],
+  );
+
+  const refreshCredentialSummaries = useCallback(async () => {
+    if (!isBridgeAvailable()) return null;
+    try {
+      const list = await bridge.getCredentialSummaries();
+      await applyCredentialSummaries(list.credentials ?? []);
+      setApiError(null);
+      return list;
+    } catch (e) {
+      setApiError(
+        e instanceof Error
+          ? `지갑 증명서 조회 실패: ${e.message}`
+          : "지갑 증명서 조회 중 오류가 발생했습니다.",
+      );
+      return null;
+    }
+  }, [applyCredentialSummaries]);
+
+  const refreshHomeData = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!isBridgeAvailable()) return;
+      const now = Date.now();
+      if (
+        !options?.force &&
+        now - lastHomeRefreshAtRef.current < HOME_REFRESH_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      if (homeRefreshInFlightRef.current) {
+        if (options?.force) pendingHomeRefreshRef.current = true;
+        return;
+      }
+
+      homeRefreshInFlightRef.current = true;
+      lastHomeRefreshAtRef.current = now;
+      try {
+        await Promise.allSettled([
+          refreshWalletAssets(),
+          refreshCredentialSummaries(),
+        ]);
+      } finally {
+        homeRefreshInFlightRef.current = false;
+        if (pendingHomeRefreshRef.current) {
+          pendingHomeRefreshRef.current = false;
+          lastHomeRefreshAtRef.current = 0;
+          void refreshHomeData({ force: true });
+        }
+      }
+    },
+    [refreshCredentialSummaries, refreshWalletAssets],
+  );
 
   // 증명서 목록은 네이티브 지갑 브릿지를 단일 소스로 사용한다.
   useEffect(() => {
     setHidden(readHiddenCerts());
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!isBridgeAvailable()) {
-          if (!cancelled) {
-            setCerts([]);
-            setApiError("증명서는 KYvC 앱 지갑에서 확인할 수 있습니다.");
-          }
-          return;
-        }
-        const list = await bridge.getCredentialSummaries();
-        if (cancelled) return;
-        setCerts((list.credentials ?? []).map(nativeSummaryToCert));
-        setApiError(null);
-      } catch (e) {
-        if (cancelled) return;
-        setApiError(
-          e instanceof Error
-            ? `지갑 증명서 조회 실패: ${e.message}`
-            : "지갑 증명서 조회 중 오류가 발생했습니다.",
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+  }, []);
 
   // 설정 화면 진입 전에 법인 기본정보를 미리 캐시한다.
   useEffect(() => {
@@ -196,58 +301,57 @@ export default function MobileHomePage() {
     };
   }, [router]);
 
-  // 브리지: 로그인 후 활성 지갑 보장 + 자산 조회.
+  // 브리지: 로그인 후 활성 지갑 보장.
   useEffect(() => {
     if (!isBridgeAvailable()) {
       return;
     }
+    if (walletBootstrappedRef.current) return;
+    walletBootstrappedRef.current = true;
+    let cancelled = false;
     (async () => {
       try {
-        const state = await ensureMobileWallet();
+        const state = await ensureMobileSessionOwner();
+        if (cancelled) return;
         await refreshHolderDidState(state.wallet);
-        if (state.assets?.ok) {
-          setWalletAssets(state.assets);
-          mSession.writeWalletAssets({ assets: state.assets, cachedAt: Date.now() });
+        if (cancelled) return;
+        homeRefreshReadyRef.current = true;
+        void refreshHomeData({ force: true });
+        if (state.created && !newWalletToastShownRef.current) {
+          newWalletToastShownRef.current = true;
+          showToast("새 지갑이 생성되었습니다.");
         }
-        void refreshWalletAssets();
-        if (state.created) showToast("새 지갑이 생성되었습니다.");
       } catch (e) {
+        if (cancelled) return;
         setApiError(e instanceof Error ? e.message : "지갑 상태를 확인할 수 없습니다.");
       }
     })();
-    bridge.listWallets().catch(() => {});
-    bridge.getCredentialSummaries().catch(() => {});
-  }, [refreshHolderDidState, refreshWalletAssets]);
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshHolderDidState, refreshHomeData]);
 
   useEffect(() => {
     if (!isBridgeAvailable()) return;
 
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refreshWalletAssets();
+    const refreshWhenReady = () => {
+      if (!homeRefreshReadyRef.current) return;
+      if (document.visibilityState !== "visible") return;
+      void refreshHomeData({ force: true });
     };
-    const onFocus = () => {
-      void refreshWalletAssets();
-    };
+
+    const onVisible = () => refreshWhenReady();
+    const onFocus = () => refreshWhenReady();
+    const timer = window.setInterval(refreshWhenReady, HOME_REFRESH_INTERVAL_MS);
 
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
-    void refreshWalletAssets();
-    const warmupTimers = [800, 1800, 3200, 5000].map((delay) =>
-      window.setTimeout(() => {
-        if (document.visibilityState === "visible") void refreshWalletAssets();
-      }, delay),
-    );
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refreshWalletAssets();
-    }, 5000);
-
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
-      warmupTimers.forEach((id) => window.clearTimeout(id));
       window.clearInterval(timer);
     };
-  }, [refreshWalletAssets]);
+  }, [refreshHomeData]);
 
   // 다른 화면에서 활성 지갑이 바뀌어도 반영
   useBridgeAction("LIST_WALLETS", (r) => {
@@ -275,7 +379,7 @@ export default function MobileHomePage() {
   useBridgeAction("GET_CREDENTIAL_SUMMARIES", (r) => {
     if (!r.ok) return;
     const list = (r.credentials as NativeCredentialSummary[] | undefined) ?? [];
-    setCerts(list.map(nativeSummaryToCert));
+    void applyCredentialSummaries(list).then(() => setApiError(null));
   });
 
   useBridgeAction("CREATE_WALLET", (r) => {
@@ -283,7 +387,6 @@ export default function MobileHomePage() {
     const next = normalizeWalletInfo(r as WalletInfo);
     setWalletInfo(next);
     void refreshHolderDidState(next);
-    void refreshWalletAssets();
   });
 
   useBridgeAction("GET_WALLET_INFO", (r) => {
@@ -299,45 +402,27 @@ export default function MobileHomePage() {
   });
 
   useBridgeAction("GET_WALLET_ASSETS", (r) => {
-    if (r.ok) setWalletAssets(r as WalletAssetsResult);
+    const assets = r as WalletAssetsResult;
+    setWalletAssets(assets);
+    if (assets.ok) {
+      mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
+      setApiError(null);
+    } else {
+      setApiError(assets.error ?? "지갑 자산 조회에 실패했습니다.");
+    }
   });
 
   useEffect(() => {
     const off = onBridgeAction("ISSUER_CREDENTIAL_RECEIVED", (r) => {
       if (r.ok) {
-        bridge.getCredentialSummaries().catch(() => {});
+        void refreshHomeData({ force: true });
       }
     });
     return off;
-  }, []);
-
-  useEffect(() => {
-    if (testState !== "bridge") {
-      setInactiveStateConfirmed(true);
-      return;
-    }
-    setInactiveStateConfirmed(false);
-    if (!walletInfo || !walletAssets) return;
-    if (isWalletActivated(walletInfo, walletAssets)) return;
-
-    let cancelled = false;
-    bridge
-      .getWalletAssets()
-      .then((assets) => {
-        if (cancelled || !assets.ok) return;
-        setWalletAssets(assets);
-        mSession.writeWalletAssets({ assets, cachedAt: Date.now() });
-        if (!isWalletActivated(walletInfo, assets)) {
-          setInactiveStateConfirmed(true);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [testState, walletInfo, walletAssets]);
+  }, [refreshHomeData]);
 
   const showToast = (message: string) => {
+    if (/^Wallet ready:/i.test(message)) return;
     setToastClosing(false);
     setToast(message);
     window.setTimeout(() => setToastClosing(true), 1400);
@@ -345,6 +430,15 @@ export default function MobileHomePage() {
   };
 
   const copyText = async (value: string) => {
+    if (isBridgeAvailable()) {
+      try {
+        const r = await bridge.copyTextToClipboard(value);
+        if (r.ok) return;
+      } catch {
+        // 브라우저 클립보드로 한 번 더 시도한다.
+      }
+    }
+
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(value);
       return;
@@ -359,6 +453,50 @@ export default function MobileHomePage() {
     el.select();
     document.execCommand("copy");
     document.body.removeChild(el);
+  };
+
+  const copyActivationAddress = async (address?: string | null) => {
+    if (!address) {
+      showToast("복사할 지갑 주소를 찾을 수 없습니다.");
+      return;
+    }
+    try {
+      await copyText(address);
+      showToast("지갑 주소가 복사되었습니다.");
+    } catch {
+      showToast("지갑 주소를 복사할 수 없습니다.");
+    }
+  };
+
+  const recheckWalletActivation = async () => {
+    if (!isBridgeAvailable()) {
+      showToast("앱에서만 활성화 상태를 확인할 수 있습니다.");
+      return;
+    }
+    setWalletRefreshing(true);
+    try {
+      const assets = await refreshWalletAssets();
+      if (!assets) {
+        showToast("활성화 상태를 확인할 수 없습니다.");
+        return;
+      }
+      if (!assets.ok) {
+        showToast(assets.error ?? "지갑 자산 조회에 실패했습니다.");
+        return;
+      }
+      if (isXrplAccountActivated(assets)) {
+        void refreshHolderDidState(walletInfo);
+        setWalletSheetOpen(false);
+        setInactiveQrOpen(false);
+        showToast("지갑 활성화가 확인되었습니다.");
+        return;
+      }
+      if (isXrplAccountActivationRequired(assets) || assets.accountActivated !== true) {
+        showToast("아직 지갑 활성화가 필요합니다.");
+      }
+    } finally {
+      setWalletRefreshing(false);
+    }
   };
 
   const startIssueQrScan = async () => {
@@ -441,7 +579,15 @@ export default function MobileHomePage() {
           : walletInfo;
   const testWalletAssets =
     testState === "inactive"
-      ? ({ ok: true, accountActivated: false, depositRequired: true } as WalletAssetsResult)
+      ? ({
+          ok: true,
+          account: "rKYvC1234567890TestWallet",
+          accountActivated: false,
+          depositRequired: true,
+          errorCode: "XRPL_ACCOUNT_NOT_ACTIVATED",
+          errorTitle: "지갑 활성화 필요",
+          errorHint: "이 주소로 XRP를 입금한 뒤 자산 조회를 다시 실행하세요.",
+        } as WalletAssetsResult)
       : testState === "walletOnly"
         ? ({ ok: true, accountActivated: true, depositRequired: false, xrpBalanceXrp: "12.345678" } as WalletAssetsResult)
         : testState === "did" || testState === "credential"
@@ -453,43 +599,100 @@ export default function MobileHomePage() {
       : testState === "credential"
         ? [TEST_CREDENTIAL]
         : certs.filter((c) => !hidden.includes(c.title));
-  const accountShort = testWalletInfo?.account
-    ? `${testWalletInfo.account.slice(0, 6)}...${testWalletInfo.account.slice(-4)}`
+  const walletAccount = readWalletAccount(testWalletInfo, testWalletAssets);
+  const accountShort = walletAccount
+    ? `${walletAccount.slice(0, 6)}...${walletAccount.slice(-4)}`
     : null;
   const walletExists = Boolean(accountShort);
+  const activationAddress = walletAccount;
   const didRegistrationLabel = testWalletInfo?.didRegistrationLabel;
   const registeredDid = testWalletInfo?.holderDid ?? testWalletInfo?.did;
-  const ledgerActivated = Boolean(testWalletAssets?.accountActivated);
-  const depositRequired = Boolean(testWalletAssets?.depositRequired);
-  const walletXrplActivated = walletExists && ledgerActivated && !depositRequired;
+  const walletActivationRequired =
+    walletExists && isXrplAccountActivationRequired(testWalletAssets);
+  const walletXrplActivated = walletExists && isWalletActivated(testWalletInfo, testWalletAssets);
   const walletStateCanRender =
     testState !== "bridge" ||
-    !walletExists ||
-    walletXrplActivated ||
-    inactiveStateConfirmed;
+    Boolean(testWalletInfo);
   const didRegistrationRequired =
     testWalletInfo?.didRegistrationRequired ??
-    (walletXrplActivated
-      ? didRegistrationLabel === "DID 등록하기" ||
-        (testWalletInfo?.didSetRegistered !== true && !registeredDid)
-      : false);
+    (didRegistrationLabel === "DID 등록하기" ||
+      (testWalletInfo?.didSetRegistered !== true && !registeredDid));
   const didRegistered =
-    walletXrplActivated &&
     (testWalletInfo?.didSetRegistered === true ||
       didRegistrationLabel === "DID 등록됨" ||
       (Boolean(registeredDid) && didRegistrationRequired === false));
   const hasCredential = visible.length > 0;
   const walletLabel =
-    !walletExists || !walletXrplActivated
-      ? "지갑 활성화 필요"
-      : didRegistered && registeredDid
-        ? shortDid(registeredDid)
-        : "DID 등록하기";
+    !walletExists
+      ? "지갑 생성 필요"
+      : walletActivationRequired
+        ? "지갑 활성화 필요"
+        : didRegistered && registeredDid
+          ? shortDid(registeredDid)
+          : "DID 등록하기";
   const balanceValue = walletExists && testWalletAssets ? readXrpBalance(testWalletAssets) : null;
   const balanceXrp = balanceValue == null ? null : formatXrp(balanceValue);
   const homeStateReady =
     testState !== "bridge" ||
-    Boolean(testWalletInfo && testWalletAssets && walletStateCanRender);
+    Boolean(testWalletInfo && walletStateCanRender);
+  const openWalletActivationSheet = () => {
+    setInactiveQrOpen(false);
+    setWalletSheetOpen(true);
+  };
+  const ensureWalletFeatureActivated = async () => {
+    if (!homeStateReady) return false;
+    if (!walletExists) {
+      openWalletActivationSheet();
+      return false;
+    }
+
+    const assets =
+      testState === "bridge" ? await refreshWalletAssets() : testWalletAssets;
+    if (!assets) {
+      showToast("지갑 활성화 상태를 확인할 수 없습니다.");
+      return false;
+    }
+    if (!assets.ok) {
+      showToast(assets.error ?? "지갑 자산 조회에 실패했습니다.");
+      return false;
+    }
+    if (isXrplAccountActivationRequired(assets) || !isXrplAccountActivated(assets)) {
+      openWalletActivationSheet();
+      return false;
+    }
+    return true;
+  };
+  const handleIssueQrAction = async () => {
+    const ready = await ensureWalletFeatureActivated();
+    if (!ready) return;
+    if (!didRegistered) {
+      setInactiveQrOpen(false);
+      setDidSheetOpen(true);
+      return;
+    }
+    setInactiveQrOpen(false);
+    await startIssueQrScan();
+  };
+  const handleSubmitQrAction = async () => {
+    const ready = await ensureWalletFeatureActivated();
+    if (!ready) return;
+    if (!didRegistered) {
+      setInactiveQrOpen(false);
+      setDidSheetOpen(true);
+      return;
+    }
+    if (!hasCredential) {
+      showToast("제출할 증명서가 없습니다.");
+      return;
+    }
+    setInactiveQrOpen(false);
+    await startPresentationQrScan();
+  };
+  const handleSendXrp = async () => {
+    const ready = await ensureWalletFeatureActivated();
+    if (!ready) return;
+    router.push("/m/xrp/send");
+  };
 
   return (
     <section className="view wash home-view">
@@ -522,8 +725,12 @@ export default function MobileHomePage() {
             <div className={`home-wallet-state${homeStateReady ? " ready" : ""}`}>
               {homeStateReady ? (
                 <>
-                  {balanceXrp ? <h1>{balanceXrp}</h1> : null}
-                <button
+                  {balanceXrp ? (
+                    <h1 key={balanceXrp} className="wallet-balance-fade">
+                      {balanceXrp}
+                    </h1>
+                  ) : null}
+                  <button
                   type="button"
                   className={`wallet-did-copy${
                     didRegistered
@@ -537,7 +744,7 @@ export default function MobileHomePage() {
                       setWalletSheetOpen(true);
                       return;
                     }
-                    if (!walletXrplActivated) {
+                    if (walletActivationRequired) {
                       setWalletSheetOpen(true);
                       return;
                     }
@@ -594,18 +801,9 @@ export default function MobileHomePage() {
             </button>
             <button
               type="button"
-              className={homeStateReady && !walletXrplActivated ? "inactive" : ""}
+              className={homeStateReady && walletActivationRequired ? "inactive" : ""}
               onClick={() => {
-                if (!homeStateReady) return;
-                if (!walletExists) {
-                  setWalletSheetOpen(true);
-                  return;
-                }
-                if (!walletXrplActivated) {
-                  router.push("/m/xrp/receive");
-                  return;
-                }
-                router.push("/m/xrp/send");
+                void handleSendXrp();
               }}
             >
               <MIcon.arrowUpRight />
@@ -631,24 +829,7 @@ export default function MobileHomePage() {
                   type="button"
                   className="empty-credential-card"
                   onClick={() => {
-                    if (!homeStateReady) return;
-                    if (!walletExists) {
-                      setWalletSheetOpen(true);
-                      return;
-                    }
-                    if (!walletXrplActivated) {
-                      router.push("/m/xrp/receive");
-                      return;
-                    }
-                    if (!didRegistered) {
-                      setDidSheetOpen(true);
-                      return;
-                    }
-                    if (didRegistered && !hasCredential) {
-                      startIssueQrScan();
-                      return;
-                    }
-                    startIssueQrScan();
+                    void handleIssueQrAction();
                   }}
                 >
                   발급하기
@@ -683,11 +864,9 @@ export default function MobileHomePage() {
             return;
           }
           setQrNoticeKind(
-            didRegistered
-              ? "needCredential"
-              : walletXrplActivated
-                ? "did"
-                : "account",
+            !walletExists || walletActivationRequired
+              ? "account"
+              : "needCredential",
           );
           setInactiveQrOpen(true);
         }}
@@ -695,13 +874,12 @@ export default function MobileHomePage() {
       {inactiveQrOpen ? (
         <InactiveQrMenu
           kind={qrNoticeKind}
+          onActivationRequired={openWalletActivationSheet}
           onIssue={() => {
-            setInactiveQrOpen(false);
-            startIssueQrScan();
+            void handleIssueQrAction();
           }}
           onSubmit={() => {
-            setInactiveQrOpen(false);
-            startPresentationQrScan();
+            void handleSubmitQrAction();
           }}
           onClose={() => setInactiveQrOpen(false)}
         />
@@ -719,7 +897,7 @@ export default function MobileHomePage() {
           onRegister={() => router.push("/m/did/register")}
         />
       ) : null}
-      {walletSheetOpen ? (
+      {walletSheetOpen && walletActivationRequired ? (
         <WalletActivationSheet
           onClose={() => setWalletSheetOpen(false)}
           onReceive={() => {
@@ -727,6 +905,8 @@ export default function MobileHomePage() {
             router.push("/m/xrp/receive");
           }}
         />
+      ) : walletSheetOpen ? (
+        <WalletSetupSheet onClose={() => setWalletSheetOpen(false)} />
       ) : null}
       {toast ? (
         <div className={`m-toast${toastClosing ? " closing" : ""}`}>
@@ -739,11 +919,13 @@ export default function MobileHomePage() {
 
 function InactiveQrMenu({
   kind,
+  onActivationRequired,
   onIssue,
   onSubmit,
   onClose,
 }: {
   kind: "account" | "did" | "needCredential" | "credential";
+  onActivationRequired?: () => void;
   onIssue: () => void;
   onSubmit: () => void;
   onClose: () => void;
@@ -751,6 +933,7 @@ function InactiveQrMenu({
   const issueReady = kind === "needCredential" || kind === "credential";
   const submitReady = kind === "credential";
   const menuReady = issueReady;
+  const blockedAction = kind === "account" ? onActivationRequired : undefined;
 
   return (
     <div className="inactive-qr-layer" role="dialog" aria-modal="true">
@@ -780,7 +963,7 @@ function InactiveQrMenu({
           type="button"
           className={issueReady ? "active" : ""}
           aria-disabled={issueReady ? undefined : "true"}
-          onClick={issueReady ? onIssue : undefined}
+          onClick={issueReady ? onIssue : blockedAction}
         >
           <span className="inactive-qr-icon issue">
             {issueReady ? <MIcon.cert /> : <MIcon.lockSlash />}
@@ -794,7 +977,7 @@ function InactiveQrMenu({
           type="button"
           className={submitReady ? "active submit" : ""}
           aria-disabled={submitReady ? undefined : "true"}
-          onClick={submitReady ? onSubmit : undefined}
+          onClick={submitReady ? onSubmit : blockedAction}
         >
           <span className="inactive-qr-icon submit">
             {submitReady ? <MIcon.qr /> : <MIcon.lockSlash />}
@@ -874,6 +1057,21 @@ function DidRequiredSheet({
       onLink={onRegister}
       ariaLabel="DID 등록 안내 닫기"
       handleLabel="DID 등록 안내 시트 이동"
+    />
+  );
+}
+
+function WalletSetupSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <WalletGuideSheet
+      title="지갑 준비 필요"
+      description="모바일 지갑을 먼저 생성하거나 복구해 주세요."
+      linkLabel=""
+      primaryLabel="확인"
+      onClose={onClose}
+      onPrimary={onClose}
+      ariaLabel="지갑 준비 안내 닫기"
+      handleLabel="지갑 준비 안내 시트 이동"
     />
   );
 }
@@ -977,13 +1175,15 @@ function WalletGuideSheet({
         <div className="wallet-sheet-body">
           <h2>{title}</h2>
           <p>{description}</p>
-          <button
-            type="button"
-            className="wallet-sheet-link"
-            onClick={onLink}
-          >
-            {linkLabel}
-          </button>
+          {onLink ? (
+            <button
+              type="button"
+              className="wallet-sheet-link"
+              onClick={onLink}
+            >
+              {linkLabel}
+            </button>
+          ) : null}
         </div>
         <button
           type="button"

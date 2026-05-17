@@ -42,10 +42,46 @@ export default function MobileBodyMarker() {
       });
     };
 
+    const isAuthInputRoute = () => {
+      const path = window.location.pathname;
+      return path.startsWith("/m/login") || path.startsWith("/m/signup");
+    };
+
+    const isTextInputTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target instanceof HTMLTextAreaElement) return true;
+      if (target.isContentEditable) return true;
+      if (!(target instanceof HTMLInputElement)) return false;
+
+      const type = target.type.toLowerCase();
+      return (
+        type === "" ||
+        type === "text" ||
+        type === "email" ||
+        type === "password" ||
+        type === "tel" ||
+        type === "url" ||
+        type === "search" ||
+        type === "number"
+      );
+    };
+
+    const syncAuthInputFocus = () => {
+      const focused = document.activeElement;
+      document.body.toggleAttribute(
+        "data-mobile-keyboard-open",
+        isAuthInputRoute() && isTextInputTarget(focused),
+      );
+    };
+
+    const onFocusOut = () => {
+      window.setTimeout(syncAuthInputFocus, 0);
+    };
+
     const getScrollTarget = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return null;
       return target.closest<HTMLElement>(
-        ".m-shell .settings-container, .m-shell .signup-content, .m-shell .content.scroll, .m-shell .scroll, .m-shell .view",
+        ".m-shell .activity-tabs, .m-shell .settings-container, .m-shell .signup-content, .m-shell .content.scroll, .m-shell .scroll, .m-shell .view",
       );
     };
 
@@ -58,6 +94,7 @@ export default function MobileBodyMarker() {
       const target = event.target;
       if (!(target instanceof Element) || !target.closest(".m-shell")) return;
       if (target.closest(".terms-sheet-handle")) return;
+      if (target.closest(".activity-tabs")) return;
 
       const currentY = event.touches[0]?.clientY ?? startY;
       const deltaY = currentY - startY;
@@ -83,6 +120,8 @@ export default function MobileBodyMarker() {
       }
     };
 
+    document.addEventListener("focusin", syncAuthInputFocus);
+    document.addEventListener("focusout", onFocusOut);
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchmove", onTouchMove, { passive: false });
     syncVisualViewport();
@@ -97,8 +136,11 @@ export default function MobileBodyMarker() {
       window.removeEventListener("resize", syncVisualViewport);
       document.documentElement.style.removeProperty("--m-visual-bottom");
       document.documentElement.style.removeProperty("--m-visual-height");
+      document.removeEventListener("focusin", syncAuthInputFocus);
+      document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
+      document.body.removeAttribute("data-mobile-keyboard-open");
       document.body.removeAttribute("data-mobile");
     };
   }, []);

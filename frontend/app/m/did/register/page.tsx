@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { MIcon } from "@/components/m/icons";
 import { MTopBar } from "@/components/m/parts";
@@ -12,9 +12,11 @@ import {
   type WalletInfo,
 } from "@/lib/m/android-bridge";
 import {
-  ensureMobileWallet,
+  ensureMobileSessionOwner,
   formatXrpDrops,
   formatXrp,
+  loadWalletAssets,
+  parseXrpToDrops,
   readXrpBalance,
   xrpBalanceDropsFromAssets,
 } from "@/lib/m/wallet-bridge";
@@ -23,24 +25,80 @@ const DID_TX_FEE_DROPS = BigInt(12);
 const XRPL_BASE_RESERVE_DROPS = BigInt(1_000_000);
 const XRPL_OWNER_RESERVE_DROPS = BigInt(200_000);
 
+function positiveBigInt(value?: string | number | bigint | null) {
+  if (value == null || value === "") return null;
+  if (typeof value === "bigint") return value >= BigInt(0) ? value : null;
+  const raw = String(value);
+  return /^\d+$/.test(raw) ? BigInt(raw) : null;
+}
+
+function readAvailableDrops(assets?: WalletAssetsResult | null) {
+  if (!assets?.ok || assets.depositRequired) return null;
+  return (
+    positiveBigInt(assets.availableXrpDrops) ??
+    positiveBigInt(assets.availableDrops) ??
+    positiveBigInt(assets.spendableDrops) ??
+    parseXrpToDrops(assets.availableXrp) ??
+    parseXrpToDrops(assets.spendableXrp)
+  );
+}
+
+function readFeeDropsFromResult(result?: {
+  feeDrops?: string | number;
+  feeXrp?: string | number;
+  networkFeeDrops?: string | number;
+  networkFeeXrp?: string | number;
+} | null) {
+  if (!result) return null;
+  return (
+    positiveBigInt(result.feeDrops) ??
+    positiveBigInt(result.networkFeeDrops) ??
+    parseXrpToDrops(result.feeXrp) ??
+    parseXrpToDrops(result.networkFeeXrp)
+  );
+}
+
+function formatSignedXrpDrops(value?: bigint | null) {
+  if (value == null) return "-";
+  if (value < BigInt(0)) return `-${formatXrpDrops(-value)}`;
+  return formatXrpDrops(value);
+}
+
 export default function MobileDidRegisterPage() {
   const router = useRouter();
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [walletAssets, setWalletAssets] = useState<WalletAssetsResult | null>(null);
+  const [feeDrops, setFeeDrops] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
+  const [toastClosing, setToastClosing] = useState(false);
+
+  const showToast = useCallback((message: string) => {
+    setToastClosing(false);
+    setToast(message);
+    window.setTimeout(() => setToastClosing(true), 1400);
+    window.setTimeout(() => setToast(""), 1600);
+  }, []);
 
   useEffect(() => {
     if (!isBridgeAvailable()) return;
-    ensureMobileWallet()
-      .then((state) => {
+    ensureMobileSessionOwner()
+      .then(async (state) => {
         setWalletInfo(state.wallet);
-        setWalletAssets(state.assets);
+        setWalletAssets(await loadWalletAssets());
+        const fee = await bridge.estimateHolderDidSetFee().catch(() => null);
+        const estimatedFeeDrops = readFeeDropsFromResult(fee);
+        if (estimatedFeeDrops == null) {
+          showToast("네트워크 수수료를 가져오지 못해 기본값으로 표시합니다.");
+        }
+        setFeeDrops(estimatedFeeDrops ?? DID_TX_FEE_DROPS);
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "지갑 상태 확인에 실패했습니다.");
+        setFeeDrops(DID_TX_FEE_DROPS);
       });
-  }, []);
+  }, [showToast]);
 
   const onRegister = async () => {
     setError(null);
@@ -64,11 +122,22 @@ export default function MobileDidRegisterPage() {
   };
 
   const balanceDrops = xrpBalanceDropsFromAssets(walletAssets);
+  const availableDrops = readAvailableDrops(walletAssets);
   const ownerCount = walletAssets?.ownerCount ?? 0;
-  const reserveAfterDid =
-    XRPL_BASE_RESERVE_DROPS + XRPL_OWNER_RESERVE_DROPS * BigInt(ownerCount + 1);
+  const networkFeeDrops = feeDrops ?? DID_TX_FEE_DROPS;
+  const baseReserveDrops =
+    positiveBigInt(walletAssets?.baseReserveDrops) ?? XRPL_BASE_RESERVE_DROPS;
+  const ownerReserveDrops =
+    positiveBigInt(walletAssets?.ownerReserveDrops) ?? XRPL_OWNER_RESERVE_DROPS;
+  const currentReserve =
+    baseReserveDrops + ownerReserveDrops * BigInt(ownerCount);
+  const currentSpendable =
+    availableDrops ??
+    (balanceDrops == null ? null : balanceDrops - currentReserve);
   const spendableAfterDid =
-    balanceDrops == null ? null : balanceDrops - reserveAfterDid - DID_TX_FEE_DROPS;
+    currentSpendable == null
+      ? null
+      : currentSpendable - ownerReserveDrops - networkFeeDrops;
   const currentBalance =
     balanceDrops == null ? formatXrp(readXrpBalance(walletAssets)) : formatXrpDrops(balanceDrops);
   const depositRequired = Boolean(walletAssets?.depositRequired);
@@ -95,15 +164,15 @@ export default function MobileDidRegisterPage() {
           </div>
           <div>
             <dt>네트워크 수수료</dt>
-            <dd>{formatXrpDrops(DID_TX_FEE_DROPS)}</dd>
+            <dd>{feeDrops == null ? "계산 중" : formatXrpDrops(networkFeeDrops)}</dd>
           </div>
           <div>
             <dt>계정 준비금 증가 (잠금, 소각 아님)</dt>
-            <dd>{formatXrpDrops(XRPL_OWNER_RESERVE_DROPS)}</dd>
+            <dd>{formatXrpDrops(ownerReserveDrops)}</dd>
           </div>
           <div>
             <dt>등록 후 사용 가능 잔액</dt>
-            <dd className="accent">{formatXrpDrops(spendableAfterDid)}</dd>
+            <dd className="accent">{formatSignedXrpDrops(spendableAfterDid)}</dd>
           </div>
         </dl>
 
@@ -129,7 +198,13 @@ export default function MobileDidRegisterPage() {
           type="button"
           className="primary"
           onClick={onRegister}
-          disabled={busy || !walletInfo || depositRequired || insufficientBalance}
+          disabled={
+            busy ||
+            !walletInfo ||
+            feeDrops == null ||
+            depositRequired ||
+            insufficientBalance
+          }
         >
           {busy ? "등록 중..." : "DID 등록하기"}
         </button>
@@ -141,6 +216,11 @@ export default function MobileDidRegisterPage() {
           취소
         </button>
       </div>
+      {toast ? (
+        <div className={`m-toast${toastClosing ? " closing" : ""}`}>
+          {toast}
+        </div>
+      ) : null}
     </section>
   );
 }

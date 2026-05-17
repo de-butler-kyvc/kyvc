@@ -88,6 +88,7 @@ jobs:
           mkdir -p /opt/kyvc/logs/dev/back-admin
           mkdir -p /opt/kyvc/logs/dev/core-admin
           test -d /mnt/kyvc-dev
+          mkdir -p /mnt/kyvc-dev/kyc-documents
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -158,6 +159,7 @@ jobs:
           mkdir -p /opt/kyvc/logs/prod/back-admin
           mkdir -p /opt/kyvc/logs/prod/core-admin
           test -d /mnt/kyvc-prod
+          mkdir -p /mnt/kyvc-prod/kyc-documents
 
       - name: Login to GHCR
         uses: docker/login-action@v3

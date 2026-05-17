@@ -3,6 +3,8 @@ package com.kyvc.backend.domain.vp.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 /**
  * VP 요청 응답
@@ -11,8 +13,13 @@ import java.time.LocalDateTime;
  * @param requesterName 요청자명
  * @param purpose 제출 목적
  * @param requiredClaims 요구 Claim JSON
+ * @param requiredDisclosures Core 필수 disclosure 목록
+ * @param documentRules Core 문서 증빙 규칙 목록
+ * @param presentationDefinition Core Presentation Definition
  * @param challenge VP 요청 challenge
  * @param nonce VP 요청 nonce
+ * @param aud VP 제출 audience
+ * @param domain VP 제출 domain
  * @param expiresAt 요청 만료 일시
  * @param expired 요청 만료 여부
  * @param submitted 제출 완료 여부
@@ -28,12 +35,22 @@ public record VpRequestResponse(
         String requesterName, // 요청자명
         @Schema(description = "제출 목적", example = "KYC 제출 증빙")
         String purpose, // 제출 목적
-        @Schema(description = "요구 Claim JSON", example = "[\"businessName\",\"representativeName\"]")
+        @Schema(description = "요구 Claim JSON", example = "[\"legalEntity.type\",\"representative.name\"]")
         String requiredClaims, // 요구 Claim JSON
+        @Schema(description = "Core 필수 disclosure 목록")
+        List<String> requiredDisclosures, // Core 필수 disclosure 목록
+        @Schema(description = "Core 문서 증빙 규칙 목록")
+        List<Map<String, Object>> documentRules, // Core 문서 증빙 규칙 목록
+        @Schema(description = "Core Presentation Definition")
+        Map<String, Object> presentationDefinition, // Core Presentation Definition
         @Schema(description = "VP 요청 challenge", example = "challenge-001")
         String challenge, // VP 요청 challenge
         @Schema(description = "VP 요청 nonce", example = "nonce-001")
         String nonce, // VP 요청 nonce
+        @Schema(description = "VP 제출 audience", example = "kyvc-finance-vp")
+        String aud, // VP 제출 audience
+        @Schema(description = "VP 제출 domain", example = "kyvc-finance-vp")
+        String domain, // VP 제출 domain
         @Schema(description = "요청 만료 일시", example = "2026-05-07T23:59:59")
         LocalDateTime expiresAt, // 요청 만료 일시
         @Schema(description = "요청 만료 여부", example = "false")
@@ -47,4 +64,23 @@ public record VpRequestResponse(
         @Schema(description = "검증 일시", example = "2026-05-07T16:05:00")
         LocalDateTime verifiedAt // 검증 일시
 ) {
+    public VpRequestResponse(
+            String requestId, // VP 요청 ID
+            String requesterName, // 요청자명
+            String purpose, // 제출 목적
+            String requiredClaims, // 요구 Claim JSON
+            List<String> requiredDisclosures, // Core 필수 disclosure 목록
+            List<Map<String, Object>> documentRules, // Core 문서 증빙 규칙 목록
+            Map<String, Object> presentationDefinition, // Core Presentation Definition
+            String challenge, // VP 요청 challenge
+            String nonce, // VP 요청 nonce
+            LocalDateTime expiresAt, // 요청 만료 일시
+            boolean expired, // 요청 만료 여부
+            boolean submitted, // 제출 완료 여부
+            String status, // VP 요청 상태
+            VpVerificationResultResponse result, // VP 검증 결과
+            LocalDateTime verifiedAt // 검증 일시
+    ) {
+        this(requestId, requesterName, purpose, requiredClaims, requiredDisclosures, documentRules, presentationDefinition, challenge, nonce, null, null, expiresAt, expired, submitted, status, result, verifiedAt);
+    }
 }

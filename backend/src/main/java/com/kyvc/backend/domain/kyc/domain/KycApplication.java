@@ -93,6 +93,12 @@ public class KycApplication {
     @Column(name = "ai_review_detail_json", columnDefinition = "TEXT")
     private String aiReviewDetailJson;
 
+    @Column(name = "core_ai_assessment_json", columnDefinition = "TEXT")
+    private String coreAiAssessmentJson; // Core AI assessment 상세 JSON
+
+    @Column(name = "core_ai_review_raw_json", columnDefinition = "TEXT")
+    private String coreAiReviewRawJson; // Core AI review 원본 응답 JSON
+
     @Column(name = "manual_review_reason", columnDefinition = "TEXT")
     private String manualReviewReason;
 
@@ -209,6 +215,14 @@ public class KycApplication {
         return aiReviewDetailJson;
     }
 
+    public String getCoreAiAssessmentJson() {
+        return coreAiAssessmentJson;
+    }
+
+    public String getCoreAiReviewRawJson() {
+        return coreAiReviewRawJson;
+    }
+
     public String getManualReviewReason() {
         return manualReviewReason;
     }
@@ -278,6 +292,15 @@ public class KycApplication {
         this.kycStatus = KyvcEnums.KycStatus.AI_REVIEWING;
         this.aiReviewStatus = KyvcEnums.AiReviewStatus.QUEUED;
         this.submittedAt = submittedAt;
+    }
+
+    // Core AI 심사 상세 저장
+    public void updateCoreAiReviewDetails(
+            String coreAiAssessmentJson, // Core AI assessment 상세 JSON
+            String coreAiReviewRawJson // Core AI review 원본 응답 JSON
+    ) {
+        this.coreAiAssessmentJson = coreAiAssessmentJson;
+        this.coreAiReviewRawJson = coreAiReviewRawJson;
     }
 
     // AI 심사 완료 후 수동심사 전환
@@ -413,6 +436,12 @@ public class KycApplication {
     // 초안 상태 여부
     public boolean isDraft() {
         return KyvcEnums.KycStatus.DRAFT == kycStatus;
+    }
+
+    // KYC 제출 가능 상태 여부
+    public boolean isSubmitAllowed() {
+        return KyvcEnums.KycStatus.DRAFT == kycStatus
+                || KyvcEnums.KycStatus.NEED_SUPPLEMENT == kycStatus;
     }
 
     // 금융사 방문 신청 여부

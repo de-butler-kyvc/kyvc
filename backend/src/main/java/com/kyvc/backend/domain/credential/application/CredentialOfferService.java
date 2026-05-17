@@ -2,6 +2,7 @@ package com.kyvc.backend.domain.credential.application;
 
 import com.kyvc.backend.domain.audit.application.AuditLogService;
 import com.kyvc.backend.domain.audit.dto.AuditLogCreateCommand;
+import com.kyvc.backend.domain.core.application.CoreDocumentEvidencePolicy;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
@@ -15,6 +16,9 @@ import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareRequest;
 import com.kyvc.backend.domain.credential.dto.WalletCredentialPrepareResponse;
 import com.kyvc.backend.domain.credential.repository.CredentialOfferRepository;
 import com.kyvc.backend.domain.credential.repository.CredentialRepository;
+import com.kyvc.backend.domain.document.domain.KycDocument;
+import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
+import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.domain.mobile.application.MobileDeviceService;
@@ -28,9 +32,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -48,6 +56,8 @@ public class CredentialOfferService {
     private final CredentialOfferRepository credentialOfferRepository;
     private final CredentialRepository credentialRepository;
     private final KycApplicationRepository kycApplicationRepository;
+    private final KycDocumentRepository kycDocumentRepository;
+    private final DocumentStorage documentStorage;
     private final CorporateRepository corporateRepository;
     private final MobileDeviceService mobileDeviceService;
     private final CredentialClaimsAssembler credentialClaimsAssembler;
@@ -208,11 +218,14 @@ public class CredentialOfferService {
         );
         saveAuditLog(userId, "CREDENTIAL_OFFER_PREPARED", offer.getCredentialOfferId(), "Credential Offer 준비");
 
+        List<Map<String, Object>> documentAttachments = createDocumentAttachments(kycApplication.getKycId());
         return new WalletCredentialPrepareResponse(
                 offer.getCredentialOfferId(),
                 credential.getCredentialId(),
                 true,
-                createCredentialPayload(issuanceResult)
+                createCredentialPayload(issuanceResult),
+                documentAttachments,
+                createDocumentAttachmentManifest(documentAttachments)
         );
     }
 
@@ -403,6 +416,109 @@ public class CredentialOfferService {
         payload.put("selectiveDisclosure", result.selectiveDisclosure());
         payload.put("metadata", createCredentialMetadata(credential, result.issuerAccount()));
         return payload;
+    }
+
+    private List<Map<String, Object>> createDocumentAttachments(
+            Long kycId // KYC 신청 ID
+    ) {
+        List<KycDocument> documents = kycDocumentRepository.findByKycId(kycId);
+        if (documents == null || documents.isEmpty()) {
+            return List.of();
+        }
+        return documents.stream()
+                .filter(KycDocument::isPreviewAvailable)
+                .map(this::toDocumentAttachment)
+                .toList();
+    }
+
+    private Map<String, Object> toDocumentAttachment(
+            KycDocument document // KYC 심사 문서
+    ) {
+        byte[] content = loadDocumentBytes(document);
+        Map<String, Object> attachment = createDocumentAttachmentDescriptor(document, content);
+        attachment.put("contentEncoding", "base64");
+        attachment.put("contentBase64", Base64.getEncoder().encodeToString(content));
+        return attachment;
+    }
+
+    private Map<String, Object> createDocumentAttachmentDescriptor(
+            KycDocument document, // KYC 심사 문서
+            byte[] content // 원본 파일 bytes
+    ) {
+        Map<String, Object> descriptor = new LinkedHashMap<>();
+        String requirementId = CoreDocumentEvidencePolicy.requirementIdFor(document.getDocumentTypeCode());
+        descriptor.put("documentId", "urn:kyvc:doc:" + document.getDocumentId());
+        descriptor.put("documentType", CoreDocumentEvidencePolicy.toCoreDocumentType(document.getDocumentTypeCode()));
+        descriptor.put("documentTypeCode", document.getDocumentTypeCode());
+        descriptor.put("documentClass", document.getDocumentTypeCode());
+        descriptor.put("attachmentRef", createAttachmentRef(document));
+        descriptor.put("fileName", normalizeNullableText(document.getFileName()));
+        descriptor.put("mediaType", normalizeNullableText(document.getMimeType()));
+        descriptor.put("byteSize", resolveDocumentByteSize(document, content));
+        descriptor.put("digestSRI", CoreDocumentEvidencePolicy.digestSRI(content));
+        if (StringUtils.hasText(requirementId)) {
+            descriptor.put("requirementId", requirementId);
+        }
+        return descriptor;
+    }
+
+    private Map<String, Object> createDocumentAttachmentManifest(
+            List<Map<String, Object>> documentAttachments // Android 저장용 문서 첨부 목록
+    ) {
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("attachments", documentAttachments.stream()
+                .map(this::toManifestAttachment)
+                .toList());
+        return manifest;
+    }
+
+    private Map<String, Object> toManifestAttachment(
+            Map<String, Object> documentAttachment // Android 저장용 문서 첨부
+    ) {
+        Map<String, Object> manifestAttachment = new LinkedHashMap<>();
+        copyIfPresent(documentAttachment, manifestAttachment, "documentId");
+        copyIfPresent(documentAttachment, manifestAttachment, "documentType");
+        copyIfPresent(documentAttachment, manifestAttachment, "attachmentRef");
+        copyIfPresent(documentAttachment, manifestAttachment, "digestSRI");
+        copyIfPresent(documentAttachment, manifestAttachment, "byteSize");
+        copyIfPresent(documentAttachment, manifestAttachment, "mediaType");
+        copyIfPresent(documentAttachment, manifestAttachment, "fileName");
+        copyIfPresent(documentAttachment, manifestAttachment, "requirementId");
+        return manifestAttachment;
+    }
+
+    private void copyIfPresent(
+            Map<String, Object> source, // 원본 Map
+            Map<String, Object> target, // 대상 Map
+            String key // 복사 키
+    ) {
+        Object value = source.get(key);
+        if (value != null) {
+            target.put(key, value);
+        }
+    }
+
+    private String createAttachmentRef(
+            KycDocument document // KYC 심사 문서
+    ) {
+        return "doc-" + document.getDocumentId();
+    }
+
+    private Long resolveDocumentByteSize(
+            KycDocument document, // KYC 심사 문서
+            byte[] content // 원본 파일 bytes
+    ) {
+        return document.getFileSize() == null ? (long) content.length : document.getFileSize();
+    }
+
+    private byte[] loadDocumentBytes(
+            KycDocument document // KYC 심사 문서
+    ) {
+        try (InputStream inputStream = documentStorage.load(document.getFilePath()).resource().getInputStream()) {
+            return inputStream.readAllBytes();
+        } catch (IOException exception) {
+            throw new ApiException(ErrorCode.DOCUMENT_FILE_NOT_FOUND, exception);
+        }
     }
 
     private Map<String, Object> createCredentialMetadata(

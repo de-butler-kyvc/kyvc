@@ -13,7 +13,8 @@ import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.credential.domain.Credential;
-import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
+import com.kyvc.backend.domain.document.application.DocumentRequirementValidationService;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementValidationResult;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.finance.dto.FinanceKycResultResponse;
@@ -63,7 +64,7 @@ public class FinanceKycReviewService {
     private final FinanceKycDocumentRepository financeKycDocumentRepository;
     private final FinanceKycQrRepository financeKycQrRepository;
     private final CorporateRepository corporateRepository;
-    private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
+    private final DocumentRequirementValidationService documentRequirementValidationService;
     private final DocumentStorage documentStorage;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
@@ -87,7 +88,7 @@ public class FinanceKycReviewService {
                 .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
         List<KycDocument> documents = financeKycDocumentRepository.findByKycId(kycId); // 제출 문서 목록
         validateRequiredInfo(kycApplication, corporate);
-        validateRequiredDocuments(kycApplication, documents);
+        validateRequiredDocuments(kycApplication, corporate, documents);
 
         LocalDateTime submittedAt = LocalDateTime.now(); // 제출 일시
         String coreRequestId = null; // Core 요청 ID
@@ -231,6 +232,12 @@ public class FinanceKycReviewService {
     ) {
         KyvcEnums.AiReviewStatus aiReviewStatus = resolveAiReviewStatus(coreResponse); // AI 심사 상태
         String detailJson = toJson(coreResponse); // AI 심사 상세 JSON
+        if (coreResponse != null) {
+            kycApplication.updateCoreAiReviewDetails(
+                    coreResponse.coreAiAssessmentJson(),
+                    coreResponse.coreAiReviewRawJson()
+            );
+        }
         BigDecimal confidenceScore = coreResponse == null || coreResponse.confidenceScore() == null
                 ? DEFAULT_CONFIDENCE_SCORE
                 : coreResponse.confidenceScore(); // AI 신뢰도 점수
@@ -299,20 +306,31 @@ public class FinanceKycReviewService {
     // 필수 문서 검증
     private void validateRequiredDocuments(
             KycApplication kycApplication, // KYC 신청
+            Corporate corporate, // 법인 정보
             List<KycDocument> documents // 제출 문서 목록
     ) {
         Set<String> uploadedTypeCodes = documents == null ? Set.of() : documents.stream()
                 .filter(document -> KyvcEnums.DocumentUploadStatus.UPLOADED == document.getUploadStatus())
                 .map(KycDocument::getDocumentTypeCode)
                 .collect(Collectors.toSet()); // 업로드 완료 문서 유형 목록
-        boolean missingRequiredDocument = requiredDocumentPolicyProvider
-                .getRequiredDocuments(kycApplication.getCorporateTypeCode())
-                .stream()
-                .filter(RequiredDocumentPolicyProvider.RequiredDocumentPolicy::required)
-                .anyMatch(policy -> !uploadedTypeCodes.contains(policy.documentTypeCode()));
-        if (missingRequiredDocument) {
+        DocumentRequirementValidationResult result = documentRequirementValidationService.validate(
+                kycApplication.getCorporateTypeCode(),
+                uploadedTypeCodes,
+                isAgentApplication(corporate)
+        ); // 제출 문서 정책 검증 결과
+        if (!result.valid()) {
             throw new ApiException(ErrorCode.FINANCE_KYC_REQUIRED_DOCUMENT_MISSING);
         }
+    }
+
+    private boolean isAgentApplication(
+            Corporate corporate // 법인 정보
+    ) {
+        return corporate != null
+                && (StringUtils.hasText(corporate.getAgentName())
+                || StringUtils.hasText(corporate.getAgentPhone())
+                || StringUtils.hasText(corporate.getAgentEmail())
+                || StringUtils.hasText(corporate.getAgentAuthorityScope()));
     }
 
     // AI 심사 상태 결정

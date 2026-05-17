@@ -29,7 +29,7 @@ public class AdminNotificationTemplateService {
     @Transactional(readOnly = true)
     public AdminNotificationTemplateDtos.PageResponse search(String channelCode, String enabledYn, String keyword, Integer page, Integer size) {
         int p = page == null || page < 0 ? 0 : page;
-        int s = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int s = size == null || size < 1 ? 15 : Math.min(size, 100);
         long total = queryRepository.count(channelCode, enabledYn, keyword);
         return new AdminNotificationTemplateDtos.PageResponse(queryRepository.search(channelCode, enabledYn, keyword, p, s), p, s, total, total == 0 ? 0 : (int) Math.ceil((double) total / s));
     }

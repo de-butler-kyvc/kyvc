@@ -8,13 +8,16 @@ import { StepIndicator } from "@/components/kyc/step-indicator";
 import { Button } from "@/components/ui/button";
 import { ApiError, kyc as kycApi } from "@/lib/api";
 import {
-  CORPORATE_TYPE_OPTIONS,
+  getSelectableCorporateTypeCode,
   getStoredCorporateType,
+  getSupportedCorporateTypeOptions,
   refreshCurrentKycStorage,
   setCurrentKycId,
   setStoredCorporateType
 } from "@/lib/kyc-flow";
 import { useCorporateProfile } from "@/lib/session-context";
+
+const CORPORATE_TYPE_OPTIONS = getSupportedCorporateTypeOptions();
 
 export default function KycApplyTypePage() {
   const router = useRouter();
@@ -33,8 +36,9 @@ export default function KycApplyTypePage() {
           const detail = await kycApi.detail(existingKycId);
           if (cancelled) return;
           if (detail.corporateTypeCode) {
-            setSelected(detail.corporateTypeCode);
-            setStoredCorporateType(detail.corporateTypeCode);
+            const selectableType = getSelectableCorporateTypeCode(detail.corporateTypeCode);
+            setSelected(selectableType);
+            setStoredCorporateType(selectableType);
             return;
           }
         } catch {
@@ -51,6 +55,11 @@ export default function KycApplyTypePage() {
   const onNext = async () => {
     if (!profile?.corporateId) {
       setError("법인 기본정보를 먼저 등록하세요.");
+      return;
+    }
+    const selectedOption = CORPORATE_TYPE_OPTIONS.find((option) => option.value === selected);
+    if (!selectedOption || selectedOption.disabled) {
+      setError("후속 확장 예정인 법인 유형은 아직 선택할 수 없습니다.");
       return;
     }
     setError(null);
@@ -107,19 +116,31 @@ export default function KycApplyTypePage() {
         </div>
         <div className="type-radio-list">
           {CORPORATE_TYPE_OPTIONS.map((option) => {
-            const active = selected === option.value;
+            const active = !option.disabled && selected === option.value;
             return (
               <button
                 key={option.value}
                 type="button"
-                className={`type-radio-card ${active ? "selected" : ""}`}
-                onClick={() => setSelected(option.value)}
+                disabled={option.disabled}
+                className={`type-radio-card ${active ? "selected" : ""} ${
+                  option.disabled ? "cursor-not-allowed opacity-60" : ""
+                }`}
+                onClick={() => {
+                  if (!option.disabled) setSelected(option.value);
+                }}
               >
                 <span className="type-radio-icon">
                   <TypeIcon value={option.value} />
                 </span>
                 <span className="type-radio-info">
-                  <span className="type-radio-name">{option.label}</span>
+                  <span className="type-radio-name">
+                    {option.label}
+                    {option.badge ? (
+                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {option.badge}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="type-radio-docs">{option.docs}</span>
                 </span>
                 <span className={`type-radio-dot ${active ? "selected" : ""}`} />
@@ -144,7 +165,7 @@ export default function KycApplyTypePage() {
 }
 
 function TypeIcon({ value }: { value: string }) {
-  if (value === "NONPROFIT") return <Icon.Shield />;
+  if (value === "NON_PROFIT") return <Icon.Shield />;
   if (value === "ASSOCIATION") return <Icon.Users />;
   return <Icon.Building />;
 }

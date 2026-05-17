@@ -20,6 +20,8 @@ import java.util.List;
  * @param expiresAt 만료 일시
  * @param createdAt 생성 일시
  * @param verifiedAt 검증 일시
+ * @param submittedAt 제출 일시
+ * @param checks 검증 항목 목록
  */
 @Schema(description = "금융사 VP 요청 상세 응답")
 public record FinanceVpRequestDetailResponse(
@@ -46,8 +48,33 @@ public record FinanceVpRequestDetailResponse(
         @Schema(description = "생성 일시", example = "2026-05-10T10:00:00")
         LocalDateTime createdAt, // 생성 일시
         @Schema(description = "검증 일시", example = "2026-05-10T10:05:00")
-        LocalDateTime verifiedAt // 검증 일시
+        LocalDateTime verifiedAt, // 검증 일시
+        @Schema(description = "제출 일시", example = "2026-05-10T10:03:00")
+        LocalDateTime submittedAt, // 제출 일시
+        @Schema(description = "검증 항목 목록")
+        List<FinanceVpVerificationCheckResponse> checks // 검증 항목 목록
 ) {
+    public FinanceVpRequestDetailResponse {
+        checks = checks == null ? List.of() : checks;
+    }
+
+    public FinanceVpRequestDetailResponse(
+            String requestId, // VP 요청 ID
+            String status, // VP 검증 상태
+            String verificationStatus, // 검증 상태 코드
+            String purpose, // VP 요청 목적
+            List<String> requestedClaims, // 요청 Claim 목록
+            String qrPayload, // QR Payload
+            Long corporateId, // 법인 ID
+            String corporateName, // 법인명
+            FinanceVpRequestResultResponse result, // 검증 결과 요약
+            LocalDateTime expiresAt, // 만료 일시
+            LocalDateTime createdAt, // 생성 일시
+            LocalDateTime verifiedAt // 검증 일시
+    ) {
+        this(requestId, status, verificationStatus, purpose, requestedClaims, qrPayload, corporateId, corporateName, result, expiresAt, createdAt, verifiedAt, null, List.of());
+    }
+
     public FinanceVpRequestDetailResponse(
             String requestId, // VP 요청 ID
             String status, // VP 검증 상태

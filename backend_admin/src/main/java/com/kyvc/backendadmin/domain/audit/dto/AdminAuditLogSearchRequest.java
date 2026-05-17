@@ -18,7 +18,7 @@ public record AdminAuditLogSearchRequest(
         LocalDateTime to
 ) {
     private static final int DEFAULT_PAGE = 0;
-    private static final int DEFAULT_SIZE = 20;
+    private static final int DEFAULT_SIZE = 15;
     private static final int MAX_SIZE = 100;
 
     public static AdminAuditLogSearchRequest of(

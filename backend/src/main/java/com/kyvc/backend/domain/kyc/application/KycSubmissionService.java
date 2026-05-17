@@ -11,10 +11,16 @@ import com.kyvc.backend.domain.core.infrastructure.CoreAdapter;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
 import com.kyvc.backend.domain.corporate.domain.CorporateAgent;
 import com.kyvc.backend.domain.corporate.domain.CorporateRepresentative;
+import com.kyvc.backend.domain.corporate.application.CorporateTypeCodeNormalizer;
 import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
-import com.kyvc.backend.domain.document.application.RequiredDocumentPolicyProvider;
+import com.kyvc.backend.domain.document.application.DocumentRequirementValidationService;
+import com.kyvc.backend.domain.document.application.DocumentTypeCodeNormalizer;
+import com.kyvc.backend.domain.document.application.RequiredDocumentService;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementGroup;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementItem;
+import com.kyvc.backend.domain.document.domain.DocumentRequirementValidationResult;
 import com.kyvc.backend.domain.document.domain.KycDocument;
 import com.kyvc.backend.domain.document.dto.KycDocumentResponse;
 import com.kyvc.backend.domain.document.dto.RequiredDocumentResponse;
@@ -25,6 +31,7 @@ import com.kyvc.backend.domain.kyc.dto.KycApplicationSummaryResponse;
 import com.kyvc.backend.domain.kyc.dto.KycMissingItemResponse;
 import com.kyvc.backend.domain.kyc.dto.KycSubmitResponse;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
+import com.kyvc.backend.domain.kyc.repository.KycReviewHistoryRepository;
 import com.kyvc.backend.global.exception.ApiException;
 import com.kyvc.backend.global.exception.ErrorCode;
 import com.kyvc.backend.global.logging.LogEventLogger;
@@ -56,6 +63,7 @@ public class KycSubmissionService {
     private static final String BUSINESS_REGISTRATION_NO_REQUIRED = "BUSINESS_REGISTRATION_NO_REQUIRED"; // 사업자등록번호 누락 코드
     private static final String REPRESENTATIVE_REQUIRED = "REPRESENTATIVE_REQUIRED"; // 대표자 정보 누락 코드
     private static final String CORPORATE_TYPE_REQUIRED = "CORPORATE_TYPE_REQUIRED"; // 법인 유형 누락 코드
+    private static final String CORPORATE_TYPE_UNSUPPORTED = "CORPORATE_TYPE_UNSUPPORTED"; // 미지원 법인 유형 코드
     private static final String DOCUMENT_STORE_OPTION_REQUIRED = "DOCUMENT_STORE_OPTION_REQUIRED"; // 원본 문서 저장 옵션 누락 코드
     private static final String DOCUMENT_REQUIRED = "DOCUMENT_REQUIRED"; // 필수서류 누락 코드
     private static final String AI_REVIEW_COMPLETED_MESSAGE = "KYC 신청이 제출되었고 수동 심사로 전환되었습니다.";
@@ -69,12 +77,15 @@ public class KycSubmissionService {
     private final CorporateRepresentativeRepository corporateRepresentativeRepository;
     private final CorporateAgentRepository corporateAgentRepository;
     private final KycDocumentRepository kycDocumentRepository;
-    private final RequiredDocumentPolicyProvider requiredDocumentPolicyProvider;
+    private final RequiredDocumentService requiredDocumentService;
+    private final DocumentRequirementValidationService documentRequirementValidationService;
     private final DocumentStorage documentStorage;
     private final CoreRequestService coreRequestService;
     private final CoreAdapter coreAdapter;
     private final ObjectMapper objectMapper;
     private final LogEventLogger logEventLogger;
+    private final KycReviewHistoryRepository kycReviewHistoryRepository;
+    private final KycSubmissionStatusService kycSubmissionStatusService;
 
     // KYC 제출 전 요약 조회
     @Transactional(readOnly = true)
@@ -96,9 +107,7 @@ public class KycSubmissionService {
         validateKycId(kycId);
 
         KycApplication kycApplication = findOwnedKyc(userId, kycId); // 사용자 소유 KYC
-        if (!kycApplication.isDraft()) {
-            throw new ApiException(ErrorCode.KYC_INVALID_STATUS);
-        }
+        validateSubmitAllowed(kycApplication);
 
         KycApplicationSummaryResponse summary = buildSummary(userId, kycApplication); // KYC 제출 전 요약
         validateSubmittable(summary);
@@ -112,13 +121,18 @@ public class KycSubmissionService {
                 createSubmitLogFields(kycApplication, null)
         );
 
+        kycApplication = kycSubmissionStatusService.reserveSubmission(
+                userId,
+                kycApplication.getKycId(),
+                submittedAt
+        );
+
         try {
             CoreRequest coreRequest = coreRequestService.createAiReviewRequest(
                     kycApplication.getKycId(),
                     null
             );
             coreRequestId = coreRequest.getCoreRequestId();
-            kycApplication.submit(submittedAt);
 
             List<KycDocument> reviewDocuments = kycDocumentRepository.findByKycId(
                     kycApplication.getKycId()
@@ -153,8 +167,17 @@ public class KycSubmissionService {
                     createSubmitLogFields(kycApplication, coreRequestId)
             );
 
+            KyvcEnums.KycStatus beforeAiReviewResultStatus = kycApplication.getKycStatus(); // AI 심사 반영 전 KYC 상태
             applyAiReviewResult(kycApplication, coreAiReviewResponse);
             KycApplication savedApplication = kycApplicationRepository.save(kycApplication); // 저장된 KYC
+            saveStatusHistory(
+                    savedApplication.getKycId(),
+                    KyvcEnums.ReviewActionType.AI_COMPLETE,
+                    beforeAiReviewResultStatus,
+                    savedApplication.getKycStatus(),
+                    "AI 심사 완료",
+                    savedApplication.getUpdatedAt() == null ? submittedAt : savedApplication.getUpdatedAt()
+            );
 
             logEventLogger.info(
                     "kyc.submit.completed",
@@ -175,8 +198,17 @@ public class KycSubmissionService {
         } catch (ApiException exception) {
             if (coreRequestId != null && isCoreAiReviewFailure(exception)) {
                 markCoreRequestFailure(coreRequestId, exception);
+                KyvcEnums.KycStatus beforeFailureStatus = kycApplication.getKycStatus(); // AI 심사 실패 전 KYC 상태
                 kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
                 KycApplication savedApplication = kycApplicationRepository.save(kycApplication);
+                saveStatusHistory(
+                        savedApplication.getKycId(),
+                        KyvcEnums.ReviewActionType.AI_FAILED,
+                        beforeFailureStatus,
+                        savedApplication.getKycStatus(),
+                        "AI 심사 실패",
+                        savedApplication.getUpdatedAt() == null ? submittedAt : savedApplication.getUpdatedAt()
+                );
                 logEventLogger.warn(
                         "kyc.ai_review.fallback_manual_review",
                         exception.getMessage(),
@@ -233,13 +265,15 @@ public class KycSubmissionService {
                 .map(this::toDocumentResponse)
                 .toList();
         List<RequiredDocumentResponse> requiredDocuments = buildRequiredDocuments(kycApplication, documents); // 필수서류 충족 여부 목록
+        String normalizedCorporateTypeCode = CorporateTypeCodeNormalizer.normalize(kycApplication.getCorporateTypeCode()); // 정규화 법인 유형 코드
         List<KycMissingItemResponse> missingItems = buildMissingItems(
                 corporate,
                 representativeName,
                 kycApplication,
-                documents
+                documents,
+                isAgentApplication(agentName, agentPhone, agentEmail, agentAuthorityScope)
         ); // 누락 항목 목록
-        boolean submittable = kycApplication.isDraft() && isSubmittable(missingItems); // 제출 가능 여부
+        boolean submittable = kycApplication.isSubmitAllowed() && isSubmittable(missingItems); // 제출 가능 여부
 
         return new KycApplicationSummaryResponse(
                 kycApplication.getKycId(),
@@ -255,7 +289,7 @@ public class KycSubmissionService {
                 agentPhone,
                 agentEmail,
                 agentAuthorityScope,
-                kycApplication.getCorporateTypeCode(),
+                normalizedCorporateTypeCode,
                 enumName(kycApplication.getOriginalDocumentStoreOption()),
                 documentResponses,
                 requiredDocuments,
@@ -273,17 +307,10 @@ public class KycSubmissionService {
             List<KycDocument> documents // 업로드 문서 목록
     ) {
         Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // 업로드 문서 유형 코드 목록
-        return requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode()).stream()
-                .map(policy -> new RequiredDocumentResponse(
-                        policy.documentTypeCode(),
-                        policy.documentTypeName(),
-                        policy.required(),
-                        uploadedDocumentTypeCodes.contains(policy.documentTypeCode()),
-                        policy.description(),
-                        policy.allowedExtensions(),
-                        policy.maxFileSizeMb()
-                ))
-                .toList();
+        return requiredDocumentService.buildRequiredDocumentResponses(
+                kycApplication.getCorporateTypeCode(),
+                uploadedDocumentTypeCodes
+        );
     }
 
     // 누락 항목 목록 생성
@@ -291,7 +318,8 @@ public class KycSubmissionService {
             Corporate corporate, // 법인 정보
             String representativeName, // 대표자명
             KycApplication kycApplication, // KYC 신청 정보
-            List<KycDocument> documents // 업로드 문서 목록
+            List<KycDocument> documents, // 업로드 문서 목록
+            boolean agentApplication // 대리인 신청 여부
     ) {
         Set<KycMissingItemResponse> missingItems = new LinkedHashSet<>(); // 누락 항목 목록
 
@@ -331,16 +359,31 @@ public class KycSubmissionService {
             ));
         }
 
-        Set<String> uploadedDocumentTypeCodes = getUploadedDocumentTypeCodes(documents); // 업로드 문서 유형 코드 목록
-        for (RequiredDocumentPolicyProvider.RequiredDocumentPolicy policy
-                : requiredDocumentPolicyProvider.getRequiredDocuments(kycApplication.getCorporateTypeCode())) {
-            if (!uploadedDocumentTypeCodes.contains(policy.documentTypeCode())) {
-                missingItems.add(new KycMissingItemResponse(
-                        DOCUMENT_REQUIRED,
-                        policy.documentTypeName() + " 업로드 필요",
-                        policy.documentTypeCode()
-                ));
-            }
+        DocumentRequirementValidationResult documentValidationResult = documentRequirementValidationService.validate(
+                kycApplication.getCorporateTypeCode(),
+                getUploadedDocumentTypeCodes(documents),
+                agentApplication
+        ); // 제출 문서 정책 검증 결과
+        if (!documentValidationResult.supported()) {
+            missingItems.add(new KycMissingItemResponse(
+                    CORPORATE_TYPE_UNSUPPORTED,
+                    "지원하지 않는 법인 유형",
+                    "corporateTypeCode"
+            ));
+        }
+        for (DocumentRequirementItem missingItem : documentValidationResult.missingRequiredItems()) {
+            missingItems.add(new KycMissingItemResponse(
+                    DOCUMENT_REQUIRED,
+                    missingItem.documentTypeName() + " 업로드 필요",
+                    missingItem.documentTypeCode()
+            ));
+        }
+        for (DocumentRequirementGroup group : documentValidationResult.unsatisfiedGroups()) {
+            missingItems.add(new KycMissingItemResponse(
+                    DOCUMENT_REQUIRED,
+                    group.groupName() + " 중 " + group.minRequiredCount() + "개 이상 업로드 필요",
+                    group.groupCode()
+            ));
         }
 
         return List.copyOf(missingItems);
@@ -364,13 +407,66 @@ public class KycSubmissionService {
         }
     }
 
+    // KYC 제출 가능 상태 검증
+    private void validateSubmitAllowed(
+            KycApplication kycApplication // KYC 신청 정보
+    ) {
+        if (kycApplication.isDraft()) {
+            return;
+        }
+        throw new ApiException(ErrorCode.KYC_ALREADY_SUBMITTED);
+    }
+
+    // 제출 이력 유형 결정
+    private KyvcEnums.ReviewActionType resolveSubmitActionType(
+            KyvcEnums.KycStatus beforeStatus // 제출 전 KYC 상태
+    ) {
+        if (KyvcEnums.KycStatus.NEED_SUPPLEMENT == beforeStatus) {
+            return KyvcEnums.ReviewActionType.SUPPLEMENT_SUBMIT;
+        }
+        return KyvcEnums.ReviewActionType.SUBMIT;
+    }
+
+    // KYC 상태 변경 이력 저장
+    private void saveStatusHistory(
+            Long kycId, // KYC 신청 ID
+            KyvcEnums.ReviewActionType actionType, // 심사 처리 유형
+            KyvcEnums.KycStatus beforeStatus, // 변경 전 KYC 상태
+            KyvcEnums.KycStatus afterStatus, // 변경 후 KYC 상태
+            String comment, // 처리 의견
+            LocalDateTime createdAt // 생성 일시
+    ) {
+        kycReviewHistoryRepository.saveStatusChange(
+                kycId,
+                actionType,
+                beforeStatus,
+                afterStatus,
+                comment,
+                createdAt
+        );
+    }
+
     // 업로드 문서 유형 코드 목록 생성
     private Set<String> getUploadedDocumentTypeCodes(
             List<KycDocument> documents // 업로드 문서 목록
     ) {
         return documents == null ? Set.of() : documents.stream()
+                .filter(document -> KyvcEnums.DocumentUploadStatus.UPLOADED == document.getUploadStatus())
                 .map(KycDocument::getDocumentTypeCode)
+                .map(DocumentTypeCodeNormalizer::normalize)
                 .collect(Collectors.toSet());
+    }
+
+    private boolean isAgentApplication(
+            String agentName, // 대리인명
+            String agentPhone, // 대리인 연락처
+            String agentEmail, // 대리인 이메일
+            String agentAuthorityScope // 대리인 권한 범위
+    ) {
+        return StringUtils.hasText(agentName)
+                || StringUtils.hasText(agentPhone)
+                || StringUtils.hasText(agentEmail)
+                || StringUtils.hasText(agentAuthorityScope);
     }
 
     // 사용자 소유 KYC 조회
@@ -492,9 +588,16 @@ public class KycSubmissionService {
     ) {
         KyvcEnums.AiReviewStatus aiReviewStatus = resolveAiReviewStatus(coreAiReviewResponse);
         String detailJson = toJson(coreAiReviewResponse); // AI 심사 메타데이터 JSON
-        BigDecimal confidenceScore = coreAiReviewResponse.confidenceScore() == null
+        if (coreAiReviewResponse != null) {
+            kycApplication.updateCoreAiReviewDetails(
+                    coreAiReviewResponse.coreAiAssessmentJson(),
+                    coreAiReviewResponse.coreAiReviewRawJson()
+            );
+        }
+        BigDecimal confidenceScore = coreAiReviewResponse == null || coreAiReviewResponse.confidenceScore() == null
                 ? DEFAULT_MANUAL_REVIEW_CONFIDENCE_SCORE
                 : coreAiReviewResponse.confidenceScore(); // AI 신뢰도 점수
+        String summary = coreAiReviewResponse == null ? null : coreAiReviewResponse.message(); // AI 심사 요약
         if (KyvcEnums.AiReviewStatus.FAILED == aiReviewStatus) {
             kycApplication.failAiReviewAsManualReview(AI_REVIEW_FAILED_MANUAL_REASON);
             return;
@@ -502,7 +605,7 @@ public class KycSubmissionService {
         if (KyvcEnums.AiReviewStatus.SUCCESS == aiReviewStatus) {
             kycApplication.completeAiReviewAsManualReview(
                     confidenceScore,
-                    coreAiReviewResponse.message(),
+                    summary,
                     detailJson,
                     AI_REVIEW_MANUAL_REASON
             );
@@ -510,7 +613,7 @@ public class KycSubmissionService {
         }
         kycApplication.completeAiReviewAsLowConfidenceManualReview(
                 confidenceScore,
-                coreAiReviewResponse.message(),
+                summary,
                 detailJson,
                 AI_REVIEW_MANUAL_REASON
         );

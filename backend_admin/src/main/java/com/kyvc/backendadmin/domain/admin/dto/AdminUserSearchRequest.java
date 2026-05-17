@@ -34,7 +34,7 @@ public record AdminUserSearchRequest(
      */
     public static AdminUserSearchRequest of(Integer page, Integer size, String keyword, String status, String roleCode) {
         int resolvedPage = page == null || page < 0 ? 0 : page;
-        int resolvedSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int resolvedSize = size == null || size < 1 ? 15 : Math.min(size, 100);
         return new AdminUserSearchRequest(resolvedPage, resolvedSize, keyword, status, roleCode);
     }
 }

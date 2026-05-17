@@ -131,6 +131,15 @@ public class CoreRequest {
         this.completedAt = LocalDateTime.now();
     }
 
+    // 실패 상태와 응답 Payload 반영
+    public void markFailed(
+            String errorMessage, // 실패 메시지
+            String responsePayloadJson // 응답 Payload JSON
+    ) {
+        markFailed(errorMessage);
+        this.responsePayloadJson = responsePayloadJson;
+    }
+
     // Timeout 상태 반영
     public void markTimeout(
             String errorMessage // Timeout 메시지

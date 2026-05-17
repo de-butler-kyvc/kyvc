@@ -3,15 +3,17 @@
 import { getKycList } from "@/lib/api/kyc";
 import { kycDetailPath } from "@/lib/navigation/admin-routes";
 import Link from "next/link";
-import type { KycStatus, KycChannel } from "@/types/kyc";
 import { useState, useEffect } from "react";
 
-const statusBadge: Record<KycStatus, string> = {
-  "수동심사필요": "bg-red-100 text-red-600",
-  "보완필요": "bg-orange-100 text-orange-600",
-  "심사중": "bg-blue-100 text-blue-600",
-  "정상": "bg-green-100 text-green-600",
-  "불충족": "bg-slate-100 text-slate-500",
+const statusBadge: Record<string, string> = {
+  "작성중": "bg-slate-100 text-slate-500",
+  "제출완료": "bg-blue-100 text-blue-600",
+  "AI 심사중": "bg-blue-100 text-blue-600",
+  "수동심사": "bg-red-100 text-red-600",
+  "보완요청": "bg-orange-100 text-orange-600",
+  "승인완료": "bg-green-100 text-green-600",
+  "VC 발급완료": "bg-green-100 text-green-600",
+  "반려": "bg-slate-100 text-slate-500",
 };
 
 const aiBadge: Record<string, string> = {
@@ -20,10 +22,7 @@ const aiBadge: Record<string, string> = {
   "정상": "bg-green-100 text-green-600",
 };
 
-const channelBadge: Record<KycChannel, string> = {
-  "웹": "bg-slate-100 text-slate-600",
-  "금융사": "bg-blue-100 text-blue-600",
-};
+const ITEMS_PER_PAGE = 15;
 
 export default function KycPage() {
   const [kycList, setKycList] = useState<any[]>([]);
@@ -32,6 +31,7 @@ export default function KycPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체 상태");
   const [channelFilter, setChannelFilter] = useState("전체 채널");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchKycList = async (search = searchTerm, status = statusFilter, channel = channelFilter) => {
     setLoading(true);
@@ -50,18 +50,25 @@ export default function KycPage() {
     fetchKycList();
   }, []);
 
-  const handleSearch = () => fetchKycList();
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchKycList();
+  };
 
   const handleReset = () => {
     setSearchTerm(""); setStatusFilter("전체 상태"); setChannelFilter("전체 채널");
+    setCurrentPage(1);
     fetchKycList("", "전체 상태", "전체 채널");
   };
+
+  const totalPages = Math.max(1, Math.ceil(kycList.length / ITEMS_PER_PAGE));
+  const paginatedList = kycList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400">백엔드 어드민</p>
+          <p className="text-xs text-slate-400">증명서 관리자</p>
           <h1 className="text-xl font-bold text-slate-800">KYC 신청 목록</h1>
         </div>
       </div>
@@ -81,10 +88,14 @@ export default function KycPage() {
             className="border border-slate-200 rounded px-3 py-1.5 text-sm focus:outline-none"
           >
             <option>전체 상태</option>
-            <option>수동심사필요</option>
-            <option>보완필요</option>
-            <option>심사중</option>
-            <option>정상</option>
+            <option>작성중</option>
+            <option>제출완료</option>
+            <option>AI 심사중</option>
+            <option>수동심사</option>
+            <option>보완요청</option>
+            <option>승인완료</option>
+            <option>반려</option>
+            <option>VC 발급완료</option>
           </select>
           <select
             value={channelFilter}
@@ -121,7 +132,6 @@ export default function KycPage() {
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">사업자등록번호</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">법인 유형</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">신청일시</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">채널</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">KYC 상태</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">AI 판단(참고)</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">심사자</th>
@@ -129,7 +139,7 @@ export default function KycPage() {
               </tr>
             </thead>
             <tbody>
-              {kycList.map((row) => (
+              {paginatedList.map((row) => (
                 <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3"><input type="checkbox" /></td>
                   <td className="px-4 py-3 text-blue-600 font-medium">{row.id}</td>
@@ -138,10 +148,7 @@ export default function KycPage() {
                   <td className="px-4 py-3 text-slate-500">{row.type}</td>
                   <td className="px-4 py-3 text-slate-500">{row.date}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${channelBadge[row.channel as KycChannel]}`}>{row.channel}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status as KycStatus]}`}>{row.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[row.status] || "bg-slate-100 text-slate-500"}`}>{row.status}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${aiBadge[row.ai] || "bg-slate-100 text-slate-500"}`}>{row.ai}</span>
@@ -155,10 +162,39 @@ export default function KycPage() {
             </tbody>
           </table>
         )}
+
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="text-xs text-slate-400">총 {kycList.length}건</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              className="w-7 h-7 rounded border border-slate-200 text-xs hover:bg-slate-50 disabled:opacity-40"
+            >
+              {"<"}
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-7 h-7 rounded text-xs ${currentPage === page ? "bg-blue-600 text-white" : "border border-slate-200 hover:bg-slate-50"}`}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+              className="w-7 h-7 rounded border border-slate-200 text-xs hover:bg-slate-50 disabled:opacity-40"
+            >
+              {">"}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-between text-xs text-slate-400 pt-2">
-        <span>KYvC Backend Admin · 백엔드 관리 시스템</span>
+        <span>KYvC 증명서 관리자 · 증명서 관리 시스템</span>
         <span>© 2025 KYvC. All rights reserved.</span>
       </div>
     </div>

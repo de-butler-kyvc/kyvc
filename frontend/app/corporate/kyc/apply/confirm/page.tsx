@@ -49,26 +49,34 @@ export default function KycApplyConfirmPage() {
   }, [router]);
 
   const onSubmit = async () => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const latestKycId = await refreshCurrentKycStorage(kycApi.current);
+      const latestKycId = summary?.kycId ?? await refreshCurrentKycStorage(kycApi.current);
       if (!latestKycId) {
         router.push("/corporate/kyc/apply");
         return;
       }
-      const res = await kycApi.submit(latestKycId);
+      const submittedKycId = latestKycId;
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("kyvc.lastSubmittedKycId", String(res.kycId));
-        if (res.submittedAt) {
-          window.localStorage.setItem("kyvc.lastSubmittedAt", res.submittedAt);
-        }
+        window.localStorage.setItem("kyvc.lastSubmittedKycId", String(submittedKycId));
+        window.localStorage.setItem(
+          "kyvc.lastSubmittedAt",
+          new Date().toISOString()
+        );
       }
+      void kycApi.submit(submittedKycId).catch((err: unknown) => {
+        const safeError =
+          err instanceof ApiError
+            ? { status: err.status, code: err.code, message: err.message }
+            : { message: err instanceof Error ? err.message : "KYC submit failed" };
+        console.error("Failed to submit KYC application", safeError);
+      });
       clearCurrentKycId();
-      router.push(`/corporate/kyc/apply/complete?id=${res.kycId}`);
+      router.replace(`/corporate/kyc/detail?id=${submittedKycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
-    } finally {
       setBusy(false);
     }
   };
@@ -78,7 +86,7 @@ export default function KycApplyConfirmPage() {
   const missing = summary?.missingItems ?? [];
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">KYC 신청 내용 확인</h1>

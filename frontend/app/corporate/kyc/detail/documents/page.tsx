@@ -123,7 +123,7 @@ function Supplements() {
 
   if (!valid) {
     return (
-      <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+      <div className="mx-auto flex w-full max-w-[920px] flex-col">
         <div className="page-head">
           <div>
             <h1 className="page-head-title">보완 서류 제출</h1>
@@ -145,7 +145,7 @@ function Supplements() {
   const allUploaded = docCodes.every((code) => !!findUploaded(code));
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
           <h1 className="page-head-title">보완 서류 제출</h1>

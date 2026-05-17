@@ -1443,6 +1443,15 @@ a:hover {
   min-width: 720px;
 }
 
+.table-scroll > .history-table {
+  min-width: 980px;
+}
+
+.history-table th,
+.history-table td {
+  white-space: nowrap;
+}
+
 .table {
   width: 100%;
   border-collapse: separate;

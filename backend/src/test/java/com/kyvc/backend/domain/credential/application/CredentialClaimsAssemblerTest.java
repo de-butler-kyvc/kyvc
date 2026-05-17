@@ -5,6 +5,8 @@ import com.kyvc.backend.domain.core.config.CoreProperties;
 import com.kyvc.backend.domain.corporate.repository.CorporateAgentRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
+import com.kyvc.backend.domain.document.domain.KycDocument;
+import com.kyvc.backend.domain.document.infrastructure.DocumentStorage;
 import com.kyvc.backend.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
 import com.kyvc.backend.global.exception.ApiException;
@@ -15,15 +17,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CredentialClaimsAssemblerTest {
@@ -43,6 +50,9 @@ class CredentialClaimsAssemblerTest {
     @Mock
     private LogEventLogger logEventLogger;
 
+    @Mock
+    private DocumentStorage documentStorage;
+
     private CredentialClaimsAssembler assembler;
     private CoreProperties coreProperties;
 
@@ -52,13 +62,16 @@ class CredentialClaimsAssemblerTest {
         assembler = new CredentialClaimsAssembler(
                 coreProperties,
                 logEventLogger,
-                new ObjectMapper()
+                new ObjectMapper(),
+                kycDocumentRepository,
+                documentStorage
         );
     }
 
     @Test
     void assemble_returnsAiReviewExtractedClaims() {
         KycApplication kycApplication = createApprovedKycWithAiReviewClaims();
+        when(kycDocumentRepository.findByKycId(10L)).thenReturn(List.of());
 
         Map<String, Object> claims = assembler.assemble(kycApplication);
 
@@ -99,9 +112,40 @@ class CredentialClaimsAssemblerTest {
         verifyNoInteractions(
                 corporateRepository,
                 corporateRepresentativeRepository,
-                corporateAgentRepository,
-                kycDocumentRepository
+                corporateAgentRepository
         );
+        verify(kycDocumentRepository).findByKycId(10L);
+    }
+
+    @Test
+    void assemble_addsDocumentEvidenceFromUploadedDocuments() {
+        KycApplication kycApplication = createApprovedKycWithAiReviewClaims();
+        KycDocument document = KycDocument.createUploaded(
+                10L,
+                "CORPORATE_REGISTRATION",
+                "registry.pdf",
+                "10/CORPORATE_REGISTRATION/registry.pdf",
+                "application/pdf",
+                12L,
+                "sha256-hash",
+                null,
+                1L
+        );
+        ReflectionTestUtils.setField(document, "documentId", 101L);
+        when(kycDocumentRepository.findByKycId(10L)).thenReturn(List.of(document));
+        when(documentStorage.load(anyString()))
+                .thenReturn(new DocumentStorage.StoredContent(new ByteArrayResource("registry-pdf".getBytes()), 12L));
+
+        Map<String, Object> claims = assembler.assemble(kycApplication);
+
+        List<?> documentEvidence = (List<?>) claims.get("documentEvidence");
+        assertThat(documentEvidence).hasSize(1);
+        Map<String, Object> evidence = map(documentEvidence.get(0));
+        assertThat(evidence.get("documentId")).isEqualTo("urn:kyvc:doc:101");
+        assertThat(evidence.get("documentType")).isEqualTo("KR_CORPORATE_REGISTER_FULL_CERTIFICATE");
+        assertThat(evidence.get("digestSRI")).asString().startsWith("sha384-");
+        assertThat(evidence.get("fileName")).isEqualTo("registry.pdf");
+        assertThat(evidence).doesNotContainKeys("filePath", "content");
     }
 
     @Test

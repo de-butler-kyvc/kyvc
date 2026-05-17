@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileText,
   CreditCard,
+  QrCode,
   Shield,
   Users,
   BookOpen,
@@ -22,6 +23,7 @@ const menus = [
   { label: "대시보드", href: "/dashboard", icon: LayoutDashboard },
   { label: "KYC 신청", href: "/kyc", icon: FileText },
   { label: "VC 관리", href: "/vc", icon: CreditCard },
+  { label: "VP 요청/검증", href: "/vp-requests", icon: QrCode },
   { label: "VP 이력", href: "/vp", icon: Shield },
   { label: "사용자", href: "/users", icon: Users },
   { label: "정책/규칙", href: "/policy", icon: BookOpen },
@@ -47,7 +49,7 @@ export default function Sidebar() {
           height={24}
           className="object-contain"
         />
-        <span className="block text-xs text-slate-400 mt-1">백엔드 어드민</span>
+        <span className="block text-xs text-slate-400 mt-1">증명서 관리자</span>
       </div>
 
       {/* 메뉴 */}
@@ -55,7 +57,8 @@ export default function Sidebar() {
         <p className="px-6 text-xs text-slate-500 mb-2">메뉴</p>
         {menus.map((menu) => {
           const Icon = menu.icon;
-          const isActive = pathname.startsWith(menu.href);
+          const isActive =
+            pathname === menu.href || pathname.startsWith(`${menu.href}/`);
           return (
             <Link
               key={menu.href}

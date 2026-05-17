@@ -3,6 +3,7 @@ package com.kyvc.backend.domain.verifier.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kyvc.backend.domain.core.application.CoreDocumentEvidencePolicy;
 import com.kyvc.backend.domain.core.application.CoreRequestService;
 import com.kyvc.backend.domain.core.domain.CoreRequest;
 import com.kyvc.backend.domain.core.dto.CorePresentationChallengeRequest;
@@ -18,13 +19,17 @@ import com.kyvc.backend.domain.credential.repository.CredentialRepository;
 import com.kyvc.backend.domain.finance.application.FinanceContextService;
 import com.kyvc.backend.domain.finance.domain.FinanceCorporateCustomer;
 import com.kyvc.backend.domain.finance.repository.FinanceCorporateCustomerRepository;
+import com.kyvc.backend.domain.kyc.domain.KycApplication;
+import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import com.kyvc.backend.domain.verifier.domain.Verifier;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCancelResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestDetailResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestListResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestResultResponse;
 import com.kyvc.backend.domain.verifier.dto.FinanceVpRequestSummaryResponse;
+import com.kyvc.backend.domain.verifier.dto.FinanceVpVerificationCheckResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateRequest;
 import com.kyvc.backend.domain.verifier.dto.VerifierReAuthRequestCreateResponse;
 import com.kyvc.backend.domain.verifier.dto.VerifierTestVpVerificationDetailResponse;
@@ -50,6 +55,7 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -64,6 +70,8 @@ public class VerifierVpService {
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 100;
     private static final String FINANCE_CODE_PREFIX = "FINANCE_USER_";
+    private static final String PUBLIC_FINANCE_INSTITUTION_CODE = "FINANCE_PUBLIC";
+    private static final String PUBLIC_FINANCE_REQUESTER_NAME = "KYvC Finance";
     private static final String TEST_VERIFY_PURPOSE = "TEST_VERIFY";
     private static final String RE_AUTH_PURPOSE = "RE_AUTH";
     private static final String VERIFIER_NAME_PREFIX = "Verifier ";
@@ -76,6 +84,7 @@ public class VerifierVpService {
     private final VpVerificationQueryRepository vpVerificationQueryRepository;
     private final CredentialRepository credentialRepository;
     private final CorporateRepository corporateRepository;
+    private final KycApplicationRepository kycApplicationRepository;
     private final FinanceContextService financeContextService;
     private final FinanceCorporateCustomerRepository financeCorporateCustomerRepository;
     private final VerifierRepository verifierRepository;
@@ -86,42 +95,42 @@ public class VerifierVpService {
 
     // 금융사 VP 요청 생성
     public FinanceVpRequestCreateResponse createFinanceVpRequest(
-            CustomUserDetails userDetails, // 인증 사용자 정보
             FinanceVpRequestCreateRequest request // 금융사 VP 요청 생성 요청
     ) {
-        AuthContext authContext = resolveFinanceAuthContext(userDetails);
         validateFinanceCreateRequest(request);
-        Long placeholderCorporateId = resolveFinancePlaceholderCorporateId(authContext);
         List<String> requestedClaims = normalizeRequiredClaims(request.requestedClaims());
+        List<String> requiredDisclosures = CoreDocumentEvidencePolicy.financeKycRequiredDisclosures(requestedClaims);
         LocalDateTime fallbackExpiresAt = LocalDateTime.now().plusSeconds(resolveExpiresInSeconds(request.expiresInSeconds()));
-        ChallengeContext challengeContext = issuePresentationChallenge(requestedClaims, fallbackExpiresAt);
+        ChallengeContext challengeContext = issuePresentationChallenge(requiredDisclosures, fallbackExpiresAt);
+        String qrToken = createRandomValue();
         VpVerification vpVerification = VpVerification.createRequest(
                 null,
-                placeholderCorporateId,
+                null,
                 createRequestId(),
                 challengeContext.nonce(),
                 challengeContext.challenge(),
                 request.purpose().trim(),
-                resolveFinanceRequesterName(userDetails),
+                PUBLIC_FINANCE_REQUESTER_NAME,
                 toJson(requestedClaims),
                 challengeContext.expiresAt(),
                 null,
-                authContext.financeInstitutionCode(),
+                PUBLIC_FINANCE_INSTITUTION_CODE,
                 KyvcEnums.VpRequestType.FINANCE_VERIFY,
                 KyvcEnums.Yn.N,
                 KyvcEnums.Yn.N,
                 toJson(createChallengeMetadata(challengeContext))
         );
+        vpVerification.applyQrTokenHash(TokenHashUtil.sha256(qrToken));
         VpVerification saved = vpVerificationRepository.save(vpVerification);
         logEventLogger.info(
-                "vp.request.created",
+                "finance.vp.request.created",
                 "Finance VP request created",
-                createLogFields(authContext.userId(), placeholderCorporateId, saved.getVpVerificationId(), saved.getVpRequestId(), null)
+                createLogFields(null, null, saved.getVpVerificationId(), saved.getVpRequestId(), null)
         );
         return new FinanceVpRequestCreateResponse(
                 saved.getVpRequestId(),
                 enumName(saved.getVpVerificationStatus()),
-                buildQrPayload(saved),
+                buildFinanceQrPayload(saved, qrToken),
                 saved.getExpiresAt()
         );
     }
@@ -129,24 +138,19 @@ public class VerifierVpService {
     // 금융사 VP 요청 목록 조회
     @Transactional(readOnly = true)
     public FinanceVpRequestListResponse getFinanceVpRequests(
-            CustomUserDetails userDetails, // 인증 사용자 정보
             String status, // VP 검증 상태 필터
             LocalDateTime from, // 조회 시작 일시
             LocalDateTime to, // 조회 종료 일시
             Integer page, // 페이지 번호
             Integer size // 페이지 크기
     ) {
-        AuthContext authContext = resolveFinanceAuthContext(userDetails);
         KyvcEnums.VpVerificationStatus statusFilter = parseVpStatus(status);
         List<VpVerification> allItems = vpVerificationQueryRepository.findFinanceRequests(
-                authContext.financeInstitutionCode(),
+                PUBLIC_FINANCE_INSTITUTION_CODE,
                 statusFilter,
                 from,
                 to
-        )
-                .stream()
-                .filter(vpVerification -> isFinanceRequesterOwner(userDetails, vpVerification))
-                .toList();
+        );
         PageRequest pageRequest = normalizePageRequest(page, size);
         List<FinanceVpRequestSummaryResponse> pageItems = allItems.stream()
                 .skip((long) pageRequest.page() * pageRequest.size())
@@ -165,28 +169,44 @@ public class VerifierVpService {
     // 금융사 VP 요청 상세 조회
     @Transactional(readOnly = true)
     public FinanceVpRequestDetailResponse getFinanceVpRequest(
-            CustomUserDetails userDetails, // 인증 사용자 정보
             String requestId // VP 요청 ID
     ) {
-        AuthContext authContext = resolveFinanceAuthContext(userDetails);
-        VpVerification vpVerification = vpVerificationQueryRepository
-                .findFinanceRequest(authContext.financeInstitutionCode(), normalizeRequiredText(requestId))
-                .orElseThrow(() -> new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND));
-        validateFinanceVpRequestAccess(userDetails, vpVerification);
-        Corporate corporate = getCorporateById(vpVerification.getCorporateId());
+        VpVerification vpVerification = getFinanceVpRequestByRequestId(requestId);
+        Corporate corporate = getNullableCorporateById(vpVerification.getCorporateId());
         return new FinanceVpRequestDetailResponse(
                 vpVerification.getVpRequestId(),
                 enumName(vpVerification.getVpVerificationStatus()),
                 enumName(vpVerification.getVpVerificationStatus()),
                 vpVerification.getPurpose(),
                 parseClaims(vpVerification.getRequiredClaimsJson()),
-                buildQrPayload(vpVerification),
+                buildDetailQrPayload(vpVerification),
                 vpVerification.getCorporateId(),
-                corporate.getCorporateName(),
+                corporate == null ? null : corporate.getCorporateName(),
                 toFinanceResultResponse(vpVerification, corporate),
                 vpVerification.getExpiresAt(),
                 vpVerification.getRequestedAt(),
-                vpVerification.getVerifiedAt()
+                vpVerification.getVerifiedAt(),
+                vpVerification.getPresentedAt(),
+                buildVerificationChecks(vpVerification)
+        );
+    }
+
+    // 금융사 VP 요청 취소
+    public FinanceVpRequestCancelResponse cancelFinanceVpRequest(
+            String requestId // VP 요청 ID
+    ) {
+        VpVerification vpVerification = getFinanceVpRequestByRequestId(requestId);
+        validateFinanceCancelAllowed(vpVerification);
+        vpVerification.markCancelled(LocalDateTime.now());
+        VpVerification saved = vpVerificationRepository.save(vpVerification);
+        logEventLogger.info(
+                "finance.vp.request.cancelled",
+                "Finance VP request cancelled",
+                createLogFields(null, saved.getCorporateId(), saved.getVpVerificationId(), saved.getVpRequestId(), saved.getVpVerificationStatus())
+        );
+        return new FinanceVpRequestCancelResponse(
+                saved.getVpRequestId(),
+                enumName(saved.getVpVerificationStatus())
         );
     }
 
@@ -332,14 +352,14 @@ public class VerifierVpService {
     private FinanceVpRequestSummaryResponse toFinanceSummaryResponse(
             VpVerification vpVerification // VP 검증 요청
     ) {
-        Corporate corporate = getCorporateById(vpVerification.getCorporateId());
+        Corporate corporate = getNullableCorporateById(vpVerification.getCorporateId());
         return new FinanceVpRequestSummaryResponse(
                 vpVerification.getVpRequestId(),
                 enumName(vpVerification.getVpVerificationStatus()),
                 vpVerification.getPurpose(),
                 parseClaims(vpVerification.getRequiredClaimsJson()),
                 vpVerification.getCorporateId(),
-                corporate.getCorporateName(),
+                corporate == null ? null : corporate.getCorporateName(),
                 vpVerification.getRequestedAt(),
                 vpVerification.getExpiresAt(),
                 vpVerification.getVerifiedAt()
@@ -350,14 +370,149 @@ public class VerifierVpService {
             VpVerification vpVerification, // VP 검증 요청
             Corporate corporate // 법인
     ) {
-        if (vpVerification == null || !vpVerification.isCompleted()) {
+        if (vpVerification == null || corporate == null || !hasFinanceResult(vpVerification)) {
             return null;
         }
+        Credential credential = vpVerification.getCredentialId() == null
+                ? null
+                : credentialRepository.findById(vpVerification.getCredentialId()).orElse(null);
+        KycApplication kycApplication = credential == null || credential.getKycId() == null
+                ? null
+                : kycApplicationRepository.findById(credential.getKycId()).orElse(null);
         return new FinanceVpRequestResultResponse(
                 corporate.getCorporateName(),
                 corporate.getBusinessRegistrationNo(),
-                vpVerification.getVerifiedAt()
+                vpVerification.getVerifiedAt(),
+                corporate.getCorporateRegistrationNo(),
+                corporate.getRepresentativeName(),
+                enumName(kycApplication == null ? null : kycApplication.getKycStatus()),
+                enumName(credential == null ? null : credential.getCredentialStatus()),
+                credential == null ? null : credential.getIssuedAt(),
+                credential == null ? null : credential.getExpiresAt()
         );
+    }
+
+    private boolean hasFinanceResult(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        return vpVerification != null
+                && (KyvcEnums.VpVerificationStatus.VALID == vpVerification.getVpVerificationStatus()
+                || KyvcEnums.VpVerificationStatus.INVALID == vpVerification.getVpVerificationStatus()
+                || KyvcEnums.VpVerificationStatus.REPLAY_SUSPECTED == vpVerification.getVpVerificationStatus()
+                || KyvcEnums.VpVerificationStatus.FAILED == vpVerification.getVpVerificationStatus());
+    }
+
+    private List<FinanceVpVerificationCheckResponse> buildVerificationChecks(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (vpVerification == null || !hasFinanceResult(vpVerification)) {
+            return List.of();
+        }
+        CoreVpVerificationResponse coreResponse = findCoreVpVerificationResponse(vpVerification);
+        VpVerificationResultResponse result = toNullableVerificationResultResponse(vpVerification, coreResponse);
+        if (result != null) {
+            return buildVerificationChecksFromResult(vpVerification, result);
+        }
+        return List.of(
+                buildVerificationCheck(vpVerification, "VP_FORMAT", "VP 형식 검증", "VP 형식이 유효합니다."),
+                buildVerificationCheck(vpVerification, "VC_SIGNATURE", "VC 서명 검증", "VC 서명이 유효합니다."),
+                buildVerificationCheck(vpVerification, "VC_STATUS", "VC 상태 조회", "VC 상태가 유효합니다."),
+                buildVerificationCheck(vpVerification, "ISSUER_TRUST", "Issuer 신뢰 확인", "Issuer가 신뢰 정책에 포함되어 있습니다."),
+                buildVerificationCheck(vpVerification, "NONCE", "Nonce 검증", "Nonce가 일치합니다.")
+        );
+    }
+
+    private FinanceVpVerificationCheckResponse buildVerificationCheck(
+            VpVerification vpVerification, // VP 검증 요청
+            String checkType, // 검증 항목 유형
+            String checkName, // 검증 항목명
+            String passedMessage // 통과 메시지
+    ) {
+        if (KyvcEnums.VpVerificationStatus.VALID == vpVerification.getVpVerificationStatus()) {
+            return new FinanceVpVerificationCheckResponse(checkType, checkName, "PASSED", passedMessage);
+        }
+        String failureReason = vpVerification.getResultSummary();
+        String resultCode = resolveCheckResultCode(checkType, failureReason);
+        return new FinanceVpVerificationCheckResponse(
+                checkType,
+                checkName,
+                resultCode,
+                resolveCheckMessage(resultCode, checkName, failureReason)
+        );
+    }
+
+    private List<FinanceVpVerificationCheckResponse> buildVerificationChecksFromResult(
+            VpVerification vpVerification, // VP 검증 요청
+            VpVerificationResultResponse result // VP 검증 결과
+    ) {
+        if (KyvcEnums.VpVerificationStatus.VALID == vpVerification.getVpVerificationStatus()) {
+            return List.of(
+                    check("VP_FORMAT", "VP 형식 검증", "PASSED", "VP 형식이 유효합니다."),
+                    check("VC_SIGNATURE", "VC 서명 검증", "PASSED", "VC 서명이 유효합니다."),
+                    check("VC_STATUS", "VC 상태 조회", "PASSED", "VC 상태가 유효합니다."),
+                    check("ISSUER_TRUST", "Issuer 신뢰 확인", "PASSED", "Issuer가 신뢰 정책에 포함되어 있습니다."),
+                    check("NONCE", "Nonce 검증", "PASSED", "Nonce가 일치합니다.")
+            );
+        }
+        return List.of(
+                check("VP_FORMAT", "VP 형식 검증", "CHECK_REQUIRED", "Core 응답에 VP 형식 검증 세부 결과가 없습니다."),
+                check("VC_SIGNATURE", "VC 서명 검증", result.signatureValid() ? "PASSED" : "FAILED", result.signatureValid() ? "VC 서명이 유효합니다." : "VC 서명이 유효하지 않습니다."),
+                check("VC_STATUS", "VC 상태 조회", isCredentialStatusValid(result.credentialStatus()) ? "PASSED" : "FAILED", isCredentialStatusValid(result.credentialStatus()) ? "VC 상태가 유효합니다." : "VC 상태가 유효하지 않습니다."),
+                check("ISSUER_TRUST", "Issuer 신뢰 확인", result.issuerTrusted() ? "PASSED" : "FAILED", result.issuerTrusted() ? "Issuer가 신뢰 정책에 포함되어 있습니다." : "Issuer 신뢰를 확인할 수 없습니다."),
+                check("NONCE", "Nonce 검증", result.replayDetected() ? "FAILED" : "PASSED", result.replayDetected() ? "VP 재사용 또는 nonce 불일치가 의심됩니다." : "Nonce가 일치합니다.")
+        );
+    }
+
+    private FinanceVpVerificationCheckResponse check(
+            String checkType, // 검증 항목 유형
+            String checkName, // 검증 항목명
+            String resultCode, // 검증 결과 코드
+            String message // 검증 결과 메시지
+    ) {
+        return new FinanceVpVerificationCheckResponse(checkType, checkName, resultCode, message);
+    }
+
+    private String resolveCheckResultCode(
+            String checkType, // 검증 항목 유형
+            String failureReason // 실패 사유
+    ) {
+        if (!StringUtils.hasText(failureReason)) {
+            return "UNKNOWN";
+        }
+        String normalized = failureReason.toLowerCase(Locale.ROOT);
+        if ("NONCE".equals(checkType) && normalized.contains("nonce")) {
+            return "FAILED";
+        }
+        if ("VC_SIGNATURE".equals(checkType) && (normalized.contains("signature") || normalized.contains("서명"))) {
+            return "FAILED";
+        }
+        if ("VC_STATUS".equals(checkType) && (normalized.contains("status") || normalized.contains("상태"))) {
+            return "FAILED";
+        }
+        if ("ISSUER_TRUST".equals(checkType) && (normalized.contains("issuer") || normalized.contains("trust") || normalized.contains("신뢰"))) {
+            return "FAILED";
+        }
+        if ("VP_FORMAT".equals(checkType)) {
+            return "FAILED";
+        }
+        return "CHECK_REQUIRED";
+    }
+
+    private String resolveCheckMessage(
+            String resultCode, // 검증 결과 코드
+            String checkName, // 검증 항목명
+            String failureReason // 실패 사유
+    ) {
+        if ("FAILED".equals(resultCode) && StringUtils.hasText(failureReason)) {
+            return failureReason.trim();
+        }
+        if ("FAILED".equals(resultCode)) {
+            return checkName + " 실패";
+        }
+        if ("UNKNOWN".equals(resultCode)) {
+            return checkName + " 결과를 확인할 수 없습니다.";
+        }
+        return checkName + " 확인이 필요합니다.";
     }
 
     private VerifierTestVpVerificationResponse toTestResponse(
@@ -510,6 +665,74 @@ public class VerifierVpService {
         );
     }
 
+    private VpVerificationResultResponse toNullableVerificationResultResponse(
+            VpVerification vpVerification, // VP 검증 요청
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        if (vpVerification == null || !vpVerification.isCompleted()) {
+            return null;
+        }
+        if (coreResponse == null) {
+            return toNullableVerificationResultResponse(vpVerification);
+        }
+        return new VpVerificationResultResponse(
+                resolveCoreBoolean(coreResponse, "signatureValid", Boolean.TRUE.equals(coreResponse.valid())),
+                resolveCoreBoolean(coreResponse, "issuerTrusted", Boolean.TRUE.equals(coreResponse.valid()) && !Boolean.TRUE.equals(coreResponse.replaySuspected())),
+                resolveCoreCredentialStatus(coreResponse),
+                resolveCoreBoolean(coreResponse, "replayDetected", Boolean.TRUE.equals(coreResponse.replaySuspected()))
+        );
+    }
+
+    private CoreVpVerificationResponse findCoreVpVerificationResponse(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        if (vpVerification == null || !StringUtils.hasText(vpVerification.getCoreRequestId())) {
+            return null;
+        }
+        try {
+            CoreRequest coreRequest = coreRequestService.getCoreRequest(vpVerification.getCoreRequestId());
+            if (coreRequest == null || !StringUtils.hasText(coreRequest.getResponsePayloadJson())) {
+                return null;
+            }
+            return objectMapper.readValue(coreRequest.getResponsePayloadJson(), CoreVpVerificationResponse.class);
+        } catch (ApiException | JsonProcessingException exception) {
+            return null;
+        }
+    }
+
+    private boolean resolveCoreBoolean(
+            CoreVpVerificationResponse coreResponse, // Core 검증 응답
+            String fieldName, // 결과 필드명
+            boolean fallback // 대체 값
+    ) {
+        Object value = coreResponse.details() == null ? null : coreResponse.details().get(fieldName);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String stringValue && StringUtils.hasText(stringValue)) {
+            return Boolean.parseBoolean(stringValue.trim());
+        }
+        return fallback;
+    }
+
+    private String resolveCoreCredentialStatus(
+            CoreVpVerificationResponse coreResponse // Core 검증 응답
+    ) {
+        Object value = coreResponse.details() == null ? null : coreResponse.details().get("credentialStatus");
+        if (value instanceof String stringValue && StringUtils.hasText(stringValue)) {
+            return stringValue.trim();
+        }
+        return Boolean.TRUE.equals(coreResponse.valid())
+                ? KyvcEnums.CredentialStatus.VALID.name()
+                : KyvcEnums.VpVerificationStatus.INVALID.name();
+    }
+
+    private boolean isCredentialStatusValid(
+            String credentialStatus // Credential 상태
+    ) {
+        return KyvcEnums.CredentialStatus.VALID.name().equals(credentialStatus);
+    }
+
     private String resolveFailureReason(
             VpVerification vpVerification // VP 검증 요청
     ) {
@@ -568,6 +791,27 @@ public class VerifierVpService {
         }
     }
 
+    private VpVerification getFinanceVpRequestByRequestId(
+            String requestId // VP 요청 ID
+    ) {
+        VpVerification vpVerification = vpVerificationRepository.getByRequestId(normalizeRequiredText(requestId));
+        if (KyvcEnums.VpRequestType.FINANCE_VERIFY != vpVerification.getRequestTypeCode()) {
+            throw new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND);
+        }
+        return vpVerification;
+    }
+
+    private void validateFinanceCancelAllowed(
+            VpVerification vpVerification // VP 요청
+    ) {
+        if (vpVerification == null) {
+            throw new ApiException(ErrorCode.VP_REQUEST_NOT_FOUND);
+        }
+        if (KyvcEnums.VpVerificationStatus.REQUESTED != vpVerification.getVpVerificationStatus()) {
+            throw new ApiException(ErrorCode.VP_REQUEST_INVALID_STATUS);
+        }
+    }
+
     private boolean isFinanceRequesterOwner(
             CustomUserDetails userDetails, // 인증 사용자 정보
             VpVerification vpVerification // VP 요청
@@ -600,6 +844,15 @@ public class VerifierVpService {
     ) {
         return corporateRepository.findById(corporateId)
                 .orElseThrow(() -> new ApiException(ErrorCode.CORPORATE_NOT_FOUND));
+    }
+
+    private Corporate getNullableCorporateById(
+            Long corporateId // 법인 ID
+    ) {
+        if (corporateId == null) {
+            return null;
+        }
+        return corporateRepository.findById(corporateId).orElse(null);
     }
 
     private Credential getLatestValidCredential(
@@ -835,6 +1088,28 @@ public class VerifierVpService {
         return toJson(payload);
     }
 
+    private String buildFinanceQrPayload(
+            VpVerification vpVerification, // VP 검증 요청
+            String qrToken // QR 토큰 원문
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", KyvcEnums.QrType.VP_REQUEST.name());
+        payload.put("requestType", "FINANCIAL_KYC_CHECK");
+        payload.put("requestId", vpVerification.getVpRequestId());
+        if (StringUtils.hasText(qrToken)) {
+            payload.put("qrToken", qrToken);
+        }
+        payload.put("purpose", vpVerification.getPurpose());
+        payload.put("expiresAt", vpVerification.getExpiresAt());
+        return toJson(payload);
+    }
+
+    private String buildDetailQrPayload(
+            VpVerification vpVerification // VP 검증 요청
+    ) {
+        return buildFinanceQrPayload(vpVerification, null);
+    }
+
     private ChallengeContext issuePresentationChallenge(
             List<String> requestedClaims, // 요청 Claim 목록
             LocalDateTime fallbackExpiresAt // fallback 만료 일시
@@ -885,6 +1160,8 @@ public class VerifierVpService {
         definition.put("acceptedFormat", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         definition.put("format", PRESENTATION_CHALLENGE_FORMAT_SD_JWT);
         definition.put("requiredClaims", requestedClaims == null ? List.of() : requestedClaims);
+        definition.put("requiredDisclosures", CoreDocumentEvidencePolicy.requiredDisclosures(requestedClaims));
+        definition.put("documentRules", CoreDocumentEvidencePolicy.attachedOriginalDocumentRules(requestedClaims));
         return definition;
     }
 

@@ -1,8 +1,10 @@
 package com.kyvc.backendadmin.domain.document.application;
 
 import com.kyvc.backendadmin.domain.document.domain.KycDocument;
+import com.kyvc.backendadmin.domain.document.dto.AdminKycDocumentFileResponse;
 import com.kyvc.backendadmin.domain.document.dto.AdminKycDocumentListResponse;
 import com.kyvc.backendadmin.domain.document.dto.AdminKycDocumentPreviewResponse;
+import com.kyvc.backendadmin.domain.document.infrastructure.AdminDocumentStorage;
 import com.kyvc.backendadmin.domain.document.repository.KycDocumentQueryRepository;
 import com.kyvc.backendadmin.domain.document.repository.KycDocumentRepository;
 import com.kyvc.backendadmin.domain.kyc.repository.KycApplicationRepository;
@@ -11,8 +13,11 @@ import com.kyvc.backendadmin.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.Base64;
 
@@ -31,6 +36,7 @@ public class AdminKycDocumentService {
     private final KycApplicationRepository kycApplicationRepository;
     private final KycDocumentRepository kycDocumentRepository;
     private final KycDocumentQueryRepository kycDocumentQueryRepository;
+    private final AdminDocumentStorage adminDocumentStorage;
 
     /**
      * KYC 제출 문서 목록을 조회합니다.
@@ -66,7 +72,7 @@ public class AdminKycDocumentService {
     @Transactional(readOnly = true)
     public AdminKycDocumentPreviewResponse createPreview(Long kycId, Long documentId) {
         validateKycExists(kycId);
-        KycDocument document = kycDocumentRepository.findById(documentId)
+        KycDocument document = kycDocumentRepository.findByKycIdAndDocumentId(kycId, documentId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
 
         // 문서 소속 검증: 요청 KYC의 문서가 아니면 파일 접근 권한이 없는 것으로 처리한다.
@@ -93,6 +99,24 @@ public class AdminKycDocumentService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public AdminKycDocumentFileResponse loadFile(
+            Long kycId, // KYC 신청 ID
+            Long documentId // 문서 ID
+    ) {
+        validateKycExists(kycId);
+        KycDocument document = kycDocumentRepository.findByKycIdAndDocumentId(kycId, documentId)
+                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND));
+
+        AdminDocumentStorage.StoredContent content = adminDocumentStorage.load(document.getFilePath());
+        return new AdminKycDocumentFileResponse(
+                content.resource(),
+                document.getFileName(),
+                resolveMimeType(document, content),
+                content.contentLength()
+        );
+    }
+
     private void validateKycExists(Long kycId) {
         kycApplicationRepository.findById(kycId)
                 .orElseThrow(() -> new ApiException(ErrorCode.KYC_NOT_FOUND));
@@ -105,5 +129,20 @@ public class AdminKycDocumentService {
                 .encodeToString(tokenSource.getBytes(StandardCharsets.UTF_8));
         return "/api/admin/backend/kyc/applications/%d/documents/%d/preview?token=%s"
                 .formatted(kycId, documentId, token);
+    }
+
+    private String resolveMimeType(
+            KycDocument document, // KYC 제출 문서
+            AdminDocumentStorage.StoredContent content // 파일 리소스
+    ) {
+        if (StringUtils.hasText(document.getMimeType())) {
+            return document.getMimeType();
+        }
+        try {
+            String probed = Files.probeContentType(content.path());
+            return StringUtils.hasText(probed) ? probed : "application/octet-stream";
+        } catch (IOException exception) {
+            return "application/octet-stream";
+        }
     }
 }

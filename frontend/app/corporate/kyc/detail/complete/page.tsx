@@ -60,6 +60,7 @@ function Complete() {
         title="KYC 인증 완료"
         description="유효한 신청 ID가 필요합니다."
         module="UWEB-018"
+        contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
       >
         <Card>
           <CardContent className="text-sm text-muted-foreground">
@@ -79,6 +80,7 @@ function Complete() {
       title="KYC 인증 완료"
       description="모든 심사가 완료되었습니다. 이어지는 단계를 확인하세요."
       module="UWEB-018 · M-04"
+      contentClassName="mx-auto flex w-full max-w-[920px] flex-col"
     >
       {error ? (
         <Card>

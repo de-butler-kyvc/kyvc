@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { Icon } from "@/components/design/icons";
@@ -9,15 +9,36 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ApiError,
+  type KycAiReviewDetailResponse,
   type KycDocument,
   type KycReviewSummaryResponse,
   type KycStatusResponse,
   type Supplement,
   kyc as kycApi
 } from "@/lib/api";
-import { DOCUMENT_LABELS, formatFileSize } from "@/lib/kyc-flow";
+import {
+  DOCUMENT_LABELS,
+  formatFileSize,
+  setCurrentKycId,
+  setStoredCorporateType
+} from "@/lib/kyc-flow";
 
 const PRE_SUBMIT_STATUSES = new Set(["DRAFT"]);
+const POLLING_STATUSES = new Set(["SUBMITTED", "AI_REVIEWING"]);
+const TERMINAL_STATUSES = new Set([
+  "NEED_SUPPLEMENT",
+  "MANUAL_REVIEW",
+  "APPROVED",
+  "REJECTED",
+  "VC_ISSUED"
+]);
+const STATUS_POLL_INTERVAL_MS = 3000;
+const STATUS_POLL_MAX_ATTEMPTS = 100;
+const STATUS_POLL_MAX_FAILURES = 3;
+const DRAFT_FALLBACK_POLL_ATTEMPTS = 2;
+const RECENT_SUBMIT_WINDOW_MS = 2 * 60 * 1000;
+const LAST_SUBMITTED_KYC_ID_KEY = "kyvc.lastSubmittedKycId";
+const LAST_SUBMITTED_AT_KEY = "kyvc.lastSubmittedAt";
 
 type StepKey = "received" | "ai" | "manual" | "result";
 
@@ -50,9 +71,118 @@ const STATUS_BADGE: Record<string, "default" | "secondary" | "warning" | "succes
   VC_ISSUED: "success"
 };
 
+const STATUS_DISPLAY: Record<string, string> = {
+  DRAFT: "임시 저장",
+  SUBMITTED: "접수완료",
+  AI_REVIEWING: "AI 심사중",
+  NEED_SUPPLEMENT: "보완 필요",
+  MANUAL_REVIEW: "수동 심사중",
+  APPROVED: "승인",
+  REJECTED: "반려",
+  VC_ISSUED: "VC 발급 완료"
+};
+
+const STATUS_GUIDES: Record<string, { title: string; description: string }> = {
+  DRAFT: {
+    title: "임시 저장",
+    description: "제출 전 상태입니다. 제출 완료 후에도 이 상태가 유지되면 다시 조회해 주세요."
+  },
+  SUBMITTED: {
+    title: "접수완료",
+    description: "신청이 접수되었습니다. AI 심사를 준비 중입니다."
+  },
+  AI_REVIEWING: {
+    title: "AI 심사중",
+    description: "AI가 제출 서류를 분석하고 있습니다. 잠시만 기다려주세요."
+  },
+  NEED_SUPPLEMENT: {
+    title: "보완 필요",
+    description: "제출 서류에 보완이 필요합니다. 보완 요청 내용을 확인해주세요."
+  },
+  MANUAL_REVIEW: {
+    title: "수동 심사중",
+    description: "담당자가 신청 내용을 검토하고 있습니다."
+  },
+  APPROVED: {
+    title: "승인",
+    description: "KYC 심사가 승인되었습니다."
+  },
+  REJECTED: {
+    title: "반려",
+    description: "KYC 심사가 반려되었습니다. 사유를 확인해주세요."
+  },
+  VC_ISSUED: {
+    title: "VC 발급 완료",
+    description: "KYC VC가 발급되었습니다."
+  }
+};
+
 function formatConfidencePercent(value: number) {
   const percent = value >= 0 && value <= 1 ? value * 100 : value;
   return `${Math.round(percent)}%`;
+}
+
+async function fetchKycDetailData(kycId: number) {
+  const [status, documents, aiReview, aiReviewDetail, supplements] =
+    await Promise.all([
+      kycApi.status(kycId),
+      kycApi.documents(kycId),
+      kycApi.aiReviewSummary(kycId).catch(() => null),
+      kycApi.aiReviewResult(kycId).catch(() => null),
+      kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
+    ]);
+
+  return {
+    status,
+    documents,
+    aiReview,
+    aiReviewDetail,
+    supplements: supplements.supplements ?? []
+  };
+}
+
+function displayStatusLabel(status?: string | null) {
+  if (!status) return "-";
+  return STATUS_DISPLAY[status] ?? STATUS_LABELS[status] ?? status;
+}
+
+function isRecentSubmittedKyc(kycId: number) {
+  if (typeof window === "undefined") return false;
+  const storedId = Number(window.localStorage.getItem(LAST_SUBMITTED_KYC_ID_KEY));
+  if (storedId !== kycId) return false;
+
+  const submittedAt = window.localStorage.getItem(LAST_SUBMITTED_AT_KEY);
+  if (!submittedAt) return false;
+
+  const submittedTime = new Date(submittedAt).getTime();
+  if (Number.isNaN(submittedTime)) return false;
+  return Date.now() - submittedTime <= RECENT_SUBMIT_WINDOW_MS;
+}
+
+function shouldPollStatus(
+  kycStatus: string,
+  draftFallbackAttempts: number,
+  recentSubmitted: boolean
+) {
+  if (POLLING_STATUSES.has(kycStatus)) return true;
+  return (
+    kycStatus === "DRAFT" &&
+    recentSubmitted &&
+    draftFallbackAttempts < DRAFT_FALLBACK_POLL_ATTEMPTS
+  );
+}
+
+function pollingMessage(kycStatus: string) {
+  if (kycStatus === "SUBMITTED") {
+    return "신청이 접수되었습니다. AI 심사 시작 여부를 주기적으로 확인하고 있습니다.";
+  }
+  if (kycStatus === "AI_REVIEWING") {
+    return "AI가 제출 서류를 분석하고 있습니다. 상태를 주기적으로 갱신합니다.";
+  }
+  if (kycStatus === "DRAFT") {
+    return "제출 상태 반영을 다시 확인하고 있습니다.";
+  }
+  return null;
 }
 
 export default function CorporateKycDetailPage() {
@@ -64,6 +194,7 @@ export default function CorporateKycDetailPage() {
 }
 
 function KycDetail() {
+  const router = useRouter();
   const params = useSearchParams();
   const kycId = Number(params.get("id"));
   const valid = Number.isFinite(kycId) && kycId > 0;
@@ -71,26 +202,23 @@ function KycDetail() {
   const [status, setStatus] = useState<KycStatusResponse | null>(null);
   const [documents, setDocuments] = useState<KycDocument[]>([]);
   const [aiReview, setAiReview] = useState<KycReviewSummaryResponse | null>(null);
+  const [aiReviewDetail, setAiReviewDetail] = useState<KycAiReviewDetailResponse | null>(null);
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [statusPollMessage, setStatusPollMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!valid) return;
     setError(null);
     let cancelled = false;
-    Promise.all([
-      kycApi.status(kycId),
-      kycApi.documents(kycId),
-      kycApi.aiReviewSummary(kycId).catch(() => null),
-      kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
-    ])
-      .then(([s, d, review, supp]) => {
+    fetchKycDetailData(kycId)
+      .then((detail) => {
         if (cancelled) return;
-        setStatus(s);
-        setDocuments(d);
-        setAiReview(review);
-        setSupplements(supp.supplements ?? []);
+        setStatus(detail.status);
+        setDocuments(detail.documents);
+        setAiReview(detail.aiReview);
+        setAiReviewDetail(detail.aiReviewDetail);
+        setSupplements(detail.supplements);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -101,29 +229,129 @@ function KycDetail() {
     };
   }, [kycId, valid]);
 
-  const onSubmitApplication = async () => {
-    if (!valid) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await kycApi.submit(kycId);
-      setStatus((prev) => ({
-        ...(prev ?? { kycId }),
-        kycStatus: res.kycStatus ?? prev?.kycStatus
-      }));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
-    } finally {
-      setSubmitting(false);
+  useEffect(() => {
+    if (!valid || !status?.kycStatus) return;
+
+    const initialStatus = status.kycStatus;
+    const recentSubmitted = isRecentSubmittedKyc(kycId);
+    let cancelled = false;
+    let timeoutId: number | null = null;
+    let attempts = 0;
+    let failures = 0;
+    let draftFallbackAttempts = 0;
+
+    if (!shouldPollStatus(initialStatus, 0, recentSubmitted)) {
+      setStatusPollMessage(null);
+      return;
     }
+
+    setStatusPollMessage(pollingMessage(initialStatus));
+
+    const clearPollTimeout = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const refreshDetailIfNeeded = async () => {
+      try {
+        const detail = await fetchKycDetailData(kycId);
+        if (cancelled) return;
+        setStatus(detail.status);
+        setDocuments(detail.documents);
+        setAiReview(detail.aiReview);
+        setAiReviewDetail(detail.aiReviewDetail);
+        setSupplements(detail.supplements);
+      } catch {
+        // 최종 상태 상세 조회 실패 시 기존 상태 표시 유지
+      }
+    };
+
+    const schedule = () => {
+      if (cancelled) return;
+      clearPollTimeout();
+      timeoutId = window.setTimeout(fetchLatestStatus, STATUS_POLL_INTERVAL_MS);
+    };
+
+    const stopPolling = (message?: string | null) => {
+      clearPollTimeout();
+      setStatusPollMessage(message ?? null);
+    };
+
+    const handleLatestStatus = async (latest: KycStatusResponse) => {
+      const nextStatus = latest.kycStatus ?? "";
+      setStatus(latest);
+
+      if (TERMINAL_STATUSES.has(nextStatus)) {
+        stopPolling();
+        await refreshDetailIfNeeded();
+        return;
+      }
+
+      if (nextStatus === "DRAFT") {
+        draftFallbackAttempts += 1;
+      }
+
+      if (attempts >= STATUS_POLL_MAX_ATTEMPTS) {
+        stopPolling("심사가 계속 진행 중입니다. 잠시 후 다시 확인해주세요.");
+        return;
+      }
+
+      if (shouldPollStatus(nextStatus, draftFallbackAttempts, recentSubmitted)) {
+        setStatusPollMessage(pollingMessage(nextStatus));
+        schedule();
+        return;
+      }
+
+      stopPolling();
+    };
+
+    async function fetchLatestStatus() {
+      attempts += 1;
+      try {
+        const latest = await kycApi.status(kycId);
+        if (cancelled) return;
+        failures = 0;
+        await handleLatestStatus(latest);
+      } catch (err) {
+        if (cancelled) return;
+        failures += 1;
+        if (err instanceof ApiError && err.status === 401) {
+          stopPolling("로그인 세션이 만료되었습니다. 다시 로그인 후 확인해주세요.");
+          return;
+        }
+        if (failures >= STATUS_POLL_MAX_FAILURES) {
+          stopPolling("상태를 불러오지 못했습니다. 새로고침 후 다시 확인해주세요.");
+          return;
+        }
+        schedule();
+      }
+    }
+
+    schedule();
+
+    return () => {
+      cancelled = true;
+      clearPollTimeout();
+    };
+  }, [kycId, valid, status?.kycStatus]);
+
+  const onResumeDraft = () => {
+    if (!valid) return;
+    setCurrentKycId(kycId);
+    if (status?.corporateTypeCode) {
+      setStoredCorporateType(status.corporateTypeCode);
+    }
+    router.push("/corporate/kyc/apply/upload");
   };
 
   if (!valid) {
     return (
-      <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+      <div className="mx-auto flex w-full max-w-[920px] flex-col">
         <div className="page-head">
           <div>
-            <h1 className="page-head-title">KYC 진행상태 조회</h1>
+            <h1 className="page-head-title">KYC 상세</h1>
             <p className="page-head-desc">유효한 신청 ID가 필요합니다.</p>
           </div>
         </div>
@@ -145,17 +373,18 @@ function KycDetail() {
     (s) => s.supplementStatus === "REQUESTED"
   );
   const visibleDocuments = documents.filter((d) => d.uploadStatus !== "DELETED");
+  const statusGuide = STATUS_GUIDES[kycStatus];
 
   const stepStates = computeSteps(kycStatus);
   const progressPct = computeProgressPct(stepStates);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col">
       <div className="page-head">
         <div>
-          <h1 className="page-head-title">KYC 진행상태 조회</h1>
+          <h1 className="page-head-title">KYC 상세</h1>
           <p className="page-head-desc">
-            신청 KYC-{kycId}의 심사 진행 상태와 결과를 확인합니다.
+            신청 KYC-{kycId}의 진행 상태와 심사 결과를 확인합니다.
           </p>
         </div>
       </div>
@@ -166,6 +395,15 @@ function KycDetail() {
             <Icon.Alert size={16} />
           </span>
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {statusPollMessage ? (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          <span className="alert-icon">
+            <Icon.Info size={16} />
+          </span>
+          <span>{statusPollMessage}</span>
         </div>
       ) : null}
 
@@ -233,7 +471,7 @@ function KycDetail() {
                 label="상태"
                 value={
                   <Badge variant={STATUS_BADGE[kycStatus] ?? "secondary"}>
-                    {STATUS_LABELS[kycStatus] ?? kycStatus ?? "-"}
+                    {displayStatusLabel(kycStatus)}
                   </Badge>
                 }
               />
@@ -254,25 +492,52 @@ function KycDetail() {
                 }
               />
 
+              {statusGuide ? (
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-md)",
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                    {statusGuide.title}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 12.5,
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.5
+                    }}
+                  >
+                    {statusGuide.description}
+                  </div>
+                </div>
+              ) : null}
+
               {beforeSubmit ? (
                 <div style={{ marginTop: 16 }}>
                   <Button
                     type="button"
                     className="btn-block"
-                    onClick={onSubmitApplication}
-                    disabled={submitting}
+                    onClick={onResumeDraft}
                   >
-                    {submitting ? "제출 중..." : "신청 제출"}
+                    이어서 작성
                   </Button>
                 </div>
               ) : null}
             </section>
           </div>
 
-          {aiReview&& !beforeSubmit ? (
+          {(aiReview || aiReviewDetail) && !beforeSubmit ? (
             <AiReviewSummary
               review={aiReview}
-              hasSupplements={pendingSupplements.length > 0}
+              detail={aiReviewDetail}
+              documents={visibleDocuments}
+              supplements={pendingSupplements}
               kycId={kycId}
               firstSupplementId={pendingSupplements[0]?.supplementId}
             />
@@ -385,78 +650,73 @@ function Timeline({
 
 function AiReviewSummary({
   review,
-  hasSupplements,
+  detail,
+  documents,
+  supplements,
   kycId,
   firstSupplementId
 }: {
-  review: KycReviewSummaryResponse;
-  hasSupplements: boolean;
+  review: KycReviewSummaryResponse | null;
+  detail: KycAiReviewDetailResponse | null;
+  documents: KycDocument[];
+  supplements: Supplement[];
   kycId: number;
   firstSupplementId?: number;
 }) {
-  const findings = review.findings ?? [];
-  const passItems = findings.filter((f) => (f.result ?? "").toUpperCase() === "PASS");
-  const reviewItems = findings.filter((f) => (f.result ?? "").toUpperCase() !== "PASS");
-  const fallbackPass: { label: string }[] =
-    passItems.length === 0
-      ? [
-          { label: "서류 진위 검증" },
-          { label: "OCR 텍스트 추출" },
-          { label: "신분증 유효성" }
-        ]
-      : passItems.map((f) => ({ label: f.findingType ?? "검증 항목" }));
+  const findings = review?.findings ?? [];
+  const detailItems = detail ? aiReviewItemsFromDetail(detail, documents) : [];
+  const reviewItems = detailItems.length
+    ? detailItems.filter((item) => !item.pass)
+    : findings
+        .filter((f) => (f.result ?? "").toUpperCase() !== "PASS")
+        .map((f) => ({
+          label: f.findingType ?? "검토 필요",
+          message: f.message ?? "검토가 필요합니다.",
+          pass: false,
+          kind: "reason" as const
+        }));
+  const supplementDocumentItems = uniqueStrings([
+    ...supplements.flatMap((supplement) => supplement.requestedDocumentTypeCodes ?? []).map((code) => documentLabel(code) ?? code),
+    ...(detail?.reviewReasons ?? []).map(reasonDocumentLabel).filter((item): item is string => !!item)
+  ]);
+  const opinionItems = uniqueStrings([
+    ...(detail?.reviewReasons ?? []).filter((reason) => !reasonDocumentLabel(reason)),
+    ...reviewItems
+      .filter((item) => item.kind === "document" || item.kind === "mismatch" || item.kind === "reason")
+      .map((item) => item.message ? `${item.label} - ${item.message}` : item.label)
+  ]);
+  const additionalCheckItems = uniqueStrings(
+    reviewItems
+      .filter((item) => item.kind === "owner" || item.kind === "delegation")
+      .map((item) => item.message ? `${item.label} - ${item.message}` : item.label)
+  );
 
   return (
-    <div className="dash-grid-2" style={{ marginTop: 16 }}>
-      <section className="form-card m-0">
-        <div className="form-card-header">
-          <div className="form-card-title">AI 심사 통과 항목</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {fallbackPass.map((item, i) => (
+    <section className="form-card" style={{ marginTop: 16 }}>
+      <div className="form-card-header">
+        <div className="form-card-title">AI 심사 의견</div>
+      </div>
+      <p
+        style={{
+          fontSize: 13,
+          color: "var(--text-secondary)",
+          lineHeight: 1.6,
+          margin: 0
+        }}
+      >
+        {detail?.summary ?? review?.summaryMessage ?? "AI 심사가 진행되었습니다. 상세 내역을 확인해주세요."}
+      </p>
+      {opinionItems.length ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          {opinionItems.map((item, index) => (
             <div
-              key={i}
+              key={`${item}-${index}`}
               style={{
                 display: "flex",
-                alignItems: "center",
+                alignItems: "flex-start",
                 gap: 10,
                 padding: "10px 0",
-                borderBottom: "1px solid var(--divider)"
-              }}
-            >
-              <div
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: "50%",
-                  background: "var(--success-soft)",
-                  color: "var(--success)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0
-                }}
-              >
-                <Icon.Check size={13} />
-              </div>
-              <span style={{ fontSize: 13.5 }}>{item.label}</span>
-              <Badge variant="success" style={{ marginLeft: "auto" }}>
-                통과
-              </Badge>
-            </div>
-          ))}
-          {reviewItems.map((f, i) => (
-            <div
-              key={`r-${i}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 0",
-                borderBottom:
-                  i < reviewItems.length - 1
-                    ? "1px solid var(--divider)"
-                    : "none"
+                borderTop: index === 0 ? "1px solid var(--divider)" : undefined
               }}
             >
               <div
@@ -474,58 +734,203 @@ function AiReviewSummary({
               >
                 <Icon.Alert size={13} />
               </div>
-              <span style={{ fontSize: 13.5 }}>
-                {f.message ?? "검토 필요"}
-              </span>
-              <Badge variant="warning" style={{ marginLeft: "auto" }}>
-                보완
-              </Badge>
+              <span style={{ fontSize: 13.5, lineHeight: 1.55 }}>{item}</span>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="form-card m-0">
-        <div className="form-card-header">
-          <div className="form-card-title">심사 의견</div>
+      ) : null}
+      {supplementDocumentItems.length ? (
+        <AiReviewItemGroup title="보완 필요 서류" items={supplementDocumentItems} />
+      ) : null}
+      {additionalCheckItems.length ? (
+        <AiReviewItemGroup title="추가 확인 필요" items={additionalCheckItems} />
+      ) : null}
+      {(detail?.confidenceScore ?? review?.confidenceScore) != null ? (
+        <div style={{ marginTop: 12 }}>
+          <InfoRow
+            label="신뢰도"
+            value={formatConfidencePercent(detail?.confidenceScore ?? review?.confidenceScore ?? 0)}
+          />
         </div>
-        <p
+      ) : null}
+      {supplements.length > 0 && firstSupplementId ? (
+        <div
           style={{
-            fontSize: 13,
-            color: "var(--text-secondary)",
-            lineHeight: 1.6,
-            margin: 0
+            marginTop: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8
           }}
         >
-          {review.summaryMessage ?? "AI 심사가 진행되었습니다. 상세 내역을 확인해주세요."}
-        </p>
-        {review.confidenceScore != null ? (
-          <div style={{ marginTop: 12 }}>
-            <InfoRow
-              label="신뢰도"
-              value={formatConfidencePercent(review.confidenceScore ?? 0)}
-            />
-          </div>
-        ) : null}
-        {hasSupplements && firstSupplementId ? (
-          <div
+          <Button asChild className="btn-block">
+            <Link
+              href={`/corporate/kyc/detail/documents?id=${kycId}&supplementId=${firstSupplementId}`}
+            >
+              보완 서류 제출
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type AiReviewDisplayItem = {
+  label: string;
+  message?: string | null;
+  pass: boolean;
+  kind: "document" | "mismatch" | "owner" | "delegation" | "reason";
+};
+
+function aiReviewItemsFromDetail(detail: KycAiReviewDetailResponse, documents: KycDocument[]): AiReviewDisplayItem[] {
+  const items: AiReviewDisplayItem[] = [];
+
+  detail.documentResults.forEach((result, index) => {
+    const label = documentResultLabel(result, documents, index);
+    const pass = isPassResult(result.resultCode) || isPassMessage(result.message);
+    if (pass || !result.message) return;
+    items.push({
+      label,
+      message: result.message,
+      pass,
+      kind: "document"
+    });
+  });
+
+  detail.mismatchResults.forEach((result) => {
+    const pass = isPassResult(result.severityCode) || isPassMessage(result.message);
+    items.push({
+      label: mismatchLabel(result, pass),
+      message: result.message ?? mismatchFallback(result),
+      pass,
+      kind: "mismatch"
+    });
+  });
+
+  detail.beneficialOwnerResults.forEach((result) => {
+    items.push({
+      label: result.ownerName ? `실소유자 확인(${result.ownerName})` : "실소유자 확인",
+      message: result.message,
+      pass: isPassResult(result.resultCode),
+      kind: "owner"
+    });
+  });
+
+  if (detail.delegationResult) {
+    items.push({
+      label: "위임권한 확인",
+      message: detail.delegationResult.message,
+      pass: isPassResult(detail.delegationResult.resultCode),
+      kind: "delegation"
+    });
+  }
+
+  if (!items.some((item) => !item.pass)) {
+    detail.reviewReasons.forEach((reason) => {
+      items.push({
+        label: "검토 사유",
+        message: reason,
+        pass: false,
+        kind: "reason"
+      });
+    });
+  }
+
+  return items;
+}
+
+function isPassResult(result?: string | null) {
+  const normalized = (result ?? "").toUpperCase();
+  return normalized === "PASS" || normalized === "PASSED" || normalized === "OK" || normalized === "VALID" || normalized === "MATCH";
+}
+
+function isPassMessage(message?: string | null) {
+  const normalized = (message ?? "").toLowerCase();
+  return (
+    normalized.includes(" passed") ||
+    normalized.endsWith("passed.") ||
+    normalized.includes("consistent") ||
+    normalized.includes("match")
+  );
+}
+
+function documentResultLabel(
+  result: KycAiReviewDetailResponse["documentResults"][number],
+  documents: KycDocument[],
+  index: number
+) {
+  if (result.documentTypeName) return result.documentTypeName;
+  const matched = documents.find((document) => document.documentId === result.documentId);
+  if (matched?.documentTypeCode) return documentLabel(matched.documentTypeCode) ?? matched.documentTypeCode;
+  if (result.documentTypeCode) return documentLabel(result.documentTypeCode) ?? result.documentTypeCode;
+  if (result.documentId) return `제출서류 ${result.documentId}`;
+  return `제출서류 ${index + 1}`;
+}
+
+function mismatchLabel(
+  result: KycAiReviewDetailResponse["mismatchResults"][number],
+  pass: boolean
+) {
+  const prefix = pass ? "문서 간 교차검증" : "문서 간 확인";
+  return result.fieldName ? `${prefix}(${result.fieldName})` : prefix;
+}
+
+function mismatchFallback(result: KycAiReviewDetailResponse["mismatchResults"][number]) {
+  const source = documentLabel(result.sourceDocumentTypeCode);
+  const target = documentLabel(result.targetDocumentTypeCode);
+  if (source && target) return `${source}와 ${target}의 정보 확인이 필요합니다.`;
+  return "문서 간 정보 확인이 필요합니다.";
+}
+
+function documentLabel(code?: string | null) {
+  if (!code) return null;
+  const map: Record<string, string> = {
+    CORPORATE_SEAL_CERTIFICATE: "법인인감증명서"
+  };
+  return DOCUMENT_LABELS[code] ?? map[code] ?? code;
+}
+
+function reasonDocumentLabel(reason: string) {
+  const normalized = reason.trim();
+  const candidates = [
+    "SHAREHOLDER_LIST",
+    "CORPORATE_SEAL_CERTIFICATE",
+    "CORPORATE_REGISTRATION",
+    "BUSINESS_REGISTRATION",
+    "주주명부",
+    "법인인감증명서",
+    "등기사항전부증명서",
+    "사업자등록증"
+  ];
+  if (!candidates.includes(normalized)) return null;
+  return documentLabel(normalized) ?? normalized;
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function AiReviewItemGroup({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {items.map((item) => (
+          <span
+            key={item}
             style={{
-              marginTop: 16,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "6px 10px",
+              fontSize: 12.5,
+              color: "var(--text-secondary)",
+              background: "var(--surface-2)"
             }}
           >
-            <Button asChild className="btn-block">
-              <Link
-                href={`/corporate/kyc/detail/documents?id=${kycId}&supplementId=${firstSupplementId}`}
-              >
-                보완 서류 제출
-              </Link>
-            </Button>
-          </div>
-        ) : null}
-      </section>
+            {item}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -740,7 +1145,7 @@ function CompletionCard({
           label="상태"
           value={
             <Badge variant="success">
-              {STATUS_LABELS[status?.kycStatus ?? ""] ?? "인증 완료"}
+              {displayStatusLabel(status?.kycStatus ?? "")}
             </Badge>
           }
         />
