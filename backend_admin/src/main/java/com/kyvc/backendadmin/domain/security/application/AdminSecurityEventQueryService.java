@@ -28,7 +28,7 @@ public class AdminSecurityEventQueryService {
 
     private AdminSecurityDtos.PageResponse search(boolean dataAccess, Integer page, Integer size) {
         int p = page == null || page < 0 ? 0 : page;
-        int s = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int s = size == null || size < 1 ? 15 : Math.min(size, 100);
         long total = repository.count(dataAccess);
         return new AdminSecurityDtos.PageResponse(repository.search(dataAccess, p, s), p, s, total, total == 0 ? 0 : (int) Math.ceil((double) total / s));
     }

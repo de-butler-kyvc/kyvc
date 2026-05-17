@@ -34,7 +34,7 @@ public class AdminVerifierQueryService {
     @Transactional(readOnly = true)
     public AdminVerifierDtos.PageResponse search(Integer page, Integer size, String status, String keyword) {
         int normalizedPage = page == null || page < 0 ? 0 : page;
-        int normalizedSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        int normalizedSize = size == null || size < 1 ? 15 : Math.min(size, 100);
         List<AdminVerifierDtos.Response> items = verifierQueryRepository.search(normalizedPage, normalizedSize, status, keyword);
         long total = verifierQueryRepository.count(status, keyword);
         int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / normalizedSize);

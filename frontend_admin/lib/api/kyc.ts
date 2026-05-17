@@ -351,6 +351,8 @@ export interface KycSubmittedDocument {
   documentTypeName?: string;
   documentName: string;
   fileName: string;
+  mimeType?: string;
+  contentType?: string;
   fileSize?: string | number;
   uploadedAt?: string;
   submittedAt?: string;
@@ -360,6 +362,12 @@ export interface KycSubmittedDocument {
 
 export interface DocumentPreviewData {
   previewUrl?: string;
+  contentType?: string;
+}
+
+export interface DocumentBlobData {
+  blob: Blob;
+  fileName?: string;
   contentType?: string;
 }
 
@@ -381,18 +389,50 @@ export async function getKycDocuments(kycId: string): Promise<KycSubmittedDocume
 }
 
 /** GET /api/admin/backend/kyc/applications/{kycId}/documents/{documentId}/preview */
-export async function getKycDocumentPreview(
+export async function getKycDocumentPreviewBlob(
   kycId: string,
   documentId: string
-): Promise<DocumentPreviewData> {
-  const response = await fetch(`${KYC_BASE}/${kycId}/documents/${documentId}/preview`, {
+): Promise<DocumentBlobData> {
+  return fetchDocumentBlob(`${KYC_BASE}/${kycId}/documents/${documentId}/preview`);
+}
+
+/** GET /api/admin/backend/kyc/applications/{kycId}/documents/{documentId}/download */
+export async function downloadKycDocumentBlob(
+  kycId: string,
+  documentId: string
+): Promise<DocumentBlobData> {
+  return fetchDocumentBlob(`${KYC_BASE}/${kycId}/documents/${documentId}/download`);
+}
+
+async function fetchDocumentBlob(url: string): Promise<DocumentBlobData> {
+  const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
     credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-  const json = (await response.json()) as CommonResponse<DocumentPreviewData>;
-  return json.data;
+  const blob = await response.blob();
+  const contentType = response.headers.get("Content-Type") ?? blob.type;
+  return {
+    blob,
+    fileName: fileNameFromDisposition(response.headers.get("Content-Disposition")),
+    contentType,
+  };
+}
+
+function fileNameFromDisposition(disposition: string | null): string | undefined {
+  if (!disposition) return undefined;
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.replace(/"/g, ""));
+    } catch {
+      return encoded;
+    }
+  }
+
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  return plain ? plain.trim() : undefined;
 }
 
 // ────────────────────────────────────────────────────────────

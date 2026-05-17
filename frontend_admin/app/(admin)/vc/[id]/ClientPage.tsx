@@ -50,7 +50,7 @@ export default function VcDetailPage({ params }: { params: Promise<{ id: string 
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-slate-400">
-            백엔드 어드민 · <Link href="/vc" className="hover:underline">VC 관리</Link>
+            증명서 관리자 · <Link href="/vc" className="hover:underline">VC 관리</Link>
           </p>
           <h1 className="text-xl font-bold text-slate-800">VC 발급 상태 조회</h1>
         </div>

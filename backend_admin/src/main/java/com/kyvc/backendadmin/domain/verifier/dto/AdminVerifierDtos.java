@@ -293,7 +293,7 @@ public final class AdminVerifierDtos {
         public static LogSearchRequest of(Long verifierId, String actionTypeCode, Integer statusCode,
                                           LocalDate fromDate, LocalDate toDate, Integer page, Integer size) {
             return new LogSearchRequest(verifierId, actionTypeCode, statusCode, fromDate, toDate,
-                    page == null || page < 0 ? 0 : page, size == null || size < 1 ? 20 : Math.min(size, 100));
+                    page == null || page < 0 ? 0 : page, size == null || size < 1 ? 15 : Math.min(size, 100));
         }
     }
 

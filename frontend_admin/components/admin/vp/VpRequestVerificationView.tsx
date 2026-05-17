@@ -192,7 +192,7 @@ export function VpRequestVerificationView() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400">백엔드 어드민</p>
+          <p className="text-xs text-slate-400">증명서 관리자</p>
           <h1 className="text-xl font-bold text-slate-800">{title}</h1>
         </div>
       </div>
