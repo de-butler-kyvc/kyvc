@@ -2,8 +2,11 @@ package com.kyvc.backend.domain.kyc.application;
 
 import com.kyvc.backend.domain.commoncode.application.CommonCodeProvider;
 import com.kyvc.backend.domain.corporate.domain.Corporate;
+import com.kyvc.backend.domain.corporate.domain.CorporateRepresentative;
 import com.kyvc.backend.domain.corporate.repository.CorporateRepository;
+import com.kyvc.backend.domain.corporate.repository.CorporateRepresentativeRepository;
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
+import com.kyvc.backend.domain.kyc.dto.KycApplicationResponse;
 import com.kyvc.backend.domain.kyc.dto.KycStartRequest;
 import com.kyvc.backend.domain.kyc.repository.KycApplicationRepository;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,8 @@ class KycApplicationServiceTest {
     @Mock
     private CorporateRepository corporateRepository;
     @Mock
+    private CorporateRepresentativeRepository corporateRepresentativeRepository;
+    @Mock
     private CommonCodeProvider commonCodeProvider;
     @InjectMocks
     private KycApplicationService kycApplicationService;
@@ -41,6 +46,7 @@ class KycApplicationServiceTest {
         Long userId = 1L;
         Corporate corporate = org.mockito.Mockito.mock(Corporate.class);
         when(corporate.getCorporateId()).thenReturn(10L);
+        when(corporate.getRepresentativeName()).thenReturn("대표자");
         when(corporateRepository.findByUserId(userId)).thenReturn(Optional.of(corporate));
         when(kycApplicationRepository.save(any(KycApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -70,6 +76,7 @@ class KycApplicationServiceTest {
         Long userId = 1L;
         Corporate corporate = org.mockito.Mockito.mock(Corporate.class);
         when(corporate.getCorporateId()).thenReturn(10L);
+        when(corporate.getRepresentativeName()).thenReturn("대표자");
         when(corporateRepository.findByUserId(userId)).thenReturn(Optional.of(corporate));
         when(kycApplicationRepository.save(any(KycApplication.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -80,5 +87,34 @@ class KycApplicationServiceTest {
         verify(kycApplicationRepository).save(captor.capture());
         verify(commonCodeProvider).validateEnabledCode(eq("CORPORATE_TYPE"), eq("CORPORATION"));
         assertThat(captor.getValue().getCorporateTypeCode()).isEqualTo("CORPORATION");
+    }
+
+    @Test
+    void startKycAllowsRepresentativeSavedInRepresentativeTable() {
+        Long userId = 1L;
+        Corporate corporate = org.mockito.Mockito.mock(Corporate.class);
+        when(corporate.getCorporateId()).thenReturn(10L);
+        when(corporate.getRepresentativeName()).thenReturn(null);
+        when(corporateRepository.findByUserId(userId)).thenReturn(Optional.of(corporate));
+        when(corporateRepresentativeRepository.findByCorporateId(10L))
+                .thenReturn(Optional.of(CorporateRepresentative.create(
+                        10L,
+                        "대표자",
+                        null,
+                        "KR",
+                        "010-1234-5678",
+                        null,
+                        1L
+                )));
+        when(kycApplicationRepository.save(any(KycApplication.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        KycApplicationResponse response = kycApplicationService.startKyc(
+                userId,
+                new KycStartRequest("CORPORATION")
+        );
+
+        assertThat(response.corporateId()).isEqualTo(10L);
+        verify(kycApplicationRepository).save(any(KycApplication.class));
     }
 }
