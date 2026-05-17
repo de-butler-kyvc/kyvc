@@ -45,7 +45,7 @@ export default function MobileBodyMarker() {
     const getScrollTarget = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return null;
       return target.closest<HTMLElement>(
-        ".m-shell .settings-container, .m-shell .signup-content, .m-shell .content.scroll, .m-shell .scroll, .m-shell .view",
+        ".m-shell .activity-tabs, .m-shell .settings-container, .m-shell .signup-content, .m-shell .content.scroll, .m-shell .scroll, .m-shell .view",
       );
     };
 
@@ -58,6 +58,7 @@ export default function MobileBodyMarker() {
       const target = event.target;
       if (!(target instanceof Element) || !target.closest(".m-shell")) return;
       if (target.closest(".terms-sheet-handle")) return;
+      if (target.closest(".activity-tabs")) return;
 
       const currentY = event.touches[0]?.clientY ?? startY;
       const deltaY = currentY - startY;
