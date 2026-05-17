@@ -135,13 +135,14 @@ export function VpRequestVerificationView() {
   }, []);
 
   useEffect(() => {
-    if (!detail?.requestId || !ACTIVE_STATUSES.includes(getBackendStatus(detail))) {
+    if (!detail?.requestId || !ACTIVE_STATUSES.includes(status)) {
       return;
     }
 
+    const requestId = detail.requestId;
     const pollDetail = async () => {
       try {
-        const nextDetail = await getFinanceVpRequestDetail(detail.requestId);
+        const nextDetail = await getFinanceVpRequestDetail(requestId);
         setDetail(nextDetail);
         setPollingWarning(null);
       } catch (error) {
@@ -154,7 +155,7 @@ export function VpRequestVerificationView() {
     }, 3000);
 
     return () => window.clearInterval(timer);
-  }, [detail]);
+  }, [detail?.requestId, status]);
 
   const handleCancel = async () => {
     if (!detail || !ACTIVE_STATUSES.includes(getBackendStatus(detail))) return;
@@ -180,13 +181,6 @@ export function VpRequestVerificationView() {
       setCancelling(false);
     }
   };
-
-  const qrModalStatusText =
-    status === "EXPIRED"
-      ? "QR 코드가 만료되었습니다. 다시 생성해주세요."
-      : status === "CANCELLED"
-        ? "요청이 취소되었습니다. QR을 다시 생성해주세요."
-        : "모바일 Wallet에서 QR 코드를 스캔하세요";
 
   return (
     <div className="space-y-6">
@@ -246,7 +240,7 @@ export function VpRequestVerificationView() {
       <VpQrModal
         open={qrModalOpen}
         qrPayload={qrPayloadForDisplay}
-        statusText={qrModalStatusText}
+        status={status}
         onClose={() => setQrModalOpen(false)}
       />
     </div>
