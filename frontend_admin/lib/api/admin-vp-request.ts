@@ -35,6 +35,8 @@ export type AdminVpRequestResult = {
 
 export type AdminVpRequestDetail = {
   requestId: string;
+  vpVerificationId?: string | number | null;
+  credentialId?: string | number | null;
   status: AdminVpRequestStatus;
   verificationStatus?: AdminVpRequestStatus | string | null;
   purpose: string;

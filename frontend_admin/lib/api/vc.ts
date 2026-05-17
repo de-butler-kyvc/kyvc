@@ -59,6 +59,8 @@ function normalizeStatus(status?: string): string {
 function formatMobileStored(value: KycCredentialDetail["mobileStored"]): string {
   if (value === true) return "저장 완료";
   if (value === false) return "미저장";
+  if (value === "Y") return "저장 완료";
+  if (value === "N") return "미저장";
   return value || "-";
 }
 
@@ -67,26 +69,26 @@ function toListItem(c: KycCredential): VcListItem {
     id: c.credentialId,
     corp: c.corporationName ?? "-",
     credId: c.credentialId,
-    type: c.credentialType ?? "KYCVerifiableCredential",
+    type: c.credentialType ?? c.credentialTypeCode ?? "KYCVerifiableCredential",
     issuedAt: c.issuedAt ?? "-",
     expiresAt: c.expiresAt ?? "-",
-    status: normalizeStatus(c.status),
+    status: normalizeStatus(c.status ?? c.credentialStatusCode),
   };
 }
 
 function toDetail(c: KycCredentialDetail): VcDetail {
   return {
     credentialId: c.credentialId,
-    credentialType: c.credentialType ?? "KYCVerifiableCredential",
+    credentialType: c.credentialType ?? c.credentialTypeCode ?? "KYCVerifiableCredential",
     issuerDid: c.issuerDid ?? "-",
     holderDid: c.holderDid ?? "-",
     issuedAt: c.issuedAt ?? "-",
     expiresAt: c.expiresAt ?? "-",
     xrplTxHash: c.xrplTxHash ?? c.transactionHash ?? "-",
-    mobileStored: formatMobileStored(c.mobileStored),
-    corp: c.corporationName ?? "-",
-    kyc: c.applicationId ?? "-",
-    status: normalizeStatus(c.status),
+    mobileStored: formatMobileStored(c.mobileStored ?? c.walletSavedYn),
+    corp: c.corporationName ?? c.corporateName ?? "-",
+    kyc: c.applicationId ?? (c.kycId != null ? String(c.kycId) : "-"),
+    status: normalizeStatus(c.status ?? c.credentialStatusCode),
   };
 }
 

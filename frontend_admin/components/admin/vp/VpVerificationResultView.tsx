@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   AdminVpRequestCheck,
@@ -9,6 +9,8 @@ import type {
   AdminVpRequestStatus,
   AdminVpSubmittedClaim,
 } from "@/lib/api/admin-vp-request";
+import { getCredential } from "@/lib/api/credentials";
+import { getAdminVpVerificationDetailByReference } from "@/lib/api/vp";
 import { cn } from "@/lib/utils";
 
 import { VpClaimsModal } from "./VpClaimsModal";
@@ -58,8 +60,10 @@ const requestStatusLabel: Record<AdminVpRequestStatus, string> = {
   CANCELLED: "취소",
 };
 
-function formatDateTime(value?: string | null) {
+function formatDateTime(value?: string | Date | null) {
   if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
 
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -69,7 +73,16 @@ function formatDateTime(value?: string | null) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-  }).format(new Date(value));
+  }).format(date);
+}
+
+function addOneYear(value?: string | null) {
+  if (!value) return null;
+  const issuedAt = new Date(value);
+  if (Number.isNaN(issuedAt.getTime())) return null;
+  const expiresAt = new Date(issuedAt);
+  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  return expiresAt;
 }
 
 function displayPurpose(purpose: string) {
@@ -178,9 +191,11 @@ function fallbackChecks(status: AdminVpRequestStatus): AdminVpRequestCheck[] {
 }
 
 function buildSubmittedClaims(
-  detail: AdminVpRequestDetail
+  detail: AdminVpRequestDetail,
+  credentialIssuedAt?: string | null
 ): AdminVpSubmittedClaim[] {
   const result = detail.result;
+  const credentialExpiresAt = addOneYear(credentialIssuedAt);
 
   return [
     { label: "법인명", value: result?.corporateName ?? "-", source: "KYC VC" },
@@ -207,12 +222,12 @@ function buildSubmittedClaims(
     },
     {
       label: "VC 발급일",
-      value: formatDateTime(result?.credentialIssuedAt),
+      value: formatDateTime(credentialIssuedAt),
       source: "KYC VC",
     },
     {
       label: "VC 만료일",
-      value: formatDateTime(result?.credentialExpiresAt),
+      value: formatDateTime(credentialExpiresAt),
       source: "KYC VC",
     },
   ];
@@ -222,6 +237,7 @@ export function VpVerificationResultView({
   detail,
 }: VpVerificationResultViewProps) {
   const [claimsModalOpen, setClaimsModalOpen] = useState(false);
+  const [credentialIssuedAt, setCredentialIssuedAt] = useState<string | null>(null);
   const status =
     detail.status === "REPLAY_SUSPECTED" ? "REPLAY_SUSPECTED" : detail.status;
   const meta =
@@ -235,7 +251,48 @@ export function VpVerificationResultView({
     detail.checks && detail.checks.length > 0
       ? detail.checks
       : fallbackChecks(status);
-  const submittedClaims = useMemo(() => buildSubmittedClaims(detail), [detail]);
+  const verificationId = useMemo(() => {
+    const id = detail.vpVerificationId ?? detail.requestId;
+    return id != null && String(id).trim() ? String(id) : null;
+  }, [detail.requestId, detail.vpVerificationId]);
+  const submittedClaims = useMemo(
+    () => buildSubmittedClaims(detail, credentialIssuedAt),
+    [credentialIssuedAt, detail]
+  );
+
+  useEffect(() => {
+    setCredentialIssuedAt(null);
+  }, [verificationId]);
+
+  useEffect(() => {
+    if (!claimsModalOpen || !verificationId) return;
+
+    let alive = true;
+    setCredentialIssuedAt(null);
+
+    const loadCredentialIssuedAt = async () => {
+      try {
+        const verificationDetail =
+          await getAdminVpVerificationDetailByReference(verificationId);
+        const credentialId =
+          verificationDetail.credentialId ??
+          verificationDetail.credential?.credentialId ??
+          null;
+        if (!credentialId) return;
+
+        const credentialDetail = await getCredential(String(credentialId));
+        if (alive) setCredentialIssuedAt(credentialDetail.issuedAt ?? null);
+      } catch {
+        if (alive) setCredentialIssuedAt(null);
+      }
+    };
+
+    void loadCredentialIssuedAt();
+
+    return () => {
+      alive = false;
+    };
+  }, [claimsModalOpen, verificationId]);
 
   return (
     <>

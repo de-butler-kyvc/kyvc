@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+
 import type { AdminVpSubmittedClaim } from "@/lib/api/admin-vp-request";
 
 type VpClaimsModalProps = {
@@ -13,18 +16,35 @@ export function VpClaimsModal({
   claims,
   onClose,
 }: VpClaimsModalProps) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !mounted) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, mounted]);
+
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="vp-claims-title"
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/65 p-6"
+      className="fixed inset-0 z-[1200] flex min-h-dvh items-center justify-center overflow-y-auto bg-black/60 p-6 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-[min(92vw,560px)] rounded-lg bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
+        className="my-6 w-[min(92vw,560px)] rounded-lg bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="text-center">
@@ -81,6 +101,7 @@ export function VpClaimsModal({
           닫기
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
