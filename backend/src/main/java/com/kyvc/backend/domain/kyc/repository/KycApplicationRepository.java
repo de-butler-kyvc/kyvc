@@ -1,7 +1,9 @@
 package com.kyvc.backend.domain.kyc.repository;
 
 import com.kyvc.backend.domain.kyc.domain.KycApplication;
+import com.kyvc.backend.global.util.KyvcEnums;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -68,6 +70,26 @@ public interface KycApplicationRepository {
      */
     boolean existsInProgressByApplicantUserId(
             Long userId // 사용자 ID
+    );
+
+    /**
+     * 현재 상태 기준 KYC 상태 조건부 변경
+     *
+     * @param kycId KYC 신청 ID
+     * @param applicantUserId 신청 사용자 ID
+     * @param currentStatus 현재 KYC 상태
+     * @param nextStatus 변경 KYC 상태
+     * @param submittedAt 제출 일시
+     * @param updatedAt 수정 일시
+     * @return 변경 건수
+     */
+    int updateStatusIfCurrentStatus(
+            Long kycId, // KYC 신청 ID
+            Long applicantUserId, // 신청 사용자 ID
+            KyvcEnums.KycStatus currentStatus, // 현재 KYC 상태
+            KyvcEnums.KycStatus nextStatus, // 변경 KYC 상태
+            LocalDateTime submittedAt, // 제출 일시
+            LocalDateTime updatedAt // 수정 일시
     );
 
     /**

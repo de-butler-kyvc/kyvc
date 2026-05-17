@@ -43,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -80,6 +81,8 @@ class KycSubmissionServiceTest {
     private LogEventLogger logEventLogger;
     @Mock
     private KycReviewHistoryRepository kycReviewHistoryRepository;
+    @Mock
+    private KycSubmissionStatusService kycSubmissionStatusService;
 
     private KycSubmissionService service;
 
@@ -98,7 +101,8 @@ class KycSubmissionServiceTest {
                 coreAdapter,
                 new ObjectMapper().findAndRegisterModules(),
                 logEventLogger,
-                kycReviewHistoryRepository
+                kycReviewHistoryRepository,
+                kycSubmissionStatusService
         );
     }
 
@@ -119,14 +123,13 @@ class KycSubmissionServiceTest {
         KycSubmitResponse response = service.submit(USER_ID, KYC_ID);
 
         assertThat(response.status()).isEqualTo(KyvcEnums.KycStatus.MANUAL_REVIEW.name());
-        verify(kycReviewHistoryRepository).saveStatusChange(
+        var inOrder = inOrder(kycSubmissionStatusService, coreAdapter);
+        inOrder.verify(kycSubmissionStatusService).reserveSubmission(
+                eq(USER_ID),
                 eq(KYC_ID),
-                eq(KyvcEnums.ReviewActionType.SUBMIT),
-                eq(KyvcEnums.KycStatus.DRAFT),
-                eq(KyvcEnums.KycStatus.AI_REVIEWING),
-                eq("KYC 제출 완료"),
                 any(LocalDateTime.class)
         );
+        inOrder.verify(coreAdapter).requestAiReview(any(CoreAiReviewRequest.class));
         verify(kycReviewHistoryRepository).saveStatusChange(
                 eq(KYC_ID),
                 eq(KyvcEnums.ReviewActionType.AI_COMPLETE),
@@ -149,6 +152,7 @@ class KycSubmissionServiceTest {
                 .extracting(exception -> ((ApiException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.KYC_ALREADY_SUBMITTED);
 
+        verify(kycSubmissionStatusService, never()).reserveSubmission(any(), any(), any());
         verify(coreAdapter, never()).requestAiReview(any(CoreAiReviewRequest.class));
     }
 
@@ -224,6 +228,11 @@ class KycSubmissionServiceTest {
         when(requiredDocumentService.buildRequiredDocumentResponses(CORPORATE_TYPE_CODE, Set.of())).thenReturn(List.of());
         when(documentRequirementValidationService.validate(CORPORATE_TYPE_CODE, Set.of(), false))
                 .thenReturn(new DocumentRequirementValidationResult(true, List.of(), List.of()));
+        when(kycSubmissionStatusService.reserveSubmission(eq(USER_ID), eq(KYC_ID), any(LocalDateTime.class)))
+                .thenAnswer(invocation -> {
+                    kycApplication.startAiReview(invocation.getArgument(2));
+                    return kycApplication;
+                });
         when(coreRequestService.createAiReviewRequest(KYC_ID, null)).thenReturn(coreRequest);
         when(kycApplicationRepository.save(any(KycApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

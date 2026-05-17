@@ -5,6 +5,7 @@ import com.kyvc.backend.global.util.KyvcEnums;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -76,6 +77,26 @@ public class KycApplicationRepositoryImpl implements KycApplicationRepository {
             Long userId // 사용자 ID
     ) {
         return kycApplicationJpaRepository.existsInProgressByApplicantUserId(userId, IN_PROGRESS_STATUSES);
+    }
+
+    // 현재 상태 기준 KYC 상태 조건부 변경
+    @Override
+    public int updateStatusIfCurrentStatus(
+            Long kycId, // KYC 신청 ID
+            Long applicantUserId, // 신청 사용자 ID
+            KyvcEnums.KycStatus currentStatus, // 현재 KYC 상태
+            KyvcEnums.KycStatus nextStatus, // 변경 KYC 상태
+            LocalDateTime submittedAt, // 제출 일시
+            LocalDateTime updatedAt // 수정 일시
+    ) {
+        return kycApplicationJpaRepository.updateStatusIfCurrentStatus(
+                kycId,
+                applicantUserId,
+                currentStatus,
+                nextStatus,
+                submittedAt,
+                updatedAt
+        );
     }
 
     // KYC 신청 저장
