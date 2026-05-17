@@ -19,6 +19,21 @@ import {
 import { DOCUMENT_LABELS, formatFileSize } from "@/lib/kyc-flow";
 
 const PRE_SUBMIT_STATUSES = new Set(["DRAFT"]);
+const POLLING_STATUSES = new Set(["SUBMITTED", "AI_REVIEWING"]);
+const TERMINAL_STATUSES = new Set([
+  "NEED_SUPPLEMENT",
+  "MANUAL_REVIEW",
+  "APPROVED",
+  "REJECTED",
+  "VC_ISSUED"
+]);
+const STATUS_POLL_INTERVAL_MS = 3000;
+const STATUS_POLL_MAX_ATTEMPTS = 100;
+const STATUS_POLL_MAX_FAILURES = 3;
+const DRAFT_FALLBACK_POLL_ATTEMPTS = 2;
+const RECENT_SUBMIT_WINDOW_MS = 2 * 60 * 1000;
+const LAST_SUBMITTED_KYC_ID_KEY = "kyvc.lastSubmittedKycId";
+const LAST_SUBMITTED_AT_KEY = "kyvc.lastSubmittedAt";
 
 type StepKey = "received" | "ai" | "manual" | "result";
 
@@ -51,9 +66,124 @@ const STATUS_BADGE: Record<string, "default" | "secondary" | "warning" | "succes
   VC_ISSUED: "success"
 };
 
+const STATUS_DISPLAY: Record<string, string> = {
+  DRAFT: "임시 저장",
+  SUBMITTED: "접수완료",
+  AI_REVIEWING: "AI 심사중",
+  NEED_SUPPLEMENT: "보완 필요",
+  MANUAL_REVIEW: "수동 심사중",
+  APPROVED: "승인",
+  REJECTED: "반려",
+  VC_ISSUED: "VC 발급 완료"
+};
+
+const STATUS_GUIDES: Record<string, { title: string; description: string }> = {
+  DRAFT: {
+    title: "임시 저장",
+    description: "제출 전 상태입니다. 제출 완료 후에도 이 상태가 유지되면 다시 조회해 주세요."
+  },
+  SUBMITTED: {
+    title: "접수완료",
+    description: "신청이 접수되었습니다. AI 심사를 준비 중입니다."
+  },
+  AI_REVIEWING: {
+    title: "AI 심사중",
+    description: "AI가 제출 서류를 분석하고 있습니다. 잠시만 기다려주세요."
+  },
+  NEED_SUPPLEMENT: {
+    title: "보완 필요",
+    description: "제출 서류에 보완이 필요합니다. 보완 요청 내용을 확인해주세요."
+  },
+  MANUAL_REVIEW: {
+    title: "수동 심사중",
+    description: "담당자가 신청 내용을 검토하고 있습니다."
+  },
+  APPROVED: {
+    title: "승인",
+    description: "KYC 심사가 승인되었습니다."
+  },
+  REJECTED: {
+    title: "반려",
+    description: "KYC 심사가 반려되었습니다. 사유를 확인해주세요."
+  },
+  VC_ISSUED: {
+    title: "VC 발급 완료",
+    description: "KYC VC가 발급되었습니다."
+  }
+};
+
 function formatConfidencePercent(value: number) {
   const percent = value >= 0 && value <= 1 ? value * 100 : value;
   return `${Math.round(percent)}%`;
+}
+
+async function fetchKycDetailData(kycId: number) {
+  const [status, documents, aiReview, aiReviewDetail, supplements] =
+    await Promise.all([
+      kycApi.status(kycId),
+      kycApi.documents(kycId),
+      kycApi.aiReviewSummary(kycId).catch(() => null),
+      kycApi.aiReviewResult(kycId).catch(() => null),
+      kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
+    ]);
+
+  return {
+    status,
+    documents,
+    aiReview,
+    aiReviewDetail,
+    supplements: supplements.supplements ?? []
+  };
+}
+
+function displayStatusLabel(status?: string | null) {
+  if (!status) return "-";
+  return STATUS_DISPLAY[status] ?? STATUS_LABELS[status] ?? status;
+}
+
+function isRecentSubmittedKyc(kycId: number) {
+  if (typeof window === "undefined") return false;
+  const storedId = Number(window.localStorage.getItem(LAST_SUBMITTED_KYC_ID_KEY));
+  if (storedId !== kycId) return false;
+
+  const submittedAt = window.localStorage.getItem(LAST_SUBMITTED_AT_KEY);
+  if (!submittedAt) return false;
+
+  const submittedTime = new Date(submittedAt).getTime();
+  if (Number.isNaN(submittedTime)) return false;
+  return Date.now() - submittedTime <= RECENT_SUBMIT_WINDOW_MS;
+}
+
+function rememberSubmittedKyc(kycId: number, submittedAt?: string | null) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_SUBMITTED_KYC_ID_KEY, String(kycId));
+  window.localStorage.setItem(LAST_SUBMITTED_AT_KEY, submittedAt ?? new Date().toISOString());
+}
+
+function shouldPollStatus(
+  kycStatus: string,
+  draftFallbackAttempts: number,
+  recentSubmitted: boolean
+) {
+  if (POLLING_STATUSES.has(kycStatus)) return true;
+  return (
+    kycStatus === "DRAFT" &&
+    recentSubmitted &&
+    draftFallbackAttempts < DRAFT_FALLBACK_POLL_ATTEMPTS
+  );
+}
+
+function pollingMessage(kycStatus: string) {
+  if (kycStatus === "SUBMITTED") {
+    return "신청이 접수되었습니다. AI 심사 시작 여부를 주기적으로 확인하고 있습니다.";
+  }
+  if (kycStatus === "AI_REVIEWING") {
+    return "AI가 제출 서류를 분석하고 있습니다. 상태를 주기적으로 갱신합니다.";
+  }
+  if (kycStatus === "DRAFT") {
+    return "제출 상태 반영을 다시 확인하고 있습니다.";
+  }
+  return null;
 }
 
 export default function CorporateKycDetailPage() {
@@ -75,26 +205,21 @@ function KycDetail() {
   const [aiReviewDetail, setAiReviewDetail] = useState<KycAiReviewDetailResponse | null>(null);
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [statusPollMessage, setStatusPollMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!valid) return;
     setError(null);
     let cancelled = false;
-    Promise.all([
-      kycApi.status(kycId),
-      kycApi.documents(kycId),
-      kycApi.aiReviewSummary(kycId).catch(() => null),
-      kycApi.aiReviewResult(kycId).catch(() => null),
-      kycApi.supplements(kycId).catch(() => ({ supplements: [] }))
-    ])
-      .then(([s, d, review, reviewDetail, supp]) => {
+    fetchKycDetailData(kycId)
+      .then((detail) => {
         if (cancelled) return;
-        setStatus(s);
-        setDocuments(d);
-        setAiReview(review);
-        setAiReviewDetail(reviewDetail);
-        setSupplements(supp.supplements ?? []);
+        setStatus(detail.status);
+        setDocuments(detail.documents);
+        setAiReview(detail.aiReview);
+        setAiReviewDetail(detail.aiReviewDetail);
+        setSupplements(detail.supplements);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -105,12 +230,121 @@ function KycDetail() {
     };
   }, [kycId, valid]);
 
+  useEffect(() => {
+    if (!valid || !status?.kycStatus) return;
+
+    const initialStatus = status.kycStatus;
+    const recentSubmitted = isRecentSubmittedKyc(kycId);
+    let cancelled = false;
+    let timeoutId: number | null = null;
+    let attempts = 0;
+    let failures = 0;
+    let draftFallbackAttempts = 0;
+
+    if (!shouldPollStatus(initialStatus, 0, recentSubmitted)) {
+      setStatusPollMessage(null);
+      return;
+    }
+
+    setStatusPollMessage(pollingMessage(initialStatus));
+
+    const clearPollTimeout = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const refreshDetailIfNeeded = async () => {
+      try {
+        const detail = await fetchKycDetailData(kycId);
+        if (cancelled) return;
+        setStatus(detail.status);
+        setDocuments(detail.documents);
+        setAiReview(detail.aiReview);
+        setAiReviewDetail(detail.aiReviewDetail);
+        setSupplements(detail.supplements);
+      } catch {
+        // 최종 상태 상세 조회 실패 시 기존 상태 표시 유지
+      }
+    };
+
+    const schedule = () => {
+      if (cancelled) return;
+      clearPollTimeout();
+      timeoutId = window.setTimeout(fetchLatestStatus, STATUS_POLL_INTERVAL_MS);
+    };
+
+    const stopPolling = (message?: string | null) => {
+      clearPollTimeout();
+      setStatusPollMessage(message ?? null);
+    };
+
+    const handleLatestStatus = async (latest: KycStatusResponse) => {
+      const nextStatus = latest.kycStatus ?? "";
+      setStatus(latest);
+
+      if (TERMINAL_STATUSES.has(nextStatus)) {
+        stopPolling();
+        await refreshDetailIfNeeded();
+        return;
+      }
+
+      if (nextStatus === "DRAFT") {
+        draftFallbackAttempts += 1;
+      }
+
+      if (attempts >= STATUS_POLL_MAX_ATTEMPTS) {
+        stopPolling("심사가 계속 진행 중입니다. 잠시 후 다시 확인해주세요.");
+        return;
+      }
+
+      if (shouldPollStatus(nextStatus, draftFallbackAttempts, recentSubmitted)) {
+        setStatusPollMessage(pollingMessage(nextStatus));
+        schedule();
+        return;
+      }
+
+      stopPolling();
+    };
+
+    async function fetchLatestStatus() {
+      attempts += 1;
+      try {
+        const latest = await kycApi.status(kycId);
+        if (cancelled) return;
+        failures = 0;
+        await handleLatestStatus(latest);
+      } catch (err) {
+        if (cancelled) return;
+        failures += 1;
+        if (err instanceof ApiError && err.status === 401) {
+          stopPolling("로그인 세션이 만료되었습니다. 다시 로그인 후 확인해주세요.");
+          return;
+        }
+        if (failures >= STATUS_POLL_MAX_FAILURES) {
+          stopPolling("상태를 불러오지 못했습니다. 새로고침 후 다시 확인해주세요.");
+          return;
+        }
+        schedule();
+      }
+    }
+
+    schedule();
+
+    return () => {
+      cancelled = true;
+      clearPollTimeout();
+    };
+  }, [kycId, valid, status?.kycStatus]);
+
   const onSubmitApplication = async () => {
     if (!valid) return;
     setSubmitting(true);
     setError(null);
     try {
       const res = await kycApi.submit(kycId);
+      rememberSubmittedKyc(kycId, res.submittedAt);
       setStatus((prev) => ({
         ...(prev ?? { kycId }),
         kycStatus: res.kycStatus ?? prev?.kycStatus
@@ -149,6 +383,7 @@ function KycDetail() {
     (s) => s.supplementStatus === "REQUESTED"
   );
   const visibleDocuments = documents.filter((d) => d.uploadStatus !== "DELETED");
+  const statusGuide = STATUS_GUIDES[kycStatus];
 
   const stepStates = computeSteps(kycStatus);
   const progressPct = computeProgressPct(stepStates);
@@ -170,6 +405,15 @@ function KycDetail() {
             <Icon.Alert size={16} />
           </span>
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {statusPollMessage ? (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          <span className="alert-icon">
+            <Icon.Info size={16} />
+          </span>
+          <span>{statusPollMessage}</span>
         </div>
       ) : null}
 
@@ -237,7 +481,7 @@ function KycDetail() {
                 label="상태"
                 value={
                   <Badge variant={STATUS_BADGE[kycStatus] ?? "secondary"}>
-                    {STATUS_LABELS[kycStatus] ?? kycStatus ?? "-"}
+                    {displayStatusLabel(kycStatus)}
                   </Badge>
                 }
               />
@@ -257,6 +501,32 @@ function KycDetail() {
                   </Badge>
                 }
               />
+
+              {statusGuide ? (
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-md)",
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                    {statusGuide.title}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 12.5,
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.5
+                    }}
+                  >
+                    {statusGuide.description}
+                  </div>
+                </div>
+              ) : null}
 
               {beforeSubmit ? (
                 <div style={{ marginTop: 16 }}>
@@ -886,7 +1156,7 @@ function CompletionCard({
           label="상태"
           value={
             <Badge variant="success">
-              {STATUS_LABELS[status?.kycStatus ?? ""] ?? "인증 완료"}
+              {displayStatusLabel(status?.kycStatus ?? "")}
             </Badge>
           }
         />

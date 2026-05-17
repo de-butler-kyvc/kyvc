@@ -57,13 +57,15 @@ export default function KycApplyConfirmPage() {
         router.push("/corporate/kyc/apply");
         return;
       }
+      const res = await kycApi.submit(latestKycId);
       if (typeof window !== "undefined") {
         window.localStorage.setItem("kyvc.lastSubmittedKycId", String(latestKycId));
+        window.localStorage.setItem(
+          "kyvc.lastSubmittedAt",
+          res.submittedAt ?? new Date().toISOString()
+        );
       }
       clearCurrentKycId();
-      void kycApi.submit(latestKycId).catch((err: unknown) => {
-        console.error("Failed to submit KYC application", err);
-      });
       router.push(`/corporate/kyc/detail?id=${latestKycId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "제출에 실패했습니다.");
